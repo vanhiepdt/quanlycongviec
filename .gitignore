@@ -1,0 +1,10 @@
+# Thư viện npm của tools/ — cài lại bằng: cd tools && npm install
+node_modules/
+
+# Bản sao lưu tay — từ nay dùng git thay cho .bak
+*.bak
+
+# File tạm do tool sinh ra
+temp.html
+*.tmp.gs
+unmapped_report.txt
