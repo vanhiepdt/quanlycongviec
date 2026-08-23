@@ -24,6 +24,15 @@ ganttStartDate.setHours(0, 0, 0, 0);
 let ganttEndDate = new Date(),
   expandedProjects = new Set(),
   openedFromProjectDetails = null;
+// GĐ1: bối cảnh phòng ban, nạp sau khi đăng nhập bằng getDepartmentContext()
+let allDepartments = [],
+  departmentNames = [],
+  visibleDepartments = [],
+  myDepartment = "",
+  myDeptRole = "",
+  isDeputyDirectorUser = false,
+  isDepartmentHeadUser = false,
+  departmentsAutoLoadTried = false;
 const COL = {
   P_ID: "Mã dự án",
   P_NAME: "Tên dự án",
@@ -32,6 +41,25 @@ const COL = {
   P_START: "Ngày bắt đầu",
   P_END: "Ngày kết thúc",
   P_STATUS: "Trạng thái dự án",
+  P_DEPT: "Phòng",
+  P_MANAGER_EMAIL: "Email quản lý",
+  P_APPROVAL: "Trạng thái duyệt",
+  P_APPROVER: "Người duyệt",
+  P_APPROVED_DATE: "Ngày duyệt",
+  P_REJECT_REASON: "Lý do từ chối",
+  T_LEVEL: "Cấp",
+  T_PARENT: "Mã cha",
+  T_ASSIGNEE_EMAIL: "Email người thực hiện",
+  T_APPROVAL: "Trạng thái duyệt",
+  T_APPROVER: "Người duyệt",
+  T_APPROVED_DATE: "Ngày duyệt",
+  D_ID: "Mã phòng",
+  D_NAME: "Tên phòng",
+  D_DIRECTOR: "Email Phó GĐ phụ trách",
+  D_HEAD: "Email Trưởng phòng",
+  D_VICE: "Email Phó phòng",
+  D_ORDER: "Thứ tự",
+  D_NOTES: "Ghi chú",
   T_ID: "Mã nhiệm vụ",
   T_PID: "Mã dự án",
   T_NAME: "Tên nhiệm vụ",
@@ -54,6 +82,8 @@ const COL = {
   S_POS: "Chức vụ",
   S_ROLE: "Phân quyền",
   S_PASSWORD: "Mật khẩu",
+  S_DEPT: "Phòng",
+  S_DEPT_ROLE: "Vai trò phòng",
   S_OBJECT_TYPE: "Đối tượng",
   S_NOTES: "Ghi chú",
   A_TIME: "Thời gian",
@@ -133,9 +163,24 @@ function handleSuccessfulLogin(data) {
     const overviewFilterContainerEl = document.getElementById("overview-filter-container");
     overviewFilterContainerEl && overviewFilterContainerEl.classList.remove("hidden");
   }
-  setupGanttEventListeners(), currentSection === "gantt" && renderGanttChart(), setTimeout(() => {
+  setupGanttEventListeners(), loadDepartmentContext(), currentSection === "gantt" && renderGanttChart(), setTimeout(() => {
     currentSection === "overview" && loadChatMessagesAsync();
   }, 500);
+}
+/** GĐ1: nạp danh sách phòng và quyền theo phòng của người đang đăng nhập. */
+function loadDepartmentContext(callback) {
+  google.script.run.withSuccessHandler(function (response) {
+    if (response && response.success) {
+      allDepartments = response.departments || [], departmentNames = response.departmentNames || [], visibleDepartments = response.visibleDepartments || [], myDepartment = response.myDepartment || "", myDeptRole = response.myDeptRole || "", isDeputyDirectorUser = response.isDeputyDirector === true, isDepartmentHeadUser = response.isDepartmentHead === true;
+      const departmentNavEl = document.getElementById("nav-departments");
+      departmentNavEl && departmentNavEl.classList.toggle("hidden", !isAdmin());
+      currentSection === "departments" && renderDepartments();
+    }
+    if (typeof callback == "function") callback(response);
+  }).withFailureHandler(function (error) {
+    console.error("Không nạp được cấu hình phòng:", error);
+    if (typeof callback == "function") callback(null);
+  }).getDepartmentContext();
 }
 function loadChatMessagesAsync() {
   const chatMessagesEl = document.getElementById("chat-messages");
@@ -647,6 +692,7 @@ function switchSection(sectionName) {
     projects: "Quản lý Dự án",
     tasks: "Quản lý Nhiệm vụ",
     staff: "Quản lý đối tượng",
+    departments: "Cấu hình phòng",
     gantt: "Sơ đồ Gantt",
     proposals: "Quản lý Đề nghị"
   };
@@ -654,7 +700,7 @@ function switchSection(sectionName) {
     item.classList.remove("active");
   }), document.getElementById(sectionName + "-section").classList.add("active"), currentSection = sectionName;
   const overviewFilterContainerEl = document.getElementById("overview-filter-container");
-  overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "gantt" && setTimeout(() => {
+  overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "departments" && renderDepartments(), sectionName === "gantt" && setTimeout(() => {
     renderGanttChart();
   }, 10), closeMobileMenu();
 }
@@ -803,7 +849,7 @@ function renderStaff() {
     staffSupplierCountEl = document.getElementById("staff-supplier-count");
   if (!staffUsersTbodyEl || !staffSuppliersTbodyEl) return;
   if (!allStaff || allStaff.length === 0) {
-    staffUsersTbodyEl.innerHTML = "<tr><td colspan=\"4\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có người dùng</td></tr>", staffSuppliersTbodyEl.innerHTML = "<tr><td colspan=\"3\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có Nhà cung cấp</td></tr>";
+    staffUsersTbodyEl.innerHTML = "<tr><td colspan=\"5\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có người dùng</td></tr>", staffSuppliersTbodyEl.innerHTML = "<tr><td colspan=\"3\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có Nhà cung cấp</td></tr>";
     if (staffUserCountEl) staffUserCountEl.textContent = "(0)";
     if (staffSupplierCountEl) staffSupplierCountEl.textContent = "(0)";
     return;
@@ -812,7 +858,7 @@ function renderStaff() {
     filteredStaff2 = allStaff.filter(staff => staff[COL.S_OBJECT_TYPE] === "Nhà cung cấp");
   if (staffUserCountEl) staffUserCountEl.textContent = "(" + filteredStaff.length + ")";
   if (staffSupplierCountEl) staffSupplierCountEl.textContent = "(" + filteredStaff2.length + ")";
-  filteredStaff.length === 0 ? staffUsersTbodyEl.innerHTML = "<tr><td colspan=\"4\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có người dùng</td></tr>" : staffUsersTbodyEl.innerHTML = filteredStaff.map(filteredStaff3 => createStaffTableRow(filteredStaff3, "user")).join(""), filteredStaff2.length === 0 ? staffSuppliersTbodyEl.innerHTML = "<tr><td colspan=\"3\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có Nhà cung cấp</td></tr>" : staffSuppliersTbodyEl.innerHTML = filteredStaff2.map(filteredStaff22 => createStaffTableRow(filteredStaff22, "supplier")).join("");
+  filteredStaff.length === 0 ? staffUsersTbodyEl.innerHTML = "<tr><td colspan=\"5\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có người dùng</td></tr>" : staffUsersTbodyEl.innerHTML = filteredStaff.map(filteredStaff3 => createStaffTableRow(filteredStaff3, "user")).join(""), filteredStaff2.length === 0 ? staffSuppliersTbodyEl.innerHTML = "<tr><td colspan=\"3\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có Nhà cung cấp</td></tr>" : staffSuppliersTbodyEl.innerHTML = filteredStaff2.map(filteredStaff22 => createStaffTableRow(filteredStaff22, "supplier")).join("");
 }
 function createStaffTableRow(staff, staffType) {
   const staffId = staff[COL.S_ID] || "N/A",
@@ -823,11 +869,15 @@ function createStaffTableRow(staff, staffType) {
   }
   const staffEmail = staff[COL.S_EMAIL] || "",
     staffPos = staff[COL.S_POS] || "",
-    staffRole = staff[COL.S_ROLE] || "Nhân viên";
+    staffRole = staff[COL.S_ROLE] || "Nhân viên",
+    staffDept = staff[COL.S_DEPT] || "",
+    staffDeptRole = staff[COL.S_DEPT_ROLE] || "";
   let text = "bg-gray-100 text-gray-700";
-  if (staffRole.toLowerCase().includes("admin")) text = "bg-red-100 text-red-700";else staffRole.toLowerCase().includes("quản lý") && (text = "bg-blue-100 text-blue-700");
+  const lowerRole = staffRole.toLowerCase();
+  if (lowerRole.includes("admin")) text = "bg-red-100 text-red-700";else lowerRole.includes("phó giám đốc") ? text = "bg-purple-100 text-purple-700" : lowerRole.includes("quản lý") && (text = "bg-blue-100 text-blue-700");
+  const deptCell = staffDept ? staffDept + (staffDeptRole && staffDeptRole !== "Nhân viên" ? " <span class=\"text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700\">" + staffDeptRole + "</span>" : "") : "<span class=\"text-gray-400\">—</span>";
   const text2 = "<span class=\"text-xs px-2 py-1 rounded-full " + text + "\">" + staffRole + "</span>";
-  return "\n        <tr class=\"hover:bg-gray-50 transition-colors\">\n            <td class=\"px-3 py-2 font-medium text-gray-900\">" + staffName + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + staffPos + "</td>\n            <td class=\"px-3 py-2\">" + text2 + "</td>\n            <td class=\"px-3 py-2 text-center\">\n                <div class=\"flex justify-center gap-1\">\n                    <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"staff\" data-id=\"" + staffId + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit text-xs\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"staff\" data-id=\"" + staffId + "\" data-name=\"" + staffName + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash text-xs\"></i>\n                    </button>\n                </div>\n            </td>\n        </tr>";
+  return "\n        <tr class=\"hover:bg-gray-50 transition-colors\">\n            <td class=\"px-3 py-2 font-medium text-gray-900\">" + staffName + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + staffPos + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + deptCell + "</td>\n            <td class=\"px-3 py-2\">" + text2 + "</td>\n            <td class=\"px-3 py-2 text-center\">\n                <div class=\"flex justify-center gap-1\">\n                    <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"staff\" data-id=\"" + staffId + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit text-xs\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"staff\" data-id=\"" + staffId + "\" data-name=\"" + staffName + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash text-xs\"></i>\n                    </button>\n                </div>\n            </td>\n        </tr>";
 }
 function createStaffCard(staff) {
   const staffId = staff[COL.S_ID] || "N/A",
@@ -1360,6 +1410,237 @@ function toggleTaskReminders(forceShow) {
     shouldShow = forceShow !== undefined ? forceShow : isHidden;
   shouldShow ? (taskRemindersContainerEl.classList.remove("hidden"), taskRemindersContainerEl.classList.add("flex"), reminderToggleIconEl.style.transform = "rotate(0deg)") : (taskRemindersContainerEl.classList.add("hidden"), taskRemindersContainerEl.classList.remove("flex"), reminderToggleIconEl.style.transform = "rotate(-90deg)");
 }
+/** GĐ1: các ô <option> phòng cho form. Không phải admin thì chỉ chọn được phòng mình thấy. */
+function buildDepartmentOptions(selected) {
+  const value = String(selected || "").trim(),
+    list = isAdmin() ? departmentNames : visibleDepartments.length > 0 ? visibleDepartments : departmentNames,
+    options = list.map(name => "<option value=\"" + escapeHtmlAttr(name) + "\" " + (name === value ? "selected" : "") + ">" + name + "</option>");
+  return "<option value=\"\" " + (value === "" ? "selected" : "") + ">-- Chưa phân phòng --</option>" + options.join("");
+}
+/** GĐ1: Trưởng phòng / Phó phòng / Nhân viên. */
+function buildDeptRoleOptions(selected) {
+  const value = String(selected || "").trim() || "Nhân viên";
+  return ["Nhân viên", "Phó phòng", "Trưởng phòng"].map(name => "<option value=\"" + name + "\" " + (name === value ? "selected" : "") + ">" + name + "</option>").join("");
+}
+/** Escape để nhét an toàn vào thuộc tính HTML dựng bằng chuỗi. */
+function escapeHtmlAttr(value) {
+  return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ===== GĐ1: giao diện tab "Cấu hình phòng" (chỉ Admin) =====
+/** Tìm một phòng trong state theo Mã phòng. */
+function findDepartmentById(departmentId) {
+  const id = String(departmentId || "").trim();
+  if (!id) return null;
+  return (allDepartments || []).find(item => String(item[COL.D_ID] || "").trim() === id) || null;
+}
+/** Kiểm tra định dạng email đơn giản. Rỗng coi là hợp lệ (cho phép bỏ trống). */
+function isValidEmailFormat(value) {
+  const trimmed = String(value || "").trim();
+  return trimmed === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+/** Tách chuỗi email cách nhau bằng ; hoặc , thành mảng đã lowercase. */
+function parseEmailListClient(value) {
+  return String(value || "").split(/[;,]/).map(item => item.trim().toLowerCase()).filter(item => item !== "");
+}
+/** Đổi email thành "Họ tên (email)" nếu tra được trong danh sách người dùng. */
+function describeEmailList(value) {
+  const emails = parseEmailListClient(value);
+  if (emails.length === 0) return "<span class=\"text-gray-400\">—</span>";
+  return emails.map(email => {
+    const staff = (allStaff || []).find(item => String(item[COL.S_EMAIL] || "").trim().toLowerCase() === email);
+    return staff ? "<span title=\"" + escapeHtmlAttr(email) + "\">" + escapeHtmlAttr(staff[COL.S_NAME] || email) + "</span>" : "<span class=\"text-amber-600\" title=\"Email này chưa có trong sheet Người dùng\">" + escapeHtmlAttr(email) + "</span>";
+  }).join("<br>");
+}
+/** Số người đang thuộc một phòng (theo tên phòng). */
+function countStaffInDepartment(departmentName) {
+  const name = String(departmentName || "").trim();
+  if (!name) return 0;
+  return (allStaff || []).filter(staff => String(staff[COL.S_DEPT] || "").trim() === name).length;
+}
+/** Vẽ bảng phòng ban. Tự nạp bối cảnh phòng một lần nếu state còn rỗng. */
+function renderDepartments() {
+  const tbody = document.getElementById("departments-tbody");
+  if (!tbody) return;
+  const wrapRow = text => "<tr><td colspan=\"6\" class=\"px-3 py-4 text-center text-gray-500\">" + text + "</td></tr>";
+  if (!isAuthenticated || !isAdmin()) {
+    tbody.innerHTML = wrapRow("Chỉ Admin xem được cấu hình phòng.");
+    return;
+  }
+  if ((!allDepartments || allDepartments.length === 0) && !departmentsAutoLoadTried) {
+    departmentsAutoLoadTried = true, tbody.innerHTML = wrapRow("<i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải..."), loadDepartmentContext(function () {
+      renderDepartments();
+    });
+    return;
+  }
+  if (!allDepartments || allDepartments.length === 0) {
+    tbody.innerHTML = wrapRow("Chưa có phòng nào. Bấm \"Thêm phòng\" để tạo.");
+    return;
+  }
+  tbody.innerHTML = allDepartments.map(item => createDepartmentTableRow(item)).join("");
+}
+/** Một dòng của bảng phòng ban. */
+function createDepartmentTableRow(department) {
+  const departmentId = String(department[COL.D_ID] || "").trim(),
+    departmentName = String(department[COL.D_NAME] || "").trim(),
+    staffCount = countStaffInDepartment(departmentName),
+    order = department[COL.D_ORDER] === "" || department[COL.D_ORDER] == null ? "" : department[COL.D_ORDER];
+  return "\n        <tr class=\"hover:bg-gray-50 transition-colors\">\n            <td class=\"px-3 py-2 text-gray-500 whitespace-nowrap\">" + escapeHtmlAttr(departmentId) + (order === "" ? "" : " <span class=\"text-xs text-gray-400\">#" + escapeHtmlAttr(order) + "</span>") + "</td>\n            <td class=\"px-3 py-2 font-medium text-gray-900\">" + escapeHtmlAttr(departmentName) + " <span class=\"text-xs font-normal text-gray-500\">(" + staffCount + " người)</span></td>\n            <td class=\"px-3 py-2 text-gray-600\">" + describeEmailList(department[COL.D_DIRECTOR]) + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + describeEmailList(department[COL.D_HEAD]) + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + describeEmailList(department[COL.D_VICE]) + "</td>\n            <td class=\"px-3 py-2 text-center\">\n                <div class=\"flex justify-center gap-1\">\n                    <button type=\"button\" class=\"action-btn action-btn-edit\" title=\"Chỉnh sửa\" onclick=\"openDepartmentModal('" + escapeHtmlAttr(departmentId) + "')\">\n                        <i class=\"fas fa-edit text-xs\"></i>\n                    </button>\n                    <button type=\"button\" class=\"action-btn action-btn-delete\" title=\"Xóa\" onclick=\"confirmDeleteDepartment('" + escapeHtmlAttr(departmentId) + "')\">\n                        <i class=\"fas fa-trash text-xs\"></i>\n                    </button>\n                </div>\n            </td>\n        </tr>";
+}
+/**
+ * GĐ1: <datalist> email người dùng để gợi ý khi gán Phó GĐ / Trưởng phòng / Phó phòng.
+ * roleFilter: chuỗi con của cột Phân quyền (vd "phó giám đốc"). Không ai khớp thì gợi ý tất cả.
+ */
+function buildStaffEmailDatalist(listId, roleFilter) {
+  const users = (allStaff || []).filter(staff => (staff[COL.S_OBJECT_TYPE] || "Người dùng") === "Người dùng" && String(staff[COL.S_EMAIL] || "").trim() !== ""),
+    filtered = roleFilter ? users.filter(staff => String(staff[COL.S_ROLE] || "").toLowerCase().includes(roleFilter)) : users,
+    source = filtered.length > 0 ? filtered : users;
+  return "<datalist id=\"" + listId + "\">" + source.map(staff => "<option value=\"" + escapeHtmlAttr(String(staff[COL.S_EMAIL]).trim().toLowerCase()) + "\">" + escapeHtmlAttr((staff[COL.S_NAME] || "") + (staff[COL.S_DEPT] ? " — " + staff[COL.S_DEPT] : "")) + "</option>").join("") + "</datalist>";
+}
+/** GĐ1: HTML modal thêm/sửa phòng. */
+function createDepartmentModal(isEdit, department) {
+  const title = isEdit ? "Chỉnh sửa phòng" : "Thêm phòng mới",
+    submitText = isEdit ? "Cập nhật" : "Thêm phòng",
+    value = key => isEdit && department ? escapeHtmlAttr(department[key] || "") : "",
+    nextOrder = isEdit && department ? escapeHtmlAttr(department[COL.D_ORDER] || "") : String((allDepartments || []).length + 1),
+    staffCount = isEdit && department ? countStaffInDepartment(department[COL.D_NAME]) : 0;
+  return "\n  <div id=\"department-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + title + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n\n          <form id=\"department-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + value(COL.D_ID) + "\">" : "") + "\n\n              <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4 mb-4\">\n                  <div class=\"form-group mb-0 md:col-span-2\">\n                      <label class=\"form-label required\">Tên phòng</label>\n                      <input type=\"text\" name=\"name\" class=\"form-input\" required maxlength=\"100\" value=\"" + value(COL.D_NAME) + "\">\n                      " + (isEdit && staffCount > 0 ? "<p class=\"text-xs text-amber-600 mt-1\">Đổi tên sẽ tự cập nhật cột Phòng của " + staffCount + " người đang thuộc phòng này.</p>" : "") + "\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Thứ tự</label>\n                      <input type=\"number\" name=\"order\" class=\"form-input\" min=\"1\" max=\"99\" value=\"" + nextOrder + "\">\n                      <p class=\"text-xs text-gray-500 mt-1\">Thứ tự hiện trên sơ đồ Gantt.</p>\n                  </div>\n              </div>\n\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Email Phó Giám đốc phụ trách</label>\n                  <input type=\"text\" name=\"director\" class=\"form-input\" list=\"dept-director-list\" placeholder=\"pgd.a@...\" value=\"" + value(COL.D_DIRECTOR) + "\">\n                  " + buildStaffEmailDatalist("dept-director-list", "phó giám đốc") + "\n                  <p class=\"text-xs text-gray-500 mt-1\">Một Phó GĐ đứng tên ở nhiều phòng nghĩa là phụ trách nhiều phòng đó.</p>\n              </div>\n\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Email Trưởng phòng</label>\n                      <input type=\"text\" name=\"head\" class=\"form-input\" list=\"dept-staff-list\" placeholder=\"tp.a@...\" value=\"" + value(COL.D_HEAD) + "\">\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Email Phó phòng</label>\n                      <input type=\"text\" name=\"vice\" class=\"form-input\" list=\"dept-staff-list\" placeholder=\"pp.a@...; pp.b@...\" value=\"" + value(COL.D_VICE) + "\">\n                      <p class=\"text-xs text-gray-500 mt-1\">Nhiều người thì cách nhau dấu chấm phẩy.</p>\n                  </div>\n              </div>\n              " + buildStaffEmailDatalist("dept-staff-list", "") + "\n\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ghi chú</label>\n                  <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit && department ? escapeHtmlAttr(department[COL.D_NOTES] || "") : "") + "</textarea>\n              </div>\n\n              <div id=\"department-validation-error\" class=\"hidden mb-4\"></div>\n\n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-accent\">" + submitText + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
+}
+/**
+ * GĐ1: mở modal thêm/sửa phòng. Không dùng openModal() vì openModal đẩy submit sang
+ * handleAdd/handleEdit — hai hàm đó không biết loại "department".
+ */
+function openDepartmentModal(departmentId) {
+  if (!isAuthenticated) {
+    showToast("Vui lòng đăng nhập", "error");
+    return;
+  }
+  if (!isAdmin()) {
+    showToast("Chỉ Admin được sửa cấu hình phòng", "error");
+    return;
+  }
+  const department = departmentId ? findDepartmentById(departmentId) : null;
+  if (departmentId && !department) {
+    showToast("Không tìm thấy phòng: " + departmentId, "error");
+    return;
+  }
+  const existing = document.getElementById("department-modal");
+  existing && existing.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = createDepartmentModal(!!department, department), document.body.appendChild(wrapper.firstElementChild);
+  const modal = document.getElementById("department-modal");
+  modal.classList.add("active");
+  const form = modal.querySelector("form");
+  form && form.addEventListener("submit", function (event) {
+    event.preventDefault(), handleSaveDepartment(department ? String(department[COL.D_ID] || "").trim() : "");
+  }), modal.querySelectorAll(".close-modal").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault(), closeModal("department-modal");
+    });
+  }), modal.addEventListener("click", event => {
+    event.target === modal && closeModal("department-modal");
+  }), setTimeout(() => {
+    const input = modal.querySelector("input[name=\"name\"]");
+    input && input.focus();
+  }, 120);
+}
+/** Hiện danh sách lỗi trong modal phòng. */
+function showDepartmentValidationError(messages) {
+  const el = document.getElementById("department-validation-error");
+  if (!el) return;
+  messages.length > 0 ? (el.innerHTML = messages.map(message => "<div class=\"text-red-600 text-sm\">" + escapeHtmlAttr(message) + "</div>").join(""), el.classList.remove("hidden")) : (el.innerHTML = "", el.classList.add("hidden"));
+}
+/**
+ * GĐ1: lưu phòng. departmentId rỗng = thêm mới.
+ * Backend nhận { name, director, head, vice, order, notes } — xem addDepartment trong Code.gs.
+ */
+function handleSaveDepartment(departmentId) {
+  const form = document.getElementById("department-form");
+  if (!form) return;
+  const submitButton = form.querySelector("button[type=\"submit\"]"),
+    formData = new FormData(form),
+    read = key => String(formData.get(key) || "").trim(),
+    data = {
+      name: read("name"),
+      director: read("director").toLowerCase(),
+      head: read("head").toLowerCase(),
+      vice: parseEmailListClient(read("vice")).join("; "),
+      order: Number(read("order")) || 0,
+      notes: read("notes")
+    },
+    errors = [];
+  if (!data.name) errors.push("Tên phòng là bắt buộc.");
+  const duplicate = (allDepartments || []).find(item => String(item[COL.D_NAME] || "").trim().toLowerCase() === data.name.toLowerCase() && String(item[COL.D_ID] || "").trim() !== departmentId);
+  if (duplicate) errors.push("Phòng \"" + data.name + "\" đã tồn tại.");
+  if (!isValidEmailFormat(data.director)) errors.push("Email Phó Giám đốc không đúng định dạng.");
+  if (!isValidEmailFormat(data.head)) errors.push("Email Trưởng phòng không đúng định dạng.");
+  parseEmailListClient(data.vice).forEach(email => {
+    isValidEmailFormat(email) || errors.push("Email Phó phòng không đúng định dạng: " + email);
+  });
+  if (errors.length > 0) {
+    showDepartmentValidationError(errors);
+    return;
+  }
+  showDepartmentValidationError([]), setButtonLoading(submitButton, true);
+  const runner = google.script.run.withSuccessHandler(function (response) {
+    setButtonLoading(submitButton, false);
+    if (!response) {
+      showDepartmentValidationError(["Máy chủ không trả về dữ liệu. Kiểm tra license / email chữ hoa (xem §4.1 kế hoạch)."]);
+      return;
+    }
+    if (!response.success) {
+      showDepartmentValidationError([response.error || "Có lỗi xảy ra"]);
+      return;
+    }
+    closeModal("department-modal"), showToast(departmentId ? "Đã cập nhật phòng \"" + data.name + "\"" : "Đã thêm phòng \"" + data.name + "\"", "success"), loadDepartmentContext(function () {
+      renderDepartments(), departmentId && refreshData();
+    });
+  }).withFailureHandler(function (error) {
+    setButtonLoading(submitButton, false), showDepartmentValidationError(["Lỗi: " + (error && error.message || error)]);
+  });
+  departmentId ? runner.updateDepartmentWithAuth(departmentId, data) : runner.addDepartmentWithAuth(data);
+}
+/**
+ * GĐ1: xoá phòng. Chặn ngay ở giao diện nếu còn người thuộc phòng (backend cũng chặn lại
+ * lần nữa trong deleteDepartment).
+ */
+function confirmDeleteDepartment(departmentId) {
+  if (!isAuthenticated) {
+    showToast("Vui lòng đăng nhập", "error");
+    return;
+  }
+  if (!isAdmin()) {
+    showToast("Chỉ Admin được xoá phòng", "error");
+    return;
+  }
+  const department = findDepartmentById(departmentId);
+  if (!department) {
+    showToast("Không tìm thấy phòng: " + departmentId, "error");
+    return;
+  }
+  const departmentName = String(department[COL.D_NAME] || "").trim(),
+    staffCount = countStaffInDepartment(departmentName);
+  if (staffCount > 0) {
+    showToast("Còn " + staffCount + " người thuộc phòng \"" + departmentName + "\". Chuyển họ sang phòng khác trước khi xoá.", "error");
+    return;
+  }
+  showConfirmDialog("Xoá phòng", "Xoá phòng \"" + departmentName + "\"? Cấu hình Phó GĐ phụ trách và Trưởng/Phó phòng của phòng này sẽ mất.", function () {
+    showToast("Đang xoá phòng...", "info"), google.script.run.withSuccessHandler(function (response) {
+      if (!response) {
+        showToast("Máy chủ không trả về dữ liệu. Kiểm tra license / email chữ hoa.", "error");
+        return;
+      }
+      response.success ? (showToast("Đã xoá phòng \"" + departmentName + "\"", "success"), loadDepartmentContext(function () {
+        renderDepartments();
+      })) : showToast(response.error || "Có lỗi xảy ra", "error");
+    }).withFailureHandler(function (error) {
+      showToast("Lỗi: " + (error && error.message || error), "error");
+    }).deleteDepartmentWithAuth(departmentId);
+  }, null, "danger", {
+    confirmText: "Xoá phòng",
+    iconClass: "fas fa-trash text-red-600 text-xl"
+  });
+}
 function createStaffModal(isEdit, staff) {
   const text = isEdit ? "Chỉnh sửa đối tượng" : "Thêm đối tượng mới",
     text2 = isEdit ? "Cập nhật" : "Thêm đối tượng",
@@ -1398,7 +1679,7 @@ function createStaffModal(isEdit, staff) {
       }
     }
     el4 && (el4.addEventListener("change", toggleFields), toggleFields());
-  }, 100), "\n  <div id=\"staff-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + text + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          <form id=\"staff-form\">\n          <div id=\"staff-validation-error\" class=\"hidden mb-4\"></div>\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + staff[COL.S_ID] + "\">" : "") + "\n\n              <!-- Row 1: Đối tượng | Họ tên -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Đối tượng</label>\n                      <select name=\"objectType\" class=\"form-select\">\n                          <option value=\"Người dùng\" " + (staffObjectType === "Người dùng" ? "selected" : "") + ">Người dùng</option>\n                          <option value=\"Nhà cung cấp\" " + (staffObjectType === "Nhà cung cấp" ? "selected" : "") + ">Nhà cung cấp</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\" id=\"staff-name-label\">Họ tên *</label>\n                      <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? staff[COL.S_NAME] || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 2: Email | Chức vụ -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Email</label>\n                      <input type=\"email\" name=\"email\" class=\"form-input\" value=\"" + (isEdit ? staff[COL.S_EMAIL] || "" : "") + "\">\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Chức vụ</label>\n                      <input type=\"text\" name=\"position\" class=\"form-input\" value=\"" + (isEdit ? staff[COL.S_POS] || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 3: Phân quyền | Mật khẩu -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Phân quyền</label>\n                      <select name=\"role\" class=\"form-select\">\n                          <option value=\"Nhân viên\" " + (isEdit && staff[COL.S_ROLE] === "Nhân viên" ? "selected" : "selected") + ">Nhân viên</option>\n                          <option value=\"Quản lý\" " + (isEdit && staff[COL.S_ROLE] === "Quản lý" ? "selected" : "") + ">Quản lý</option>\n                          <option value=\"Admin\" " + (isEdit && staff[COL.S_ROLE] === "Admin" ? "selected" : "") + ">Admin</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Mật khẩu *</label>\n                      <input type=\"text\" name=\"password\" class=\"form-input\" required \n                              value=\"" + (isEdit ? staff[COL.S_PASSWORD] || "" : "") + "\"\n                              placeholder=\"Nhập mật khẩu\">\n                  </div>\n              </div>\n\n              <!-- Ghi chú cho Nhà cung cấp  -->\n              <div class=\"form-group supplier-field hidden\">\n                  <label class=\"form-label\">Ghi chú</label>\n                  <textarea name=\"notes\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? staff[COL.S_NOTES] || "" : "") + "</textarea>\n              </div>\n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-accent\">" + text2 + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
+  }, 100), "\n  <div id=\"staff-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + text + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          <form id=\"staff-form\">\n          <div id=\"staff-validation-error\" class=\"hidden mb-4\"></div>\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + staff[COL.S_ID] + "\">" : "") + "\n\n              <!-- Row 1: Đối tượng | Họ tên -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Đối tượng</label>\n                      <select name=\"objectType\" class=\"form-select\">\n                          <option value=\"Người dùng\" " + (staffObjectType === "Người dùng" ? "selected" : "") + ">Người dùng</option>\n                          <option value=\"Nhà cung cấp\" " + (staffObjectType === "Nhà cung cấp" ? "selected" : "") + ">Nhà cung cấp</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\" id=\"staff-name-label\">Họ tên *</label>\n                      <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? staff[COL.S_NAME] || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 2: Email | Chức vụ -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Email</label>\n                      <input type=\"email\" name=\"email\" class=\"form-input\" value=\"" + (isEdit ? staff[COL.S_EMAIL] || "" : "") + "\">\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Chức vụ</label>\n                      <input type=\"text\" name=\"position\" class=\"form-input\" value=\"" + (isEdit ? staff[COL.S_POS] || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 3: Phân quyền | Mật khẩu -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Phân quyền</label>\n                      <select name=\"role\" class=\"form-select\">\n                          <option value=\"Nhân viên\" " + (isEdit && staff[COL.S_ROLE] === "Nhân viên" ? "selected" : "selected") + ">Nhân viên</option>\n                          <option value=\"Quản lý\" " + (isEdit && staff[COL.S_ROLE] === "Quản lý" ? "selected" : "") + ">Quản lý</option>\n                          <option value=\"Phó Giám đốc\" " + (isEdit && staff[COL.S_ROLE] === "Phó Giám đốc" ? "selected" : "") + ">Phó Giám đốc</option>\n                          <option value=\"Admin\" " + (isEdit && staff[COL.S_ROLE] === "Admin" ? "selected" : "") + ">Admin</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Mật khẩu *</label>\n                      <input type=\"text\" name=\"password\" class=\"form-input\" required \n                              value=\"" + (isEdit ? staff[COL.S_PASSWORD] || "" : "") + "\"\n                              placeholder=\"Nhập mật khẩu\">\n                  </div>\n              </div>\n\n              <!-- Row 4: Phòng | Vai trò phòng -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Phòng</label>\n                      <select name=\"department\" class=\"form-select\">" + buildDepartmentOptions(isEdit && staff ? staff[COL.S_DEPT] : "") + "</select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Vai trò phòng</label>\n                      <select name=\"deptRole\" class=\"form-select\">" + buildDeptRoleOptions(isEdit && staff ? staff[COL.S_DEPT_ROLE] : "") + "</select>\n                  </div>\n              </div>\n\n              <!-- Ghi chú cho Nhà cung cấp  -->\n              <div class=\"form-group supplier-field hidden\">\n                  <label class=\"form-label\">Ghi chú</label>\n                  <textarea name=\"notes\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? staff[COL.S_NOTES] || "" : "") + "</textarea>\n              </div>\n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-accent\">" + text2 + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
 }
 function handleAdd(type) {
   if (!isAuthenticated) {
@@ -2883,7 +3164,7 @@ function formatDateToISOString(date) {
   if (isNaN(date2.getTime())) return "";
   return date2.getFullYear() + "-" + String(date2.getMonth() + 1).padStart(2, "0") + "-" + String(date2.getDate()).padStart(2, "0");
 }
-function showConfirmDialog(title, message, onConfirm, onCancel, type = "success") {
+function showConfirmDialog(title, message, onConfirm, onCancel, type = "success", options = {}) {
   if (!document.getElementById("custom-confirm-modal")) {
     const text = "\n        <div id=\"custom-confirm-modal\" class=\"confirm-modal-overlay\">\n            <div class=\"confirm-modal-box\">\n                <div id=\"confirm-icon-container\" class=\"w-12 h-12 rounded-full bg-green-100 mx-auto mb-4 flex items-center justify-center\">\n                    <i id=\"confirm-icon\" class=\"fas fa-check text-green-600 text-xl\"></i>\n                </div>\n                <h3 id=\"confirm-title\" class=\"text-lg font-bold text-gray-900 mb-2\"></h3>\n                <p id=\"confirm-message\" class=\"text-gray-500 text-sm mb-6\"></p>\n                <div class=\"flex space-x-3 justify-center\">\n                    <button id=\"btn-cancel-confirm\" class=\"px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors\">Hủy bỏ</button>\n                    <button id=\"btn-yes-confirm\" class=\"px-6 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 shadow-lg shadow-green-500/30 transition-all\">Xác nhận</button>\n                </div>\n            </div>\n        </div>\n    ";
     document.body.insertAdjacentHTML("beforeend", text);
@@ -2897,6 +3178,8 @@ function showConfirmDialog(title, message, onConfirm, onCancel, type = "success"
     confirmIconEl = document.getElementById("confirm-icon");
   confirmTitleEl.textContent = title, confirmMessageEl.textContent = message;
   type === "danger" ? (confirmIconContainerEl.className = "w-12 h-12 rounded-full bg-red-100 mx-auto mb-4 flex items-center justify-center", confirmIconEl.className = "fas fa-sign-out-alt text-red-600 text-xl", btnYesConfirmEl.className = "px-6 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 shadow-lg shadow-red-500/30 transition-all", btnYesConfirmEl.textContent = "Đăng xuất") : (confirmIconContainerEl.className = "w-12 h-12 rounded-full bg-green-100 mx-auto mb-4 flex items-center justify-center", confirmIconEl.className = "fas fa-check text-green-600 text-xl", btnYesConfirmEl.className = "px-6 py-2 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 shadow-lg shadow-green-500/30 transition-all", btnYesConfirmEl.textContent = "Xác nhận");
+  // GĐ1: cho phép ghi đè chữ trên nút và icon (vd xoá phòng) mà không đụng các nơi gọi cũ.
+  options && options.confirmText && (btnYesConfirmEl.textContent = options.confirmText), options && options.iconClass && (confirmIconEl.className = options.iconClass);
   customConfirmModalEl.classList.add("active");
   const el = btnYesConfirmEl.cloneNode(true),
     el2 = btnCancelConfirmEl.cloneNode(true);

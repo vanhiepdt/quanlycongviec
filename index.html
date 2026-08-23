@@ -166,6 +166,20 @@
                     class="ml-auto w-2 h-2 rounded-full bg-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 </div>
             </a>
+
+            <!-- GĐ1: Cấu hình phòng — chỉ admin, mặc định ẩn, mở bởi loadDepartmentContext() -->
+            <a href="#" data-section="departments"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 hidden"
+                id="nav-departments">
+                <div
+                    class="w-8 h-8 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-sitemap text-purple-600 text-sm"></i>
+                </div>
+                <span>Cấu hình phòng</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
         </nav>
 
         <!-- Footer: Support Info -->
@@ -701,6 +715,40 @@
                 </div>
             </div>
 
+            <!-- GĐ1: Cấu hình phòng (chỉ admin) -->
+            <div id="departments-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Cấu hình phòng</h3>
+                    <button id="add-department-btn" class="btn-accent"
+                        onclick="if(isAuthenticated && isAdmin()) openDepartmentModal()">
+                        <i class="fas fa-plus mr-2"></i>Thêm phòng
+                    </button>
+                </div>
+                <div class="glass-card p-4 overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="text-left px-3 py-2 font-medium text-gray-700">Mã</th>
+                                <th class="text-left px-3 py-2 font-medium text-gray-700">Tên phòng</th>
+                                <th class="text-left px-3 py-2 font-medium text-gray-700">Phó GĐ phụ trách</th>
+                                <th class="text-left px-3 py-2 font-medium text-gray-700">Trưởng phòng</th>
+                                <th class="text-left px-3 py-2 font-medium text-gray-700">Phó phòng</th>
+                                <th class="text-center px-3 py-2 font-medium text-gray-700 w-24">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="departments-tbody" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="6" class="px-3 py-4 text-center text-gray-500">Đang tải...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-gray-500 mt-3">
+                    Một Phó Giám đốc đứng tên ở nhiều phòng nghĩa là phụ trách nhiều phòng đó.
+                    Phó phòng có thể nhập nhiều email, cách nhau bằng dấu chấm phẩy.
+                </p>
+            </div>
+
             <!-- Staff Section -->
             <div id="staff-section" class="section">
                 <div class="flex items-center justify-between mb-6">
@@ -726,13 +774,14 @@
                                             class="text-left px-3 py-2 font-medium text-gray-700 sticky left-0 z-20 bg-gray-50 max-w-[35vw] md:max-w-none whitespace-normal break-words">
                                             Họ tên</th>
                                         <th class="text-left px-3 py-2 font-medium text-gray-700">Chức vụ</th>
+                                        <th class="text-left px-3 py-2 font-medium text-gray-700">Phòng</th>
                                         <th class="text-left px-3 py-2 font-medium text-gray-700">Phân quyền</th>
                                         <th class="text-center px-3 py-2 font-medium text-gray-700 w-20">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody id="staff-users-tbody" class="divide-y divide-gray-100">
                                     <tr>
-                                        <td colspan="4" class="px-3 py-4 text-center text-gray-500">Đang tải...</td>
+                                        <td colspan="5" class="px-3 py-4 text-center text-gray-500">Đang tải...</td>
                                     </tr>
                                 </tbody>
                             </table>
