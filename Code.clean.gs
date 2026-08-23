@@ -1,0 +1,2610 @@
+var _cr = "Bản quyền thuộc về gsheets.vn",
+  _reed = [46, 58, 58, 39, 63, 44, 63, 26, 63, 16, 45, 30, 115, 28, 47, 32, 45, 48, 9, 44, 63, 124, 44, 56],
+  _qjii = [8, 7913, 36, 106, 59, 63, 51, 7819, 36, 106, 62, 34, 63, 7827, 41, 106, 60, 7819, 106, 45, 57, 34, 47, 47, 62, 57, 100, 60, 36],
+  _iwruum = "7vv119ir",
+  _cachedEmail = null,
+  _licenseCache;
+const xorDecode = function (_0x3fc6b0) {
+    return _0x3fc6b0.map(function (_0x43659c) {
+      return String.fromCharCode(_0x43659c ^ 74);
+    }).join("");
+  },
+  cyrb53Hash = function (_0x263443) {
+    var _0x38cfff = 3735928559,
+      _0x35eb04 = 1103547991;
+    for (var _0x47973c = 0; _0x47973c < _0x263443.length; _0x47973c++) {
+      var _0x10ae83 = _0x263443.charCodeAt(_0x47973c);
+      _0x38cfff = Math.imul(_0x38cfff ^ _0x10ae83, 2654435761), _0x35eb04 = Math.imul(_0x35eb04 ^ _0x10ae83, 1597334677);
+    }
+    return _0x38cfff = Math.imul(_0x38cfff ^ _0x38cfff >>> 16, 2246822507) ^ Math.imul(_0x35eb04 ^ _0x35eb04 >>> 13, 3266489909), _0x35eb04 = Math.imul(_0x35eb04 ^ _0x35eb04 >>> 16, 2246822507) ^ Math.imul(_0x38cfff ^ _0x38cfff >>> 13, 3266489909), (4294967296 * (2097151 & _0x35eb04) + (_0x38cfff >>> 0)).toString(36);
+  },
+  isValidLicenseKey = function (_0x6cbd6d) {
+    var _0x1b55df = xorDecode(_reed);
+    if (_cachedEmail === null) _cachedEmail = Session.getEffectiveUser().getEmail().toLowerCase();
+    return _0x6cbd6d === cyrb53Hash(_cachedEmail + _0x1b55df);
+  },
+  getLicenseState = function () {
+    if (_licenseCache !== undefined) return _licenseCache;
+    if (isValidLicenseKey.toString().length < 40) return _licenseCache = false;
+    if (typeof _iwruum === "undefined" || _iwruum !== "7vv119ir") return _licenseCache = false;
+    var _0x242917 = xorDecode(_qjii);
+    if (_cr !== _0x242917) return _licenseCache = false;
+    var _0x58d74f = PropertiesService.getScriptProperties(),
+      _0x322010 = _0x58d74f.getProperty("_lk");
+    if (!_0x322010) return _licenseCache = null;
+    if (!isValidLicenseKey(_0x322010)) return _licenseCache = false;
+    return _licenseCache = _0x322010;
+  };
+function _activateKey(_0xc69f52) {
+  if (!isValidLicenseKey(_0xc69f52)) return false;
+  return PropertiesService.getScriptProperties().setProperty("_lk", _0xc69f52), true;
+}
+function _getUrl() {
+  return ScriptApp.getService().getUrl();
+}
+const TASK_SHEET_NAME = "Nhiệm vụ",
+  PROJECT_SHEET_NAME = "Dự án/Nhiệm vụ",
+  STAFF_SHEET_NAME = "Người dùng",
+  NOTIFICATION_SHEET_NAME = "Thông báo",
+  TASK_ID_COLUMN_NAME = "Mã nhiệm vụ",
+  TASK_PROJECT_ID_COLUMN_NAME = "Mã dự án",
+  TASK_NAME_COLUMN_NAME = "Tên nhiệm vụ",
+  TASK_DESC_COLUMN_NAME = "Mô tả nhiệm vụ",
+  TASK_ASSIGNEE_COLUMN_NAME = "Người thực hiện",
+  TASK_STATUS_COLUMN_NAME = "Trạng thái",
+  TASK_PRIORITY_COLUMN_NAME = "Ưu tiên",
+  TASK_START_DATE_COLUMN_NAME = "Ngày bắt đầu",
+  TASK_DUE_DATE_COLUMN_NAME = "Hạn chót",
+  TASK_COMPLETION_COLUMN_NAME = "Tiến độ (%)",
+  TASK_REPORT_DATE_COLUMN_NAME = "Ngày hoàn thành",
+  TASK_TARGET_COLUMN_NAME = "Mục tiêu",
+  TASK_RESULT_LINKS_COLUMN_NAME = "Link kết quả",
+  TASK_OUTPUT_COLUMN_NAME = "Kết quả đầu ra",
+  TASK_NOTES_COLUMN_NAME = "Ghi chú",
+  TASK_REMINDERS_COLUMN_NAME = "Nhắc việc",
+  PROJECT_ID_COLUMN_NAME = "Mã dự án",
+  PROJECT_NAME_COLUMN_NAME = "Tên dự án",
+  PROJECT_DESC_COLUMN_NAME = "Mô tả dự án",
+  PROJECT_MANAGER_COLUMN_NAME = "Quản lý dự án",
+  PROJECT_START_DATE_COLUMN_NAME = "Ngày bắt đầu",
+  PROJECT_END_DATE_COLUMN_NAME = "Ngày kết thúc",
+  PROJECT_STATUS_COLUMN_NAME = "Trạng thái dự án",
+  PROJECT_TASKS_JSON_COLUMN_NAME = "Nhiệm vụ JSON",
+  PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME = "Nhật ký JSON",
+  STAFF_ID_COLUMN_NAME = "Mã NV",
+  STAFF_NAME_COLUMN_NAME = "Họ tên",
+  STAFF_EMAIL_COLUMN_NAME = "Email",
+  STAFF_POSITION_COLUMN_NAME = "Chức vụ",
+  STAFF_ROLE_COLUMN_NAME = "Phân quyền",
+  STAFF_PASSWORD_COLUMN_NAME = "Mật khẩu",
+  STAFF_OBJECT_TYPE_COLUMN_NAME = "Đối tượng",
+  STAFF_NOTES_COLUMN_NAME = "Ghi chú",
+  LOG_TIMESTAMP_COLUMN_NAME = "Thời gian",
+  LOG_ACTION_COLUMN_NAME = "Hành động",
+  LOG_USER_COLUMN_NAME = "Người thực hiện",
+  LOG_DETAILS_COLUMN_NAME = "Chi tiết",
+  CHAT_SHEET_NAME = "Chat",
+  CHAT_ID_COLUMN_NAME = "Mã chat",
+  CHAT_DATE_COLUMN_NAME = "Ngày",
+  CHAT_JSON_COLUMN_NAME = "Chat JSON",
+  PROPOSAL_SHEET_NAME = "Đề nghị",
+  PROPOSAL_ID_COLUMN = "Mã đề nghị",
+  PROPOSAL_TYPE_COLUMN = "Loại",
+  PROPOSAL_PROJECT_ID_COLUMN = "Mã dự án",
+  PROPOSAL_TASK_ID_COLUMN = "Mã nhiệm vụ",
+  PROPOSAL_CONTENT_COLUMN = "Nội dung đề nghị",
+  PROPOSAL_URL_COLUMN = "URL đề nghị",
+  PROPOSAL_SUPPLIER_COLUMN = "Nhà cung cấp",
+  PROPOSAL_CREATOR_COLUMN = "Người đề nghị",
+  PROPOSAL_DATE_COLUMN = "Ngày đề nghị",
+  PROPOSAL_STATUS_COLUMN = "Trạng thái",
+  PROPOSAL_NOTE_COLUMN = "Ghi chú duyệt",
+  APP_SHEET_NAME = "Quản lý App",
+  APP_ID_COLUMN = "Mã App",
+  APP_NAME_COLUMN = "Tên App",
+  APP_URL_COLUMN = "URL",
+  APP_ICON_COLUMN = "Icon URL",
+  APP_DESC_COLUMN = "Mô tả",
+  APP_CREATED_BY_COLUMN = "Người tạo",
+  APP_CATEGORY_COLUMN = "Danh mục",
+  APP_PERMISSIONS_COLUMN = "Phân quyền",
+  NOTIFICATION_ID_COLUMN_NAME = "Mã thông báo",
+  NOTIFICATION_TIME_COLUMN_NAME = "Thời gian",
+  NOTIFICATION_USER_COLUMN_NAME = "Người nhận",
+  NOTIFICATION_CONTENT_COLUMN_NAME = "Nội dung",
+  NOTIFICATION_TYPE_COLUMN_NAME = "Loại";
+function include(_0x547718) {
+  return HtmlService.createHtmlOutputFromFile(_0x547718).getContent();
+}
+function getInitialDataFast() {
+  var _0x34c19c = getLicenseState();
+  if (!_0x34c19c || !isValidLicenseKey(_0x34c19c) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x220acf = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x47f03f = _0x220acf.getId(),
+      _0x363f1f = ["'" + PROJECT_SHEET_NAME + "'!A:Z", "'" + STAFF_SHEET_NAME + "'!A:H", "'" + PROPOSAL_SHEET_NAME + "'!A:K", "'" + APP_SHEET_NAME + "'!A:H"];
+    let _0x119cdc;
+    try {
+      _0x119cdc = Sheets.Spreadsheets.Values.batchGet(_0x47f03f, {
+        ranges: _0x363f1f,
+        majorDimension: "ROWS"
+      });
+    } catch (_0x3c906c) {
+      return console.warn("Batch get failed (possibly missing sheets), falling back to normal load:", _0x3c906c), getInitialData();
+    }
+    const _0x33907e = _0x119cdc.valueRanges[0].values || [],
+      _0x3f75f0 = parseSheetData(_0x33907e),
+      _0x36f7af = extractTasksFromProjectValues(_0x33907e),
+      _0x40627e = _0x119cdc.valueRanges[1].values || [],
+      _0x23e2f7 = parseSheetData(_0x40627e),
+      _0x35ed27 = _0x119cdc.valueRanges.length > 2 ? _0x119cdc.valueRanges[2].values || [] : [],
+      _0x29772a = parseSheetData(_0x35ed27),
+      _0x564174 = _0x119cdc.valueRanges.length > 3 ? _0x119cdc.valueRanges[3].values || [] : [],
+      _0x34ac60 = parseSheetData(_0x564174),
+      _0x164a56 = getTaskStatusChartData(_0x36f7af),
+      _0x1c700b = getSummaryStats(_0x3f75f0, _0x36f7af),
+      _0x2706a3 = getRecentActivities();
+    return {
+      projects: _0x3f75f0,
+      tasks: _0x36f7af,
+      staff: _0x23e2f7,
+      proposals: _0x29772a,
+      apps: _0x34ac60,
+      chartData: _0x164a56,
+      recentActivities: _0x2706a3,
+      summaryStats: _0x1c700b
+    };
+  } catch (_0x34a064) {
+    return console.error("Error in getInitialDataFast:", _0x34a064), getInitialData();
+  }
+}
+function extractTasksFromProjectValues(_0x2d1291) {
+  var _0x1faba4 = getLicenseState();
+  if (!_0x1faba4 || !isValidLicenseKey(_0x1faba4) || getLicenseState.toString().length < 80) return;
+  if (!_0x2d1291 || _0x2d1291.length < 2) return [];
+  const _0x3ce013 = _0x2d1291[0],
+    _0x2e5025 = _0x3ce013.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+    _0x4e4d04 = _0x3ce013.indexOf(PROJECT_ID_COLUMN_NAME);
+  if (_0x2e5025 === -1 || _0x4e4d04 === -1) return [];
+  let _0x2c638b = [];
+  for (let _0x1308ee = 1; _0x1308ee < _0x2d1291.length; _0x1308ee++) {
+    const _0x25ea40 = _0x2d1291[_0x1308ee];
+    if (!_0x25ea40) continue;
+    const _0x23dde0 = _0x25ea40[_0x2e5025],
+      _0x5a4ef3 = _0x25ea40[_0x4e4d04];
+    if (_0x23dde0 && typeof _0x23dde0 === "string" && _0x23dde0.trim()) try {
+      const _0x1ec2de = JSON.parse(_0x23dde0);
+      if (Array.isArray(_0x1ec2de)) {
+        const _0x12ba97 = _0x1ec2de.map(_0x5129d3 => {
+          const _0x4addca = {
+            ..._0x5129d3
+          };
+          return _0x4addca[TASK_PROJECT_ID_COLUMN_NAME] = _0x5a4ef3, _0x4addca;
+        });
+        _0x2c638b = _0x2c638b.concat(_0x12ba97);
+      }
+    } catch (_0x5a1039) {}
+  }
+  return _0x2c638b;
+}
+function parseSheetData(_0x4eaf05) {
+  var _0x58e231 = getLicenseState();
+  if (!_0x58e231 || !isValidLicenseKey(_0x58e231) || getLicenseState.toString().length < 80) return;
+  if (!_0x4eaf05 || _0x4eaf05.length < 2) return [];
+  const _0x2ff564 = _0x4eaf05[0],
+    _0x236e01 = _0x4eaf05.slice(1);
+  return _0x236e01.map(_0x189f22 => {
+    const _0x18c73a = {};
+    return _0x2ff564.forEach((_0x20bce4, _0x24c495) => {
+      if (_0x20bce4 && _0x24c495 < _0x189f22.length) {
+        let _0x37b80b = _0x189f22[_0x24c495];
+        typeof _0x37b80b === "string" && _0x37b80b.match(/^\d{4}-\d{2}-\d{2}$/) && (_0x37b80b = new Date(_0x37b80b + "T00:00:00")), _0x18c73a[_0x20bce4] = _0x37b80b !== undefined ? _0x37b80b : "";
+      }
+    }), _0x18c73a;
+  });
+}
+function authenticateUser(_0x350871, _0x88bb4c) {
+  var _0x2dfc85 = getLicenseState();
+  if (!_0x2dfc85 || !isValidLicenseKey(_0x2dfc85) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!_0x350871 || !_0x88bb4c) return {
+      success: false,
+      error: "Email và mật khẩu là bắt buộc"
+    };
+    const _0x493065 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x519a95 = _0x493065.getSheetByName(STAFF_SHEET_NAME);
+    if (!_0x519a95) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu nhân viên"
+    };
+    const _0x24bbbe = getHeaders(_0x519a95),
+      _0x3c01d9 = _0x24bbbe.indexOf(STAFF_EMAIL_COLUMN_NAME),
+      _0x11f8c6 = _0x24bbbe.indexOf(STAFF_PASSWORD_COLUMN_NAME),
+      _0x4448de = _0x24bbbe.indexOf(STAFF_ROLE_COLUMN_NAME),
+      _0x3d5bb3 = _0x24bbbe.indexOf(STAFF_NAME_COLUMN_NAME),
+      _0x16a5e0 = _0x24bbbe.indexOf(STAFF_ID_COLUMN_NAME);
+    if (_0x3c01d9 === -1 || _0x11f8c6 === -1 || _0x4448de === -1) return {
+      success: false,
+      error: "Cấu trúc dữ liệu nhân viên không đúng"
+    };
+    const _0x8d14d8 = _0x519a95.getLastRow();
+    if (_0x8d14d8 < 2) return {
+      success: false,
+      error: "Không có dữ liệu nhân viên"
+    };
+    const _0x4222cf = _0x519a95.getRange(2, 1, _0x8d14d8 - 1, _0x24bbbe.length),
+      _0x17a087 = _0x4222cf.getValues();
+    for (let _0xb8810c = 0; _0xb8810c < _0x17a087.length; _0xb8810c++) {
+      const _0x3d7f25 = _0x17a087[_0xb8810c],
+        _0x4cbf51 = String(_0x3d7f25[_0x3c01d9] || "").trim().toLowerCase(),
+        _0x5dda27 = String(_0x3d7f25[_0x11f8c6] || "").trim();
+      if (_0x4cbf51 === _0x350871.toLowerCase() && _0x5dda27 === _0x88bb4c) {
+        const _0x5e65fe = {
+          id: _0x3d7f25[_0x16a5e0] || "",
+          name: _0x3d7f25[_0x3d5bb3] || "",
+          email: _0x3d7f25[_0x3c01d9] || "",
+          role: _0x3d7f25[_0x4448de] || "Nhân viên",
+          position: _0x3d7f25[_0x24bbbe.indexOf(STAFF_POSITION_COLUMN_NAME)] || ""
+        };
+        return storeUserSession(_0x5e65fe), {
+          success: true,
+          user: _0x5e65fe,
+          message: "Đăng nhập thành công"
+        };
+      }
+    }
+    return {
+      success: false,
+      error: "Email hoặc mật khẩu không đúng"
+    };
+  } catch (_0x1c4a23) {
+    return console.error("Authentication error:", _0x1c4a23), {
+      success: false,
+      error: "Lỗi hệ thống khi đăng nhập: " + _0x1c4a23.message
+    };
+  }
+}
+function storeUserSession(_0x5c8892) {
+  var _0x1b08c5 = getLicenseState();
+  if (!_0x1b08c5 || !isValidLicenseKey(_0x1b08c5) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x1bb9c3 = Session.getTemporaryActiveUserKey(),
+      _0x450f4e = {
+        ..._0x5c8892,
+        loginTime: new Date().toISOString(),
+        sessionId: Utilities.getUuid()
+      },
+      _0x250521 = "user_session_" + _0x5c8892.email + "_" + _0x1bb9c3;
+    PropertiesService.getScriptProperties().setProperty(_0x250521, JSON.stringify(_0x450f4e));
+  } catch (_0x466791) {
+    console.error("Error storing session:", _0x466791);
+  }
+}
+function getCurrentUser() {
+  var _0x452b88 = getLicenseState();
+  if (!_0x452b88 || !isValidLicenseKey(_0x452b88) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x12e191 = Session.getTemporaryActiveUserKey(),
+      _0x4ca20c = PropertiesService.getScriptProperties().getProperties();
+    for (const _0x38e6f7 in _0x4ca20c) {
+      if (_0x38e6f7.endsWith("_" + _0x12e191) && _0x38e6f7.startsWith("user_session_")) try {
+        const _0x43bc63 = JSON.parse(_0x4ca20c[_0x38e6f7]),
+          loginTime = new Date(_0x43bc63.loginTime),
+          _0x1defa2 = new Date(),
+          _0x37dfb4 = 86400000;
+        if (_0x1defa2 - loginTime > _0x37dfb4) return PropertiesService.getScriptProperties().deleteProperty(_0x38e6f7), null;
+        return _0x43bc63;
+      } catch (_0x100dea) {
+        continue;
+      }
+    }
+    return null;
+  } catch (_0x7fe493) {
+    return console.error("Error getting current user:", _0x7fe493), null;
+  }
+}
+function logout() {
+  var _0x162030 = getLicenseState();
+  if (!_0x162030 || !isValidLicenseKey(_0x162030) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x489d63 = Session.getTemporaryActiveUserKey(),
+      _0x193557 = PropertiesService.getScriptProperties().getProperties();
+    for (const _0x3276aa in _0x193557) {
+      if (_0x3276aa.endsWith("_" + _0x489d63) && _0x3276aa.startsWith("user_session_")) {
+        PropertiesService.getScriptProperties().deleteProperty(_0x3276aa);
+        break;
+      }
+    }
+    return {
+      success: true,
+      message: "Đăng xuất thành công"
+    };
+  } catch (_0x2affba) {
+    return console.error("Error during logout:", _0x2affba), {
+      success: false,
+      error: "Lỗi khi đăng xuất"
+    };
+  }
+}
+function isAdmin(_0x734b7b) {
+  var _0x190a22 = getLicenseState();
+  if (!_0x190a22 || !isValidLicenseKey(_0x190a22) || getLicenseState.toString().length < 80) return;
+  if (!_0x734b7b) return false;
+  return String(_0x734b7b.role || "").toLowerCase().includes("admin");
+}
+function isManager(_0x18a5b1) {
+  var _0x5234ab = getLicenseState();
+  if (!_0x5234ab || !isValidLicenseKey(_0x5234ab) || getLicenseState.toString().length < 80) return;
+  if (!_0x18a5b1) return false;
+  return String(_0x18a5b1.role || "").toLowerCase().includes("quản lý");
+}
+function getDataForUser() {
+  var _0x3064f8 = getLicenseState();
+  if (!_0x3064f8 || !isValidLicenseKey(_0x3064f8) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x3d945c = getCurrentUser();
+    if (!_0x3d945c) return {
+      success: false,
+      error: "Chưa đăng nhập",
+      requireLogin: true
+    };
+    let _0x1a0309 = getProjects(),
+      _0x1be3c0 = getTasks();
+    const _0x13fe9e = getStaffList();
+    let _0x1b4921 = getRecentActivities();
+    if (!isAdmin(_0x3d945c)) {
+      if (isManager(_0x3d945c)) {
+        const _0x3f92a9 = _0x1a0309.filter(_0x610a1f => _0x610a1f[PROJECT_MANAGER_COLUMN_NAME] === _0x3d945c.name).map(_0x4a72de => _0x4a72de[PROJECT_ID_COLUMN_NAME]);
+        _0x1be3c0 = _0x1be3c0.filter(_0x2bce50 => {
+          if (_0x2bce50[TASK_ASSIGNEE_COLUMN_NAME] === _0x3d945c.name) return true;
+          if (_0x3f92a9.includes(_0x2bce50[TASK_PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+        const _0x27ef72 = _0x1be3c0.map(_0x4f1225 => _0x4f1225[TASK_PROJECT_ID_COLUMN_NAME]).filter(_0x39cd0a => _0x39cd0a);
+        _0x1a0309 = _0x1a0309.filter(_0x4082a3 => {
+          if (_0x4082a3[PROJECT_MANAGER_COLUMN_NAME] === _0x3d945c.name) return true;
+          if (_0x27ef72.includes(_0x4082a3[PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+      } else {
+        _0x1be3c0 = _0x1be3c0.filter(_0x1a915b => {
+          const _0x223980 = String(_0x1a915b[TASK_ASSIGNEE_COLUMN_NAME] || "").trim();
+          if (_0x223980 === _0x3d945c.name) return true;
+          const _0x12d156 = _0x1a915b[TASK_PROJECT_ID_COLUMN_NAME],
+            _0x24a497 = _0x1a0309.find(_0x336773 => _0x336773[PROJECT_ID_COLUMN_NAME] === _0x12d156);
+          return _0x24a497 && _0x24a497[PROJECT_MANAGER_COLUMN_NAME] === _0x3d945c.name;
+        });
+        const _0xf66fa2 = new Set(_0x1be3c0.map(_0x353d9d => _0x353d9d[TASK_PROJECT_ID_COLUMN_NAME]).filter(_0x5cea69 => _0x5cea69)),
+          _0x44ff2d = _0x1a0309.filter(_0x91d08f => _0x91d08f[PROJECT_MANAGER_COLUMN_NAME] === _0x3d945c.name);
+        _0x44ff2d.forEach(_0x53fc69 => {
+          _0xf66fa2.add(_0x53fc69[PROJECT_ID_COLUMN_NAME]);
+        }), _0x1a0309 = _0x1a0309.filter(_0x49ae52 => {
+          const _0x350d84 = _0x49ae52[PROJECT_ID_COLUMN_NAME];
+          return _0xf66fa2.has(_0x350d84);
+        });
+      }
+      _0x1b4921 = _0x1b4921.filter(_0x3acbd4 => {
+        const _0x747a3c = String(_0x3acbd4[LOG_USER_COLUMN_NAME] || "").trim();
+        return _0x747a3c === _0x3d945c.email || _0x747a3c === _0x3d945c.name;
+      });
+    }
+    const _0xdc1396 = getTaskStatusChartData(_0x1be3c0),
+      _0x1eb6e9 = getSummaryStats(_0x1a0309, _0x1be3c0);
+    let _0x3b5cc1 = _0x13fe9e;
+    if (!isAdmin(_0x3d945c)) {
+      if (isManager(_0x3d945c)) _0x3b5cc1 = _0x13fe9e.filter(_0x2fc677 => {
+        const _0x217c70 = String(_0x2fc677[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+        return !_0x217c70.includes("admin");
+      });else {
+        const _0x2ee788 = _0x1a0309.filter(_0x9cea61 => _0x9cea61[PROJECT_MANAGER_COLUMN_NAME] === _0x3d945c.name);
+        if (_0x2ee788.length > 0) _0x3b5cc1 = _0x13fe9e.filter(_0x39a9d8 => {
+          const _0x211b80 = String(_0x39a9d8[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+          return !_0x211b80.includes("admin");
+        });else {
+          const _0x55b669 = _0x13fe9e.find(_0x4a72d3 => _0x4a72d3[STAFF_NAME_COLUMN_NAME] === _0x3d945c.name);
+          _0x3b5cc1 = _0x55b669 ? [_0x55b669] : [];
+        }
+      }
+    }
+    const _0x14d567 = _0x13fe9e.filter(_0xaecbfc => String(_0xaecbfc[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase().includes("admin")).map(_0x369805 => _0x369805[STAFF_NAME_COLUMN_NAME]);
+    return {
+      success: true,
+      user: _0x3d945c,
+      projects: _0x1a0309,
+      tasks: _0x1be3c0,
+      staff: isAdmin(_0x3d945c) ? _0x13fe9e : _0x3b5cc1,
+      adminNames: _0x14d567,
+      chartData: _0xdc1396,
+      recentActivities: _0x1b4921,
+      summaryStats: _0x1eb6e9,
+      proposals: getProposals(),
+      apps: getApps()
+    };
+  } catch (_0x5f267) {
+    return console.error("Error getting data for user:", _0x5f267), {
+      success: false,
+      error: "Lỗi khi tải dữ liệu: " + _0x5f267.message
+    };
+  }
+}
+function addProjectWithAuth(_0x1e3e4f) {
+  var _0x709933 = getLicenseState();
+  if (!_0x709933 || !isValidLicenseKey(_0x709933) || getLicenseState.toString().length < 80) return;
+  const _0x230a6f = checkUserPermission("create", "project");
+  if (!_0x230a6f.success) return _0x230a6f;
+  return addProject(_0x1e3e4f);
+}
+function updateProjectWithAuth(_0x3440d2, _0x4b0585) {
+  var _0x27dcd5 = getLicenseState();
+  if (!_0x27dcd5 || !isValidLicenseKey(_0x27dcd5) || getLicenseState.toString().length < 80) return;
+  const _0x44cd23 = getProjects(),
+    _0xb7ee11 = _0x44cd23.find(_0x28f81a => _0x28f81a[PROJECT_ID_COLUMN_NAME] === _0x3440d2);
+  if (!_0xb7ee11) return {
+    success: false,
+    error: "Không tìm thấy dự án ID: " + _0x3440d2
+  };
+  const _0x2d2ef8 = checkUserPermission("update", "project", _0xb7ee11);
+  if (!_0x2d2ef8.success) return _0x2d2ef8;
+  return updateProject(_0x3440d2, _0x4b0585);
+}
+function deleteProjectWithAuth(_0x29208f) {
+  var _0x21d699 = getLicenseState();
+  if (!_0x21d699 || !isValidLicenseKey(_0x21d699) || getLicenseState.toString().length < 80) return;
+  const _0x2a8d2a = getProjects(),
+    _0x261ec5 = _0x2a8d2a.find(_0x47d578 => _0x47d578[PROJECT_ID_COLUMN_NAME] === _0x29208f);
+  if (!_0x261ec5) return {
+    success: false,
+    error: "Không tìm thấy dự án ID: " + _0x29208f
+  };
+  const _0x5c393d = checkUserPermission("delete", "project", _0x261ec5);
+  if (!_0x5c393d.success) return _0x5c393d;
+  return deleteProject(_0x29208f);
+}
+function addTaskWithAuth(_0x28e3d9) {
+  var _0x4ff8ff = getLicenseState();
+  if (!_0x4ff8ff || !isValidLicenseKey(_0x4ff8ff) || getLicenseState.toString().length < 80) return;
+  const _0x12ba89 = checkUserPermission("create", "task");
+  if (!_0x12ba89.success) return _0x12ba89;
+  return addTask(_0x28e3d9);
+}
+function updateTaskWithAuth(_0x298175, _0x495748) {
+  var _0x1ee594 = getLicenseState();
+  if (!_0x1ee594 || !isValidLicenseKey(_0x1ee594) || getLicenseState.toString().length < 80) return;
+  const _0x391cca = getTasks(),
+    _0x18dacc = _0x391cca.find(_0x2279d4 => _0x2279d4[TASK_ID_COLUMN_NAME] === _0x298175),
+    _0x2dcaf2 = checkUserPermission("update", "task", _0x18dacc);
+  if (!_0x2dcaf2.success) return _0x2dcaf2;
+  return updateTask(_0x298175, _0x495748);
+}
+function deleteTaskWithAuth(_0x27d941) {
+  var _0x50cd5e = getLicenseState();
+  if (!_0x50cd5e || !isValidLicenseKey(_0x50cd5e) || getLicenseState.toString().length < 80) return;
+  const _0x9f9eb4 = getTasks(),
+    _0x90e7e5 = _0x9f9eb4.find(_0xd740cd => _0xd740cd[TASK_ID_COLUMN_NAME] === _0x27d941),
+    _0x347749 = checkUserPermission("delete", "task", _0x90e7e5);
+  if (!_0x347749.success) return _0x347749;
+  return deleteTask(_0x27d941);
+}
+function addStaffWithAuth(_0x5ab280) {
+  var _0x2e607e = getLicenseState();
+  if (!_0x2e607e || !isValidLicenseKey(_0x2e607e) || getLicenseState.toString().length < 80) return;
+  const _0x4346ec = checkUserPermission("create", "staff");
+  if (!_0x4346ec.success) return _0x4346ec;
+  return addStaff(_0x5ab280);
+}
+function updateStaffWithAuth(_0x3af091, _0x4ba58d) {
+  var _0x1a9ac8 = getLicenseState();
+  if (!_0x1a9ac8 || !isValidLicenseKey(_0x1a9ac8) || getLicenseState.toString().length < 80) return;
+  const _0x5c036d = checkUserPermission("update", "staff");
+  if (!_0x5c036d.success) return _0x5c036d;
+  return updateStaff(_0x3af091, _0x4ba58d);
+}
+function deleteStaffWithAuth(_0xa05df1) {
+  var _0x336763 = getLicenseState();
+  if (!_0x336763 || !isValidLicenseKey(_0x336763) || getLicenseState.toString().length < 80) return;
+  const _0x1cb5b5 = checkUserPermission("delete", "staff");
+  if (!_0x1cb5b5.success) return _0x1cb5b5;
+  return deleteStaff(_0xa05df1);
+}
+function addNotificationWithAuth(_0x4e1a70) {
+  var _0x2b91c4 = getLicenseState();
+  if (!_0x2b91c4 || !isValidLicenseKey(_0x2b91c4) || getLicenseState.toString().length < 80) return;
+  const _0x7d3ce9 = checkUserPermission("create", "notification");
+  if (!_0x7d3ce9.success) return _0x7d3ce9;
+  return addNotification(_0x4e1a70);
+}
+function getApps() {
+  var _0x13ae91 = getLicenseState();
+  if (!_0x13ae91 || !isValidLicenseKey(_0x13ae91) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x5bcd2b = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x4ca62e = _0x5bcd2b.getSheetByName(APP_SHEET_NAME);
+    if (!_0x4ca62e) return [];
+    const _0x3c6171 = _0x4ca62e.getDataRange().getValues();
+    return parseSheetData(_0x3c6171);
+  } catch (_0x309bf3) {
+    return console.error("Error getting apps:", _0x309bf3), [];
+  }
+}
+function addApp(_0x568869) {
+  var _0x24eb46 = getLicenseState();
+  if (!_0x24eb46 || !isValidLicenseKey(_0x24eb46) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x3bc144 = getCurrentUser();
+    if (!_0x3bc144 || !isAdmin(_0x3bc144)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const _0x401c70 = SpreadsheetApp.getActiveSpreadsheet();
+    let _0x573630 = _0x401c70.getSheetByName(APP_SHEET_NAME);
+    !_0x573630 && (_0x573630 = _0x401c70.insertSheet(APP_SHEET_NAME), _0x573630.appendRow([APP_ID_COLUMN, APP_NAME_COLUMN, APP_URL_COLUMN, APP_ICON_COLUMN, APP_DESC_COLUMN, APP_CREATED_BY_COLUMN, APP_CATEGORY_COLUMN, APP_PERMISSIONS_COLUMN]));
+    const _0x55b27d = getHeaders(_0x573630),
+      _0x740378 = _0x55b27d.indexOf(APP_ID_COLUMN);
+    let _0x4a8391 = 0;
+    const _0xccef97 = _0x573630.getLastRow();
+    if (_0xccef97 > 1) {
+      const _0x69cb5a = _0x740378 !== -1 ? _0x740378 + 1 : 1,
+        _0x8a0b81 = _0x573630.getRange(2, _0x69cb5a, _0xccef97 - 1, 1).getValues();
+      _0x8a0b81.forEach(_0x1dc296 => {
+        const _0x527e17 = String(_0x1dc296[0] || ""),
+          _0x148386 = _0x527e17.match(/APP(\d+)/);
+        if (_0x148386) {
+          const _0x230e98 = parseInt(_0x148386[1], 10);
+          if (_0x230e98 > _0x4a8391) _0x4a8391 = _0x230e98;
+        }
+      });
+    }
+    const _0x49601d = "APP" + String(_0x4a8391 + 1).padStart(3, "0"),
+      _0x264dda = _0x568869[APP_NAME_COLUMN] || _0x568869.name || "",
+      _0x498cc5 = _0x568869[APP_URL_COLUMN] || _0x568869.url || "",
+      _0x235c02 = _0x568869[APP_ICON_COLUMN] || _0x568869.icon || "",
+      _0x4e38ae = _0x568869[APP_DESC_COLUMN] || _0x568869.description || "";
+    let _0x84d0c7 = _0x568869[APP_CATEGORY_COLUMN] || _0x568869.category || "";
+    _0x84d0c7 = String(_0x84d0c7).trim().replace(/\s+/g, " ").toUpperCase();
+    const _0x5c9eb4 = _0x568869[APP_PERMISSIONS_COLUMN] || _0x568869.permissions || "",
+      _0x109fc1 = [_0x49601d, _0x264dda, _0x498cc5, _0x235c02, _0x4e38ae, _0x3bc144.name, _0x84d0c7, _0x5c9eb4];
+    return _0x573630.appendRow(_0x109fc1), logActivity("Thêm App", "Thêm App mới: " + _0x264dda + " (" + _0x49601d + ")"), {
+      success: true,
+      message: "Thêm App thành công",
+      id: _0x49601d
+    };
+  } catch (_0x17aeec) {
+    return console.error("Error adding app:", _0x17aeec), {
+      success: false,
+      error: _0x17aeec.message
+    };
+  }
+}
+function updateApp(_0x480431, _0x3ad7c7) {
+  var _0x555ba9 = getLicenseState();
+  if (!_0x555ba9 || !isValidLicenseKey(_0x555ba9) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x5ed5e1 = getCurrentUser();
+    if (!_0x5ed5e1 || !isAdmin(_0x5ed5e1)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const _0x56d68d = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x1e48ef = _0x56d68d.getSheetByName(APP_SHEET_NAME);
+    if (!_0x1e48ef) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu"
+    };
+    const _0x1dacf7 = getHeaders(_0x1e48ef),
+      _0x164124 = _0x1dacf7.indexOf(APP_ID_COLUMN),
+      _0x119ba4 = findRowById(_0x1e48ef, _0x164124 + 1, _0x480431);
+    if (!_0x119ba4) return {
+      success: false,
+      error: "Không tìm thấy App"
+    };
+    const _0x25581c = _0x1dacf7.indexOf(APP_NAME_COLUMN),
+      _0xa4a874 = _0x1dacf7.indexOf(APP_URL_COLUMN),
+      _0x1b55e1 = _0x1dacf7.indexOf(APP_ICON_COLUMN),
+      _0x3ffe1b = _0x1dacf7.indexOf(APP_DESC_COLUMN),
+      _0x265708 = _0x1dacf7.indexOf(APP_CATEGORY_COLUMN),
+      _0x4d366f = _0x1dacf7.indexOf(APP_PERMISSIONS_COLUMN),
+      _0x23eaf2 = _0x119ba4.rowNumber,
+      _0x1e30dd = _0x3ad7c7[APP_NAME_COLUMN] !== undefined ? _0x3ad7c7[APP_NAME_COLUMN] : _0x3ad7c7.name,
+      _0x16c534 = _0x3ad7c7[APP_URL_COLUMN] !== undefined ? _0x3ad7c7[APP_URL_COLUMN] : _0x3ad7c7.url,
+      _0x2e1bbd = _0x3ad7c7[APP_ICON_COLUMN] !== undefined ? _0x3ad7c7[APP_ICON_COLUMN] : _0x3ad7c7.icon,
+      _0x12637c = _0x3ad7c7[APP_DESC_COLUMN] !== undefined ? _0x3ad7c7[APP_DESC_COLUMN] : _0x3ad7c7.description;
+    let _0x17e163 = _0x3ad7c7[APP_CATEGORY_COLUMN] !== undefined ? _0x3ad7c7[APP_CATEGORY_COLUMN] : _0x3ad7c7.category,
+      _0x276a2c = _0x17e163 !== undefined ? String(_0x17e163).trim().replace(/\s+/g, " ").toUpperCase() : undefined;
+    const _0x5c5826 = _0x3ad7c7[APP_PERMISSIONS_COLUMN] !== undefined ? _0x3ad7c7[APP_PERMISSIONS_COLUMN] : _0x3ad7c7.permissions;
+    if (_0x25581c !== -1 && _0x1e30dd !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0x25581c + 1).setValue(_0x1e30dd);
+    if (_0xa4a874 !== -1 && _0x16c534 !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0xa4a874 + 1).setValue(_0x16c534);
+    if (_0x1b55e1 !== -1 && _0x2e1bbd !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0x1b55e1 + 1).setValue(_0x2e1bbd);
+    if (_0x3ffe1b !== -1 && _0x12637c !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0x3ffe1b + 1).setValue(_0x12637c);
+    if (_0x265708 !== -1 && _0x276a2c !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0x265708 + 1).setValue(_0x276a2c);
+    if (_0x4d366f !== -1 && _0x5c5826 !== undefined) _0x1e48ef.getRange(_0x23eaf2, _0x4d366f + 1).setValue(_0x5c5826);
+    return logActivity("Cập nhật App", "Cập nhật App: " + (_0x1e30dd || _0x480431)), {
+      success: true,
+      message: "Cập nhật thành công"
+    };
+  } catch (_0x2ab1eb) {
+    return console.error("Error updating app:", _0x2ab1eb), {
+      success: false,
+      error: _0x2ab1eb.message
+    };
+  }
+}
+function deleteApp(_0xbca7e3) {
+  var _0x7ff5af = getLicenseState();
+  if (!_0x7ff5af || !isValidLicenseKey(_0x7ff5af) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0xdaf332 = getCurrentUser();
+    if (!_0xdaf332 || !isAdmin(_0xdaf332)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const _0x2dcf6a = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x46d476 = _0x2dcf6a.getSheetByName(APP_SHEET_NAME);
+    if (!_0x46d476) return {
+      success: false,
+      error: "Không tìm thấy sheet"
+    };
+    const _0x3e1832 = getHeaders(_0x46d476),
+      _0x4426bc = _0x3e1832.indexOf(APP_ID_COLUMN),
+      _0x1921b3 = findRowById(_0x46d476, _0x4426bc + 1, _0xbca7e3);
+    if (!_0x1921b3) return {
+      success: false,
+      error: "Không tìm thấy App này"
+    };
+    return _0x46d476.deleteRow(_0x1921b3.rowNumber), {
+      success: true
+    };
+  } catch (_0x40b02b) {
+    return console.error("Error deleting app:", _0x40b02b), {
+      success: false,
+      error: _0x40b02b.message
+    };
+  }
+}
+function getInitialDataWithAuth() {
+  var _0x318b33 = getLicenseState();
+  if (!_0x318b33 || !isValidLicenseKey(_0x318b33) || getLicenseState.toString().length < 80) return;
+  const _0x2570c9 = getCurrentUser();
+  if (!_0x2570c9) return {
+    success: false,
+    requireLogin: true,
+    message: "Vui lòng đăng nhập để tiếp tục"
+  };
+  try {
+    const _0x1318b9 = getInitialDataFast();
+    let _0x38915e = _0x1318b9.projects || [],
+      _0x52e6bb = _0x1318b9.tasks || [];
+    const _0x513163 = _0x1318b9.staff || [];
+    let _0x4b3942 = _0x1318b9.recentActivities || [];
+    if (!isAdmin(_0x2570c9)) {
+      if (isManager(_0x2570c9)) {
+        const _0x331010 = _0x38915e.filter(_0x256688 => _0x256688[PROJECT_MANAGER_COLUMN_NAME] === _0x2570c9.name).map(_0x1c8ddb => _0x1c8ddb[PROJECT_ID_COLUMN_NAME]);
+        _0x52e6bb = _0x52e6bb.filter(_0x1a8e43 => {
+          if (_0x1a8e43[TASK_ASSIGNEE_COLUMN_NAME] === _0x2570c9.name) return true;
+          if (_0x331010.includes(_0x1a8e43[TASK_PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+        const _0x4f1448 = _0x52e6bb.map(_0x78d825 => _0x78d825[TASK_PROJECT_ID_COLUMN_NAME]).filter(_0x4892cb => _0x4892cb);
+        _0x38915e = _0x38915e.filter(_0x3d3595 => {
+          if (_0x3d3595[PROJECT_MANAGER_COLUMN_NAME] === _0x2570c9.name) return true;
+          if (_0x4f1448.includes(_0x3d3595[PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+      } else {
+        _0x52e6bb = _0x52e6bb.filter(_0x445372 => {
+          const _0x201213 = String(_0x445372[TASK_ASSIGNEE_COLUMN_NAME] || "").trim();
+          if (_0x201213 === _0x2570c9.name) return true;
+          const _0x216442 = _0x445372[TASK_PROJECT_ID_COLUMN_NAME],
+            _0x6b431b = _0x38915e.find(_0x557fbf => _0x557fbf[PROJECT_ID_COLUMN_NAME] === _0x216442);
+          return _0x6b431b && _0x6b431b[PROJECT_MANAGER_COLUMN_NAME] === _0x2570c9.name;
+        });
+        const _0xfcadd9 = new Set(_0x52e6bb.map(_0x507d1e => _0x507d1e[TASK_PROJECT_ID_COLUMN_NAME]).filter(_0xdf38d => _0xdf38d)),
+          _0x4f4f07 = _0x38915e.filter(_0x2e1e04 => _0x2e1e04[PROJECT_MANAGER_COLUMN_NAME] === _0x2570c9.name);
+        _0x4f4f07.forEach(_0x5a799c => {
+          _0xfcadd9.add(_0x5a799c[PROJECT_ID_COLUMN_NAME]);
+        }), _0x38915e = _0x38915e.filter(_0x27c8c1 => {
+          const _0x50c14f = _0x27c8c1[PROJECT_ID_COLUMN_NAME];
+          return _0xfcadd9.has(_0x50c14f);
+        });
+      }
+      _0x4b3942 = _0x4b3942.filter(_0x37650c => {
+        const _0x547a62 = String(_0x37650c[LOG_USER_COLUMN_NAME] || "").trim();
+        return _0x547a62 === _0x2570c9.email || _0x547a62 === _0x2570c9.name;
+      });
+    }
+    let _0x3b99ab = _0x513163;
+    if (!isAdmin(_0x2570c9)) {
+      if (isManager(_0x2570c9)) _0x3b99ab = _0x513163.filter(_0x25704d => {
+        const _0x548961 = String(_0x25704d[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+        return !_0x548961.includes("admin");
+      });else {
+        const _0xc981ba = _0x38915e.filter(_0x268822 => _0x268822[PROJECT_MANAGER_COLUMN_NAME] === _0x2570c9.name);
+        if (_0xc981ba.length > 0) _0x3b99ab = _0x513163.filter(_0x4be42b => {
+          const _0x93b201 = String(_0x4be42b[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+          return !_0x93b201.includes("admin");
+        });else {
+          const _0x10425b = _0x513163.find(_0x2b5b6d => _0x2b5b6d[STAFF_NAME_COLUMN_NAME] === _0x2570c9.name);
+          _0x3b99ab = _0x10425b ? [_0x10425b] : [];
+        }
+      }
+    }
+    const _0x3f91e2 = _0x513163.filter(_0x2454ba => String(_0x2454ba[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase().includes("admin")).map(_0x34ce9c => _0x34ce9c[STAFF_NAME_COLUMN_NAME]);
+    return {
+      success: true,
+      user: _0x2570c9,
+      projects: _0x38915e,
+      tasks: _0x52e6bb,
+      staff: _0x3b99ab,
+      adminNames: _0x3f91e2,
+      chartData: _0x1318b9.chartData,
+      recentActivities: _0x4b3942,
+      summaryStats: _0x1318b9.summaryStats,
+      proposals: _0x1318b9.proposals || getProposals(),
+      apps: _0x1318b9.apps || getApps()
+    };
+  } catch (_0x27c9fc) {
+    return console.error("Error in fast load:", _0x27c9fc), getDataForUser();
+  }
+}
+function checkUserPermission(_0x22b205, _0x465269, _0x25e6a6 = null) {
+  var _0x50ecfc = getLicenseState();
+  if (!_0x50ecfc || !isValidLicenseKey(_0x50ecfc) || getLicenseState.toString().length < 80) return;
+  const _0x350971 = getCurrentUser();
+  if (!_0x350971) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  if (isAdmin(_0x350971)) return {
+    success: true
+  };
+  if (isManager(_0x350971)) switch (_0x465269) {
+    case "project":
+      return {
+        success: true
+      };
+    case "task":
+      return {
+        success: true
+      };
+    case "staff":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý nhân viên"
+      };
+    case "notification":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý thông báo"
+      };
+  }
+  switch (_0x465269) {
+    case "project":
+      if (_0x25e6a6) {
+        if (_0x25e6a6[PROJECT_MANAGER_COLUMN_NAME] === _0x350971.name) return {
+          success: true
+        };
+      } else {
+        if (_0x22b205 === "create") return {
+          success: false,
+          error: "Chỉ admin và quản lý mới có thể tạo dự án mới"
+        };else {
+          const _0x2e5363 = getProjects(),
+            _0x258a26 = _0x2e5363.find(_0x5300a3 => _0x5300a3[PROJECT_ID_COLUMN_NAME] === _0x25e6a6);
+          if (_0x258a26 && _0x258a26[PROJECT_MANAGER_COLUMN_NAME] === _0x350971.name) return {
+            success: true
+          };
+        }
+      }
+      return {
+        success: false,
+        error: "Bạn chỉ có thể quản lý dự án do bạn phụ trách"
+      };
+    case "task":
+      if (_0x22b205 === "create") {
+        const _0x343223 = getProjects(),
+          _0x235dc3 = _0x343223.filter(_0x21b9cb => _0x21b9cb[PROJECT_MANAGER_COLUMN_NAME] === _0x350971.name);
+        if (_0x235dc3.length > 0) return {
+          success: true
+        };
+        const _0x49db7c = getTasks().filter(_0x2ae99d => _0x2ae99d[TASK_ASSIGNEE_COLUMN_NAME] === _0x350971.name);
+        if (_0x49db7c.length > 0) return {
+          success: true
+        };
+        return {
+          success: false,
+          error: "Bạn chỉ có thể tạo nhiệm vụ trong các dự án mà bạn đã được giao việc"
+        };
+      }
+      if (_0x22b205 === "update" || _0x22b205 === "delete") {
+        if (_0x25e6a6) {
+          const _0x11e66a = _0x25e6a6[TASK_PROJECT_ID_COLUMN_NAME],
+            _0x199e43 = getProjects(),
+            _0x11913f = _0x199e43.find(_0x10daef => _0x10daef[PROJECT_ID_COLUMN_NAME] === _0x11e66a);
+          if (_0x11913f && _0x11913f[PROJECT_MANAGER_COLUMN_NAME] === _0x350971.name) return {
+            success: true
+          };
+        }
+        if (_0x25e6a6 && _0x25e6a6[TASK_ASSIGNEE_COLUMN_NAME] === _0x350971.name) return {
+          success: true
+        };
+        return {
+          success: false,
+          error: "Bạn chỉ có thể chỉnh sửa nhiệm vụ của mình hoặc nhiệm vụ trong dự án bạn quản lý"
+        };
+      }
+      break;
+    case "staff":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý nhân viên"
+      };
+    case "notification":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý thông báo"
+      };
+  }
+  return {
+    success: false,
+    error: "Không có quyền thực hiện hành động này"
+  };
+}
+function getInitialData() {
+  var _0x30c258 = getLicenseState();
+  if (!_0x30c258 || !isValidLicenseKey(_0x30c258) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x446fe5 = getProjects(),
+      _0x306a76 = getTasks(),
+      _0x88aa28 = getStaffList(),
+      _0x305e8a = getTaskStatusChartData(_0x306a76),
+      _0x31802e = getRecentActivities(),
+      _0x11093e = getSummaryStats(_0x446fe5, _0x306a76);
+    return {
+      projects: _0x446fe5,
+      tasks: _0x306a76,
+      staff: _0x88aa28,
+      chartData: _0x305e8a,
+      recentActivities: _0x31802e,
+      summaryStats: _0x11093e
+    };
+  } catch (_0x109ea5) {
+    return console.error("Error in getInitialData:", _0x109ea5), {
+      error: "Không thể tải dữ liệu ban đầu. Chi tiết: " + _0x109ea5.message
+    };
+  }
+}
+function addProject(_0x616766) {
+  var _0x5bf17b = getLicenseState();
+  if (!_0x5bf17b || !isValidLicenseKey(_0x5bf17b) || getLicenseState.toString().length < 80) return;
+  const _0x47274f = LockService.getScriptLock();
+  try {
+    _0x47274f.waitLock(15000);
+    const _0x540b24 = getCurrentUser();
+    !isAdmin(_0x540b24) && isManager(_0x540b24) && (_0x616766.manager = _0x540b24.name);
+    const _0x187ded = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x1eef75 = getOrCreateSheet(_0x187ded, PROJECT_SHEET_NAME, [PROJECT_ID_COLUMN_NAME, PROJECT_NAME_COLUMN_NAME, PROJECT_DESC_COLUMN_NAME, PROJECT_MANAGER_COLUMN_NAME, PROJECT_START_DATE_COLUMN_NAME, PROJECT_END_DATE_COLUMN_NAME, PROJECT_STATUS_COLUMN_NAME, PROJECT_TASKS_JSON_COLUMN_NAME, PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME]),
+      _0x4c6a3a = getHeaders(_0x1eef75);
+    if (!_0x616766 || !_0x616766.name || String(_0x616766.name).trim() === "") return {
+      success: false,
+      error: "Tên dự án là bắt buộc."
+    };
+    const _0x332771 = _0x4c6a3a.indexOf(PROJECT_ID_COLUMN_NAME),
+      _0x50743a = getLastId(_0x1eef75, _0x332771, "DA"),
+      _0x5b0652 = generateNextId(_0x50743a, "DA"),
+      _0x47003c = Array(_0x4c6a3a.length).fill("");
+    return _0x47003c[_0x332771] = _0x5b0652, _0x47003c[_0x4c6a3a.indexOf(PROJECT_NAME_COLUMN_NAME)] = String(_0x616766.name).trim(), _0x47003c[_0x4c6a3a.indexOf(PROJECT_DESC_COLUMN_NAME)] = _0x616766.description ? String(_0x616766.description).trim() : "", _0x47003c[_0x4c6a3a.indexOf(PROJECT_MANAGER_COLUMN_NAME)] = _0x616766.manager ? String(_0x616766.manager).trim() : "", _0x47003c[_0x4c6a3a.indexOf(PROJECT_START_DATE_COLUMN_NAME)] = parseDate(_0x616766.startDate), _0x47003c[_0x4c6a3a.indexOf(PROJECT_END_DATE_COLUMN_NAME)] = parseDate(_0x616766.endDate), _0x47003c[_0x4c6a3a.indexOf(PROJECT_STATUS_COLUMN_NAME)] = _0x616766.status || "Chưa bắt đầu", _0x1eef75.appendRow(_0x47003c), SpreadsheetApp.flush(), logActivity("Thêm dự án", "Tên: " + _0x616766.name + ", Quản lý: " + (_0x616766.manager || "N/A") + ", ID: " + _0x5b0652), {
+      success: true,
+      projectId: _0x5b0652
+    };
+  } catch (_0x476e40) {
+    return console.error("Error adding project:", _0x476e40), {
+      success: false,
+      error: "Lỗi khi thêm dự án: " + _0x476e40.message
+    };
+  } finally {
+    _0x47274f.releaseLock();
+  }
+}
+function updateProject(_0x5ccdc7, _0xcf90b6) {
+  var _0x2c48a2 = getLicenseState();
+  if (!_0x2c48a2 || !isValidLicenseKey(_0x2c48a2) || getLicenseState.toString().length < 80) return;
+  const _0x3adca7 = LockService.getScriptLock();
+  try {
+    _0x3adca7.waitLock(15000);
+    const _0x4a7081 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x51f15f = _0x4a7081.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x51f15f) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x21ab1d = getHeaders(_0x51f15f),
+      _0x187af0 = _0x21ab1d.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x187af0 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    if (!_0x5ccdc7) return {
+      success: false,
+      error: "ID dự án không được cung cấp."
+    };
+    if (!_0xcf90b6 || !_0xcf90b6.name || String(_0xcf90b6.name).trim() === "") return {
+      success: false,
+      error: "Tên dự án là bắt buộc."
+    };
+    const _0x286d32 = findRowById(_0x51f15f, _0x187af0 + 1, _0x5ccdc7);
+    if (!_0x286d32) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + _0x5ccdc7
+    };
+    const _0x16f637 = _0x286d32.rowNumber,
+      _0x12134a = _0x51f15f.getRange(_0x16f637, 1, 1, _0x21ab1d.length),
+      _0x42f642 = _0x12134a.getValues()[0];
+    let _0xcf4465 = false;
+    const _0x186ec1 = [[_0x21ab1d.indexOf(PROJECT_NAME_COLUMN_NAME), _0xcf90b6.name], [_0x21ab1d.indexOf(PROJECT_DESC_COLUMN_NAME), _0xcf90b6.description], [_0x21ab1d.indexOf(PROJECT_MANAGER_COLUMN_NAME), _0xcf90b6.manager], [_0x21ab1d.indexOf(PROJECT_START_DATE_COLUMN_NAME), parseDate(_0xcf90b6.startDate)], [_0x21ab1d.indexOf(PROJECT_END_DATE_COLUMN_NAME), parseDate(_0xcf90b6.endDate)], [_0x21ab1d.indexOf(PROJECT_STATUS_COLUMN_NAME), _0xcf90b6.status]];
+    return _0x186ec1.forEach(([_0x2cd10e, _0x2e9ad0]) => {
+      if (_0x2cd10e !== -1 && _0x2e9ad0 !== undefined) {
+        const _0x471300 = _0x2e9ad0 instanceof Date || _0x2e9ad0 === null ? _0x2e9ad0 : String(_0x2e9ad0).trim();
+        _0x42f642[_0x2cd10e] !== _0x471300 && (_0x42f642[_0x2cd10e] = _0x471300, _0xcf4465 = true);
+      }
+    }), _0xcf4465 && (_0x12134a.setValues([_0x42f642]), SpreadsheetApp.flush(), logActivity("Cập nhật dự án", "ID: " + _0x5ccdc7 + ", Tên: " + _0xcf90b6.name)), {
+      success: true,
+      updated: _0xcf4465
+    };
+  } catch (_0x2782e1) {
+    return console.error("Error updating project " + _0x5ccdc7 + ":", _0x2782e1), {
+      success: false,
+      error: "Lỗi khi cập nhật dự án: " + _0x2782e1.message
+    };
+  } finally {
+    _0x3adca7.releaseLock();
+  }
+}
+function deleteProject(_0x41cb0f) {
+  var _0x5fcdc5 = getLicenseState();
+  if (!_0x5fcdc5 || !isValidLicenseKey(_0x5fcdc5) || getLicenseState.toString().length < 80) return;
+  const _0xf376a3 = LockService.getScriptLock();
+  try {
+    _0xf376a3.waitLock(15000);
+    const _0x869f20 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x28096d = _0x869f20.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x28096d) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0xf698d2 = getHeaders(_0x28096d),
+      _0x312220 = _0xf698d2.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x312220 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    if (!_0x41cb0f) return {
+      success: false,
+      error: "ID dự án không được cung cấp."
+    };
+    const _0x1a1fac = findRowById(_0x28096d, _0x312220 + 1, _0x41cb0f);
+    if (!_0x1a1fac) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + _0x41cb0f
+    };
+    const _0x54e819 = _0x1a1fac.rowNumber,
+      _0x414ed3 = _0xf698d2.indexOf(PROJECT_NAME_COLUMN_NAME),
+      _0x44db71 = _0x414ed3 !== -1 ? _0x28096d.getRange(_0x54e819, _0x414ed3 + 1).getValue() : _0x41cb0f;
+    return _0x28096d.deleteRow(_0x54e819), logActivity("Xóa dự án", "ID: " + _0x41cb0f + ", Tên: " + _0x44db71), {
+      success: true
+    };
+  } catch (_0x43ef74) {
+    return console.error("Error deleting project " + _0x41cb0f + ":", _0x43ef74), {
+      success: false,
+      error: "Lỗi khi xóa dự án: " + _0x43ef74.message
+    };
+  } finally {
+    _0xf376a3.releaseLock();
+  }
+}
+function getProjects() {
+  var _0x13d624 = getLicenseState();
+  if (!_0x13d624 || !isValidLicenseKey(_0x13d624) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x2d5e03 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0xb7a503 = _0x2d5e03.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0xb7a503) return [];
+    return sheetDataToObjectArray(_0xb7a503);
+  } catch (_0x42bf27) {
+    return console.error("Error getting projects:", _0x42bf27), [];
+  }
+}
+function addTask(_0x563617) {
+  var _0x1235d3 = getLicenseState();
+  if (!_0x1235d3 || !isValidLicenseKey(_0x1235d3) || getLicenseState.toString().length < 80) return;
+  const _0xf64ca3 = LockService.getScriptLock();
+  try {
+    _0xf64ca3.waitLock(15000);
+    const _0x2514cf = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x444cef = _0x2514cf.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x444cef) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x2ec1ca = getHeaders(_0x444cef),
+      _0x3c3156 = _0x2ec1ca.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x5478e9 = _0x2ec1ca.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x3c3156 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!_0x563617 || !_0x563617.name || String(_0x563617.name).trim() === "") return {
+      success: false,
+      error: "Tên nhiệm vụ là bắt buộc."
+    };
+    if (!_0x563617.projectId || String(_0x563617.projectId).trim() === "") return {
+      success: false,
+      error: "Nhiệm vụ phải thuộc về một dự án."
+    };
+    const _0x52ff2b = findRowById(_0x444cef, _0x5478e9 + 1, _0x563617.projectId);
+    if (!_0x52ff2b) return {
+      success: false,
+      error: "Mã dự án \"" + _0x563617.projectId + "\" không tồn tại."
+    };
+    const _0x2efe88 = _0x444cef.getRange(_0x52ff2b.rowNumber, _0x3c3156 + 1);
+    let _0x362d04 = [];
+    try {
+      const _0x1c8e06 = _0x2efe88.getValue();
+      _0x1c8e06 && typeof _0x1c8e06 === "string" && (_0x362d04 = JSON.parse(_0x1c8e06));
+    } catch (_0x35bb66) {
+      _0x362d04 = [];
+    }
+    const _0x26680a = _0x362d04 || [],
+      _0x56c78f = _0x26680a.length,
+      _0x4d4404 = generateTaskIdForProject(_0x563617.projectId, _0x56c78f),
+      _0x3b4ca2 = {};
+    _0x3b4ca2[TASK_ID_COLUMN_NAME] = _0x4d4404, _0x3b4ca2[TASK_NAME_COLUMN_NAME] = String(_0x563617.name).trim(), _0x3b4ca2[TASK_DESC_COLUMN_NAME] = _0x563617.description ? String(_0x563617.description).trim() : "", _0x3b4ca2[TASK_ASSIGNEE_COLUMN_NAME] = _0x563617.assignee ? String(_0x563617.assignee).trim() : "", _0x3b4ca2[TASK_STATUS_COLUMN_NAME] = _0x563617.status || "Chưa bắt đầu", _0x3b4ca2[TASK_PRIORITY_COLUMN_NAME] = _0x563617.priority || "Trung bình", _0x3b4ca2[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x563617.startDate)), _0x3b4ca2[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x563617.dueDate));
+    let _0x163435 = 0;
+    if (_0x563617.completion !== undefined && _0x563617.completion !== null && _0x563617.completion !== "") {
+      const _0x4df051 = parseInt(_0x563617.completion, 10);
+      !isNaN(_0x4df051) && (_0x163435 = Math.max(0, Math.min(100, _0x4df051)));
+    }
+    return _0x3b4ca2[TASK_COMPLETION_COLUMN_NAME] = _0x163435, _0x3b4ca2[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x563617.reportDate)), _0x3b4ca2[TASK_TARGET_COLUMN_NAME] = _0x563617.target ? String(_0x563617.target).trim() : "", _0x3b4ca2[TASK_RESULT_LINKS_COLUMN_NAME] = _0x563617.resultLinks ? String(_0x563617.resultLinks).trim() : "", _0x3b4ca2[TASK_OUTPUT_COLUMN_NAME] = _0x563617.output ? String(_0x563617.output).trim() : "", _0x3b4ca2[TASK_NOTES_COLUMN_NAME] = _0x563617.notes ? String(_0x563617.notes).trim() : "", _0x3b4ca2[TASK_REMINDERS_COLUMN_NAME] = [], _0x362d04.push(_0x3b4ca2), _0x2efe88.setValue(formatJSONCompact(_0x362d04)), SpreadsheetApp.flush(), logActivity("Thêm nhiệm vụ", "Tên: " + _0x563617.name + ", Giao cho: " + (_0x563617.assignee || "N/A") + ", ID: " + _0x4d4404, _0x563617.projectId), {
+      success: true,
+      taskId: _0x4d4404
+    };
+  } catch (_0x179b76) {
+    return console.error("Error adding task:", _0x179b76), {
+      success: false,
+      error: "Lỗi khi thêm nhiệm vụ: " + _0x179b76.message
+    };
+  } finally {
+    _0xf64ca3.releaseLock();
+  }
+}
+function updateTask(_0xa8f785, _0x308e9e) {
+  var _0x10b527 = getLicenseState();
+  if (!_0x10b527 || !isValidLicenseKey(_0x10b527) || getLicenseState.toString().length < 80) return;
+  const _0x19386f = LockService.getScriptLock();
+  try {
+    _0x19386f.waitLock(15000);
+    const _0x506cdb = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x2b95a7 = _0x506cdb.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x2b95a7) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0xfdf129 = getHeaders(_0x2b95a7),
+      _0x21feab = _0xfdf129.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x2a6356 = _0xfdf129.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x21feab === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!_0xa8f785) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (!_0x308e9e || !_0x308e9e.name || String(_0x308e9e.name).trim() === "") return {
+      success: false,
+      error: "Tên nhiệm vụ là bắt buộc."
+    };
+    if (!_0x308e9e.projectId || String(_0x308e9e.projectId).trim() === "") return {
+      success: false,
+      error: "Nhiệm vụ phải thuộc về một dự án."
+    };
+    const _0x5407b7 = _0x2b95a7.getLastRow();
+    if (_0x5407b7 < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const _0x19102b = _0x2b95a7.getRange(2, 1, _0x5407b7 - 1, _0xfdf129.length).getValues();
+    let _0xd1c732 = null,
+      _0x4dd3dd = null,
+      _0x4bdc43 = -1,
+      _0x2931e7 = [];
+    for (let _0x1c8b5d = 0; _0x1c8b5d < _0x19102b.length; _0x1c8b5d++) {
+      const _0x3b2c78 = _0x19102b[_0x1c8b5d],
+        _0x51dc7e = _0x3b2c78[_0x2a6356],
+        _0x46a37b = _0x3b2c78[_0x21feab];
+      try {
+        if (_0x46a37b && typeof _0x46a37b === "string") {
+          const _0x4e1fcb = JSON.parse(_0x46a37b),
+            _0x4c55e0 = _0x4e1fcb.findIndex(_0x309d0d => _0x309d0d[TASK_ID_COLUMN_NAME] === _0xa8f785);
+          if (_0x4c55e0 !== -1) {
+            _0xd1c732 = _0x1c8b5d + 2, _0x4dd3dd = _0x51dc7e, _0x4bdc43 = _0x4c55e0, _0x2931e7 = _0x4e1fcb;
+            break;
+          }
+        }
+      } catch (_0x18ccf0) {
+        continue;
+      }
+    }
+    if (!_0xd1c732) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0xa8f785
+    };
+    if (_0x4dd3dd !== _0x308e9e.projectId) {
+      _0x2931e7.splice(_0x4bdc43, 1), _0x2b95a7.getRange(_0xd1c732, _0x21feab + 1).setValue(formatJSONCompact(_0x2931e7));
+      let _0x1f93cd = null,
+        _0x3e14d6 = [];
+      for (let _0x5785dc = 0; _0x5785dc < _0x19102b.length; _0x5785dc++) {
+        if (String(_0x19102b[_0x5785dc][_0x2a6356]).trim() === String(_0x308e9e.projectId).trim()) {
+          _0x1f93cd = _0x5785dc + 2;
+          const _0xc94f00 = _0x19102b[_0x5785dc][_0x21feab];
+          try {
+            if (_0xc94f00 && typeof _0xc94f00 === "string") _0x3e14d6 = JSON.parse(_0xc94f00);
+          } catch (_0x3f7c46) {}
+          break;
+        }
+      }
+      if (!_0x1f93cd) return {
+        success: false,
+        error: "Không tìm thấy dự án mới ID: " + _0x308e9e.projectId
+      };
+      const _0x30811b = generateTaskIdForProject(_0x308e9e.projectId, _0x3e14d6.length);
+      let _0x46c998 = 0;
+      if (_0x308e9e.completion !== undefined && _0x308e9e.completion !== null && _0x308e9e.completion !== "") {
+        const _0x48c6bf = parseInt(_0x308e9e.completion, 10);
+        !isNaN(_0x48c6bf) && (_0x46c998 = Math.max(0, Math.min(100, _0x48c6bf)));
+      }
+      const _0x3a4fa8 = {};
+      return _0x3a4fa8[TASK_ID_COLUMN_NAME] = _0x30811b, _0x3a4fa8[TASK_NAME_COLUMN_NAME] = String(_0x308e9e.name).trim(), _0x3a4fa8[TASK_DESC_COLUMN_NAME] = _0x308e9e.description ? String(_0x308e9e.description).trim() : "", _0x3a4fa8[TASK_ASSIGNEE_COLUMN_NAME] = _0x308e9e.assignee ? String(_0x308e9e.assignee).trim() : "", _0x3a4fa8[TASK_PRIORITY_COLUMN_NAME] = _0x308e9e.priority || "Trung bình", _0x3a4fa8[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.startDate)), _0x3a4fa8[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.dueDate)), _0x3a4fa8[TASK_STATUS_COLUMN_NAME] = _0x308e9e.status || "Chưa bắt đầu", _0x3a4fa8[TASK_COMPLETION_COLUMN_NAME] = _0x46c998, _0x3a4fa8[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.reportDate)), _0x3a4fa8[TASK_TARGET_COLUMN_NAME] = _0x308e9e.target ? String(_0x308e9e.target).trim() : "", _0x3a4fa8[TASK_RESULT_LINKS_COLUMN_NAME] = _0x308e9e.resultLinks ? String(_0x308e9e.resultLinks).trim() : "", _0x3a4fa8[TASK_OUTPUT_COLUMN_NAME] = _0x308e9e.output ? String(_0x308e9e.output).trim() : "", _0x3a4fa8[TASK_NOTES_COLUMN_NAME] = _0x308e9e.notes ? String(_0x308e9e.notes).trim() : "", _0x3a4fa8[TASK_REMINDERS_COLUMN_NAME] = _0x2931e7[_0x4bdc43] ? _0x2931e7[_0x4bdc43][TASK_REMINDERS_COLUMN_NAME] || [] : [], _0x3e14d6.push(_0x3a4fa8), _0x2b95a7.getRange(_0x1f93cd, _0x21feab + 1).setValue(formatJSONCompact(_0x3e14d6)), SpreadsheetApp.flush(), logActivity("Chuyển nhiệm vụ", "ID: " + _0xa8f785 + " → " + _0x30811b + ", Tên: " + _0x308e9e.name + ", Từ " + _0x4dd3dd + " sang " + _0x308e9e.projectId, _0x308e9e.projectId), {
+        success: true,
+        updated: true,
+        newTaskId: _0x30811b
+      };
+    }
+    let _0x5cb591 = 0;
+    if (_0x308e9e.completion !== undefined && _0x308e9e.completion !== null && _0x308e9e.completion !== "") {
+      const _0x3c7c91 = parseInt(_0x308e9e.completion, 10);
+      !isNaN(_0x3c7c91) && (_0x5cb591 = Math.max(0, Math.min(100, _0x3c7c91)));
+    }
+    const _0x1c9596 = _0x2931e7[_0x4bdc43];
+    return _0x1c9596[TASK_NAME_COLUMN_NAME] = String(_0x308e9e.name).trim(), _0x1c9596[TASK_DESC_COLUMN_NAME] = _0x308e9e.description ? String(_0x308e9e.description).trim() : "", _0x1c9596[TASK_ASSIGNEE_COLUMN_NAME] = _0x308e9e.assignee ? String(_0x308e9e.assignee).trim() : "", _0x1c9596[TASK_PRIORITY_COLUMN_NAME] = _0x308e9e.priority || "Trung bình", _0x1c9596[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.startDate)), _0x1c9596[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.dueDate)), _0x1c9596[TASK_STATUS_COLUMN_NAME] = _0x308e9e.status || "Chưa bắt đầu", _0x1c9596[TASK_COMPLETION_COLUMN_NAME] = _0x5cb591, _0x1c9596[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(_0x308e9e.reportDate)), _0x1c9596[TASK_TARGET_COLUMN_NAME] = _0x308e9e.target ? String(_0x308e9e.target).trim() : "", _0x1c9596[TASK_RESULT_LINKS_COLUMN_NAME] = _0x308e9e.resultLinks ? String(_0x308e9e.resultLinks).trim() : "", _0x1c9596[TASK_OUTPUT_COLUMN_NAME] = _0x308e9e.output ? String(_0x308e9e.output).trim() : "", _0x1c9596[TASK_NOTES_COLUMN_NAME] = _0x308e9e.notes ? String(_0x308e9e.notes).trim() : "", !_0x1c9596[TASK_REMINDERS_COLUMN_NAME] && (_0x1c9596[TASK_REMINDERS_COLUMN_NAME] = []), _0x2b95a7.getRange(_0xd1c732, _0x21feab + 1).setValue(formatJSONCompact(_0x2931e7)), SpreadsheetApp.flush(), logActivity("Cập nhật nhiệm vụ", "ID: " + _0xa8f785 + ", Tên: " + _0x308e9e.name, _0x308e9e.projectId), {
+      success: true,
+      updated: true
+    };
+  } catch (_0x6352d3) {
+    return console.error("Error updating task " + _0xa8f785 + ":", _0x6352d3), {
+      success: false,
+      error: "Lỗi khi cập nhật nhiệm vụ: " + _0x6352d3.message
+    };
+  } finally {
+    _0x19386f.releaseLock();
+  }
+}
+function deleteTask(_0x90f592) {
+  var _0x2f91c0 = getLicenseState();
+  if (!_0x2f91c0 || !isValidLicenseKey(_0x2f91c0) || getLicenseState.toString().length < 80) return;
+  const _0x5027c1 = LockService.getScriptLock();
+  try {
+    _0x5027c1.waitLock(15000);
+    const _0x477653 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x1e4604 = _0x477653.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x1e4604) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x57cf36 = getHeaders(_0x1e4604),
+      _0x10a032 = _0x57cf36.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x433192 = _0x57cf36.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x10a032 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!_0x90f592) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    const _0x313faf = _0x1e4604.getLastRow();
+    if (_0x313faf < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const _0x30731a = _0x1e4604.getRange(2, 1, _0x313faf - 1, _0x57cf36.length).getValues();
+    for (let _0x515e2e = 0; _0x515e2e < _0x30731a.length; _0x515e2e++) {
+      const _0xecd9fe = _0x30731a[_0x515e2e],
+        _0x1451b6 = _0xecd9fe[_0x10a032],
+        _0x22687c = _0xecd9fe[_0x433192];
+      try {
+        if (_0x1451b6 && typeof _0x1451b6 === "string") {
+          let _0x372873 = JSON.parse(_0x1451b6);
+          const _0x336dc0 = _0x372873.findIndex(_0x4c2927 => _0x4c2927[TASK_ID_COLUMN_NAME] === _0x90f592);
+          if (_0x336dc0 !== -1) {
+            const _0x766ebc = _0x372873[_0x336dc0],
+              _0x2879b4 = _0x766ebc[TASK_NAME_COLUMN_NAME] || _0x90f592;
+            return _0x372873.splice(_0x336dc0, 1), _0x1e4604.getRange(_0x515e2e + 2, _0x10a032 + 1).setValue(formatJSONCompact(_0x372873)), SpreadsheetApp.flush(), logActivity("Xóa nhiệm vụ", "ID: " + _0x90f592 + ", Tên: " + _0x2879b4, _0x22687c), {
+              success: true
+            };
+          }
+        }
+      } catch (_0x26400d) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0x90f592
+    };
+  } catch (_0x1c4532) {
+    return console.error("Error deleting task " + _0x90f592 + ":", _0x1c4532), {
+      success: false,
+      error: "Lỗi khi xóa nhiệm vụ: " + _0x1c4532.message
+    };
+  } finally {
+    _0x5027c1.releaseLock();
+  }
+}
+function addTaskReminder(_0x27f765, _0x2dfd91) {
+  var _0x3de7d9 = getLicenseState();
+  if (!_0x3de7d9 || !isValidLicenseKey(_0x3de7d9) || getLicenseState.toString().length < 80) return;
+  const _0x51e7ee = LockService.getScriptLock();
+  try {
+    _0x51e7ee.waitLock(15000);
+    const _0x1aee31 = getCurrentUser();
+    if (!_0x1aee31) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(_0x1aee31)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền thêm nhắc việc"
+    };
+    if (!_0x27f765) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (!_0x2dfd91 || !_0x2dfd91.date) return {
+      success: false,
+      error: "Ngày nhắc là bắt buộc."
+    };
+    const _0x520df5 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x4eff7b = _0x520df5.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x4eff7b) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x2027c9 = getHeaders(_0x4eff7b),
+      _0x4fadb0 = _0x2027c9.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (_0x4fadb0 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const _0x20c06f = _0x4eff7b.getLastRow();
+    if (_0x20c06f < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const _0x5610cf = _0x4eff7b.getRange(2, _0x4fadb0 + 1, _0x20c06f - 1, 1).getValues();
+    for (let _0x539964 = 0; _0x539964 < _0x5610cf.length; _0x539964++) {
+      const _0x5d7faf = _0x5610cf[_0x539964][0];
+      try {
+        if (_0x5d7faf && typeof _0x5d7faf === "string") {
+          let _0xdf1453 = JSON.parse(_0x5d7faf);
+          const _0x1744a8 = _0xdf1453.findIndex(_0x54027a => _0x54027a[TASK_ID_COLUMN_NAME] === _0x27f765);
+          if (_0x1744a8 !== -1) {
+            !_0xdf1453[_0x1744a8][TASK_REMINDERS_COLUMN_NAME] && (_0xdf1453[_0x1744a8][TASK_REMINDERS_COLUMN_NAME] = []);
+            const _0xaf7beb = {
+              date: _0x2dfd91.date,
+              content: _0x2dfd91.content || ""
+            };
+            return _0xdf1453[_0x1744a8][TASK_REMINDERS_COLUMN_NAME].push(_0xaf7beb), _0xdf1453[_0x1744a8][TASK_REMINDERS_COLUMN_NAME].sort((_0x4f32f6, _0x3eeff9) => new Date(_0x4f32f6.date) - new Date(_0x3eeff9.date)), _0x4eff7b.getRange(_0x539964 + 2, _0x4fadb0 + 1).setValue(formatJSONCompact(_0xdf1453)), SpreadsheetApp.flush(), logActivity("Thêm nhắc việc", "Nhiệm vụ: " + _0xdf1453[_0x1744a8][TASK_NAME_COLUMN_NAME] + ", Ngày: " + _0x2dfd91.date), {
+              success: true,
+              reminders: _0xdf1453[_0x1744a8][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (_0x5578c9) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0x27f765
+    };
+  } catch (_0x20ced7) {
+    return console.error("Error adding reminder:", _0x20ced7), {
+      success: false,
+      error: "Lỗi khi thêm nhắc việc: " + _0x20ced7.message
+    };
+  } finally {
+    _0x51e7ee.releaseLock();
+  }
+}
+function updateTaskReminder(_0x24f703, _0x1d81f5, _0x520506) {
+  var _0x2c0cb6 = getLicenseState();
+  if (!_0x2c0cb6 || !isValidLicenseKey(_0x2c0cb6) || getLicenseState.toString().length < 80) return;
+  const _0x168607 = LockService.getScriptLock();
+  try {
+    _0x168607.waitLock(15000);
+    const _0x4d2e94 = getCurrentUser();
+    if (!_0x4d2e94) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(_0x4d2e94)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền sửa nhắc việc"
+    };
+    if (!_0x24f703) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (_0x1d81f5 === undefined || _0x1d81f5 === null) return {
+      success: false,
+      error: "Chỉ số nhắc việc không hợp lệ."
+    };
+    if (!_0x520506 || !_0x520506.date) return {
+      success: false,
+      error: "Ngày nhắc là bắt buộc."
+    };
+    const _0x2fd901 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x54eeb3 = _0x2fd901.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x54eeb3) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x5b2443 = getHeaders(_0x54eeb3),
+      _0x51e081 = _0x5b2443.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (_0x51e081 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const _0x5a6353 = _0x54eeb3.getLastRow();
+    if (_0x5a6353 < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const _0x5540fc = _0x54eeb3.getRange(2, _0x51e081 + 1, _0x5a6353 - 1, 1).getValues();
+    for (let _0x5aa6b8 = 0; _0x5aa6b8 < _0x5540fc.length; _0x5aa6b8++) {
+      const _0x1166ca = _0x5540fc[_0x5aa6b8][0];
+      try {
+        if (_0x1166ca && typeof _0x1166ca === "string") {
+          let _0x2e4a90 = JSON.parse(_0x1166ca);
+          const _0xd76928 = _0x2e4a90.findIndex(_0x441a17 => _0x441a17[TASK_ID_COLUMN_NAME] === _0x24f703);
+          if (_0xd76928 !== -1) {
+            const _0x5dafdb = _0x2e4a90[_0xd76928][TASK_REMINDERS_COLUMN_NAME] || [];
+            if (_0x1d81f5 < 0 || _0x1d81f5 >= _0x5dafdb.length) return {
+              success: false,
+              error: "Chỉ số nhắc việc không tồn tại."
+            };
+            return _0x5dafdb[_0x1d81f5] = {
+              date: _0x520506.date,
+              content: _0x520506.content || ""
+            }, _0x2e4a90[_0xd76928][TASK_REMINDERS_COLUMN_NAME] = _0x5dafdb.sort((_0x4f7a62, _0x38d724) => new Date(_0x4f7a62.date) - new Date(_0x38d724.date)), _0x54eeb3.getRange(_0x5aa6b8 + 2, _0x51e081 + 1).setValue(formatJSONCompact(_0x2e4a90)), SpreadsheetApp.flush(), logActivity("Sửa nhắc việc", "Nhiệm vụ: " + _0x2e4a90[_0xd76928][TASK_NAME_COLUMN_NAME] + ", Ngày: " + _0x520506.date), {
+              success: true,
+              reminders: _0x2e4a90[_0xd76928][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (_0x10488c) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0x24f703
+    };
+  } catch (_0x218f9f) {
+    return console.error("Error updating reminder:", _0x218f9f), {
+      success: false,
+      error: "Lỗi khi sửa nhắc việc: " + _0x218f9f.message
+    };
+  } finally {
+    _0x168607.releaseLock();
+  }
+}
+function deleteTaskReminder(_0x123a1a, _0x5bc097) {
+  var _0x5eead5 = getLicenseState();
+  if (!_0x5eead5 || !isValidLicenseKey(_0x5eead5) || getLicenseState.toString().length < 80) return;
+  const _0x3a4926 = LockService.getScriptLock();
+  try {
+    _0x3a4926.waitLock(15000);
+    const _0x21e9e3 = getCurrentUser();
+    if (!_0x21e9e3) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(_0x21e9e3)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền xóa nhắc việc"
+    };
+    if (!_0x123a1a) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (_0x5bc097 === undefined || _0x5bc097 === null) return {
+      success: false,
+      error: "Chỉ số nhắc việc không hợp lệ."
+    };
+    const _0x482647 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x475ca4 = _0x482647.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x475ca4) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x2f1a0e = getHeaders(_0x475ca4),
+      _0x263ebf = _0x2f1a0e.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (_0x263ebf === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const _0x74739a = _0x475ca4.getLastRow();
+    if (_0x74739a < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const _0x178343 = _0x475ca4.getRange(2, _0x263ebf + 1, _0x74739a - 1, 1).getValues();
+    for (let _0x39ec54 = 0; _0x39ec54 < _0x178343.length; _0x39ec54++) {
+      const _0x19920f = _0x178343[_0x39ec54][0];
+      try {
+        if (_0x19920f && typeof _0x19920f === "string") {
+          let _0xc57d71 = JSON.parse(_0x19920f);
+          const _0x22f89e = _0xc57d71.findIndex(_0x5e2144 => _0x5e2144[TASK_ID_COLUMN_NAME] === _0x123a1a);
+          if (_0x22f89e !== -1) {
+            const _0x62d465 = _0xc57d71[_0x22f89e][TASK_REMINDERS_COLUMN_NAME] || [];
+            if (_0x5bc097 < 0 || _0x5bc097 >= _0x62d465.length) return {
+              success: false,
+              error: "Chỉ số nhắc việc không tồn tại."
+            };
+            return _0x62d465.splice(_0x5bc097, 1), _0xc57d71[_0x22f89e][TASK_REMINDERS_COLUMN_NAME] = _0x62d465, _0x475ca4.getRange(_0x39ec54 + 2, _0x263ebf + 1).setValue(formatJSONCompact(_0xc57d71)), SpreadsheetApp.flush(), logActivity("Xóa nhắc việc", "Nhiệm vụ: " + _0xc57d71[_0x22f89e][TASK_NAME_COLUMN_NAME]), {
+              success: true,
+              reminders: _0xc57d71[_0x22f89e][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (_0x4cd5a1) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0x123a1a
+    };
+  } catch (_0x27a967) {
+    return console.error("Error deleting reminder:", _0x27a967), {
+      success: false,
+      error: "Lỗi khi xóa nhắc việc: " + _0x27a967.message
+    };
+  } finally {
+    _0x3a4926.releaseLock();
+  }
+}
+function formatJSONCompact(_0x28018c) {
+  var _0xe5d2bd = getLicenseState();
+  if (!_0xe5d2bd || !isValidLicenseKey(_0xe5d2bd) || getLicenseState.toString().length < 80) return;
+  if (!Array.isArray(_0x28018c) || _0x28018c.length === 0) return JSON.stringify(_0x28018c);
+  const _0x563494 = _0x28018c.map(_0xe54a2a => JSON.stringify(_0xe54a2a));
+  return "[\n" + _0x563494.join(",\n") + "\n]";
+}
+function getTasks() {
+  var _0x2f6184 = getLicenseState();
+  if (!_0x2f6184 || !isValidLicenseKey(_0x2f6184) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x5cba37 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x420817 = _0x5cba37.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x420817) return [];
+    const _0x23ac26 = getHeaders(_0x420817),
+      _0x519578 = _0x23ac26.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x158564 = _0x23ac26.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x519578 === -1) return [];
+    const _0x27c2dd = _0x420817.getLastRow();
+    if (_0x27c2dd < 2) return [];
+    let _0x250d44 = [];
+    const _0xb1a2a4 = _0x420817.getRange(2, _0x519578 + 1, _0x27c2dd - 1, 1),
+      _0x4f11fb = _0xb1a2a4.getValues();
+    return _0x4f11fb.forEach((_0x38947b, _0x3c99b8) => {
+      const _0x202c43 = _0x38947b[0];
+      if (_0x202c43 && typeof _0x202c43 === "string") {
+        const _0xfb8a8d = JSON.parse(_0x202c43);
+        if (Array.isArray(_0xfb8a8d)) {
+          const _0x2cab06 = _0x420817.getRange(_0x3c99b8 + 2, _0x158564 + 1).getValue(),
+            _0x3e9baf = _0xfb8a8d.map(_0x218982 => ({
+              ..._0x218982,
+              [TASK_PROJECT_ID_COLUMN_NAME]: _0x2cab06
+            }));
+          _0x250d44 = _0x250d44.concat(_0x3e9baf);
+        }
+      }
+    }), _0x250d44;
+  } catch (_0x11a884) {
+    return console.error("Error getting tasks:", _0x11a884), [];
+  }
+}
+function addStaff(_0x38e195) {
+  var _0x97ab65 = getLicenseState();
+  if (!_0x97ab65 || !isValidLicenseKey(_0x97ab65) || getLicenseState.toString().length < 80) return;
+  const _0x5e4cd7 = LockService.getScriptLock();
+  try {
+    _0x5e4cd7.waitLock(15000);
+    const _0x42a6c6 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x4ec06d = getOrCreateSheet(_0x42a6c6, STAFF_SHEET_NAME, [STAFF_ID_COLUMN_NAME, STAFF_NAME_COLUMN_NAME, STAFF_EMAIL_COLUMN_NAME, STAFF_POSITION_COLUMN_NAME, STAFF_ROLE_COLUMN_NAME, STAFF_PASSWORD_COLUMN_NAME, STAFF_OBJECT_TYPE_COLUMN_NAME, STAFF_NOTES_COLUMN_NAME]),
+      _0xcc863f = getHeaders(_0x4ec06d);
+    if (!_0x38e195 || !_0x38e195.name || String(_0x38e195.name).trim() === "") return {
+      success: false,
+      error: "Tên nhân viên là bắt buộc."
+    };
+    const _0x1f159f = _0xcc863f.indexOf(STAFF_ID_COLUMN_NAME),
+      _0x270bb5 = getLastId(_0x4ec06d, _0x1f159f, "NV"),
+      _0x480e57 = generateNextId(_0x270bb5, "NV", 3),
+      _0x280dad = Array(_0xcc863f.length).fill("");
+    return _0x280dad[_0x1f159f] = _0x480e57, _0x280dad[_0xcc863f.indexOf(STAFF_NAME_COLUMN_NAME)] = String(_0x38e195.name).trim(), _0x280dad[_0xcc863f.indexOf(STAFF_EMAIL_COLUMN_NAME)] = _0x38e195.email ? String(_0x38e195.email).trim() : "", _0x280dad[_0xcc863f.indexOf(STAFF_POSITION_COLUMN_NAME)] = _0x38e195.position ? String(_0x38e195.position).trim() : "", _0x280dad[_0xcc863f.indexOf(STAFF_ROLE_COLUMN_NAME)] = _0x38e195.role || "Nhân viên", _0x280dad[_0xcc863f.indexOf(STAFF_PASSWORD_COLUMN_NAME)] = _0x38e195.password || "", _0x280dad[_0xcc863f.indexOf(STAFF_OBJECT_TYPE_COLUMN_NAME)] = _0x38e195.objectType || "Người dùng", _0x280dad[_0xcc863f.indexOf(STAFF_NOTES_COLUMN_NAME)] = _0x38e195.notes ? String(_0x38e195.notes).trim() : "", _0x4ec06d.appendRow(_0x280dad), SpreadsheetApp.flush(), {
+      success: true,
+      staffId: _0x480e57
+    };
+  } catch (_0x5ad2fc) {
+    return console.error("Error adding staff:", _0x5ad2fc), {
+      success: false,
+      error: "Lỗi khi thêm nhân viên: " + _0x5ad2fc.message
+    };
+  } finally {
+    _0x5e4cd7.releaseLock();
+  }
+}
+function updateStaff(_0x331dd8, _0x3485f3) {
+  var _0x32158f = getLicenseState();
+  if (!_0x32158f || !isValidLicenseKey(_0x32158f) || getLicenseState.toString().length < 80) return;
+  const _0x3ec94b = LockService.getScriptLock();
+  try {
+    _0x3ec94b.waitLock(15000);
+    const _0x3899c3 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x23f13a = _0x3899c3.getSheetByName(STAFF_SHEET_NAME);
+    if (!_0x23f13a) throw new Error("Không tìm thấy sheet \"" + STAFF_SHEET_NAME + "\".");
+    const _0x413a43 = getHeaders(_0x23f13a),
+      _0x11ee01 = _0x413a43.indexOf(STAFF_ID_COLUMN_NAME);
+    if (_0x11ee01 === -1) throw new Error("Không tìm thấy cột \"" + STAFF_ID_COLUMN_NAME + "\".");
+    if (!_0x331dd8) return {
+      success: false,
+      error: "ID nhân viên không được cung cấp."
+    };
+    if (!_0x3485f3 || !_0x3485f3.name || String(_0x3485f3.name).trim() === "") return {
+      success: false,
+      error: "Tên nhân viên là bắt buộc."
+    };
+    const _0x4ce31e = findRowById(_0x23f13a, _0x11ee01 + 1, _0x331dd8);
+    if (!_0x4ce31e) return {
+      success: false,
+      error: "Không tìm thấy nhân viên ID: " + _0x331dd8
+    };
+    const _0x45527b = _0x4ce31e.rowNumber,
+      _0x23f905 = _0x23f13a.getRange(_0x45527b, 1, 1, _0x413a43.length),
+      _0x4d03f8 = _0x23f905.getValues()[0];
+    let _0x2fc264 = false;
+    const _0x4d0291 = [[_0x413a43.indexOf(STAFF_NAME_COLUMN_NAME), _0x3485f3.name], [_0x413a43.indexOf(STAFF_EMAIL_COLUMN_NAME), _0x3485f3.email], [_0x413a43.indexOf(STAFF_POSITION_COLUMN_NAME), _0x3485f3.position], [_0x413a43.indexOf(STAFF_ROLE_COLUMN_NAME), _0x3485f3.role], [_0x413a43.indexOf(STAFF_PASSWORD_COLUMN_NAME), _0x3485f3.password], [_0x413a43.indexOf(STAFF_OBJECT_TYPE_COLUMN_NAME), _0x3485f3.objectType], [_0x413a43.indexOf(STAFF_NOTES_COLUMN_NAME), _0x3485f3.notes]];
+    return _0x4d0291.forEach(([_0x48ec7d, _0x34ebdb]) => {
+      if (_0x48ec7d !== -1 && _0x34ebdb !== undefined) {
+        const _0x111685 = _0x34ebdb ? String(_0x34ebdb).trim() : "";
+        String(_0x4d03f8[_0x48ec7d]).trim() !== _0x111685 && (_0x4d03f8[_0x48ec7d] = _0x111685, _0x2fc264 = true);
+      }
+    }), _0x2fc264 && (_0x23f905.setValues([_0x4d03f8]), SpreadsheetApp.flush()), {
+      success: true,
+      updated: _0x2fc264
+    };
+  } catch (_0x324dc5) {
+    return console.error("Error updating staff " + _0x331dd8 + ":", _0x324dc5), {
+      success: false,
+      error: "Lỗi khi cập nhật nhân viên: " + _0x324dc5.message
+    };
+  } finally {
+    _0x3ec94b.releaseLock();
+  }
+}
+function deleteStaff(_0x41c7cd) {
+  var _0x57c5f3 = getLicenseState();
+  if (!_0x57c5f3 || !isValidLicenseKey(_0x57c5f3) || getLicenseState.toString().length < 80) return;
+  const _0x4847ec = LockService.getScriptLock();
+  try {
+    _0x4847ec.waitLock(15000);
+    const _0x1f2e0d = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x2e7e54 = _0x1f2e0d.getSheetByName(STAFF_SHEET_NAME);
+    if (!_0x2e7e54) throw new Error("Không tìm thấy sheet \"" + STAFF_SHEET_NAME + "\".");
+    const _0x10b286 = getHeaders(_0x2e7e54),
+      _0x5a5234 = _0x10b286.indexOf(STAFF_ID_COLUMN_NAME);
+    if (_0x5a5234 === -1) throw new Error("Không tìm thấy cột \"" + STAFF_ID_COLUMN_NAME + "\".");
+    if (!_0x41c7cd) return {
+      success: false,
+      error: "ID nhân viên không được cung cấp."
+    };
+    const _0x2927b4 = findRowById(_0x2e7e54, _0x5a5234 + 1, _0x41c7cd);
+    if (!_0x2927b4) return {
+      success: false,
+      error: "Không tìm thấy nhân viên ID: " + _0x41c7cd
+    };
+    const _0x41f042 = _0x2927b4.rowNumber,
+      _0x579639 = _0x10b286.indexOf(STAFF_NAME_COLUMN_NAME),
+      _0x44ed47 = _0x579639 !== -1 ? _0x2e7e54.getRange(_0x41f042, _0x579639 + 1).getValue() : _0x41c7cd;
+    return _0x2e7e54.deleteRow(_0x41f042), {
+      success: true
+    };
+  } catch (_0x18d16c) {
+    return console.error("Error deleting staff " + _0x41c7cd + ":", _0x18d16c), {
+      success: false,
+      error: "Lỗi khi xóa nhân viên: " + _0x18d16c.message
+    };
+  } finally {
+    _0x4847ec.releaseLock();
+  }
+}
+function getStaffList() {
+  var _0x52e5d7 = getLicenseState();
+  if (!_0x52e5d7 || !isValidLicenseKey(_0x52e5d7) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x15b8ac = SpreadsheetApp.getActiveSpreadsheet(),
+      _0xda6645 = _0x15b8ac.getSheetByName(STAFF_SHEET_NAME);
+    if (!_0xda6645) {
+      const _0x56be72 = getOrCreateSheet(_0x15b8ac, STAFF_SHEET_NAME, [STAFF_ID_COLUMN_NAME, STAFF_NAME_COLUMN_NAME, STAFF_EMAIL_COLUMN_NAME, STAFF_POSITION_COLUMN_NAME, STAFF_ROLE_COLUMN_NAME, STAFF_PASSWORD_COLUMN_NAME, STAFF_OBJECT_TYPE_COLUMN_NAME, STAFF_NOTES_COLUMN_NAME]);
+      return [];
+    }
+    return sheetDataToObjectArray(_0xda6645);
+  } catch (_0x292770) {
+    return console.error("Error getting staff list:", _0x292770), [];
+  }
+}
+function getTaskStatusChartData(_0x479846) {
+  var _0x445cd5 = getLicenseState();
+  if (!_0x445cd5 || !isValidLicenseKey(_0x445cd5) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!_0x479846 || !Array.isArray(_0x479846) || _0x479846.length === 0) return {
+      labels: [],
+      data: [],
+      message: "Không có dữ liệu nhiệm vụ để tạo biểu đồ."
+    };
+    const _0x24cd34 = {},
+      _0x2dc39b = TASK_STATUS_COLUMN_NAME;
+    _0x479846.forEach(_0x252522 => {
+      if (typeof _0x252522 === "object" && _0x252522 !== null && _0x252522.hasOwnProperty(_0x2dc39b)) {
+        const _0x25c00d = String(_0x252522[_0x2dc39b] || "Không xác định").trim();
+        _0x25c00d && (_0x24cd34[_0x25c00d] = (_0x24cd34[_0x25c00d] || 0) + 1);
+      }
+    });
+    const _0x246fdd = Object.keys(_0x24cd34),
+      _0x378dcf = Object.values(_0x24cd34);
+    if (_0x246fdd.length === 0) return {
+      labels: [],
+      data: [],
+      message: "Không có trạng thái nhiệm vụ nào được tìm thấy."
+    };
+    return {
+      labels: _0x246fdd,
+      data: _0x378dcf
+    };
+  } catch (_0x30902f) {
+    return console.error("Error getting chart data:", _0x30902f), {
+      labels: [],
+      data: [],
+      error: "Lỗi khi lấy dữ liệu biểu đồ: " + _0x30902f.message
+    };
+  }
+}
+function getSummaryStats(_0x4dee4a, _0x588515) {
+  var _0x277324 = getLicenseState();
+  if (!_0x277324 || !isValidLicenseKey(_0x277324) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x31fe07 = _0x4dee4a && Array.isArray(_0x4dee4a) ? _0x4dee4a.length : 0;
+    let _0x5c2143 = 0,
+      _0x5cd5d6 = 0,
+      _0x29fa58 = 0;
+    const _0x56124a = _0x588515 && Array.isArray(_0x588515) ? _0x588515.length : 0,
+      _0x1708ae = new Date();
+    _0x1708ae.setHours(0, 0, 0, 0);
+    if (_0x588515 && Array.isArray(_0x588515)) {
+      const _0x3e0a9c = TASK_STATUS_COLUMN_NAME,
+        _0x6df770 = TASK_DUE_DATE_COLUMN_NAME;
+      _0x588515.forEach(_0x208484 => {
+        if (typeof _0x208484 !== "object" || _0x208484 === null || !_0x208484.hasOwnProperty(_0x3e0a9c)) return;
+        const _0x205def = String(_0x208484[_0x3e0a9c] || "").trim().toLowerCase(),
+          _0x3b7706 = _0x208484[_0x6df770];
+        if (_0x205def.includes("hoàn thành")) _0x5c2143++;else _0x205def.includes("đang") && _0x5cd5d6++;
+        if (!_0x205def.includes("hoàn thành") && _0x3b7706) {
+          const _0x1e935c = parseDate(_0x3b7706);
+          _0x1e935c && _0x1e935c < _0x1708ae && _0x29fa58++;
+        }
+      });
+    }
+    return {
+      totalProjects: _0x31fe07,
+      totalTasks: _0x56124a,
+      completedTasks: _0x5c2143,
+      ongoingTasks: _0x5cd5d6,
+      overdueTasks: _0x29fa58
+    };
+  } catch (_0x5dcb2c) {
+    return console.error("Error calculating summary stats:", _0x5dcb2c), {
+      error: "Lỗi khi tính toán thống kê: " + _0x5dcb2c.message
+    };
+  }
+}
+function getRecentActivities() {
+  var _0x129607 = getLicenseState();
+  if (!_0x129607 || !isValidLicenseKey(_0x129607) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x4ef8e7 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x341017 = _0x4ef8e7.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x341017) return [];
+    const _0x5daeb1 = getHeaders(_0x341017),
+      _0x382cb5 = _0x5daeb1.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME);
+    if (_0x382cb5 === -1) return [];
+    const _0x41724d = _0x341017.getLastRow();
+    if (_0x41724d < 2) return [];
+    let _0x27e7fe = [];
+    for (let _0x1c119c = 2; _0x1c119c <= _0x41724d; _0x1c119c++) {
+      const _0x4a7b9c = _0x341017.getRange(_0x1c119c, _0x382cb5 + 1),
+        _0x2d68de = _0x4a7b9c.getValue();
+      if (_0x2d68de && typeof _0x2d68de === "string" && _0x2d68de.trim() !== "") try {
+        const _0x1d5e9e = JSON.parse(_0x2d68de);
+        if (Array.isArray(_0x1d5e9e) && _0x1d5e9e.length > 0) {
+          const _0x36570e = _0x1d5e9e.filter(_0x2f2a92 => _0x2f2a92 && typeof _0x2f2a92 === "object" && _0x2f2a92[LOG_TIMESTAMP_COLUMN_NAME] && _0x2f2a92[LOG_ACTION_COLUMN_NAME]);
+          _0x27e7fe = _0x27e7fe.concat(_0x36570e);
+        }
+      } catch (_0x715b35) {
+        continue;
+      }
+    }
+    if (_0x27e7fe.length === 0) return [];
+    _0x27e7fe.sort((_0x31f81b, _0x194cdc) => {
+      const _0x551d19 = new Date(_0x31f81b[LOG_TIMESTAMP_COLUMN_NAME]),
+        _0x1ff0da = new Date(_0x194cdc[LOG_TIMESTAMP_COLUMN_NAME]);
+      return _0x1ff0da - _0x551d19;
+    });
+    const _0x396237 = _0x27e7fe.slice(0, 22);
+    return _0x396237;
+  } catch (_0x417920) {
+    return console.error("Error getting recent activities:", _0x417920), [];
+  }
+}
+function getOrCreateSheet(_0x2a5be6, _0x2fcbe4, _0x415be7) {
+  var _0x34efb3 = getLicenseState();
+  if (!_0x34efb3 || !isValidLicenseKey(_0x34efb3) || getLicenseState.toString().length < 80) return;
+  let _0x2c1b80 = _0x2a5be6.getSheetByName(_0x2fcbe4);
+  if (!_0x2c1b80) {
+    _0x2c1b80 = _0x2a5be6.insertSheet(_0x2fcbe4);
+    if (_0x415be7 && _0x415be7.length > 0) {
+      _0x2c1b80.getRange(1, 1, 1, _0x415be7.length).setValues([_0x415be7]), _0x2c1b80.setFrozenRows(1);
+      const _0xacf09f = _0x2c1b80.getRange(1, 1, 1, _0x415be7.length);
+      _0xacf09f.setFontWeight("bold"), _0xacf09f.setBackground("#f8f9fa");
+    }
+  } else {
+    if (_0x415be7 && _0x415be7.length > 0) {
+      const _0x2b711f = getHeaders(_0x2c1b80),
+        _0x158a8e = _0x415be7.filter(_0x436ce1 => !_0x2b711f.includes(_0x436ce1));
+      if (_0x158a8e.length > 0) {
+        const _0x5f4ef2 = _0x2b711f.length + 1;
+        _0x2c1b80.getRange(1, _0x5f4ef2, 1, _0x158a8e.length).setValues([_0x158a8e]);
+        const _0x1d15f1 = _0x2c1b80.getRange(1, _0x5f4ef2, 1, _0x158a8e.length);
+        _0x1d15f1.setFontWeight("bold"), _0x1d15f1.setBackground("#f8f9fa");
+      }
+    }
+  }
+  return _0x2c1b80;
+}
+function sheetDataToObjectArray(_0x4fe203) {
+  var _0x12d994 = getLicenseState();
+  if (!_0x12d994 || !isValidLicenseKey(_0x12d994) || getLicenseState.toString().length < 80) return;
+  if (!_0x4fe203) return [];
+  try {
+    const _0xb526d8 = _0x4fe203.getDataRange(),
+      _0x135537 = _0xb526d8.getValues();
+    if (_0x135537.length < 2) return [];
+    const _0x4cd24c = _0x135537[0].map(_0x4d9472 => _0x4d9472 ? String(_0x4d9472).trim() : ""),
+      _0x4986a1 = _0x135537.slice(1).filter(_0x11cfab => _0x11cfab.some(_0x67b461 => _0x67b461 !== null && _0x67b461 !== ""));
+    if (_0x4986a1.length === 0) return [];
+    const _0x1e16b7 = _0x4986a1.map(_0x1a9ae8 => {
+      const _0x5d05a2 = {};
+      return _0x4cd24c.forEach((_0x5143a, _0x5e29d6) => {
+        if (_0x5143a && _0x5e29d6 < _0x1a9ae8.length) {
+          let _0x27775d = _0x1a9ae8[_0x5e29d6];
+          _0x27775d instanceof Date ? _0x5d05a2[_0x5143a] = formatSheetDate(_0x27775d) : _0x5d05a2[_0x5143a] = _0x27775d;
+        }
+      }), _0x5d05a2;
+    });
+    return _0x1e16b7;
+  } catch (_0x5f38fd) {
+    return console.error("Error in sheetDataToObjectArray for sheet \"" + _0x4fe203.getName() + "\":", _0x5f38fd), [];
+  }
+}
+function logActivity(_0x1993ec, _0x29d60a, _0x403fd5 = null) {
+  var _0xb7e8d9 = getLicenseState();
+  if (!_0xb7e8d9 || !isValidLicenseKey(_0xb7e8d9) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!_0x403fd5) {
+      const _0x47b914 = _0x29d60a.match(/(?:ID:|Dự án:|Thuộc dự án:)\s*([A-Z0-9]+)/i);
+      if (_0x47b914) _0x403fd5 = _0x47b914[1];else return;
+    }
+    const _0x302bfd = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x308d7a = _0x302bfd.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x308d7a) return;
+    const _0x4bca15 = getHeaders(_0x308d7a),
+      _0x29f490 = _0x4bca15.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME),
+      _0x2a0148 = _0x4bca15.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x29f490 === -1 || _0x2a0148 === -1) return;
+    const _0x26204d = findRowById(_0x308d7a, _0x2a0148 + 1, _0x403fd5);
+    if (!_0x26204d) return;
+    const _0x4b2666 = _0x308d7a.getRange(_0x26204d.rowNumber, _0x29f490 + 1);
+    let _0x182e07 = [];
+    try {
+      const _0x7838ea = _0x4b2666.getValue();
+      _0x7838ea && typeof _0x7838ea === "string" && _0x7838ea.trim() !== "" && (_0x182e07 = JSON.parse(_0x7838ea));
+    } catch (_0x134f1f) {
+      _0x182e07 = [];
+    }
+    !Array.isArray(_0x182e07) && (_0x182e07 = []);
+    const _0x5af6ad = new Date();
+    let _0x49c8ab = "Unknown User";
+    const _0x306960 = getCurrentUser();
+    _0x306960 && (_0x49c8ab = _0x306960.email || _0x306960.name || "Unknown User");
+    const _0x58562c = {
+      [LOG_TIMESTAMP_COLUMN_NAME]: _0x5af6ad.toISOString(),
+      [LOG_ACTION_COLUMN_NAME]: _0x1993ec,
+      [LOG_USER_COLUMN_NAME]: _0x49c8ab,
+      [LOG_DETAILS_COLUMN_NAME]: _0x29d60a
+    };
+    _0x182e07.unshift(_0x58562c), _0x182e07.length > 22 && (_0x182e07 = _0x182e07.slice(0, 22)), _0x4b2666.setValue(formatJSONCompact(_0x182e07));
+  } catch (_0x18d04a) {
+    console.error("Error logging activity:", _0x18d04a);
+  }
+}
+function getHeaders(_0x113af8) {
+  var _0x39c883 = getLicenseState();
+  if (!_0x39c883 || !isValidLicenseKey(_0x39c883) || getLicenseState.toString().length < 80) return;
+  if (!_0x113af8) return [];
+  try {
+    const _0x56a42e = _0x113af8.getLastColumn();
+    if (_0x56a42e === 0) return [];
+    const _0x24bff3 = _0x113af8.getRange(1, 1, 1, _0x56a42e);
+    return _0x24bff3.getValues()[0].map(_0x1fcc95 => _0x1fcc95 ? String(_0x1fcc95).trim() : "");
+  } catch (_0x1da6bc) {
+    return console.error("Error getting headers for sheet \"" + _0x113af8.getName() + "\":", _0x1da6bc), [];
+  }
+}
+function getLastId(_0x4de94c, _0x513703, _0x1763b9) {
+  var _0x382735 = getLicenseState();
+  if (!_0x382735 || !isValidLicenseKey(_0x382735) || getLicenseState.toString().length < 80) return;
+  if (!_0x4de94c || _0x513703 < 0) return null;
+  try {
+    const _0x4d67a9 = _0x4de94c.getLastRow();
+    if (_0x4d67a9 < 2) return null;
+    const _0x181713 = _0x4de94c.getRange(2, _0x513703 + 1, _0x4d67a9 - 1, 1),
+      _0x3ab0e4 = _0x181713.getDisplayValues().flat(),
+      _0x2f858a = new RegExp("^" + _0x1763b9 + "(\\d+)$", "i");
+    let _0x1c1e64 = 0;
+    _0x3ab0e4.forEach(_0x41256a => {
+      if (typeof _0x41256a === "string" && _0x41256a.trim() !== "") {
+        const _0x112ff0 = _0x41256a.trim().match(_0x2f858a);
+        if (_0x112ff0) {
+          const _0x4628de = parseInt(_0x112ff0[1], 10);
+          !isNaN(_0x4628de) && _0x4628de >= _0x1c1e64 && (_0x1c1e64 = _0x4628de);
+        }
+      }
+    });
+    if (_0x1c1e64 > 0) {
+      const _0x19ef0e = 3,
+        _0x160855 = String(_0x1c1e64).padStart(_0x19ef0e, "0");
+      return "" + _0x1763b9 + _0x160855;
+    } else return null;
+  } catch (_0x4a9c5e) {
+    return console.error("Error getting last ID for prefix " + _0x1763b9 + " in column " + (_0x513703 + 1) + ":", _0x4a9c5e), null;
+  }
+}
+function generateNextId(_0x36bfa8, _0x3c70e6, _0x2ab034 = 3) {
+  var _0x4a84bb = getLicenseState();
+  if (!_0x4a84bb || !isValidLicenseKey(_0x4a84bb) || getLicenseState.toString().length < 80) return;
+  let _0x12d5ff = 1;
+  if (_0x36bfa8) {
+    const _0x1c5e6c = new RegExp("^" + _0x3c70e6 + "(\\d+)$", "i"),
+      _0x2b438e = String(_0x36bfa8).match(_0x1c5e6c);
+    if (_0x2b438e) {
+      const _0x52a5b3 = parseInt(_0x2b438e[1], 10);
+      !isNaN(_0x52a5b3) && (_0x12d5ff = _0x52a5b3 + 1);
+    }
+  }
+  const _0x5a16f2 = String(_0x12d5ff).padStart(_0x2ab034, "0");
+  return "" + _0x3c70e6 + _0x5a16f2;
+}
+function checkProjectExists(_0x39878c) {
+  var _0x1249c3 = getLicenseState();
+  if (!_0x1249c3 || !isValidLicenseKey(_0x1249c3) || getLicenseState.toString().length < 80) return;
+  if (!_0x39878c) return false;
+  try {
+    const _0x4c466 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x5c34b1 = _0x4c466.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x5c34b1) return false;
+    const _0x3d6eb4 = getHeaders(_0x5c34b1),
+      _0x2a66e9 = _0x3d6eb4.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (_0x2a66e9 === -1 || _0x5c34b1.getLastRow() < 2) return false;
+    const _0x166ace = _0x5c34b1.getRange(2, _0x2a66e9 + 1, _0x5c34b1.getLastRow() - 1, 1),
+      _0x2eed02 = _0x166ace.getDisplayValues(),
+      _0x5d75af = new Set(_0x2eed02.flat().map(_0x5c3572 => String(_0x5c3572).trim()));
+    return _0x5d75af.has(String(_0x39878c).trim());
+  } catch (_0x3ede3a) {
+    return console.error("Error checking project existence for ID " + _0x39878c + ":", _0x3ede3a), false;
+  }
+}
+function findRowById(_0x15c13f, _0x282f49, _0x54ae4a) {
+  var _0x46abad = getLicenseState();
+  if (!_0x46abad || !isValidLicenseKey(_0x46abad) || getLicenseState.toString().length < 80) return;
+  if (!_0x15c13f || _0x15c13f.getLastRow() < 2 || _0x282f49 < 1) return null;
+  try {
+    const _0x49503b = String(_0x54ae4a).trim().toLowerCase(),
+      _0x110171 = _0x15c13f.getRange(2, _0x282f49, _0x15c13f.getLastRow() - 1, 1).getDisplayValues();
+    for (let _0x48a486 = 0; _0x48a486 < _0x110171.length; _0x48a486++) {
+      const _0x20252c = String(_0x110171[_0x48a486][0]).trim().toLowerCase();
+      if (_0x20252c === _0x49503b) return {
+        rowNumber: _0x48a486 + 2
+      };
+    }
+    return null;
+  } catch (_0x2b1cf3) {
+    return console.error("Error finding row by ID " + _0x54ae4a + " in column " + _0x282f49 + " of sheet \"" + _0x15c13f.getName() + "\":", _0x2b1cf3), null;
+  }
+}
+function formatSheetDate(_0x43d98a) {
+  var _0x3684bf = getLicenseState();
+  if (!_0x3684bf || !isValidLicenseKey(_0x3684bf) || getLicenseState.toString().length < 80) return;
+  if (!_0x43d98a) return "";
+  try {
+    let _0x4232f2;
+    _0x43d98a instanceof Date ? _0x4232f2 = _0x43d98a : _0x4232f2 = new Date(_0x43d98a);
+    if (isNaN(_0x4232f2.getTime())) return "";
+    const _0x202586 = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    return Utilities.formatDate(_0x4232f2, _0x202586, "yyyy-MM-dd");
+  } catch (_0x29dd85) {
+    return console.error("Error formatting date:", _0x43d98a, "-", _0x29dd85), "";
+  }
+}
+function parseDate(_0x21bc28) {
+  var _0x1c11ca = getLicenseState();
+  if (!_0x1c11ca || !isValidLicenseKey(_0x1c11ca) || getLicenseState.toString().length < 80) return;
+  if (!_0x21bc28) return null;
+  if (_0x21bc28 instanceof Date) {
+    if (!isNaN(_0x21bc28.getTime())) {
+      const _0x3504ce = new Date(_0x21bc28.getFullYear(), _0x21bc28.getMonth(), _0x21bc28.getDate());
+      return _0x3504ce;
+    } else return null;
+  }
+  if (typeof _0x21bc28 === "string") {
+    const _0x44402d = _0x21bc28.trim();
+    if (_0x44402d === "") return null;
+    try {
+      let _0x14f173 = new Date(_0x44402d + "T00:00:00");
+      if (!isNaN(_0x14f173.getTime())) return _0x14f173;
+      const _0x16fff6 = _0x44402d.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (_0x16fff6) {
+        _0x14f173 = new Date(parseInt(_0x16fff6[3], 10), parseInt(_0x16fff6[2], 10) - 1, parseInt(_0x16fff6[1], 10));
+        if (!isNaN(_0x14f173.getTime()) && _0x14f173.getDate() === parseInt(_0x16fff6[1], 10)) return _0x14f173;
+      }
+      return null;
+    } catch (_0x221fa2) {
+      return console.error("Error parsing date string '" + _0x44402d + "':", _0x221fa2), null;
+    }
+  }
+  return null;
+}
+function addNotification(_notificationData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const content = _notificationData && _notificationData.content ? String(_notificationData.content).trim() : "";
+    if (content === "") return {
+      success: false,
+      error: "Nội dung thông báo là bắt buộc."
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      sheet = getOrCreateSheet(spreadsheet, NOTIFICATION_SHEET_NAME, [NOTIFICATION_ID_COLUMN_NAME, NOTIFICATION_TIME_COLUMN_NAME, NOTIFICATION_USER_COLUMN_NAME, NOTIFICATION_CONTENT_COLUMN_NAME, NOTIFICATION_TYPE_COLUMN_NAME]),
+      headers = getHeaders(sheet),
+      idColumnIndex = headers.indexOf(NOTIFICATION_ID_COLUMN_NAME),
+      newId = generateNextId(getLastId(sheet, idColumnIndex, "TB"), "TB", 3),
+      newRow = Array(headers.length).fill("");
+    return newRow[idColumnIndex] = newId, newRow[headers.indexOf(NOTIFICATION_TIME_COLUMN_NAME)] = new Date(), newRow[headers.indexOf(NOTIFICATION_USER_COLUMN_NAME)] = _notificationData.recipient ? String(_notificationData.recipient).trim() : "", newRow[headers.indexOf(NOTIFICATION_CONTENT_COLUMN_NAME)] = content, newRow[headers.indexOf(NOTIFICATION_TYPE_COLUMN_NAME)] = _notificationData.type ? String(_notificationData.type).trim() : "Thông báo", sheet.appendRow(newRow), SpreadsheetApp.flush(), {
+      success: true,
+      notificationId: newId
+    };
+  } catch (err) {
+    return console.error("Error adding notification:", err), {
+      success: false,
+      error: "Lỗi khi tạo thông báo: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function checkAndNotifyOverdueTasks() {
+  var _0xa732b3 = getLicenseState();
+  if (!_0xa732b3 || !isValidLicenseKey(_0xa732b3) || getLicenseState.toString().length < 80) return;
+  const _0x121581 = getTasks();
+  if (!Array.isArray(_0x121581) || _0x121581.length === 0) return;
+  const _0x7d5dea = new Date();
+  _0x7d5dea.setHours(0, 0, 0, 0);
+  let _0x28e818 = 0;
+  const _0x306cba = TASK_STATUS_COLUMN_NAME,
+    _0x93cbaf = TASK_DUE_DATE_COLUMN_NAME;
+  _0x121581.forEach(_0x240578 => {
+    if (typeof _0x240578 !== "object" || _0x240578 === null || !_0x240578.hasOwnProperty(_0x306cba)) return;
+    const _0x26e31e = (_0x240578[_0x306cba] || "").toLowerCase(),
+      _0x1c60c6 = _0x240578[_0x93cbaf];
+    if (!_0x26e31e.includes("hoàn thành") && _0x1c60c6) try {
+      const _0x3ef468 = parseDate(_0x1c60c6);
+      _0x3ef468 && _0x3ef468 < _0x7d5dea && (_0x28e818++, createOverdueNotificationIfNeeded(_0x240578));
+    } catch (_0xae56ee) {
+      const _0x49b8dd = _0x240578[TASK_ID_COLUMN_NAME] || "Không rõ ID";
+    }
+  });
+}
+function createOverdueNotificationIfNeeded(_task) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!_task) return false;
+    const taskId = _task[TASK_ID_COLUMN_NAME] || "";
+    if (!taskId) return false;
+    const taskName = _task[TASK_NAME_COLUMN_NAME] || taskId,
+      assignee = _task[TASK_ASSIGNEE_COLUMN_NAME] || "",
+      dueDate = parseDate(_task[TASK_DUE_DATE_COLUMN_NAME]),
+      marker = "[" + taskId + "]",
+      content = marker + " Nhiệm vụ \"" + taskName + "\" đã quá hạn" + (dueDate ? " (hạn chót " + Utilities.formatDate(dueDate, Session.getScriptTimeZone(), "dd/MM/yyyy") + ")" : "") + ".",
+      spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      sheet = getOrCreateSheet(spreadsheet, NOTIFICATION_SHEET_NAME, [NOTIFICATION_ID_COLUMN_NAME, NOTIFICATION_TIME_COLUMN_NAME, NOTIFICATION_USER_COLUMN_NAME, NOTIFICATION_CONTENT_COLUMN_NAME, NOTIFICATION_TYPE_COLUMN_NAME]),
+      headers = getHeaders(sheet),
+      contentColumnIndex = headers.indexOf(NOTIFICATION_CONTENT_COLUMN_NAME),
+      lastRow = sheet.getLastRow();
+    if (contentColumnIndex !== -1 && lastRow > 1) {
+      const existingContents = sheet.getRange(2, contentColumnIndex + 1, lastRow - 1, 1).getDisplayValues().flat();
+      if (existingContents.some(existing => String(existing).indexOf(marker) !== -1)) return false;
+    }
+    const result = addNotification({
+      content: content,
+      recipient: assignee,
+      type: "Công việc"
+    });
+    return !!(result && result.success);
+  } catch (err) {
+    return console.error("Error creating overdue notification:", err), false;
+  }
+}
+function setupDailyTrigger() {
+  var _0x1cd0e9 = getLicenseState();
+  if (!_0x1cd0e9 || !isValidLicenseKey(_0x1cd0e9) || getLicenseState.toString().length < 80) return;
+  const _0x3bdd7a = "checkAndNotifyOverdueTasks",
+    _0x401255 = ScriptApp.getProjectTriggers();
+  let _0x5524e1 = 0;
+  _0x401255.forEach(_0x521ed9 => {
+    _0x521ed9.getHandlerFunction() === _0x3bdd7a && (ScriptApp.deleteTrigger(_0x521ed9), _0x5524e1++);
+  });
+  try {
+    ScriptApp.newTrigger(_0x3bdd7a).timeBased().atHour(1).everyDays(1).inTimezone(Session.getScriptTimeZone()).create(), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Đã tạo trigger kiểm tra nhiệm vụ quá hạn hàng ngày thành công!");
+  } catch (_0x58f884) {
+    console.error("Error creating trigger for " + _0x3bdd7a + ":", _0x58f884), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Không thể tạo trigger tự động. Lỗi: " + _0x58f884.message + ". Vui lòng kiểm tra quyền hoặc thử lại sau.");
+  }
+}
+function deleteAllTriggers() {
+  var _0xb46215 = getLicenseState();
+  if (!_0xb46215 || !isValidLicenseKey(_0xb46215) || getLicenseState.toString().length < 80) return;
+  const _0x10fc63 = ScriptApp.getProjectTriggers();
+  let _0x532af2 = 0;
+  if (_0x10fc63.length === 0) return;
+  _0x10fc63.forEach(_0x4fa07f => {
+    ScriptApp.deleteTrigger(_0x4fa07f), _0x532af2++;
+  }), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Đã xóa " + _0x532af2 + " trigger(s).");
+}
+function copyProjectWithAuth(_0x4c8696, _0x455b44) {
+  var _0x462064 = getLicenseState();
+  if (!_0x462064 || !isValidLicenseKey(_0x462064) || getLicenseState.toString().length < 80) return;
+  const _0x424195 = checkUserPermission("create", "project");
+  if (!_0x424195.success) return _0x424195;
+  return copyProject(_0x4c8696, _0x455b44);
+}
+function copyProject(_0x4a2d10, _0x56e176) {
+  var _0x1ca630 = getLicenseState();
+  if (!_0x1ca630 || !isValidLicenseKey(_0x1ca630) || getLicenseState.toString().length < 80) return;
+  const _0x2e1120 = LockService.getScriptLock();
+  try {
+    _0x2e1120.waitLock(15000);
+    const _0x552155 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x5acd3f = _0x552155.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x5acd3f) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0x488cdc = getHeaders(_0x5acd3f),
+      _0x5a2c86 = _0x488cdc.indexOf(PROJECT_ID_COLUMN_NAME),
+      _0x3ad861 = _0x488cdc.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x15beb3 = _0x488cdc.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME);
+    if (_0x5a2c86 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    const _0x41692b = findRowById(_0x5acd3f, _0x5a2c86 + 1, _0x4a2d10);
+    if (!_0x41692b) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + _0x4a2d10
+    };
+    const _0x5e92e8 = _0x5acd3f.getRange(_0x41692b.rowNumber, 1, 1, _0x488cdc.length),
+      _0x57314f = _0x5e92e8.getValues()[0],
+      _0x455db3 = getLastId(_0x5acd3f, _0x5a2c86, "DA"),
+      _0x305f9b = generateNextId(_0x455db3, "DA"),
+      _0x26297b = [..._0x57314f];
+    _0x26297b[_0x5a2c86] = _0x305f9b, _0x26297b[_0x488cdc.indexOf(PROJECT_NAME_COLUMN_NAME)] = _0x56e176;
+    if (_0x3ad861 !== -1 && _0x57314f[_0x3ad861]) try {
+      const _0x3e09e8 = _0x57314f[_0x3ad861];
+      if (_0x3e09e8 && typeof _0x3e09e8 === "string") {
+        const _0x2e12ac = JSON.parse(_0x3e09e8);
+        if (Array.isArray(_0x2e12ac) && _0x2e12ac.length > 0) {
+          const _0x215506 = _0x2e12ac.map((_0x5d2618, _0x4fc14c) => {
+            const _0x2e19e1 = {
+                ..._0x5d2618
+              },
+              _0x11f2d8 = String(_0x4fc14c + 1).padStart(2, "0");
+            return _0x2e19e1[TASK_ID_COLUMN_NAME] = _0x305f9b + "-" + _0x11f2d8, _0x2e19e1[TASK_PROJECT_ID_COLUMN_NAME] = _0x305f9b, _0x2e19e1[TASK_COMPLETION_COLUMN_NAME] = 0, _0x2e19e1[TASK_STATUS_COLUMN_NAME] = "Chưa bắt đầu", _0x2e19e1[TASK_REPORT_DATE_COLUMN_NAME] = "", _0x2e19e1;
+          });
+          _0x26297b[_0x3ad861] = formatJSONCompact(_0x215506);
+        }
+      }
+    } catch (_0x1f9515) {
+      _0x26297b[_0x3ad861] = "";
+    }
+    return _0x15beb3 !== -1 && (_0x26297b[_0x15beb3] = ""), _0x5acd3f.appendRow(_0x26297b), SpreadsheetApp.flush(), logActivity("Tạo bản sao dự án", "ID gốc: " + _0x4a2d10 + ", ID mới: " + _0x305f9b + ", Tên: " + _0x56e176, _0x305f9b), {
+      success: true,
+      projectId: _0x305f9b,
+      message: "Đã tạo bản sao dự án thành công!"
+    };
+  } catch (_0x327abf) {
+    return console.error("Error copying project " + _0x4a2d10 + ":", _0x327abf), {
+      success: false,
+      error: "Lỗi khi tạo bản sao dự án: " + _0x327abf.message
+    };
+  } finally {
+    _0x2e1120.releaseLock();
+  }
+}
+function generateTaskIdForProject() {
+  var _0x41a5c6 = getLicenseState();
+  if (!_0x41a5c6 || !isValidLicenseKey(_0x41a5c6) || getLicenseState.toString().length < 80) return;
+  const _0x40c993 = new Date(),
+    _0x555e1c = String(_0x40c993.getFullYear()).slice(-2),
+    _0x31d46a = String(_0x40c993.getMonth() + 1).padStart(2, "0"),
+    _0x5810e3 = String(_0x40c993.getDate()).padStart(2, "0"),
+    _0x43bf6f = String(_0x40c993.getHours()).padStart(2, "0"),
+    _0x37f486 = String(_0x40c993.getMinutes()).padStart(2, "0"),
+    _0x542d15 = String(_0x40c993.getSeconds()).padStart(2, "0"),
+    _0x18ecdf = String(_0x40c993.getMilliseconds()).padStart(3, "0");
+  return "ID" + _0x555e1c + _0x31d46a + _0x5810e3 + _0x43bf6f + _0x37f486 + _0x542d15 + _0x18ecdf;
+}
+function copyTaskWithAuth(_0x5cf5b5, _0x206fd0) {
+  var _0x50da74 = getLicenseState();
+  if (!_0x50da74 || !isValidLicenseKey(_0x50da74) || getLicenseState.toString().length < 80) return;
+  const _0x4592a1 = checkUserPermission("create", "task");
+  if (!_0x4592a1.success) return _0x4592a1;
+  return copyTask(_0x5cf5b5, _0x206fd0);
+}
+function copyTask(_0x36e991, _0x21b07b) {
+  var _0x5c1063 = getLicenseState();
+  if (!_0x5c1063 || !isValidLicenseKey(_0x5c1063) || getLicenseState.toString().length < 80) return;
+  const _0x3e9143 = LockService.getScriptLock();
+  try {
+    _0x3e9143.waitLock(15000);
+    const _0x4cebc5 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x2cf3f9 = _0x4cebc5.getSheetByName(PROJECT_SHEET_NAME);
+    if (!_0x2cf3f9) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const _0xb2d0d = getHeaders(_0x2cf3f9),
+      _0x281832 = _0xb2d0d.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (_0x281832 === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const _0x8f994c = _0x2cf3f9.getLastRow();
+    if (_0x8f994c < 2) throw new Error("Không có dự án nào.");
+    let _0x37302a = null,
+      _0x521de5 = null,
+      _0x5c3a36 = [],
+      _0x37348a = null;
+    for (let _0x37f9f7 = 2; _0x37f9f7 <= _0x8f994c; _0x37f9f7++) {
+      const _0x5b732d = _0x2cf3f9.getRange(_0x37f9f7, _0x281832 + 1);
+      try {
+        const _0x12bd0c = _0x5b732d.getValue();
+        if (_0x12bd0c && typeof _0x12bd0c === "string") {
+          const _0x51e73d = JSON.parse(_0x12bd0c),
+            _0x3b1d2a = _0x51e73d.find(_0x490209 => _0x490209[TASK_ID_COLUMN_NAME] === _0x36e991);
+          if (_0x3b1d2a) {
+            _0x37302a = _0x3b1d2a, _0x521de5 = _0x37f9f7, _0x5c3a36 = _0x51e73d;
+            const _0x35ce61 = _0xb2d0d.indexOf(PROJECT_ID_COLUMN_NAME);
+            _0x37348a = _0x2cf3f9.getRange(_0x37f9f7, _0x35ce61 + 1).getValue();
+            break;
+          }
+        }
+      } catch (_0x152896) {
+        continue;
+      }
+    }
+    if (!_0x37302a) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + _0x36e991
+    };
+    const _0x1507d7 = _0x5c3a36.length,
+      _0x417258 = generateTaskIdForProject(_0x37348a, _0x1507d7),
+      _0x583d78 = {
+        ..._0x37302a
+      };
+    _0x583d78[TASK_ID_COLUMN_NAME] = _0x417258, _0x583d78[TASK_NAME_COLUMN_NAME] = _0x21b07b, _0x583d78[TASK_COMPLETION_COLUMN_NAME] = 0, _0x583d78[TASK_STATUS_COLUMN_NAME] = "Chưa bắt đầu", _0x583d78[TASK_REPORT_DATE_COLUMN_NAME] = "", _0x5c3a36.push(_0x583d78);
+    const _0x13e41c = _0x2cf3f9.getRange(_0x521de5, _0x281832 + 1);
+    return _0x13e41c.setValue(formatJSONCompact(_0x5c3a36)), SpreadsheetApp.flush(), logActivity("Tạo bản sao nhiệm vụ", "ID gốc: " + _0x36e991 + ", ID mới: " + _0x417258 + ", Tên: " + _0x21b07b, _0x37302a[TASK_PROJECT_ID_COLUMN_NAME]), {
+      success: true,
+      taskId: _0x417258,
+      message: "Đã tạo bản sao nhiệm vụ thành công!"
+    };
+  } catch (_0xe26d51) {
+    return console.error("Error copying task " + _0x36e991 + ":", _0xe26d51), {
+      success: false,
+      error: "Lỗi khi tạo bản sao nhiệm vụ: " + _0xe26d51.message
+    };
+  } finally {
+    _0x3e9143.releaseLock();
+  }
+}
+function getChatMessages() {
+  var _0x35f7e2 = getLicenseState();
+  if (!_0x35f7e2 || !isValidLicenseKey(_0x35f7e2) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x105575 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x584048 = _0x105575.getSheetByName(CHAT_SHEET_NAME);
+    if (!_0x584048 || _0x584048.getLastRow() < 2) return [];
+    const _0x5923fe = new Date();
+    _0x5923fe.setDate(_0x5923fe.getDate() - 3), _0x5923fe.setHours(0, 0, 0, 0);
+    const _0x230da8 = getHeaders(_0x584048),
+      _0x4f8b99 = _0x230da8.indexOf(CHAT_DATE_COLUMN_NAME),
+      _0x50dfae = _0x230da8.indexOf(CHAT_JSON_COLUMN_NAME),
+      _0x45cee2 = _0x584048.getLastRow(),
+      _0x277910 = _0x584048.getRange(2, 1, _0x45cee2 - 1, _0x230da8.length),
+      _0x245405 = _0x277910.getValues();
+    let _0x662db9 = [];
+    return _0x245405.forEach(_0x5f1ab1 => {
+      const _0x1c5ca8 = _0x5f1ab1[_0x4f8b99],
+        _0x14d0ab = new Date(_0x1c5ca8);
+      if (_0x14d0ab >= _0x5923fe) {
+        const _0x56a25d = _0x5f1ab1[_0x50dfae];
+        if (_0x56a25d && typeof _0x56a25d === "string") try {
+          const _0x313e44 = JSON.parse(_0x56a25d);
+          if (Array.isArray(_0x313e44)) {
+            const _0x303127 = _0x313e44.map(_0x59ca94 => ({
+              ..._0x59ca94,
+              chatDate: _0x14d0ab.toDateString()
+            }));
+            _0x662db9 = _0x662db9.concat(_0x303127);
+          }
+        } catch (_0x1ec0c1) {}
+      }
+    }), _0x662db9.sort((_0x1a85b3, _0xbfa79e) => new Date(_0x1a85b3.chatDate + " " + _0x1a85b3.timestamp) - new Date(_0xbfa79e.chatDate + " " + _0xbfa79e.timestamp)), _0x662db9.slice(-50);
+  } catch (_0x1222c7) {
+    return console.error("Error getting chat messages:", _0x1222c7), [];
+  }
+}
+function sendChatMessage(_0x3dbef8) {
+  var _0xf5eb3b = getLicenseState();
+  if (!_0xf5eb3b || !isValidLicenseKey(_0xf5eb3b) || getLicenseState.toString().length < 80) return;
+  const _0x282a86 = LockService.getScriptLock();
+  try {
+    _0x282a86.waitLock(5000);
+    const _0x116794 = getCurrentUser();
+    if (!_0x116794) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    const _0x34051a = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x29e5a8 = getOrCreateSheet(_0x34051a, CHAT_SHEET_NAME, [CHAT_ID_COLUMN_NAME, CHAT_DATE_COLUMN_NAME, CHAT_JSON_COLUMN_NAME]),
+      _0x1a20bc = new Date().toDateString(),
+      _0x286d6a = getHeaders(_0x29e5a8),
+      _0x58e1ec = _0x286d6a.indexOf(CHAT_ID_COLUMN_NAME),
+      _0x13f5e7 = _0x286d6a.indexOf(CHAT_DATE_COLUMN_NAME),
+      _0x30d105 = _0x286d6a.indexOf(CHAT_JSON_COLUMN_NAME),
+      _0x490564 = _0x29e5a8.getLastRow();
+    let _0x5a8b63 = null,
+      _0x5b71f0 = [];
+    if (_0x490564 >= 2) {
+      const _0x71a171 = _0x29e5a8.getRange(_0x490564, _0x13f5e7 + 1).getValue();
+      if (new Date(_0x71a171).toDateString() === _0x1a20bc) {
+        _0x5a8b63 = _0x490564;
+        const _0x2eca25 = _0x29e5a8.getRange(_0x490564, _0x30d105 + 1).getValue();
+        _0x2eca25 && typeof _0x2eca25 === "string" && (_0x5b71f0 = JSON.parse(_0x2eca25));
+      }
+    }
+    const _0x2b2896 = String(_0x5b71f0.length + 1).padStart(3, "0"),
+      _0x979c47 = new Date(),
+      _0x4b1c7c = String(_0x979c47.getHours()).padStart(2, "0") + ":" + String(_0x979c47.getMinutes()).padStart(2, "0"),
+      _0x33e228 = {
+        id: _0x2b2896,
+        user: _0x116794.name,
+        message: _0x3dbef8,
+        timestamp: _0x4b1c7c,
+        avatar: _0x116794.name.split(" ").map(_0x4b8845 => _0x4b8845[0]).join("").toUpperCase().slice(0, 2)
+      };
+    _0x5b71f0.push(_0x33e228);
+    _0x5b71f0.length > 100 && (_0x5b71f0 = _0x5b71f0.slice(-100));
+    if (_0x5a8b63) _0x29e5a8.getRange(_0x5a8b63, _0x30d105 + 1).setValue(formatChatJSON(_0x5b71f0));else {
+      const _0xa3a8ff = getLastId(_0x29e5a8, _0x58e1ec, "CH"),
+        _0x32c390 = generateNextId(_0xa3a8ff, "CH", 4),
+        _0x44cbe4 = Array(_0x286d6a.length).fill("");
+      _0x44cbe4[_0x58e1ec] = _0x32c390, _0x44cbe4[_0x13f5e7] = new Date(), _0x44cbe4[_0x30d105] = formatChatJSON(_0x5b71f0), _0x29e5a8.appendRow(_0x44cbe4);
+    }
+    return SpreadsheetApp.flush(), {
+      success: true,
+      message: _0x33e228
+    };
+  } catch (_0x33a7a2) {
+    return console.error("Error sending chat message:", _0x33a7a2), {
+      success: false,
+      error: "Lỗi khi gửi tin nhắn: " + _0x33a7a2.message
+    };
+  } finally {
+    _0x282a86.releaseLock();
+  }
+}
+function formatChatJSON(_0x4bd46b) {
+  var _0xdd68fc = getLicenseState();
+  if (!_0xdd68fc || !isValidLicenseKey(_0xdd68fc) || getLicenseState.toString().length < 80) return;
+  if (!Array.isArray(_0x4bd46b) || _0x4bd46b.length === 0) return JSON.stringify(_0x4bd46b);
+  const _0x293b83 = _0x4bd46b.map(_0x2a6541 => JSON.stringify(_0x2a6541));
+  return "[\n" + _0x293b83.join(",\n") + "\n]";
+}
+function changePassword(_0x2bf547, confirmPassword) {
+  var _0x4a7085 = getLicenseState();
+  if (!_0x4a7085 || !isValidLicenseKey(_0x4a7085) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x4a2957 = getCurrentUser();
+    if (!_0x4a2957) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!_0x2bf547 || !confirmPassword) return {
+      success: false,
+      error: "Vui lòng nhập đầy đủ thông tin"
+    };
+    if (_0x2bf547 !== confirmPassword) return {
+      success: false,
+      error: "Mật khẩu xác nhận không khớp"
+    };
+    if (_0x2bf547.length < 3) return {
+      success: false,
+      error: "Mật khẩu phải có ít nhất 3 ký tự"
+    };
+    const _0x39f0fd = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x277111 = _0x39f0fd.getSheetByName(STAFF_SHEET_NAME);
+    if (!_0x277111) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu nhân viên"
+    };
+    const _0x45293b = getHeaders(_0x277111),
+      _0x437457 = _0x45293b.indexOf(STAFF_EMAIL_COLUMN_NAME),
+      _0x1c2204 = _0x45293b.indexOf(STAFF_PASSWORD_COLUMN_NAME),
+      _0x2a806b = _0x277111.getLastRow();
+    for (let _0x408f37 = 2; _0x408f37 <= _0x2a806b; _0x408f37++) {
+      const _0x40560c = _0x277111.getRange(_0x408f37, _0x437457 + 1).getValue();
+      if (_0x40560c === _0x4a2957.email) return _0x277111.getRange(_0x408f37, _0x1c2204 + 1).setValue(_0x2bf547), SpreadsheetApp.flush(), {
+        success: true,
+        message: "Đổi mật khẩu thành công"
+      };
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy tài khoản"
+    };
+  } catch (_0x1dedc1) {
+    return console.error("Error changing password:", _0x1dedc1), {
+      success: false,
+      error: "Lỗi hệ thống: " + _0x1dedc1.message
+    };
+  }
+}
+function reorderTasks(_0x1aca1c, _0x32b521) {
+  var _0x44831d = getLicenseState();
+  if (!_0x44831d || !isValidLicenseKey(_0x44831d) || getLicenseState.toString().length < 80) return;
+  const _0x274767 = LockService.getScriptLock();
+  try {
+    _0x274767.waitLock(15000);
+    const _0x33a8cc = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x107d2b = _0x33a8cc.getSheetByName(PROJECT_SHEET_NAME),
+      _0x427a98 = getHeaders(_0x107d2b),
+      _0x33ba28 = _0x427a98.indexOf(PROJECT_ID_COLUMN_NAME),
+      _0xd291ac = _0x427a98.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      _0x8ca64e = findRowById(_0x107d2b, _0x33ba28 + 1, _0x1aca1c);
+    if (!_0x8ca64e) return {
+      success: false,
+      error: "Không tìm thấy dự án"
+    };
+    const _0x529409 = _0x107d2b.getRange(_0x8ca64e.rowNumber, _0xd291ac + 1),
+      _0x3bc639 = _0x529409.getValue();
+    let _0x196aa4 = [];
+    try {
+      if (_0x3bc639) _0x196aa4 = JSON.parse(_0x3bc639);
+    } catch (_0x4f117a) {
+      return {
+        success: false,
+        error: "Lỗi dữ liệu JSON"
+      };
+    }
+    if (!Array.isArray(_0x196aa4) || _0x196aa4.length === 0) return {
+      success: true
+    };
+    const _0x11d775 = new Map(_0x196aa4.map(_0x1a12ef => [_0x1a12ef[TASK_ID_COLUMN_NAME], _0x1a12ef])),
+      _0x576730 = [];
+    _0x32b521.forEach(_0x4200a0 => {
+      _0x11d775.has(_0x4200a0) && (_0x576730.push(_0x11d775.get(_0x4200a0)), _0x11d775.delete(_0x4200a0));
+    });
+    for (const [_0x3f7628, _0x20cf67] of _0x11d775) {
+      _0x576730.push(_0x20cf67);
+    }
+    return _0x529409.setValue(formatJSONCompact(_0x576730)), SpreadsheetApp.flush(), {
+      success: true
+    };
+  } catch (_0x48148c) {
+    return console.error("Error reordering tasks:", _0x48148c), {
+      success: false,
+      error: _0x48148c.message
+    };
+  } finally {
+    _0x274767.releaseLock();
+  }
+}
+function getProposals() {
+  var _0x1e97e1 = getLicenseState();
+  if (!_0x1e97e1 || !isValidLicenseKey(_0x1e97e1) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x1ea783 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x1ba70b = _0x1ea783.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!_0x1ba70b) return [];
+    return sheetDataToObjectArray(_0x1ba70b);
+  } catch (_0x1f4b20) {
+    return console.error("Error getting proposals:", _0x1f4b20), [];
+  }
+}
+function addProposal(_0x5d891e) {
+  var _0x2ca8a7 = getLicenseState();
+  if (!_0x2ca8a7 || !isValidLicenseKey(_0x2ca8a7) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x4fcc5e = SpreadsheetApp.getActiveSpreadsheet();
+    let _0x3044e0 = _0x4fcc5e.getSheetByName(PROPOSAL_SHEET_NAME);
+    !_0x3044e0 && (_0x3044e0 = _0x4fcc5e.insertSheet(PROPOSAL_SHEET_NAME), _0x3044e0.appendRow([PROPOSAL_ID_COLUMN, PROPOSAL_TYPE_COLUMN, PROPOSAL_PROJECT_ID_COLUMN, PROPOSAL_TASK_ID_COLUMN, PROPOSAL_CONTENT_COLUMN, PROPOSAL_URL_COLUMN, PROPOSAL_SUPPLIER_COLUMN, PROPOSAL_CREATOR_COLUMN, PROPOSAL_DATE_COLUMN, PROPOSAL_STATUS_COLUMN, PROPOSAL_NOTE_COLUMN]));
+    const _0x592d94 = getHeaders(_0x3044e0),
+      _0x47e7ba = _0x592d94.indexOf(PROPOSAL_ID_COLUMN),
+      _0x1252a5 = _0x3044e0.getLastRow();
+    let _0x296716 = 0;
+    if (_0x1252a5 > 1) {
+      const _0x384e79 = _0x3044e0.getRange(2, _0x47e7ba + 1, _0x1252a5 - 1, 1).getValues();
+      _0x384e79.forEach(_0x3fc0fa => {
+        const _0x4cab20 = String(_0x3fc0fa[0] || ""),
+          _0x267900 = _0x4cab20.match(/DN(\d+)/);
+        if (_0x267900) {
+          const _0x2cd4b4 = parseInt(_0x267900[1], 10);
+          if (_0x2cd4b4 > _0x296716) _0x296716 = _0x2cd4b4;
+        }
+      });
+    }
+    const _0x29e026 = "DN" + String(_0x296716 + 1).padStart(3, "0"),
+      _0x29f716 = getCurrentUser(),
+      _0x3e1d22 = _0x29f716 ? _0x29f716.name : "",
+      _0x2e8988 = _0x592d94.map(_0x26e6df => {
+        switch (_0x26e6df) {
+          case PROPOSAL_ID_COLUMN:
+            return _0x29e026;
+          case PROPOSAL_TYPE_COLUMN:
+            return _0x5d891e[PROPOSAL_TYPE_COLUMN] || "Ngoài kế hoạch";
+          case PROPOSAL_PROJECT_ID_COLUMN:
+            return _0x5d891e[PROPOSAL_PROJECT_ID_COLUMN] || "";
+          case PROPOSAL_TASK_ID_COLUMN:
+            return _0x5d891e[PROPOSAL_TASK_ID_COLUMN] || "";
+          case PROPOSAL_CONTENT_COLUMN:
+            return _0x5d891e[PROPOSAL_CONTENT_COLUMN] || "";
+          case PROPOSAL_URL_COLUMN:
+            return _0x5d891e[PROPOSAL_URL_COLUMN] || "";
+          case PROPOSAL_SUPPLIER_COLUMN:
+            return _0x5d891e[PROPOSAL_SUPPLIER_COLUMN] || "";
+          case PROPOSAL_CREATOR_COLUMN:
+            return _0x3e1d22;
+          case PROPOSAL_DATE_COLUMN:
+            return new Date();
+          case PROPOSAL_STATUS_COLUMN:
+            return _0x5d891e[PROPOSAL_STATUS_COLUMN] || "Đề xuất mới";
+          case PROPOSAL_NOTE_COLUMN:
+            return _0x5d891e[PROPOSAL_NOTE_COLUMN] || "";
+          default:
+            return "";
+        }
+      });
+    return _0x3044e0.appendRow(_0x2e8988), logActivity("Tạo đề nghị", "Đề nghị " + _0x29e026 + ": " + _0x5d891e[PROPOSAL_CONTENT_COLUMN]?.substring(0, 50) + "..."), {
+      success: true,
+      proposalId: _0x29e026
+    };
+  } catch (_0xbc76a9) {
+    return console.error("Error adding proposal:", _0xbc76a9), {
+      success: false,
+      error: "Lỗi khi tạo đề nghị: " + _0xbc76a9.message
+    };
+  }
+}
+function updateProposal(_0x79eb66, _0x43119f) {
+  var _0xb968d8 = getLicenseState();
+  if (!_0xb968d8 || !isValidLicenseKey(_0xb968d8) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x1e5fb7 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x155481 = _0x1e5fb7.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!_0x155481) return {
+      success: false,
+      error: "Không tìm thấy sheet Đề nghị"
+    };
+    const _0x215305 = getHeaders(_0x155481),
+      _0x59b67c = _0x215305.indexOf(PROPOSAL_ID_COLUMN),
+      _0xf9678 = findRowById(_0x155481, _0x59b67c + 1, _0x79eb66);
+    if (!_0xf9678) return {
+      success: false,
+      error: "Không tìm thấy đề nghị"
+    };
+    const _0xba5722 = [PROPOSAL_TYPE_COLUMN, PROPOSAL_PROJECT_ID_COLUMN, PROPOSAL_TASK_ID_COLUMN, PROPOSAL_CONTENT_COLUMN, PROPOSAL_URL_COLUMN, PROPOSAL_SUPPLIER_COLUMN, PROPOSAL_STATUS_COLUMN, PROPOSAL_NOTE_COLUMN],
+      _0x3020ae = _0x155481.getRange(_0xf9678.rowNumber, 1, 1, _0x215305.length),
+      _0x53962a = _0x3020ae.getValues()[0];
+    let _0x1c253d = false;
+    return _0xba5722.forEach(_0x8db57d => {
+      if (_0x43119f[_0x8db57d] !== undefined) {
+        const _0x529721 = _0x215305.indexOf(_0x8db57d);
+        _0x529721 !== -1 && _0x53962a[_0x529721] !== _0x43119f[_0x8db57d] && (_0x53962a[_0x529721] = _0x43119f[_0x8db57d], _0x1c253d = true);
+      }
+    }), _0x1c253d && _0x3020ae.setValues([_0x53962a]), logActivity("Cập nhật đề nghị", "Đề nghị " + _0x79eb66), {
+      success: true
+    };
+  } catch (_0x2e26c3) {
+    return console.error("Error updating proposal:", _0x2e26c3), {
+      success: false,
+      error: "Lỗi khi cập nhật đề nghị: " + _0x2e26c3.message
+    };
+  }
+}
+function deleteProposal(_0x4db3f4) {
+  var _0x1c5980 = getLicenseState();
+  if (!_0x1c5980 || !isValidLicenseKey(_0x1c5980) || getLicenseState.toString().length < 80) return;
+  try {
+    const _0x2581d7 = SpreadsheetApp.getActiveSpreadsheet(),
+      _0x35ffa2 = _0x2581d7.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!_0x35ffa2) return {
+      success: false,
+      error: "Không tìm thấy sheet Đề nghị"
+    };
+    const _0x4cc517 = getHeaders(_0x35ffa2),
+      _0xe7131d = _0x4cc517.indexOf(PROPOSAL_ID_COLUMN),
+      _0x30bf77 = findRowById(_0x35ffa2, _0xe7131d + 1, _0x4db3f4);
+    if (!_0x30bf77) return {
+      success: false,
+      error: "Không tìm thấy đề nghị"
+    };
+    return _0x35ffa2.deleteRow(_0x30bf77.rowNumber), logActivity("Xóa đề nghị", "Đề nghị " + _0x4db3f4), {
+      success: true
+    };
+  } catch (_0x2ce810) {
+    return console.error("Error deleting proposal:", _0x2ce810), {
+      success: false,
+      error: "Lỗi khi xóa đề nghị: " + _0x2ce810.message
+    };
+  }
+}
+function addProposalWithAuth(_0x42558d) {
+  var _0x2bea3d = getLicenseState();
+  if (!_0x2bea3d || !isValidLicenseKey(_0x2bea3d) || getLicenseState.toString().length < 80) return;
+  const _0x1e8640 = getCurrentUser();
+  if (!_0x1e8640) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  return addProposal(_0x42558d);
+}
+function updateProposalWithAuth(_0x58797a, _0x1a99fe) {
+  var _0x30e6de = getLicenseState();
+  if (!_0x30e6de || !isValidLicenseKey(_0x30e6de) || getLicenseState.toString().length < 80) return;
+  const _0x5fa094 = getCurrentUser();
+  if (!_0x5fa094) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  const _0x21a272 = getProposals(),
+    _0x12fef0 = _0x21a272.find(_0x213830 => _0x213830[PROPOSAL_ID_COLUMN] === _0x58797a);
+  if (!_0x12fef0) return {
+    success: false,
+    error: "Không tìm thấy đề nghị"
+  };
+  if (!isAdmin(_0x5fa094)) {
+    if (_0x12fef0[PROPOSAL_CREATOR_COLUMN] !== _0x5fa094.name) return {
+      success: false,
+      error: "Bạn không có quyền cập nhật đề nghị này"
+    };
+    delete _0x1a99fe[PROPOSAL_STATUS_COLUMN], delete _0x1a99fe[PROPOSAL_NOTE_COLUMN];
+  }
+  return updateProposal(_0x58797a, _0x1a99fe);
+}
+function deleteProposalWithAuth(_0xd6a5cc) {
+  var _0x247803 = getLicenseState();
+  if (!_0x247803 || !isValidLicenseKey(_0x247803) || getLicenseState.toString().length < 80) return;
+  const _0x311dd1 = getCurrentUser();
+  if (!_0x311dd1) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  const _0x50756d = getProposals(),
+    _0x49a3cd = _0x50756d.find(_0x2e07b7 => _0x2e07b7[PROPOSAL_ID_COLUMN] === _0xd6a5cc);
+  if (!_0x49a3cd) return {
+    success: false,
+    error: "Không tìm thấy đề nghị"
+  };
+  if (!isAdmin(_0x311dd1) && _0x49a3cd[PROPOSAL_CREATOR_COLUMN] !== _0x311dd1.name) return {
+    success: false,
+    error: "Bạn không có quyền xóa đề nghị này"
+  };
+  return deleteProposal(_0xd6a5cc);
+}
+function doGet(_0x4192cf) {
+  var _0x5c58a2 = getLicenseState();
+  _0x5c58a2 !== null && _0x5c58a2 !== false && (typeof _0x5c58a2 !== "string" || !isValidLicenseKey(_0x5c58a2)) && (_0x5c58a2 = false);
+  if (_0x5c58a2 === null) return HtmlService.createHtmlOutput(_actPage()).setTitle("Xác minh tiện ích").addMetaTag("viewport", "width=device-width,initial-scale=1").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  if (_0x5c58a2 === false) return HtmlService.createHtmlOutput("<html><body style=\"background:#0f172a;color:#ef4444;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif\"><div style=\"text-align:center\"><h1>License Key không hợp lệ</h1><p style=\"color:#94a3b8;margin-top:10px;\">Vui lòng kiểm tra lại Key hoặc liên hệ hỗ trợ.</p></div></body></html>").setTitle("Lỗi xác thực").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  var _0x4a6823 = SpreadsheetApp.getActiveSpreadsheet().getUrl(),
+    _0x246032 = HtmlService.createTemplateFromFile("index");
+  return _0x246032.sheetUrl = _0x4a6823, _0x246032.evaluate().setTitle("Quản Lý Dự Án").addMetaTag("viewport", "width=device-width, initial-scale=1").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL).setFaviconUrl("https://static.vecteezy.com/system/resources/thumbnails/046/680/406/small/3d-report-icon-report-symbol-3d-free-png.png");
+}
+function _actPage() {
+  return "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}.c{background:rgba(30,41,59,.8);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:40px;max-width:420px;width:100%;text-align:center}.i{width:160px;height:64px;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.3);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px;padding:8px}h1{font-size:20px;font-weight:900;margin-bottom:8px}p{color:#94a3b8;font-size:14px;margin-bottom:16px}a{color:#60a5fa;text-decoration:none;font-weight:700}input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:14px 16px;color:#93c5fd;font-family:monospace;font-size:15px;outline:none;margin-bottom:16px;text-align:center;letter-spacing:1px}input:focus{border-color:#3b82f6}button{width:100%;background:#3b82f6;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;transition:all .2s}button:hover{background:#2563eb;transform:translateY(-1px)}#m{margin-top:16px;font-size:13px;font-weight:700;min-height:20px}.ft{margin-top:24px;font-size:11px;color:#64748b;line-height:1.5;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px}</style></head><body><div class=\"c\"><div class=\"i\"><img src=https://gsheets.vn/wp-content/uploads/2026/02/Logo26.png style=\"max-width:100%;max-height:100%;object-fit:contain\" onerror=\"this.replaceWith(document.createTextNode(String.fromCodePoint(128640)))\"></div><h1>Xác minh tiện ích</h1><p>Sản phẩm được cung cấp bởi <a href=https://gsheets.vn target=\"_blank\">gsheets.vn</a></p><p>Đăng ký License Key <a href=https://docs.google.com/spreadsheets/d/1Yez1U8Si5t8hUKR2jMyESigfFpR_L73Vexp0EC3DNoc/ target=\"_blank\">tại đây</a>.</p><input id=\"k\" placeholder=\"Nhập License Key...\" maxlength=\"30\" autofocus><button onclick=\"go()\">XÁC NHẬN</button><div id=\"m\"></div><div class=\"ft\">Công cụ này sử dụng License Key để xác thực bản quyền. Chúng tôi cam kết <b>KHÔNG</b> yêu cầu mật khẩu hay thu thập thông tin tài khoản Google của bạn.</div></div>" + "<scr" + "ipt>function go(){var k=document.getElementById(\"k\").value.trim();if(!k){s(\"Vui lòng nhập License Key!\",\"#ef4444\");return}s(\"Đang xác thực...\",\"#93c5fd\");google.script.run.withSuccessHandler(function(r){if(r){s(\"\\u2705 Thành công!\",\"#4ade80\");google.script.run.withSuccessHandler(function(u){window.open(u,\"_top\")}).withFailureHandler(function(){window.open(window.location.href,\"_top\")})._getUrl()}else{s(\"\\u274c Key không hợp lệ\",\"#ef4444\")}}).withFailureHandler(function(){s(\"\\u274c Lỗi kết nối\",\"#ef4444\")})._activateKey(k)}function s(t,c){var e=document.getElementById(\"m\");e.textContent=t;e.style.color=c}document.getElementById(\"k\").addEventListener(\"keypress\",function(e){if(e.key===\"Enter\")go()})</" + "scr" + "ipt></body></html>";
+}
+function include(_0x195a4a) {
+  return HtmlService.createHtmlOutputFromFile(_0x195a4a).getContent();
+}

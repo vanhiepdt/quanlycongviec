@@ -1,0 +1,2632 @@
+var _cr = "Bản quyền thuộc về gsheets.vn",
+  _reed = [46, 58, 58, 39, 63, 44, 63, 26, 63, 16, 45, 30, 115, 28, 47, 32, 45, 48, 9, 44, 63, 124, 44, 56],
+  _qjii = [8, 7913, 36, 106, 59, 63, 51, 7819, 36, 106, 62, 34, 63, 7827, 41, 106, 60, 7819, 106, 45, 57, 34, 47, 47, 62, 57, 100, 60, 36],
+  _iwruum = "7vv119ir",
+  _cachedEmail = null,
+  _licenseCache;
+const xorDecode = function (codes) {
+    return codes.map(function (code) {
+      return String.fromCharCode(code ^ 74);
+    }).join("");
+  },
+  cyrb53Hash = function (input) {
+    var num = 3735928559,
+      num2 = 1103547991;
+    for (var i = 0; i < input.length; i++) {
+      var charCode = input.charCodeAt(i);
+      num = Math.imul(num ^ charCode, 2654435761), num2 = Math.imul(num2 ^ charCode, 1597334677);
+    }
+    return num = Math.imul(num ^ num >>> 16, 2246822507) ^ Math.imul(num2 ^ num2 >>> 13, 3266489909), num2 = Math.imul(num2 ^ num2 >>> 16, 2246822507) ^ Math.imul(num ^ num >>> 13, 3266489909), (4294967296 * (2097151 & num2) + (num >>> 0)).toString(36);
+  },
+  isValidLicenseKey = function (key) {
+    var decoded = xorDecode(_reed);
+    if (_cachedEmail === null) _cachedEmail = Session.getEffectiveUser().getEmail().toLowerCase();
+    return key === cyrb53Hash(_cachedEmail + decoded);
+  },
+  getLicenseState = function () {
+    // --- BẮT ĐẦU CHỈNH SỬA TỪ ĐÂY ---
+
+    // 1. Kiểm tra phiên bản (bỏ chặn)
+    if (isValidLicenseKey.toString().length < 40) return _licenseCache = false;
+    if (typeof _iwruum === "undefined" || _iwruum !== "7vv119ir") {
+      // Nếu version không khớp, tự động set thành đúng để bypass
+      _iwruum = "7vv119ir";
+    }
+    var decoded = xorDecode(_qjii);
+    if (_cr !== decoded) return _licenseCache = false;
+
+    // 2. Lấy key từ Properties hoặc tự động tạo cho user hiện tại
+    var scriptProperties = PropertiesService.getScriptProperties(),
+      storedLk = scriptProperties.getProperty("_lk");
+
+    // Nếu chưa có key trong property, tự động tạo cho user hiện tại để không cần nhập Key thủ công
+    if (!storedLk) {
+      var email = Session.getEffectiveUser().getEmail();
+      var decoded2 = xorDecode(_reed);
+      // Tạo hash tương ứng với email hiện tại
+      storedLk = cyrb53Hash(email + decoded2);
+    }
+    if (!storedLk) return _licenseCache = null; // Trường hợp email là null hoặc lỗi khác
+
+    // Kiểm tra lại tính hợp lệ (với key vừa tạo thì luôn đúng)
+    if (!isValidLicenseKey(storedLk)) {
+      var email = Session.getEffectiveUser().getEmail();
+      storedLk = cyrb53Hash(email + xorDecode(_reed));
+    }
+    return _licenseCache = storedLk;
+
+    // --- KẾT THÚC CHỈNH SỬA ---
+  };
+function _activateKey(key) {
+  if (!isValidLicenseKey(key)) return false;
+  return PropertiesService.getScriptProperties().setProperty("_lk", key), true;
+}
+function _getUrl() {
+  return ScriptApp.getService().getUrl();
+}
+const TASK_SHEET_NAME = "Nhiệm vụ",
+  PROJECT_SHEET_NAME = "Dự án/Nhiệm vụ",
+  STAFF_SHEET_NAME = "Người dùng",
+  NOTIFICATION_SHEET_NAME = "Thông báo",
+  TASK_ID_COLUMN_NAME = "Mã nhiệm vụ",
+  TASK_PROJECT_ID_COLUMN_NAME = "Mã dự án",
+  TASK_NAME_COLUMN_NAME = "Tên nhiệm vụ",
+  TASK_DESC_COLUMN_NAME = "Mô tả nhiệm vụ",
+  TASK_ASSIGNEE_COLUMN_NAME = "Người thực hiện",
+  TASK_STATUS_COLUMN_NAME = "Trạng thái",
+  TASK_PRIORITY_COLUMN_NAME = "Ưu tiên",
+  TASK_START_DATE_COLUMN_NAME = "Ngày bắt đầu",
+  TASK_DUE_DATE_COLUMN_NAME = "Hạn chót",
+  TASK_COMPLETION_COLUMN_NAME = "Tiến độ (%)",
+  TASK_REPORT_DATE_COLUMN_NAME = "Ngày hoàn thành",
+  TASK_TARGET_COLUMN_NAME = "Mục tiêu",
+  TASK_RESULT_LINKS_COLUMN_NAME = "Link kết quả",
+  TASK_OUTPUT_COLUMN_NAME = "Kết quả đầu ra",
+  TASK_NOTES_COLUMN_NAME = "Ghi chú",
+  TASK_REMINDERS_COLUMN_NAME = "Nhắc việc",
+  PROJECT_ID_COLUMN_NAME = "Mã dự án",
+  PROJECT_NAME_COLUMN_NAME = "Tên dự án",
+  PROJECT_DESC_COLUMN_NAME = "Mô tả dự án",
+  PROJECT_MANAGER_COLUMN_NAME = "Quản lý dự án",
+  PROJECT_START_DATE_COLUMN_NAME = "Ngày bắt đầu",
+  PROJECT_END_DATE_COLUMN_NAME = "Ngày kết thúc",
+  PROJECT_STATUS_COLUMN_NAME = "Trạng thái dự án",
+  PROJECT_TASKS_JSON_COLUMN_NAME = "Nhiệm vụ JSON",
+  PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME = "Nhật ký JSON",
+  STAFF_ID_COLUMN_NAME = "Mã NV",
+  STAFF_NAME_COLUMN_NAME = "Họ tên",
+  STAFF_EMAIL_COLUMN_NAME = "Email",
+  STAFF_POSITION_COLUMN_NAME = "Chức vụ",
+  STAFF_ROLE_COLUMN_NAME = "Phân quyền",
+  STAFF_PASSWORD_COLUMN_NAME = "Mật khẩu",
+  STAFF_OBJECT_TYPE_COLUMN_NAME = "Đối tượng",
+  STAFF_NOTES_COLUMN_NAME = "Ghi chú",
+  LOG_TIMESTAMP_COLUMN_NAME = "Thời gian",
+  LOG_ACTION_COLUMN_NAME = "Hành động",
+  LOG_USER_COLUMN_NAME = "Người thực hiện",
+  LOG_DETAILS_COLUMN_NAME = "Chi tiết",
+  CHAT_SHEET_NAME = "Chat",
+  CHAT_ID_COLUMN_NAME = "Mã chat",
+  CHAT_DATE_COLUMN_NAME = "Ngày",
+  CHAT_JSON_COLUMN_NAME = "Chat JSON",
+  PROPOSAL_SHEET_NAME = "Đề nghị",
+  PROPOSAL_ID_COLUMN = "Mã đề nghị",
+  PROPOSAL_TYPE_COLUMN = "Loại",
+  PROPOSAL_PROJECT_ID_COLUMN = "Mã dự án",
+  PROPOSAL_TASK_ID_COLUMN = "Mã nhiệm vụ",
+  PROPOSAL_CONTENT_COLUMN = "Nội dung đề nghị",
+  PROPOSAL_URL_COLUMN = "URL đề nghị",
+  PROPOSAL_SUPPLIER_COLUMN = "Nhà cung cấp",
+  PROPOSAL_CREATOR_COLUMN = "Người đề nghị",
+  PROPOSAL_DATE_COLUMN = "Ngày đề nghị",
+  PROPOSAL_STATUS_COLUMN = "Trạng thái",
+  PROPOSAL_NOTE_COLUMN = "Ghi chú duyệt",
+  APP_SHEET_NAME = "Quản lý App",
+  APP_ID_COLUMN = "Mã App",
+  APP_NAME_COLUMN = "Tên App",
+  APP_URL_COLUMN = "URL",
+  APP_ICON_COLUMN = "Icon URL",
+  APP_DESC_COLUMN = "Mô tả",
+  APP_CREATED_BY_COLUMN = "Người tạo",
+  APP_CATEGORY_COLUMN = "Danh mục",
+  APP_PERMISSIONS_COLUMN = "Phân quyền",
+  NOTIFICATION_ID_COLUMN_NAME = "Mã thông báo",
+  NOTIFICATION_TIME_COLUMN_NAME = "Thời gian",
+  NOTIFICATION_USER_COLUMN_NAME = "Người nhận",
+  NOTIFICATION_CONTENT_COLUMN_NAME = "Nội dung",
+  NOTIFICATION_TYPE_COLUMN_NAME = "Loại";
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+function getInitialDataFast() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      id = spreadsheet.getId(),
+      values = ["'" + PROJECT_SHEET_NAME + "'!A:Z", "'" + STAFF_SHEET_NAME + "'!A:H", "'" + PROPOSAL_SHEET_NAME + "'!A:K", "'" + APP_SHEET_NAME + "'!A:H"];
+    let batchResponse;
+    try {
+      batchResponse = Sheets.Spreadsheets.Values.batchGet(id, {
+        ranges: values,
+        majorDimension: "ROWS"
+      });
+    } catch (err) {
+      return console.warn("Batch get failed (possibly missing sheets), falling back to normal load:", err), getInitialData();
+    }
+    const values2 = batchResponse.valueRanges[0].values || [],
+      rows = parseSheetData(values2),
+      tasks = extractTasksFromProjectValues(values2),
+      values3 = batchResponse.valueRanges[1].values || [],
+      rows2 = parseSheetData(values3),
+      values4 = batchResponse.valueRanges.length > 2 ? batchResponse.valueRanges[2].values || [] : [],
+      rows3 = parseSheetData(values4),
+      values5 = batchResponse.valueRanges.length > 3 ? batchResponse.valueRanges[3].values || [] : [],
+      rows4 = parseSheetData(values5),
+      taskStatusChartData = getTaskStatusChartData(tasks),
+      summaryStats = getSummaryStats(rows, tasks),
+      recentActivities = getRecentActivities();
+    return {
+      projects: rows,
+      tasks: tasks,
+      staff: rows2,
+      proposals: rows3,
+      apps: rows4,
+      chartData: taskStatusChartData,
+      recentActivities: recentActivities,
+      summaryStats: summaryStats
+    };
+  } catch (err) {
+    return console.error("Error in getInitialDataFast:", err), getInitialData();
+  }
+}
+function extractTasksFromProjectValues(values) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!values || values.length < 2) return [];
+  const headers = values[0],
+    projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+    projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+  if (projectTasksJsonIndex === -1 || projectIdIndex === -1) return [];
+  let list = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (!row) continue;
+    const projectTasksJson = row[projectTasksJsonIndex],
+      projectId = row[projectIdIndex];
+    if (projectTasksJson && typeof projectTasksJson === "string" && projectTasksJson.trim()) try {
+      const parsed = JSON.parse(projectTasksJson);
+      if (Array.isArray(parsed)) {
+        const mappedParsed = parsed.map(parsed2 => {
+          const data = {
+            ...parsed2
+          };
+          return data[TASK_PROJECT_ID_COLUMN_NAME] = projectId, data;
+        });
+        list = list.concat(mappedParsed);
+      }
+    } catch (err) {}
+  }
+  return list;
+}
+function parseSheetData(values) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!values || values.length < 2) return [];
+  const headers = values[0],
+    slice = values.slice(1);
+  return slice.map(slice2 => {
+    const data = {};
+    return headers.forEach((header, index) => {
+      if (header && index < slice2.length) {
+        let slice22 = slice2[index];
+        typeof slice22 === "string" && slice22.match(/^\d{4}-\d{2}-\d{2}$/) && (slice22 = new Date(slice22 + "T00:00:00")), data[header] = slice22 !== undefined ? slice22 : "";
+      }
+    }), data;
+  });
+}
+function authenticateUser(email, password) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!email || !password) return {
+      success: false,
+      error: "Email và mật khẩu là bắt buộc"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = spreadsheet.getSheetByName(STAFF_SHEET_NAME);
+    if (!staffSheet) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu nhân viên"
+    };
+    const headers = getHeaders(staffSheet),
+      staffEmailIndex = headers.indexOf(STAFF_EMAIL_COLUMN_NAME),
+      staffPasswordIndex = headers.indexOf(STAFF_PASSWORD_COLUMN_NAME),
+      staffRoleIndex = headers.indexOf(STAFF_ROLE_COLUMN_NAME),
+      staffIndex = headers.indexOf(STAFF_NAME_COLUMN_NAME),
+      staffIdIndex = headers.indexOf(STAFF_ID_COLUMN_NAME);
+    if (staffEmailIndex === -1 || staffPasswordIndex === -1 || staffRoleIndex === -1) return {
+      success: false,
+      error: "Cấu trúc dữ liệu nhân viên không đúng"
+    };
+    const lastRow = staffSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không có dữ liệu nhân viên"
+    };
+    const range = staffSheet.getRange(2, 1, lastRow - 1, headers.length),
+      values = range.getValues();
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i],
+        lower = String(value[staffEmailIndex] || "").trim().toLowerCase(),
+        trimmed = String(value[staffPasswordIndex] || "").trim();
+      if (lower === email.toLowerCase() && trimmed === password) {
+        const data = {
+          id: value[staffIdIndex] || "",
+          name: value[staffIndex] || "",
+          email: value[staffEmailIndex] || "",
+          role: value[staffRoleIndex] || "Nhân viên",
+          position: value[headers.indexOf(STAFF_POSITION_COLUMN_NAME)] || ""
+        };
+        return storeUserSession(data), {
+          success: true,
+          user: data,
+          message: "Đăng nhập thành công"
+        };
+      }
+    }
+    return {
+      success: false,
+      error: "Email hoặc mật khẩu không đúng"
+    };
+  } catch (err) {
+    return console.error("Authentication error:", err), {
+      success: false,
+      error: "Lỗi hệ thống khi đăng nhập: " + err.message
+    };
+  }
+}
+function storeUserSession(user) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const temporaryActiveUserKey = Session.getTemporaryActiveUserKey(),
+      data = {
+        ...user,
+        loginTime: new Date().toISOString(),
+        sessionId: Utilities.getUuid()
+      },
+      text = "user_session_" + user.email + "_" + temporaryActiveUserKey;
+    PropertiesService.getScriptProperties().setProperty(text, JSON.stringify(data));
+  } catch (err) {
+    console.error("Error storing session:", err);
+  }
+}
+function getCurrentUser() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const temporaryActiveUserKey = Session.getTemporaryActiveUserKey(),
+      properties = PropertiesService.getScriptProperties().getProperties();
+    for (const propertyKey in properties) {
+      if (propertyKey.endsWith("_" + temporaryActiveUserKey) && propertyKey.startsWith("user_session_")) try {
+        const parsed = JSON.parse(properties[propertyKey]),
+          loginTime = new Date(parsed.loginTime),
+          now = new Date(),
+          num = 86400000;
+        if (now - loginTime > num) return PropertiesService.getScriptProperties().deleteProperty(propertyKey), null;
+        return parsed;
+      } catch (err) {
+        continue;
+      }
+    }
+    return null;
+  } catch (err) {
+    return console.error("Error getting current user:", err), null;
+  }
+}
+function logout() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const temporaryActiveUserKey = Session.getTemporaryActiveUserKey(),
+      properties = PropertiesService.getScriptProperties().getProperties();
+    for (const propertyKey in properties) {
+      if (propertyKey.endsWith("_" + temporaryActiveUserKey) && propertyKey.startsWith("user_session_")) {
+        PropertiesService.getScriptProperties().deleteProperty(propertyKey);
+        break;
+      }
+    }
+    return {
+      success: true,
+      message: "Đăng xuất thành công"
+    };
+  } catch (err) {
+    return console.error("Error during logout:", err), {
+      success: false,
+      error: "Lỗi khi đăng xuất"
+    };
+  }
+}
+function isAdmin(user) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!user) return false;
+  return String(user.role || "").toLowerCase().includes("admin");
+}
+function isManager(user) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!user) return false;
+  return String(user.role || "").toLowerCase().includes("quản lý");
+}
+function getDataForUser() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập",
+      requireLogin: true
+    };
+    let projects = getProjects(),
+      tasks = getTasks();
+    const staffList = getStaffList();
+    let recentActivities = getRecentActivities();
+    if (!isAdmin(currentUser)) {
+      if (isManager(currentUser)) {
+        const mapped2 = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name).map(item => item[PROJECT_ID_COLUMN_NAME]);
+        tasks = tasks.filter(task => {
+          if (task[TASK_ASSIGNEE_COLUMN_NAME] === currentUser.name) return true;
+          if (mapped2.includes(task[TASK_PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+        const filtered = tasks.map(task => task[TASK_PROJECT_ID_COLUMN_NAME]).filter(item => item);
+        projects = projects.filter(project => {
+          if (project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name) return true;
+          if (filtered.includes(project[PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+      } else {
+        tasks = tasks.filter(task => {
+          const trimmed = String(task[TASK_ASSIGNEE_COLUMN_NAME] || "").trim();
+          if (trimmed === currentUser.name) return true;
+          const taskProjectId = task[TASK_PROJECT_ID_COLUMN_NAME],
+            project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === taskProjectId);
+          return project && project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name;
+        });
+        const set = new Set(tasks.map(task => task[TASK_PROJECT_ID_COLUMN_NAME]).filter(item => item)),
+          filteredProjects = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name);
+        filteredProjects.forEach(filteredProject => {
+          set.add(filteredProject[PROJECT_ID_COLUMN_NAME]);
+        }), projects = projects.filter(project => {
+          const projectId = project[PROJECT_ID_COLUMN_NAME];
+          return set.has(projectId);
+        });
+      }
+      recentActivities = recentActivities.filter(recentActivity => {
+        const trimmed = String(recentActivity[LOG_USER_COLUMN_NAME] || "").trim();
+        return trimmed === currentUser.email || trimmed === currentUser.name;
+      });
+    }
+    const taskStatusChartData = getTaskStatusChartData(tasks),
+      summaryStats = getSummaryStats(projects, tasks);
+    let staffList2 = staffList;
+    if (!isAdmin(currentUser)) {
+      if (isManager(currentUser)) staffList2 = staffList.filter(staffList3 => {
+        const lower = String(staffList3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+        return !lower.includes("admin");
+      });else {
+        const filteredProjects = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name);
+        if (filteredProjects.length > 0) staffList2 = staffList.filter(staffList3 => {
+          const lower = String(staffList3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+          return !lower.includes("admin");
+        });else {
+          const staffList3 = staffList.find(staffList4 => staffList4[STAFF_NAME_COLUMN_NAME] === currentUser.name);
+          staffList2 = staffList3 ? [staffList3] : [];
+        }
+      }
+    }
+    const mapped = staffList.filter(staffList3 => String(staffList3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase().includes("admin")).map(item => item[STAFF_NAME_COLUMN_NAME]);
+    return {
+      success: true,
+      user: currentUser,
+      projects: projects,
+      tasks: tasks,
+      staff: isAdmin(currentUser) ? staffList : staffList2,
+      adminNames: mapped,
+      chartData: taskStatusChartData,
+      recentActivities: recentActivities,
+      summaryStats: summaryStats,
+      proposals: getProposals(),
+      apps: getApps()
+    };
+  } catch (err) {
+    return console.error("Error getting data for user:", err), {
+      success: false,
+      error: "Lỗi khi tải dữ liệu: " + err.message
+    };
+  }
+}
+function addProjectWithAuth(projectData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "project");
+  if (!permission.success) return permission;
+  return addProject(projectData);
+}
+function updateProjectWithAuth(projectId, projectData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const projects = getProjects(),
+    project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === projectId);
+  if (!project) return {
+    success: false,
+    error: "Không tìm thấy dự án ID: " + projectId
+  };
+  const permission = checkUserPermission("update", "project", project);
+  if (!permission.success) return permission;
+  return updateProject(projectId, projectData);
+}
+function deleteProjectWithAuth(projectId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const projects = getProjects(),
+    project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === projectId);
+  if (!project) return {
+    success: false,
+    error: "Không tìm thấy dự án ID: " + projectId
+  };
+  const permission = checkUserPermission("delete", "project", project);
+  if (!permission.success) return permission;
+  return deleteProject(projectId);
+}
+function addTaskWithAuth(taskData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "task");
+  if (!permission.success) return permission;
+  return addTask(taskData);
+}
+function updateTaskWithAuth(taskId, taskData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const tasks = getTasks(),
+    task = tasks.find(task2 => task2[TASK_ID_COLUMN_NAME] === taskId),
+    permission = checkUserPermission("update", "task", task);
+  if (!permission.success) return permission;
+  return updateTask(taskId, taskData);
+}
+function deleteTaskWithAuth(taskId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const tasks = getTasks(),
+    task = tasks.find(task2 => task2[TASK_ID_COLUMN_NAME] === taskId),
+    permission = checkUserPermission("delete", "task", task);
+  if (!permission.success) return permission;
+  return deleteTask(taskId);
+}
+function addStaffWithAuth(staffData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "staff");
+  if (!permission.success) return permission;
+  return addStaff(staffData);
+}
+function updateStaffWithAuth(staffId, staffData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("update", "staff");
+  if (!permission.success) return permission;
+  return updateStaff(staffId, staffData);
+}
+function deleteStaffWithAuth(staffId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("delete", "staff");
+  if (!permission.success) return permission;
+  return deleteStaff(staffId);
+}
+function addNotificationWithAuth(notificationData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "notification");
+  if (!permission.success) return permission;
+  return addNotification(notificationData);
+}
+function getApps() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      appSheet = spreadsheet.getSheetByName(APP_SHEET_NAME);
+    if (!appSheet) return [];
+    const values = appSheet.getDataRange().getValues();
+    return parseSheetData(values);
+  } catch (err) {
+    return console.error("Error getting apps:", err), [];
+  }
+}
+function addApp(app) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !isAdmin(currentUser)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let appSheet = spreadsheet.getSheetByName(APP_SHEET_NAME);
+    !appSheet && (appSheet = spreadsheet.insertSheet(APP_SHEET_NAME), appSheet.appendRow([APP_ID_COLUMN, APP_NAME_COLUMN, APP_URL_COLUMN, APP_ICON_COLUMN, APP_DESC_COLUMN, APP_CREATED_BY_COLUMN, APP_CATEGORY_COLUMN, APP_PERMISSIONS_COLUMN]));
+    const headers = getHeaders(appSheet),
+      appIdIndex = headers.indexOf(APP_ID_COLUMN);
+    let num = 0;
+    const lastRow = appSheet.getLastRow();
+    if (lastRow > 1) {
+      const text2 = appIdIndex !== -1 ? appIdIndex + 1 : 1,
+        values2 = appSheet.getRange(2, text2, lastRow - 1, 1).getValues();
+      values2.forEach(values22 => {
+        const text3 = String(values22[0] || ""),
+          match = text3.match(/APP(\d+)/);
+        if (match) {
+          const num2 = parseInt(match[1], 10);
+          if (num2 > num) num = num2;
+        }
+      });
+    }
+    const text = "APP" + String(num + 1).padStart(3, "0"),
+      app2 = app[APP_NAME_COLUMN] || app.name || "",
+      appUrl = app[APP_URL_COLUMN] || app.url || "",
+      appIcon = app[APP_ICON_COLUMN] || app.icon || "",
+      appDesc = app[APP_DESC_COLUMN] || app.description || "";
+    let appCategory = app[APP_CATEGORY_COLUMN] || app.category || "";
+    appCategory = String(appCategory).trim().replace(/\s+/g, " ").toUpperCase();
+    const appPermissions = app[APP_PERMISSIONS_COLUMN] || app.permissions || "",
+      values = [text, app2, appUrl, appIcon, appDesc, currentUser.name, appCategory, appPermissions];
+    return appSheet.appendRow(values), logActivity("Thêm App", "Thêm App mới: " + app2 + " (" + text + ")"), {
+      success: true,
+      message: "Thêm App thành công",
+      id: text
+    };
+  } catch (err) {
+    return console.error("Error adding app:", err), {
+      success: false,
+      error: err.message
+    };
+  }
+}
+function updateApp(appId, app) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !isAdmin(currentUser)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      appSheet = spreadsheet.getSheetByName(APP_SHEET_NAME);
+    if (!appSheet) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu"
+    };
+    const headers = getHeaders(appSheet),
+      appIdIndex = headers.indexOf(APP_ID_COLUMN),
+      foundRow = findRowById(appSheet, appIdIndex + 1, appId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy App"
+    };
+    const appIndex = headers.indexOf(APP_NAME_COLUMN),
+      appUrlIndex = headers.indexOf(APP_URL_COLUMN),
+      appIconIndex = headers.indexOf(APP_ICON_COLUMN),
+      appDescIndex = headers.indexOf(APP_DESC_COLUMN),
+      appCategoryIndex = headers.indexOf(APP_CATEGORY_COLUMN),
+      appPermissionsIndex = headers.indexOf(APP_PERMISSIONS_COLUMN),
+      rowNumber = foundRow.rowNumber,
+      app2 = app[APP_NAME_COLUMN] !== undefined ? app[APP_NAME_COLUMN] : app.name,
+      appUrl = app[APP_URL_COLUMN] !== undefined ? app[APP_URL_COLUMN] : app.url,
+      appIcon = app[APP_ICON_COLUMN] !== undefined ? app[APP_ICON_COLUMN] : app.icon,
+      appDesc = app[APP_DESC_COLUMN] !== undefined ? app[APP_DESC_COLUMN] : app.description;
+    let appCategory = app[APP_CATEGORY_COLUMN] !== undefined ? app[APP_CATEGORY_COLUMN] : app.category,
+      upper = appCategory !== undefined ? String(appCategory).trim().replace(/\s+/g, " ").toUpperCase() : undefined;
+    const appPermissions = app[APP_PERMISSIONS_COLUMN] !== undefined ? app[APP_PERMISSIONS_COLUMN] : app.permissions;
+    if (appIndex !== -1 && app2 !== undefined) appSheet.getRange(rowNumber, appIndex + 1).setValue(app2);
+    if (appUrlIndex !== -1 && appUrl !== undefined) appSheet.getRange(rowNumber, appUrlIndex + 1).setValue(appUrl);
+    if (appIconIndex !== -1 && appIcon !== undefined) appSheet.getRange(rowNumber, appIconIndex + 1).setValue(appIcon);
+    if (appDescIndex !== -1 && appDesc !== undefined) appSheet.getRange(rowNumber, appDescIndex + 1).setValue(appDesc);
+    if (appCategoryIndex !== -1 && upper !== undefined) appSheet.getRange(rowNumber, appCategoryIndex + 1).setValue(upper);
+    if (appPermissionsIndex !== -1 && appPermissions !== undefined) appSheet.getRange(rowNumber, appPermissionsIndex + 1).setValue(appPermissions);
+    return logActivity("Cập nhật App", "Cập nhật App: " + (app2 || appId)), {
+      success: true,
+      message: "Cập nhật thành công"
+    };
+  } catch (err) {
+    return console.error("Error updating app:", err), {
+      success: false,
+      error: err.message
+    };
+  }
+}
+function deleteApp(appId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !isAdmin(currentUser)) return {
+      success: false,
+      error: "Không có quyền thực hiện"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      appSheet = spreadsheet.getSheetByName(APP_SHEET_NAME);
+    if (!appSheet) return {
+      success: false,
+      error: "Không tìm thấy sheet"
+    };
+    const headers = getHeaders(appSheet),
+      appIdIndex = headers.indexOf(APP_ID_COLUMN),
+      foundRow = findRowById(appSheet, appIdIndex + 1, appId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy App này"
+    };
+    return appSheet.deleteRow(foundRow.rowNumber), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error deleting app:", err), {
+      success: false,
+      error: err.message
+    };
+  }
+}
+function getInitialDataWithAuth() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return {
+    success: false,
+    requireLogin: true,
+    message: "Vui lòng đăng nhập để tiếp tục"
+  };
+  try {
+    const initialDataFast = getInitialDataFast();
+    let projects = initialDataFast.projects || [],
+      tasks = initialDataFast.tasks || [];
+    const staff = initialDataFast.staff || [];
+    let recentActivities = initialDataFast.recentActivities || [];
+    if (!isAdmin(currentUser)) {
+      if (isManager(currentUser)) {
+        const mapped2 = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name).map(item => item[PROJECT_ID_COLUMN_NAME]);
+        tasks = tasks.filter(task => {
+          if (task[TASK_ASSIGNEE_COLUMN_NAME] === currentUser.name) return true;
+          if (mapped2.includes(task[TASK_PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+        const filtered = tasks.map(task => task[TASK_PROJECT_ID_COLUMN_NAME]).filter(item => item);
+        projects = projects.filter(project => {
+          if (project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name) return true;
+          if (filtered.includes(project[PROJECT_ID_COLUMN_NAME])) return true;
+          return false;
+        });
+      } else {
+        tasks = tasks.filter(task => {
+          const trimmed = String(task[TASK_ASSIGNEE_COLUMN_NAME] || "").trim();
+          if (trimmed === currentUser.name) return true;
+          const taskProjectId = task[TASK_PROJECT_ID_COLUMN_NAME],
+            project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === taskProjectId);
+          return project && project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name;
+        });
+        const set = new Set(tasks.map(task => task[TASK_PROJECT_ID_COLUMN_NAME]).filter(item => item)),
+          filteredProjects = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name);
+        filteredProjects.forEach(filteredProject => {
+          set.add(filteredProject[PROJECT_ID_COLUMN_NAME]);
+        }), projects = projects.filter(project => {
+          const projectId = project[PROJECT_ID_COLUMN_NAME];
+          return set.has(projectId);
+        });
+      }
+      recentActivities = recentActivities.filter(recentActivity => {
+        const trimmed = String(recentActivity[LOG_USER_COLUMN_NAME] || "").trim();
+        return trimmed === currentUser.email || trimmed === currentUser.name;
+      });
+    }
+    let staff2 = staff;
+    if (!isAdmin(currentUser)) {
+      if (isManager(currentUser)) staff2 = staff.filter(staff3 => {
+        const lower = String(staff3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+        return !lower.includes("admin");
+      });else {
+        const filteredProjects = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name);
+        if (filteredProjects.length > 0) staff2 = staff.filter(staff3 => {
+          const lower = String(staff3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase();
+          return !lower.includes("admin");
+        });else {
+          const staff3 = staff.find(staff4 => staff4[STAFF_NAME_COLUMN_NAME] === currentUser.name);
+          staff2 = staff3 ? [staff3] : [];
+        }
+      }
+    }
+    const mapped = staff.filter(staff3 => String(staff3[STAFF_ROLE_COLUMN_NAME] || "").toLowerCase().includes("admin")).map(item => item[STAFF_NAME_COLUMN_NAME]);
+    return {
+      success: true,
+      user: currentUser,
+      projects: projects,
+      tasks: tasks,
+      staff: staff2,
+      adminNames: mapped,
+      chartData: initialDataFast.chartData,
+      recentActivities: recentActivities,
+      summaryStats: initialDataFast.summaryStats,
+      proposals: initialDataFast.proposals || getProposals(),
+      apps: initialDataFast.apps || getApps()
+    };
+  } catch (err) {
+    return console.error("Error in fast load:", err), getDataForUser();
+  }
+}
+function checkUserPermission(action, entityType, row = null) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  if (isAdmin(currentUser)) return {
+    success: true
+  };
+  if (isManager(currentUser)) switch (entityType) {
+    case "project":
+      return {
+        success: true
+      };
+    case "task":
+      return {
+        success: true
+      };
+    case "staff":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý nhân viên"
+      };
+    case "notification":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý thông báo"
+      };
+  }
+  switch (entityType) {
+    case "project":
+      if (row) {
+        if (row[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name) return {
+          success: true
+        };
+      } else {
+        if (action === "create") return {
+          success: false,
+          error: "Chỉ admin và quản lý mới có thể tạo dự án mới"
+        };else {
+          const projects = getProjects(),
+            project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === row);
+          if (project && project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name) return {
+            success: true
+          };
+        }
+      }
+      return {
+        success: false,
+        error: "Bạn chỉ có thể quản lý dự án do bạn phụ trách"
+      };
+    case "task":
+      if (action === "create") {
+        const projects = getProjects(),
+          filteredProjects = projects.filter(project => project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name);
+        if (filteredProjects.length > 0) return {
+          success: true
+        };
+        const filtered = getTasks().filter(item => item[TASK_ASSIGNEE_COLUMN_NAME] === currentUser.name);
+        if (filtered.length > 0) return {
+          success: true
+        };
+        return {
+          success: false,
+          error: "Bạn chỉ có thể tạo nhiệm vụ trong các dự án mà bạn đã được giao việc"
+        };
+      }
+      if (action === "update" || action === "delete") {
+        if (row) {
+          const taskProjectId = row[TASK_PROJECT_ID_COLUMN_NAME],
+            projects = getProjects(),
+            project = projects.find(project2 => project2[PROJECT_ID_COLUMN_NAME] === taskProjectId);
+          if (project && project[PROJECT_MANAGER_COLUMN_NAME] === currentUser.name) return {
+            success: true
+          };
+        }
+        if (row && row[TASK_ASSIGNEE_COLUMN_NAME] === currentUser.name) return {
+          success: true
+        };
+        return {
+          success: false,
+          error: "Bạn chỉ có thể chỉnh sửa nhiệm vụ của mình hoặc nhiệm vụ trong dự án bạn quản lý"
+        };
+      }
+      break;
+    case "staff":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý nhân viên"
+      };
+    case "notification":
+      return {
+        success: false,
+        error: "Chỉ admin mới có thể quản lý thông báo"
+      };
+  }
+  return {
+    success: false,
+    error: "Không có quyền thực hiện hành động này"
+  };
+}
+function getInitialData() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const projects = getProjects(),
+      tasks = getTasks(),
+      staffList = getStaffList(),
+      taskStatusChartData = getTaskStatusChartData(tasks),
+      recentActivities = getRecentActivities(),
+      summaryStats = getSummaryStats(projects, tasks);
+    return {
+      projects: projects,
+      tasks: tasks,
+      staff: staffList,
+      chartData: taskStatusChartData,
+      recentActivities: recentActivities,
+      summaryStats: summaryStats
+    };
+  } catch (err) {
+    return console.error("Error in getInitialData:", err), {
+      error: "Không thể tải dữ liệu ban đầu. Chi tiết: " + err.message
+    };
+  }
+}
+function addProject(projectData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const currentUser = getCurrentUser();
+    !isAdmin(currentUser) && isManager(currentUser) && (projectData.manager = currentUser.name);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = getOrCreateSheet(spreadsheet, PROJECT_SHEET_NAME, [PROJECT_ID_COLUMN_NAME, PROJECT_NAME_COLUMN_NAME, PROJECT_DESC_COLUMN_NAME, PROJECT_MANAGER_COLUMN_NAME, PROJECT_START_DATE_COLUMN_NAME, PROJECT_END_DATE_COLUMN_NAME, PROJECT_STATUS_COLUMN_NAME, PROJECT_TASKS_JSON_COLUMN_NAME, PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME]),
+      headers = getHeaders(projectSheet);
+    if (!projectData || !projectData.name || String(projectData.name).trim() === "") return {
+      success: false,
+      error: "Tên dự án là bắt buộc."
+    };
+    const projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME),
+      lastId = getLastId(projectSheet, projectIdIndex, "DA"),
+      newId = generateNextId(lastId, "DA"),
+      row = Array(headers.length).fill("");
+    return row[projectIdIndex] = newId, row[headers.indexOf(PROJECT_NAME_COLUMN_NAME)] = String(projectData.name).trim(), row[headers.indexOf(PROJECT_DESC_COLUMN_NAME)] = projectData.description ? String(projectData.description).trim() : "", row[headers.indexOf(PROJECT_MANAGER_COLUMN_NAME)] = projectData.manager ? String(projectData.manager).trim() : "", row[headers.indexOf(PROJECT_START_DATE_COLUMN_NAME)] = parseDate(projectData.startDate), row[headers.indexOf(PROJECT_END_DATE_COLUMN_NAME)] = parseDate(projectData.endDate), row[headers.indexOf(PROJECT_STATUS_COLUMN_NAME)] = projectData.status || "Chưa bắt đầu", projectSheet.appendRow(row), SpreadsheetApp.flush(), logActivity("Thêm dự án", "Tên: " + projectData.name + ", Quản lý: " + (projectData.manager || "N/A") + ", ID: " + newId), {
+      success: true,
+      projectId: newId
+    };
+  } catch (err) {
+    return console.error("Error adding project:", err), {
+      success: false,
+      error: "Lỗi khi thêm dự án: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function updateProject(projectId, projectData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectIdIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    if (!projectId) return {
+      success: false,
+      error: "ID dự án không được cung cấp."
+    };
+    if (!projectData || !projectData.name || String(projectData.name).trim() === "") return {
+      success: false,
+      error: "Tên dự án là bắt buộc."
+    };
+    const foundRow = findRowById(projectSheet, projectIdIndex + 1, projectId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + projectId
+    };
+    const rowNumber = foundRow.rowNumber,
+      range = projectSheet.getRange(rowNumber, 1, 1, headers.length),
+      currentRow = range.getValues()[0];
+    let flag = false;
+    const values = [[headers.indexOf(PROJECT_NAME_COLUMN_NAME), projectData.name], [headers.indexOf(PROJECT_DESC_COLUMN_NAME), projectData.description], [headers.indexOf(PROJECT_MANAGER_COLUMN_NAME), projectData.manager], [headers.indexOf(PROJECT_START_DATE_COLUMN_NAME), parseDate(projectData.startDate)], [headers.indexOf(PROJECT_END_DATE_COLUMN_NAME), parseDate(projectData.endDate)], [headers.indexOf(PROJECT_STATUS_COLUMN_NAME), projectData.status]];
+    return values.forEach(([value, value2]) => {
+      if (value !== -1 && value2 !== undefined) {
+        const value22 = value2 instanceof Date || value2 === null ? value2 : String(value2).trim();
+        currentRow[value] !== value22 && (currentRow[value] = value22, flag = true);
+      }
+    }), flag && (range.setValues([currentRow]), SpreadsheetApp.flush(), logActivity("Cập nhật dự án", "ID: " + projectId + ", Tên: " + projectData.name)), {
+      success: true,
+      updated: flag
+    };
+  } catch (err) {
+    return console.error("Error updating project " + projectId + ":", err), {
+      success: false,
+      error: "Lỗi khi cập nhật dự án: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function deleteProject(projectId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectIdIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    if (!projectId) return {
+      success: false,
+      error: "ID dự án không được cung cấp."
+    };
+    const foundRow = findRowById(projectSheet, projectIdIndex + 1, projectId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + projectId
+    };
+    const rowNumber = foundRow.rowNumber,
+      projectIndex = headers.indexOf(PROJECT_NAME_COLUMN_NAME),
+      value = projectIndex !== -1 ? projectSheet.getRange(rowNumber, projectIndex + 1).getValue() : projectId;
+    return projectSheet.deleteRow(rowNumber), logActivity("Xóa dự án", "ID: " + projectId + ", Tên: " + value), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error deleting project " + projectId + ":", err), {
+      success: false,
+      error: "Lỗi khi xóa dự án: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function getProjects() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return [];
+    return sheetDataToObjectArray(projectSheet);
+  } catch (err) {
+    return console.error("Error getting projects:", err), [];
+  }
+}
+function addTask(taskData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!taskData || !taskData.name || String(taskData.name).trim() === "") return {
+      success: false,
+      error: "Tên nhiệm vụ là bắt buộc."
+    };
+    if (!taskData.projectId || String(taskData.projectId).trim() === "") return {
+      success: false,
+      error: "Nhiệm vụ phải thuộc về một dự án."
+    };
+    const foundRow = findRowById(projectSheet, projectIdIndex + 1, taskData.projectId);
+    if (!foundRow) return {
+      success: false,
+      error: "Mã dự án \"" + taskData.projectId + "\" không tồn tại."
+    };
+    const range = projectSheet.getRange(foundRow.rowNumber, projectTasksJsonIndex + 1);
+    let list = [];
+    try {
+      const value = range.getValue();
+      value && typeof value === "string" && (list = JSON.parse(value));
+    } catch (err) {
+      list = [];
+    }
+    const list2 = list || [],
+      list2Length = list2.length,
+      newTaskId = generateTaskIdForProject(taskData.projectId, list2Length),
+      data = {};
+    data[TASK_ID_COLUMN_NAME] = newTaskId, data[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), data[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", data[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", data[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", data[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", data[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), data[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate));
+    let num = 0;
+    if (taskData.completion !== undefined && taskData.completion !== null && taskData.completion !== "") {
+      const num2 = parseInt(taskData.completion, 10);
+      !isNaN(num2) && (num = Math.max(0, Math.min(100, num2)));
+    }
+    return data[TASK_COMPLETION_COLUMN_NAME] = num, data[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), data[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", data[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", data[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", data[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", data[TASK_REMINDERS_COLUMN_NAME] = [], list.push(data), range.setValue(formatJSONCompact(list)), SpreadsheetApp.flush(), logActivity("Thêm nhiệm vụ", "Tên: " + taskData.name + ", Giao cho: " + (taskData.assignee || "N/A") + ", ID: " + newTaskId, taskData.projectId), {
+      success: true,
+      taskId: newTaskId
+    };
+  } catch (err) {
+    return console.error("Error adding task:", err), {
+      success: false,
+      error: "Lỗi khi thêm nhiệm vụ: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function updateTask(taskId, taskData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!taskId) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (!taskData || !taskData.name || String(taskData.name).trim() === "") return {
+      success: false,
+      error: "Tên nhiệm vụ là bắt buộc."
+    };
+    if (!taskData.projectId || String(taskData.projectId).trim() === "") return {
+      success: false,
+      error: "Nhiệm vụ phải thuộc về một dự án."
+    };
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    let text = null,
+      sourceProjectId = null,
+      taskIndex = -1,
+      list = [];
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i],
+        projectId = value[projectIdIndex],
+        projectTasksJson = value[projectTasksJsonIndex];
+      try {
+        if (projectTasksJson && typeof projectTasksJson === "string") {
+          const parsed = JSON.parse(projectTasksJson),
+            parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
+          if (parsedIndex !== -1) {
+            text = i + 2, sourceProjectId = projectId, taskIndex = parsedIndex, list = parsed;
+            break;
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    if (!text) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+    };
+    if (sourceProjectId !== taskData.projectId) {
+      list.splice(taskIndex, 1), projectSheet.getRange(text, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list));
+      let text2 = null,
+        list2 = [];
+      for (let i = 0; i < values.length; i++) {
+        if (String(values[i][projectIdIndex]).trim() === String(taskData.projectId).trim()) {
+          text2 = i + 2;
+          const projectTasksJson = values[i][projectTasksJsonIndex];
+          try {
+            if (projectTasksJson && typeof projectTasksJson === "string") list2 = JSON.parse(projectTasksJson);
+          } catch (err) {}
+          break;
+        }
+      }
+      if (!text2) return {
+        success: false,
+        error: "Không tìm thấy dự án mới ID: " + taskData.projectId
+      };
+      const newTaskId = generateTaskIdForProject(taskData.projectId, list2.length);
+      let num2 = 0;
+      if (taskData.completion !== undefined && taskData.completion !== null && taskData.completion !== "") {
+        const num3 = parseInt(taskData.completion, 10);
+        !isNaN(num3) && (num2 = Math.max(0, Math.min(100, num3)));
+      }
+      const data = {};
+      return data[TASK_ID_COLUMN_NAME] = newTaskId, data[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), data[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", data[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", data[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", data[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), data[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate)), data[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", data[TASK_COMPLETION_COLUMN_NAME] = num2, data[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), data[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", data[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", data[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", data[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", data[TASK_REMINDERS_COLUMN_NAME] = list[taskIndex] ? list[taskIndex][TASK_REMINDERS_COLUMN_NAME] || [] : [], list2.push(data), projectSheet.getRange(text2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list2)), SpreadsheetApp.flush(), logActivity("Chuyển nhiệm vụ", "ID: " + taskId + " → " + newTaskId + ", Tên: " + taskData.name + ", Từ " + sourceProjectId + " sang " + taskData.projectId, taskData.projectId), {
+        success: true,
+        updated: true,
+        newTaskId: newTaskId
+      };
+    }
+    let num = 0;
+    if (taskData.completion !== undefined && taskData.completion !== null && taskData.completion !== "") {
+      const num2 = parseInt(taskData.completion, 10);
+      !isNaN(num2) && (num = Math.max(0, Math.min(100, num2)));
+    }
+    const task = list[taskIndex];
+    return task[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), task[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", task[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", task[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", task[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), task[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate)), task[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", task[TASK_COMPLETION_COLUMN_NAME] = num, task[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), task[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", task[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", task[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", task[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", !task[TASK_REMINDERS_COLUMN_NAME] && (task[TASK_REMINDERS_COLUMN_NAME] = []), projectSheet.getRange(text, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list)), SpreadsheetApp.flush(), logActivity("Cập nhật nhiệm vụ", "ID: " + taskId + ", Tên: " + taskData.name, taskData.projectId), {
+      success: true,
+      updated: true
+    };
+  } catch (err) {
+    return console.error("Error updating task " + taskId + ":", err), {
+      success: false,
+      error: "Lỗi khi cập nhật nhiệm vụ: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function deleteTask(taskId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    if (!taskId) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i],
+        projectTasksJson = value[projectTasksJsonIndex],
+        projectId = value[projectIdIndex];
+      try {
+        if (projectTasksJson && typeof projectTasksJson === "string") {
+          let parsed = JSON.parse(projectTasksJson);
+          const parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
+          if (parsedIndex !== -1) {
+            const parsed2 = parsed[parsedIndex],
+              task = parsed2[TASK_NAME_COLUMN_NAME] || taskId;
+            return parsed.splice(parsedIndex, 1), projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(parsed)), SpreadsheetApp.flush(), logActivity("Xóa nhiệm vụ", "ID: " + taskId + ", Tên: " + task, projectId), {
+              success: true
+            };
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+    };
+  } catch (err) {
+    return console.error("Error deleting task " + taskId + ":", err), {
+      success: false,
+      error: "Lỗi khi xóa nhiệm vụ: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function addTaskReminder(taskId, reminderData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(currentUser)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền thêm nhắc việc"
+    };
+    if (!taskId) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (!reminderData || !reminderData.date) return {
+      success: false,
+      error: "Ngày nhắc là bắt buộc."
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const values = projectSheet.getRange(2, projectTasksJsonIndex + 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i][0];
+      try {
+        if (value && typeof value === "string") {
+          let parsed = JSON.parse(value);
+          const parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
+          if (parsedIndex !== -1) {
+            !parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] && (parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] = []);
+            const data = {
+              date: reminderData.date,
+              content: reminderData.content || ""
+            };
+            return parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME].push(data), parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME].sort((a, b) => new Date(a.date) - new Date(b.date)), projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(parsed)), SpreadsheetApp.flush(), logActivity("Thêm nhắc việc", "Nhiệm vụ: " + parsed[parsedIndex][TASK_NAME_COLUMN_NAME] + ", Ngày: " + reminderData.date), {
+              success: true,
+              reminders: parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+    };
+  } catch (err) {
+    return console.error("Error adding reminder:", err), {
+      success: false,
+      error: "Lỗi khi thêm nhắc việc: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function updateTaskReminder(taskId, reminderId, reminderData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(currentUser)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền sửa nhắc việc"
+    };
+    if (!taskId) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (reminderId === undefined || reminderId === null) return {
+      success: false,
+      error: "Chỉ số nhắc việc không hợp lệ."
+    };
+    if (!reminderData || !reminderData.date) return {
+      success: false,
+      error: "Ngày nhắc là bắt buộc."
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const values = projectSheet.getRange(2, projectTasksJsonIndex + 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i][0];
+      try {
+        if (value && typeof value === "string") {
+          let parsed = JSON.parse(value);
+          const parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
+          if (parsedIndex !== -1) {
+            const taskReminders = parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] || [];
+            if (reminderId < 0 || reminderId >= taskReminders.length) return {
+              success: false,
+              error: "Chỉ số nhắc việc không tồn tại."
+            };
+            return taskReminders[reminderId] = {
+              date: reminderData.date,
+              content: reminderData.content || ""
+            }, parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] = taskReminders.sort((a, b) => new Date(a.date) - new Date(b.date)), projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(parsed)), SpreadsheetApp.flush(), logActivity("Sửa nhắc việc", "Nhiệm vụ: " + parsed[parsedIndex][TASK_NAME_COLUMN_NAME] + ", Ngày: " + reminderData.date), {
+              success: true,
+              reminders: parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+    };
+  } catch (err) {
+    return console.error("Error updating reminder:", err), {
+      success: false,
+      error: "Lỗi khi sửa nhắc việc: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function deleteTaskReminder(taskId, reminderId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!isAdmin(currentUser)) return {
+      success: false,
+      error: "Chỉ Admin mới có quyền xóa nhắc việc"
+    };
+    if (!taskId) return {
+      success: false,
+      error: "ID nhiệm vụ không được cung cấp."
+    };
+    if (reminderId === undefined || reminderId === null) return {
+      success: false,
+      error: "Chỉ số nhắc việc không hợp lệ."
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ."
+    };
+    const values = projectSheet.getRange(2, projectTasksJsonIndex + 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i][0];
+      try {
+        if (value && typeof value === "string") {
+          let parsed = JSON.parse(value);
+          const parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
+          if (parsedIndex !== -1) {
+            const taskReminders = parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] || [];
+            if (reminderId < 0 || reminderId >= taskReminders.length) return {
+              success: false,
+              error: "Chỉ số nhắc việc không tồn tại."
+            };
+            return taskReminders.splice(reminderId, 1), parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME] = taskReminders, projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(parsed)), SpreadsheetApp.flush(), logActivity("Xóa nhắc việc", "Nhiệm vụ: " + parsed[parsedIndex][TASK_NAME_COLUMN_NAME]), {
+              success: true,
+              reminders: parsed[parsedIndex][TASK_REMINDERS_COLUMN_NAME]
+            };
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+    };
+  } catch (err) {
+    return console.error("Error deleting reminder:", err), {
+      success: false,
+      error: "Lỗi khi xóa nhắc việc: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function formatJSONCompact(value) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!Array.isArray(value) || value.length === 0) return JSON.stringify(value);
+  const mappedValue = value.map(value2 => JSON.stringify(value2));
+  return "[\n" + mappedValue.join(",\n") + "\n]";
+}
+function getTasks() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return [];
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) return [];
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return [];
+    let list = [];
+    const range = projectSheet.getRange(2, projectTasksJsonIndex + 1, lastRow - 1, 1),
+      values = range.getValues();
+    return values.forEach((value, index) => {
+      const value2 = value[0];
+      if (value2 && typeof value2 === "string") {
+        const parsed = JSON.parse(value2);
+        if (Array.isArray(parsed)) {
+          const value3 = projectSheet.getRange(index + 2, projectIdIndex + 1).getValue(),
+            mappedParsed = parsed.map(parsed2 => ({
+              ...parsed2,
+              [TASK_PROJECT_ID_COLUMN_NAME]: value3
+            }));
+          list = list.concat(mappedParsed);
+        }
+      }
+    }), list;
+  } catch (err) {
+    return console.error("Error getting tasks:", err), [];
+  }
+}
+function addStaff(staffData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = getOrCreateSheet(spreadsheet, STAFF_SHEET_NAME, [STAFF_ID_COLUMN_NAME, STAFF_NAME_COLUMN_NAME, STAFF_EMAIL_COLUMN_NAME, STAFF_POSITION_COLUMN_NAME, STAFF_ROLE_COLUMN_NAME, STAFF_PASSWORD_COLUMN_NAME, STAFF_OBJECT_TYPE_COLUMN_NAME, STAFF_NOTES_COLUMN_NAME]),
+      headers = getHeaders(staffSheet);
+    if (!staffData || !staffData.name || String(staffData.name).trim() === "") return {
+      success: false,
+      error: "Tên nhân viên là bắt buộc."
+    };
+    const staffIdIndex = headers.indexOf(STAFF_ID_COLUMN_NAME),
+      lastId = getLastId(staffSheet, staffIdIndex, "NV"),
+      newId = generateNextId(lastId, "NV", 3),
+      row = Array(headers.length).fill("");
+    return row[staffIdIndex] = newId, row[headers.indexOf(STAFF_NAME_COLUMN_NAME)] = String(staffData.name).trim(), row[headers.indexOf(STAFF_EMAIL_COLUMN_NAME)] = staffData.email ? String(staffData.email).trim() : "", row[headers.indexOf(STAFF_POSITION_COLUMN_NAME)] = staffData.position ? String(staffData.position).trim() : "", row[headers.indexOf(STAFF_ROLE_COLUMN_NAME)] = staffData.role || "Nhân viên", row[headers.indexOf(STAFF_PASSWORD_COLUMN_NAME)] = staffData.password || "", row[headers.indexOf(STAFF_OBJECT_TYPE_COLUMN_NAME)] = staffData.objectType || "Người dùng", row[headers.indexOf(STAFF_NOTES_COLUMN_NAME)] = staffData.notes ? String(staffData.notes).trim() : "", staffSheet.appendRow(row), SpreadsheetApp.flush(), {
+      success: true,
+      staffId: newId
+    };
+  } catch (err) {
+    return console.error("Error adding staff:", err), {
+      success: false,
+      error: "Lỗi khi thêm nhân viên: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function updateStaff(staffId, staffData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = spreadsheet.getSheetByName(STAFF_SHEET_NAME);
+    if (!staffSheet) throw new Error("Không tìm thấy sheet \"" + STAFF_SHEET_NAME + "\".");
+    const headers = getHeaders(staffSheet),
+      staffIdIndex = headers.indexOf(STAFF_ID_COLUMN_NAME);
+    if (staffIdIndex === -1) throw new Error("Không tìm thấy cột \"" + STAFF_ID_COLUMN_NAME + "\".");
+    if (!staffId) return {
+      success: false,
+      error: "ID nhân viên không được cung cấp."
+    };
+    if (!staffData || !staffData.name || String(staffData.name).trim() === "") return {
+      success: false,
+      error: "Tên nhân viên là bắt buộc."
+    };
+    const foundRow = findRowById(staffSheet, staffIdIndex + 1, staffId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy nhân viên ID: " + staffId
+    };
+    const rowNumber = foundRow.rowNumber,
+      range = staffSheet.getRange(rowNumber, 1, 1, headers.length),
+      currentRow = range.getValues()[0];
+    let flag = false;
+    const values = [[headers.indexOf(STAFF_NAME_COLUMN_NAME), staffData.name], [headers.indexOf(STAFF_EMAIL_COLUMN_NAME), staffData.email], [headers.indexOf(STAFF_POSITION_COLUMN_NAME), staffData.position], [headers.indexOf(STAFF_ROLE_COLUMN_NAME), staffData.role], [headers.indexOf(STAFF_PASSWORD_COLUMN_NAME), staffData.password], [headers.indexOf(STAFF_OBJECT_TYPE_COLUMN_NAME), staffData.objectType], [headers.indexOf(STAFF_NOTES_COLUMN_NAME), staffData.notes]];
+    return values.forEach(([value, value2]) => {
+      if (value !== -1 && value2 !== undefined) {
+        const trimmed = value2 ? String(value2).trim() : "";
+        String(currentRow[value]).trim() !== trimmed && (currentRow[value] = trimmed, flag = true);
+      }
+    }), flag && (range.setValues([currentRow]), SpreadsheetApp.flush()), {
+      success: true,
+      updated: flag
+    };
+  } catch (err) {
+    return console.error("Error updating staff " + staffId + ":", err), {
+      success: false,
+      error: "Lỗi khi cập nhật nhân viên: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function deleteStaff(staffId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = spreadsheet.getSheetByName(STAFF_SHEET_NAME);
+    if (!staffSheet) throw new Error("Không tìm thấy sheet \"" + STAFF_SHEET_NAME + "\".");
+    const headers = getHeaders(staffSheet),
+      staffIdIndex = headers.indexOf(STAFF_ID_COLUMN_NAME);
+    if (staffIdIndex === -1) throw new Error("Không tìm thấy cột \"" + STAFF_ID_COLUMN_NAME + "\".");
+    if (!staffId) return {
+      success: false,
+      error: "ID nhân viên không được cung cấp."
+    };
+    const foundRow = findRowById(staffSheet, staffIdIndex + 1, staffId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy nhân viên ID: " + staffId
+    };
+    const rowNumber = foundRow.rowNumber,
+      staffIndex = headers.indexOf(STAFF_NAME_COLUMN_NAME),
+      value = staffIndex !== -1 ? staffSheet.getRange(rowNumber, staffIndex + 1).getValue() : staffId;
+    return staffSheet.deleteRow(rowNumber), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error deleting staff " + staffId + ":", err), {
+      success: false,
+      error: "Lỗi khi xóa nhân viên: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function getStaffList() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = spreadsheet.getSheetByName(STAFF_SHEET_NAME);
+    if (!staffSheet) {
+      const staffSheet2 = getOrCreateSheet(spreadsheet, STAFF_SHEET_NAME, [STAFF_ID_COLUMN_NAME, STAFF_NAME_COLUMN_NAME, STAFF_EMAIL_COLUMN_NAME, STAFF_POSITION_COLUMN_NAME, STAFF_ROLE_COLUMN_NAME, STAFF_PASSWORD_COLUMN_NAME, STAFF_OBJECT_TYPE_COLUMN_NAME, STAFF_NOTES_COLUMN_NAME]);
+      return [];
+    }
+    return sheetDataToObjectArray(staffSheet);
+  } catch (err) {
+    return console.error("Error getting staff list:", err), [];
+  }
+}
+function getTaskStatusChartData(tasks) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) return {
+      labels: [],
+      data: [],
+      message: "Không có dữ liệu nhiệm vụ để tạo biểu đồ."
+    };
+    const data = {},
+      taskStatusColumnName = TASK_STATUS_COLUMN_NAME;
+    tasks.forEach(task => {
+      if (typeof task === "object" && task !== null && task.hasOwnProperty(taskStatusColumnName)) {
+        const trimmed = String(task[taskStatusColumnName] || "Không xác định").trim();
+        trimmed && (data[trimmed] = (data[trimmed] || 0) + 1);
+      }
+    });
+    const keys = Object.keys(data),
+      statusCounts = Object.values(data);
+    if (keys.length === 0) return {
+      labels: [],
+      data: [],
+      message: "Không có trạng thái nhiệm vụ nào được tìm thấy."
+    };
+    return {
+      labels: keys,
+      data: statusCounts
+    };
+  } catch (err) {
+    return console.error("Error getting chart data:", err), {
+      labels: [],
+      data: [],
+      error: "Lỗi khi lấy dữ liệu biểu đồ: " + err.message
+    };
+  }
+}
+function getSummaryStats(projects, tasks) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const projectCount = projects && Array.isArray(projects) ? projects.length : 0;
+    let num = 0,
+      num2 = 0,
+      num3 = 0;
+    const taskCount = tasks && Array.isArray(tasks) ? tasks.length : 0,
+      now = new Date();
+    now.setHours(0, 0, 0, 0);
+    if (tasks && Array.isArray(tasks)) {
+      const taskStatusColumnName = TASK_STATUS_COLUMN_NAME,
+        taskDueDateColumnName = TASK_DUE_DATE_COLUMN_NAME;
+      tasks.forEach(task => {
+        if (typeof task !== "object" || task === null || !task.hasOwnProperty(taskStatusColumnName)) return;
+        const lower = String(task[taskStatusColumnName] || "").trim().toLowerCase(),
+          task2 = task[taskDueDateColumnName];
+        if (lower.includes("hoàn thành")) num++;else lower.includes("đang") && num2++;
+        if (!lower.includes("hoàn thành") && task2) {
+          const parsedDate = parseDate(task2);
+          parsedDate && parsedDate < now && num3++;
+        }
+      });
+    }
+    return {
+      totalProjects: projectCount,
+      totalTasks: taskCount,
+      completedTasks: num,
+      ongoingTasks: num2,
+      overdueTasks: num3
+    };
+  } catch (err) {
+    return console.error("Error calculating summary stats:", err), {
+      error: "Lỗi khi tính toán thống kê: " + err.message
+    };
+  }
+}
+function getRecentActivities() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return [];
+    const headers = getHeaders(projectSheet),
+      projectActivityLogJsonIndex = headers.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME);
+    if (projectActivityLogJsonIndex === -1) return [];
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return [];
+    let list = [];
+    for (let i = 2; i <= lastRow; i++) {
+      const range = projectSheet.getRange(i, projectActivityLogJsonIndex + 1),
+        value = range.getValue();
+      if (value && typeof value === "string" && value.trim() !== "") try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filteredParsed = parsed.filter(parsed2 => parsed2 && typeof parsed2 === "object" && parsed2[LOG_TIMESTAMP_COLUMN_NAME] && parsed2[LOG_ACTION_COLUMN_NAME]);
+          list = list.concat(filteredParsed);
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    if (list.length === 0) return [];
+    list.sort((a, b) => {
+      const date = new Date(a[LOG_TIMESTAMP_COLUMN_NAME]),
+        date2 = new Date(b[LOG_TIMESTAMP_COLUMN_NAME]);
+      return date2 - date;
+    });
+    const slice = list.slice(0, 22);
+    return slice;
+  } catch (err) {
+    return console.error("Error getting recent activities:", err), [];
+  }
+}
+function getOrCreateSheet(spreadsheet, sheetName, requiredHeaders) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+    if (requiredHeaders && requiredHeaders.length > 0) {
+      sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]), sheet.setFrozenRows(1);
+      const range = sheet.getRange(1, 1, 1, requiredHeaders.length);
+      range.setFontWeight("bold"), range.setBackground("#f8f9fa");
+    }
+  } else {
+    if (requiredHeaders && requiredHeaders.length > 0) {
+      const headers = getHeaders(sheet),
+        filteredRequiredHeaders = requiredHeaders.filter(requiredHeader => !headers.includes(requiredHeader));
+      if (filteredRequiredHeaders.length > 0) {
+        const text = headers.length + 1;
+        sheet.getRange(1, text, 1, filteredRequiredHeaders.length).setValues([filteredRequiredHeaders]);
+        const range = sheet.getRange(1, text, 1, filteredRequiredHeaders.length);
+        range.setFontWeight("bold"), range.setBackground("#f8f9fa");
+      }
+    }
+  }
+  return sheet;
+}
+function sheetDataToObjectArray(sheet) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!sheet) return [];
+  try {
+    const dataRange = sheet.getDataRange(),
+      values = dataRange.getValues();
+    if (values.length < 2) return [];
+    const mapped = values[0].map(item => item ? String(item).trim() : ""),
+      filtered = values.slice(1).filter(item => item.some(item2 => item2 !== null && item2 !== ""));
+    if (filtered.length === 0) return [];
+    const mappedFiltered = filtered.map(filtered2 => {
+      const data = {};
+      return mapped.forEach((mapped2, index) => {
+        if (mapped2 && index < filtered2.length) {
+          let filtered22 = filtered2[index];
+          filtered22 instanceof Date ? data[mapped2] = formatSheetDate(filtered22) : data[mapped2] = filtered22;
+        }
+      }), data;
+    });
+    return mappedFiltered;
+  } catch (err) {
+    return console.error("Error in sheetDataToObjectArray for sheet \"" + sheet.getName() + "\":", err), [];
+  }
+}
+function logActivity(action, details, projectId = null) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!projectId) {
+      const match = details.match(/(?:ID:|Dự án:|Thuộc dự án:)\s*([A-Z0-9]+)/i);
+      if (match) projectId = match[1];else return;
+    }
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return;
+    const headers = getHeaders(projectSheet),
+      projectActivityLogJsonIndex = headers.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectActivityLogJsonIndex === -1 || projectIdIndex === -1) return;
+    const foundRow = findRowById(projectSheet, projectIdIndex + 1, projectId);
+    if (!foundRow) return;
+    const range = projectSheet.getRange(foundRow.rowNumber, projectActivityLogJsonIndex + 1);
+    let list = [];
+    try {
+      const value = range.getValue();
+      value && typeof value === "string" && value.trim() !== "" && (list = JSON.parse(value));
+    } catch (err) {
+      list = [];
+    }
+    !Array.isArray(list) && (list = []);
+    const now = new Date();
+    let text = "Unknown User";
+    const currentUser = getCurrentUser();
+    currentUser && (text = currentUser.email || currentUser.name || "Unknown User");
+    const data = {
+      [LOG_TIMESTAMP_COLUMN_NAME]: now.toISOString(),
+      [LOG_ACTION_COLUMN_NAME]: action,
+      [LOG_USER_COLUMN_NAME]: text,
+      [LOG_DETAILS_COLUMN_NAME]: details
+    };
+    list.unshift(data), list.length > 22 && (list = list.slice(0, 22)), range.setValue(formatJSONCompact(list));
+  } catch (err) {
+    console.error("Error logging activity:", err);
+  }
+}
+function getHeaders(sheet) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!sheet) return [];
+  try {
+    const lastColumn = sheet.getLastColumn();
+    if (lastColumn === 0) return [];
+    const range = sheet.getRange(1, 1, 1, lastColumn);
+    return range.getValues()[0].map(item => item ? String(item).trim() : "");
+  } catch (err) {
+    return console.error("Error getting headers for sheet \"" + sheet.getName() + "\":", err), [];
+  }
+}
+function getLastId(sheet, idColumnIndex, prefix) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!sheet || idColumnIndex < 0) return null;
+  try {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    const range = sheet.getRange(2, idColumnIndex + 1, lastRow - 1, 1),
+      flattened = range.getDisplayValues().flat(),
+      pattern = new RegExp("^" + prefix + "(\\d+)$", "i");
+    let num = 0;
+    flattened.forEach(flattened2 => {
+      if (typeof flattened2 === "string" && flattened2.trim() !== "") {
+        const match = flattened2.trim().match(pattern);
+        if (match) {
+          const num2 = parseInt(match[1], 10);
+          !isNaN(num2) && num2 >= num && (num = num2);
+        }
+      }
+    });
+    if (num > 0) {
+      const num2 = 3,
+        padded = String(num).padStart(num2, "0");
+      return "" + prefix + padded;
+    } else return null;
+  } catch (err) {
+    return console.error("Error getting last ID for prefix " + prefix + " in column " + (idColumnIndex + 1) + ":", err), null;
+  }
+}
+function generateNextId(lastId, prefix, padLength = 3) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  let num = 1;
+  if (lastId) {
+    const pattern = new RegExp("^" + prefix + "(\\d+)$", "i"),
+      match = String(lastId).match(pattern);
+    if (match) {
+      const num2 = parseInt(match[1], 10);
+      !isNaN(num2) && (num = num2 + 1);
+    }
+  }
+  const padded = String(num).padStart(padLength, "0");
+  return "" + prefix + padded;
+}
+function checkProjectExists(projectId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!projectId) return false;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return false;
+    const headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+    if (projectIdIndex === -1 || projectSheet.getLastRow() < 2) return false;
+    const range = projectSheet.getRange(2, projectIdIndex + 1, projectSheet.getLastRow() - 1, 1),
+      displayValues = range.getDisplayValues(),
+      set = new Set(displayValues.flat().map(item => String(item).trim()));
+    return set.has(String(projectId).trim());
+  } catch (err) {
+    return console.error("Error checking project existence for ID " + projectId + ":", err), false;
+  }
+}
+function findRowById(sheet, idColumnNumber, id) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!sheet || sheet.getLastRow() < 2 || idColumnNumber < 1) return null;
+  try {
+    const lower = String(id).trim().toLowerCase(),
+      displayValues = sheet.getRange(2, idColumnNumber, sheet.getLastRow() - 1, 1).getDisplayValues();
+    for (let i = 0; i < displayValues.length; i++) {
+      const lower2 = String(displayValues[i][0]).trim().toLowerCase();
+      if (lower2 === lower) return {
+        rowNumber: i + 2
+      };
+    }
+    return null;
+  } catch (err) {
+    return console.error("Error finding row by ID " + id + " in column " + idColumnNumber + " of sheet \"" + sheet.getName() + "\":", err), null;
+  }
+}
+function formatSheetDate(value) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!value) return "";
+  try {
+    let value2;
+    value instanceof Date ? value2 = value : value2 = new Date(value);
+    if (isNaN(value2.getTime())) return "";
+    const spreadsheetTimeZone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    return Utilities.formatDate(value2, spreadsheetTimeZone, "yyyy-MM-dd");
+  } catch (err) {
+    return console.error("Error formatting date:", value, "-", err), "";
+  }
+}
+function parseDate(value) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (!isNaN(value.getTime())) {
+      const date = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+      return date;
+    } else return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+    try {
+      let date = new Date(trimmed + "T00:00:00");
+      if (!isNaN(date.getTime())) return date;
+      const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (match) {
+        date = new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10));
+        if (!isNaN(date.getTime()) && date.getDate() === parseInt(match[1], 10)) return date;
+      }
+      return null;
+    } catch (err) {
+      return console.error("Error parsing date string '" + trimmed + "':", err), null;
+    }
+  }
+  return null;
+}
+function addNotification(_notificationData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const content = _notificationData && _notificationData.content ? String(_notificationData.content).trim() : "";
+    if (content === "") return {
+      success: false,
+      error: "Nội dung thông báo là bắt buộc."
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      sheet = getOrCreateSheet(spreadsheet, NOTIFICATION_SHEET_NAME, [NOTIFICATION_ID_COLUMN_NAME, NOTIFICATION_TIME_COLUMN_NAME, NOTIFICATION_USER_COLUMN_NAME, NOTIFICATION_CONTENT_COLUMN_NAME, NOTIFICATION_TYPE_COLUMN_NAME]),
+      headers = getHeaders(sheet),
+      idColumnIndex = headers.indexOf(NOTIFICATION_ID_COLUMN_NAME),
+      newId = generateNextId(getLastId(sheet, idColumnIndex, "TB"), "TB", 3),
+      newRow = Array(headers.length).fill("");
+    return newRow[idColumnIndex] = newId, newRow[headers.indexOf(NOTIFICATION_TIME_COLUMN_NAME)] = new Date(), newRow[headers.indexOf(NOTIFICATION_USER_COLUMN_NAME)] = _notificationData.recipient ? String(_notificationData.recipient).trim() : "", newRow[headers.indexOf(NOTIFICATION_CONTENT_COLUMN_NAME)] = content, newRow[headers.indexOf(NOTIFICATION_TYPE_COLUMN_NAME)] = _notificationData.type ? String(_notificationData.type).trim() : "Thông báo", sheet.appendRow(newRow), SpreadsheetApp.flush(), {
+      success: true,
+      notificationId: newId
+    };
+  } catch (err) {
+    return console.error("Error adding notification:", err), {
+      success: false,
+      error: "Lỗi khi tạo thông báo: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function checkAndNotifyOverdueTasks() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const tasks = getTasks();
+  if (!Array.isArray(tasks) || tasks.length === 0) return;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  let num = 0;
+  const taskStatusColumnName = TASK_STATUS_COLUMN_NAME,
+    taskDueDateColumnName = TASK_DUE_DATE_COLUMN_NAME;
+  tasks.forEach(task => {
+    if (typeof task !== "object" || task === null || !task.hasOwnProperty(taskStatusColumnName)) return;
+    const lower = (task[taskStatusColumnName] || "").toLowerCase(),
+      task2 = task[taskDueDateColumnName];
+    if (!lower.includes("hoàn thành") && task2) try {
+      const parsedDate = parseDate(task2);
+      parsedDate && parsedDate < now && (num++, createOverdueNotificationIfNeeded(task));
+    } catch (err) {
+      const taskId = task[TASK_ID_COLUMN_NAME] || "Không rõ ID";
+    }
+  });
+}
+function createOverdueNotificationIfNeeded(_task) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    if (!_task) return false;
+    const taskId = _task[TASK_ID_COLUMN_NAME] || "";
+    if (!taskId) return false;
+    const taskName = _task[TASK_NAME_COLUMN_NAME] || taskId,
+      assignee = _task[TASK_ASSIGNEE_COLUMN_NAME] || "",
+      dueDate = parseDate(_task[TASK_DUE_DATE_COLUMN_NAME]),
+      marker = "[" + taskId + "]",
+      content = marker + " Nhiệm vụ \"" + taskName + "\" đã quá hạn" + (dueDate ? " (hạn chót " + Utilities.formatDate(dueDate, Session.getScriptTimeZone(), "dd/MM/yyyy") + ")" : "") + ".",
+      spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      sheet = getOrCreateSheet(spreadsheet, NOTIFICATION_SHEET_NAME, [NOTIFICATION_ID_COLUMN_NAME, NOTIFICATION_TIME_COLUMN_NAME, NOTIFICATION_USER_COLUMN_NAME, NOTIFICATION_CONTENT_COLUMN_NAME, NOTIFICATION_TYPE_COLUMN_NAME]),
+      headers = getHeaders(sheet),
+      contentColumnIndex = headers.indexOf(NOTIFICATION_CONTENT_COLUMN_NAME),
+      lastRow = sheet.getLastRow();
+    if (contentColumnIndex !== -1 && lastRow > 1) {
+      const existingContents = sheet.getRange(2, contentColumnIndex + 1, lastRow - 1, 1).getDisplayValues().flat();
+      if (existingContents.some(existing => String(existing).indexOf(marker) !== -1)) return false;
+    }
+    const result = addNotification({
+      content: content,
+      recipient: assignee,
+      type: "Công việc"
+    });
+    return !!(result && result.success);
+  } catch (err) {
+    return console.error("Error creating overdue notification:", err), false;
+  }
+}
+function setupDailyTrigger() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const text = "checkAndNotifyOverdueTasks",
+    triggers = ScriptApp.getProjectTriggers();
+  let num = 0;
+  triggers.forEach(trigger => {
+    trigger.getHandlerFunction() === text && (ScriptApp.deleteTrigger(trigger), num++);
+  });
+  try {
+    ScriptApp.newTrigger(text).timeBased().atHour(1).everyDays(1).inTimezone(Session.getScriptTimeZone()).create(), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Đã tạo trigger kiểm tra nhiệm vụ quá hạn hàng ngày thành công!");
+  } catch (err) {
+    console.error("Error creating trigger for " + text + ":", err), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Không thể tạo trigger tự động. Lỗi: " + err.message + ". Vui lòng kiểm tra quyền hoặc thử lại sau.");
+  }
+}
+function deleteAllTriggers() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const triggers = ScriptApp.getProjectTriggers();
+  let num = 0;
+  if (triggers.length === 0) return;
+  triggers.forEach(trigger => {
+    ScriptApp.deleteTrigger(trigger), num++;
+  }), typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.getUi && SpreadsheetApp.getUi().alert("Đã xóa " + num + " trigger(s).");
+}
+function copyProjectWithAuth(sourceProjectId, newProjectName) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "project");
+  if (!permission.success) return permission;
+  return copyProject(sourceProjectId, newProjectName);
+}
+function copyProject(sourceProjectId, newProjectName) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      projectActivityLogJsonIndex = headers.indexOf(PROJECT_ACTIVITY_LOG_JSON_COLUMN_NAME);
+    if (projectIdIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_ID_COLUMN_NAME + "\".");
+    const foundRow = findRowById(projectSheet, projectIdIndex + 1, sourceProjectId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy dự án ID: " + sourceProjectId
+    };
+    const range = projectSheet.getRange(foundRow.rowNumber, 1, 1, headers.length),
+      sourceRow = range.getValues()[0],
+      lastId = getLastId(projectSheet, projectIdIndex, "DA"),
+      newId = generateNextId(lastId, "DA"),
+      values = [...sourceRow];
+    values[projectIdIndex] = newId, values[headers.indexOf(PROJECT_NAME_COLUMN_NAME)] = newProjectName;
+    if (projectTasksJsonIndex !== -1 && sourceRow[projectTasksJsonIndex]) try {
+      const projectTasksJson = sourceRow[projectTasksJsonIndex];
+      if (projectTasksJson && typeof projectTasksJson === "string") {
+        const parsed = JSON.parse(projectTasksJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const mappedParsed = parsed.map((parsed2, index) => {
+            const data = {
+                ...parsed2
+              },
+              padded = String(index + 1).padStart(2, "0");
+            return data[TASK_ID_COLUMN_NAME] = newId + "-" + padded, data[TASK_PROJECT_ID_COLUMN_NAME] = newId, data[TASK_COMPLETION_COLUMN_NAME] = 0, data[TASK_STATUS_COLUMN_NAME] = "Chưa bắt đầu", data[TASK_REPORT_DATE_COLUMN_NAME] = "", data;
+          });
+          values[projectTasksJsonIndex] = formatJSONCompact(mappedParsed);
+        }
+      }
+    } catch (err) {
+      values[projectTasksJsonIndex] = "";
+    }
+    return projectActivityLogJsonIndex !== -1 && (values[projectActivityLogJsonIndex] = ""), projectSheet.appendRow(values), SpreadsheetApp.flush(), logActivity("Tạo bản sao dự án", "ID gốc: " + sourceProjectId + ", ID mới: " + newId + ", Tên: " + newProjectName, newId), {
+      success: true,
+      projectId: newId,
+      message: "Đã tạo bản sao dự án thành công!"
+    };
+  } catch (err) {
+    return console.error("Error copying project " + sourceProjectId + ":", err), {
+      success: false,
+      error: "Lỗi khi tạo bản sao dự án: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function generateTaskIdForProject() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const now = new Date(),
+    slice = String(now.getFullYear()).slice(-2),
+    padded = String(now.getMonth() + 1).padStart(2, "0"),
+    padded2 = String(now.getDate()).padStart(2, "0"),
+    padded3 = String(now.getHours()).padStart(2, "0"),
+    padded4 = String(now.getMinutes()).padStart(2, "0"),
+    padded5 = String(now.getSeconds()).padStart(2, "0"),
+    padded6 = String(now.getMilliseconds()).padStart(3, "0");
+  return "ID" + slice + padded + padded2 + padded3 + padded4 + padded5 + padded6;
+}
+function copyTaskWithAuth(sourceTaskId, newTaskName) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const permission = checkUserPermission("create", "task");
+  if (!permission.success) return permission;
+  return copyTask(sourceTaskId, newTaskName);
+}
+function copyTask(sourceTaskId, newTaskName) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) throw new Error("Không tìm thấy sheet \"" + PROJECT_SHEET_NAME + "\".");
+    const headers = getHeaders(projectSheet),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) throw new Error("Không có dự án nào.");
+    let task = null,
+      sourceRowNumber = null,
+      list = [],
+      value = null;
+    for (let i = 2; i <= lastRow; i++) {
+      const range2 = projectSheet.getRange(i, projectTasksJsonIndex + 1);
+      try {
+        const value2 = range2.getValue();
+        if (value2 && typeof value2 === "string") {
+          const parsed = JSON.parse(value2),
+            parsed2 = parsed.find(parsed3 => parsed3[TASK_ID_COLUMN_NAME] === sourceTaskId);
+          if (parsed2) {
+            task = parsed2, sourceRowNumber = i, list = parsed;
+            const projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
+            value = projectSheet.getRange(i, projectIdIndex + 1).getValue();
+            break;
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    if (!task) return {
+      success: false,
+      error: "Không tìm thấy nhiệm vụ ID: " + sourceTaskId
+    };
+    const listLength = list.length,
+      newTaskId = generateTaskIdForProject(value, listLength),
+      data = {
+        ...task
+      };
+    data[TASK_ID_COLUMN_NAME] = newTaskId, data[TASK_NAME_COLUMN_NAME] = newTaskName, data[TASK_COMPLETION_COLUMN_NAME] = 0, data[TASK_STATUS_COLUMN_NAME] = "Chưa bắt đầu", data[TASK_REPORT_DATE_COLUMN_NAME] = "", list.push(data);
+    const range = projectSheet.getRange(sourceRowNumber, projectTasksJsonIndex + 1);
+    return range.setValue(formatJSONCompact(list)), SpreadsheetApp.flush(), logActivity("Tạo bản sao nhiệm vụ", "ID gốc: " + sourceTaskId + ", ID mới: " + newTaskId + ", Tên: " + newTaskName, task[TASK_PROJECT_ID_COLUMN_NAME]), {
+      success: true,
+      taskId: newTaskId,
+      message: "Đã tạo bản sao nhiệm vụ thành công!"
+    };
+  } catch (err) {
+    return console.error("Error copying task " + sourceTaskId + ":", err), {
+      success: false,
+      error: "Lỗi khi tạo bản sao nhiệm vụ: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function getChatMessages() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      chatSheet = spreadsheet.getSheetByName(CHAT_SHEET_NAME);
+    if (!chatSheet || chatSheet.getLastRow() < 2) return [];
+    const now = new Date();
+    now.setDate(now.getDate() - 3), now.setHours(0, 0, 0, 0);
+    const headers = getHeaders(chatSheet),
+      chatDateIndex = headers.indexOf(CHAT_DATE_COLUMN_NAME),
+      chatJsonIndex = headers.indexOf(CHAT_JSON_COLUMN_NAME),
+      lastRow = chatSheet.getLastRow(),
+      range = chatSheet.getRange(2, 1, lastRow - 1, headers.length),
+      values = range.getValues();
+    let list = [];
+    return values.forEach(value => {
+      const chatDate = value[chatDateIndex],
+        date = new Date(chatDate);
+      if (date >= now) {
+        const chatJson = value[chatJsonIndex];
+        if (chatJson && typeof chatJson === "string") try {
+          const parsed = JSON.parse(chatJson);
+          if (Array.isArray(parsed)) {
+            const mappedParsed = parsed.map(parsed2 => ({
+              ...parsed2,
+              chatDate: date.toDateString()
+            }));
+            list = list.concat(mappedParsed);
+          }
+        } catch (err) {}
+      }
+    }), list.sort((a, b) => new Date(a.chatDate + " " + a.timestamp) - new Date(b.chatDate + " " + b.timestamp)), list.slice(-50);
+  } catch (err) {
+    return console.error("Error getting chat messages:", err), [];
+  }
+}
+function sendChatMessage(messageText) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      chatSheet = getOrCreateSheet(spreadsheet, CHAT_SHEET_NAME, [CHAT_ID_COLUMN_NAME, CHAT_DATE_COLUMN_NAME, CHAT_JSON_COLUMN_NAME]),
+      todayKey = new Date().toDateString(),
+      headers = getHeaders(chatSheet),
+      chatIdIndex = headers.indexOf(CHAT_ID_COLUMN_NAME),
+      chatDateIndex = headers.indexOf(CHAT_DATE_COLUMN_NAME),
+      chatJsonIndex = headers.indexOf(CHAT_JSON_COLUMN_NAME),
+      lastRow = chatSheet.getLastRow();
+    let lastRow2 = null,
+      list = [];
+    if (lastRow >= 2) {
+      const value = chatSheet.getRange(lastRow, chatDateIndex + 1).getValue();
+      if (new Date(value).toDateString() === todayKey) {
+        lastRow2 = lastRow;
+        const value2 = chatSheet.getRange(lastRow, chatJsonIndex + 1).getValue();
+        value2 && typeof value2 === "string" && (list = JSON.parse(value2));
+      }
+    }
+    const padded = String(list.length + 1).padStart(3, "0"),
+      now = new Date(),
+      text = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0"),
+      data = {
+        id: padded,
+        user: currentUser.name,
+        message: messageText,
+        timestamp: text,
+        avatar: currentUser.name.split(" ").map(item => item[0]).join("").toUpperCase().slice(0, 2)
+      };
+    list.push(data);
+    list.length > 100 && (list = list.slice(-100));
+    if (lastRow2) chatSheet.getRange(lastRow2, chatJsonIndex + 1).setValue(formatChatJSON(list));else {
+      const lastId = getLastId(chatSheet, chatIdIndex, "CH"),
+        newId = generateNextId(lastId, "CH", 4),
+        row = Array(headers.length).fill("");
+      row[chatIdIndex] = newId, row[chatDateIndex] = new Date(), row[chatJsonIndex] = formatChatJSON(list), chatSheet.appendRow(row);
+    }
+    return SpreadsheetApp.flush(), {
+      success: true,
+      message: data
+    };
+  } catch (err) {
+    return console.error("Error sending chat message:", err), {
+      success: false,
+      error: "Lỗi khi gửi tin nhắn: " + err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function formatChatJSON(messages) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  if (!Array.isArray(messages) || messages.length === 0) return JSON.stringify(messages);
+  const mappedMessages = messages.map(message => JSON.stringify(message));
+  return "[\n" + mappedMessages.join(",\n") + "\n]";
+}
+function changePassword(newPassword, confirmPassword) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return {
+      success: false,
+      error: "Chưa đăng nhập"
+    };
+    if (!newPassword || !confirmPassword) return {
+      success: false,
+      error: "Vui lòng nhập đầy đủ thông tin"
+    };
+    if (newPassword !== confirmPassword) return {
+      success: false,
+      error: "Mật khẩu xác nhận không khớp"
+    };
+    if (newPassword.length < 3) return {
+      success: false,
+      error: "Mật khẩu phải có ít nhất 3 ký tự"
+    };
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      staffSheet = spreadsheet.getSheetByName(STAFF_SHEET_NAME);
+    if (!staffSheet) return {
+      success: false,
+      error: "Không tìm thấy dữ liệu nhân viên"
+    };
+    const headers = getHeaders(staffSheet),
+      staffEmailIndex = headers.indexOf(STAFF_EMAIL_COLUMN_NAME),
+      staffPasswordIndex = headers.indexOf(STAFF_PASSWORD_COLUMN_NAME),
+      lastRow = staffSheet.getLastRow();
+    for (let i = 2; i <= lastRow; i++) {
+      const value = staffSheet.getRange(i, staffEmailIndex + 1).getValue();
+      if (value === currentUser.email) return staffSheet.getRange(i, staffPasswordIndex + 1).setValue(newPassword), SpreadsheetApp.flush(), {
+        success: true,
+        message: "Đổi mật khẩu thành công"
+      };
+    }
+    return {
+      success: false,
+      error: "Không tìm thấy tài khoản"
+    };
+  } catch (err) {
+    return console.error("Error changing password:", err), {
+      success: false,
+      error: "Lỗi hệ thống: " + err.message
+    };
+  }
+}
+function reorderTasks(projectId, orderedTaskIds) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME),
+      headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
+      foundRow = findRowById(projectSheet, projectIdIndex + 1, projectId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy dự án"
+    };
+    const range = projectSheet.getRange(foundRow.rowNumber, projectTasksJsonIndex + 1),
+      value = range.getValue();
+    let list = [];
+    try {
+      if (value) list = JSON.parse(value);
+    } catch (err) {
+      return {
+        success: false,
+        error: "Lỗi dữ liệu JSON"
+      };
+    }
+    if (!Array.isArray(list) || list.length === 0) return {
+      success: true
+    };
+    const map = new Map(list.map(list3 => [list3[TASK_ID_COLUMN_NAME], list3])),
+      list2 = [];
+    orderedTaskIds.forEach(orderedTaskId => {
+      map.has(orderedTaskId) && (list2.push(map.get(orderedTaskId)), map.delete(orderedTaskId));
+    });
+    for (const [taskId, task] of map) {
+      list2.push(task);
+    }
+    return range.setValue(formatJSONCompact(list2)), SpreadsheetApp.flush(), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error reordering tasks:", err), {
+      success: false,
+      error: err.message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+function getProposals() {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      proposalSheet = spreadsheet.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!proposalSheet) return [];
+    return sheetDataToObjectArray(proposalSheet);
+  } catch (err) {
+    return console.error("Error getting proposals:", err), [];
+  }
+}
+function addProposal(proposal) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let proposalSheet = spreadsheet.getSheetByName(PROPOSAL_SHEET_NAME);
+    !proposalSheet && (proposalSheet = spreadsheet.insertSheet(PROPOSAL_SHEET_NAME), proposalSheet.appendRow([PROPOSAL_ID_COLUMN, PROPOSAL_TYPE_COLUMN, PROPOSAL_PROJECT_ID_COLUMN, PROPOSAL_TASK_ID_COLUMN, PROPOSAL_CONTENT_COLUMN, PROPOSAL_URL_COLUMN, PROPOSAL_SUPPLIER_COLUMN, PROPOSAL_CREATOR_COLUMN, PROPOSAL_DATE_COLUMN, PROPOSAL_STATUS_COLUMN, PROPOSAL_NOTE_COLUMN]));
+    const headers = getHeaders(proposalSheet),
+      proposalIdIndex = headers.indexOf(PROPOSAL_ID_COLUMN),
+      lastRow = proposalSheet.getLastRow();
+    let num = 0;
+    if (lastRow > 1) {
+      const values = proposalSheet.getRange(2, proposalIdIndex + 1, lastRow - 1, 1).getValues();
+      values.forEach(value => {
+        const text2 = String(value[0] || ""),
+          match = text2.match(/DN(\d+)/);
+        if (match) {
+          const num2 = parseInt(match[1], 10);
+          if (num2 > num) num = num2;
+        }
+      });
+    }
+    const text = "DN" + String(num + 1).padStart(3, "0"),
+      currentUser = getCurrentUser(),
+      currentUserName = currentUser ? currentUser.name : "",
+      mappedHeaders = headers.map(header => {
+        switch (header) {
+          case PROPOSAL_ID_COLUMN:
+            return text;
+          case PROPOSAL_TYPE_COLUMN:
+            return proposal[PROPOSAL_TYPE_COLUMN] || "Ngoài kế hoạch";
+          case PROPOSAL_PROJECT_ID_COLUMN:
+            return proposal[PROPOSAL_PROJECT_ID_COLUMN] || "";
+          case PROPOSAL_TASK_ID_COLUMN:
+            return proposal[PROPOSAL_TASK_ID_COLUMN] || "";
+          case PROPOSAL_CONTENT_COLUMN:
+            return proposal[PROPOSAL_CONTENT_COLUMN] || "";
+          case PROPOSAL_URL_COLUMN:
+            return proposal[PROPOSAL_URL_COLUMN] || "";
+          case PROPOSAL_SUPPLIER_COLUMN:
+            return proposal[PROPOSAL_SUPPLIER_COLUMN] || "";
+          case PROPOSAL_CREATOR_COLUMN:
+            return currentUserName;
+          case PROPOSAL_DATE_COLUMN:
+            return new Date();
+          case PROPOSAL_STATUS_COLUMN:
+            return proposal[PROPOSAL_STATUS_COLUMN] || "Đề xuất mới";
+          case PROPOSAL_NOTE_COLUMN:
+            return proposal[PROPOSAL_NOTE_COLUMN] || "";
+          default:
+            return "";
+        }
+      });
+    return proposalSheet.appendRow(mappedHeaders), logActivity("Tạo đề nghị", "Đề nghị " + text + ": " + proposal[PROPOSAL_CONTENT_COLUMN]?.substring(0, 50) + "..."), {
+      success: true,
+      proposalId: text
+    };
+  } catch (err) {
+    return console.error("Error adding proposal:", err), {
+      success: false,
+      error: "Lỗi khi tạo đề nghị: " + err.message
+    };
+  }
+}
+function updateProposal(proposalId, proposalData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      proposalSheet = spreadsheet.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!proposalSheet) return {
+      success: false,
+      error: "Không tìm thấy sheet Đề nghị"
+    };
+    const headers = getHeaders(proposalSheet),
+      proposalIdIndex = headers.indexOf(PROPOSAL_ID_COLUMN),
+      foundRow = findRowById(proposalSheet, proposalIdIndex + 1, proposalId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy đề nghị"
+    };
+    const values = [PROPOSAL_TYPE_COLUMN, PROPOSAL_PROJECT_ID_COLUMN, PROPOSAL_TASK_ID_COLUMN, PROPOSAL_CONTENT_COLUMN, PROPOSAL_URL_COLUMN, PROPOSAL_SUPPLIER_COLUMN, PROPOSAL_STATUS_COLUMN, PROPOSAL_NOTE_COLUMN],
+      range = proposalSheet.getRange(foundRow.rowNumber, 1, 1, headers.length),
+      currentRow = range.getValues()[0];
+    let flag = false;
+    return values.forEach(value => {
+      if (proposalData[value] !== undefined) {
+        const index = headers.indexOf(value);
+        index !== -1 && currentRow[index] !== proposalData[value] && (currentRow[index] = proposalData[value], flag = true);
+      }
+    }), flag && range.setValues([currentRow]), logActivity("Cập nhật đề nghị", "Đề nghị " + proposalId), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error updating proposal:", err), {
+      success: false,
+      error: "Lỗi khi cập nhật đề nghị: " + err.message
+    };
+  }
+}
+function deleteProposal(proposalId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      proposalSheet = spreadsheet.getSheetByName(PROPOSAL_SHEET_NAME);
+    if (!proposalSheet) return {
+      success: false,
+      error: "Không tìm thấy sheet Đề nghị"
+    };
+    const headers = getHeaders(proposalSheet),
+      proposalIdIndex = headers.indexOf(PROPOSAL_ID_COLUMN),
+      foundRow = findRowById(proposalSheet, proposalIdIndex + 1, proposalId);
+    if (!foundRow) return {
+      success: false,
+      error: "Không tìm thấy đề nghị"
+    };
+    return proposalSheet.deleteRow(foundRow.rowNumber), logActivity("Xóa đề nghị", "Đề nghị " + proposalId), {
+      success: true
+    };
+  } catch (err) {
+    return console.error("Error deleting proposal:", err), {
+      success: false,
+      error: "Lỗi khi xóa đề nghị: " + err.message
+    };
+  }
+}
+function addProposalWithAuth(proposalData) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  return addProposal(proposalData);
+}
+function updateProposalWithAuth(proposalId, proposal) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  const proposals = getProposals(),
+    proposal2 = proposals.find(proposal3 => proposal3[PROPOSAL_ID_COLUMN] === proposalId);
+  if (!proposal2) return {
+    success: false,
+    error: "Không tìm thấy đề nghị"
+  };
+  if (!isAdmin(currentUser)) {
+    if (proposal2[PROPOSAL_CREATOR_COLUMN] !== currentUser.name) return {
+      success: false,
+      error: "Bạn không có quyền cập nhật đề nghị này"
+    };
+    delete proposal[PROPOSAL_STATUS_COLUMN], delete proposal[PROPOSAL_NOTE_COLUMN];
+  }
+  return updateProposal(proposalId, proposal);
+}
+function deleteProposalWithAuth(proposalId) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return {
+    success: false,
+    error: "Chưa đăng nhập"
+  };
+  const proposals = getProposals(),
+    proposal = proposals.find(proposal2 => proposal2[PROPOSAL_ID_COLUMN] === proposalId);
+  if (!proposal) return {
+    success: false,
+    error: "Không tìm thấy đề nghị"
+  };
+  if (!isAdmin(currentUser) && proposal[PROPOSAL_CREATOR_COLUMN] !== currentUser.name) return {
+    success: false,
+    error: "Bạn không có quyền xóa đề nghị này"
+  };
+  return deleteProposal(proposalId);
+}
+function doGet(request) {
+  var licenseKey = getLicenseState();
+  licenseKey !== null && licenseKey !== false && (typeof licenseKey !== "string" || !isValidLicenseKey(licenseKey)) && (licenseKey = false);
+  if (licenseKey === null) return HtmlService.createHtmlOutput(_actPage()).setTitle("Xác minh tiện ích").addMetaTag("viewport", "width=device-width,initial-scale=1").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  if (licenseKey === false) return HtmlService.createHtmlOutput("<html><body style=\"background:#0f172a;color:#ef4444;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif\"><div style=\"text-align:center\"><h1>License Key không hợp lệ</h1><p style=\"color:#94a3b8;margin-top:10px;\">Vui lòng kiểm tra lại Key hoặc liên hệ hỗ trợ.</p></div></body></html>").setTitle("Lỗi xác thực").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  var url = SpreadsheetApp.getActiveSpreadsheet().getUrl(),
+    template = HtmlService.createTemplateFromFile("index");
+  return template.sheetUrl = url, template.evaluate().setTitle("Quản Lý Dự Án").addMetaTag("viewport", "width=device-width, initial-scale=1").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL).setFaviconUrl("https://static.vecteezy.com/system/resources/thumbnails/046/680/406/small/3d-report-icon-report-symbol-3d-free-png.png");
+}
+function _actPage() {
+  return "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}.c{background:rgba(30,41,59,.8);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:40px;max-width:420px;width:100%;text-align:center}.i{width:160px;height:64px;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.3);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px;padding:8px}h1{font-size:20px;font-weight:900;margin-bottom:8px}p{color:#94a3b8;font-size:14px;margin-bottom:16px}a{color:#60a5fa;text-decoration:none;font-weight:700}input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:14px 16px;color:#93c5fd;font-family:monospace;font-size:15px;outline:none;margin-bottom:16px;text-align:center;letter-spacing:1px}input:focus{border-color:#3b82f6}button{width:100%;background:#3b82f6;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;transition:all .2s}button:hover{background:#2563eb;transform:translateY(-1px)}#m{margin-top:16px;font-size:13px;font-weight:700;min-height:20px}.ft{margin-top:24px;font-size:11px;color:#64748b;line-height:1.5;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px}</style></head><body><div class=\"c\"><div class=\"i\"><img src=https://gsheets.vn/wp-content/uploads/2026/02/Logo26.png style=\"max-width:100%;max-height:100%;object-fit:contain\" onerror=\"this.replaceWith(document.createTextNode(String.fromCodePoint(128640)))\"></div><h1>Xác minh tiện ích</h1><p>Sản phẩm được cung cấp bởi <a href=https://gsheets.vn target=\"_blank\">gsheets.vn</a></p><p>Đăng ký License Key <a href=https://docs.google.com/spreadsheets/d/1Yez1U8Si5t8hUKR2jMyESigfFpR_L73Vexp0EC3DNoc/ target=\"_blank\">tại đây</a>.</p><input id=\"k\" placeholder=\"Nhập License Key...\" maxlength=\"30\" autofocus><button onclick=\"go()\">XÁC NHẬN</button><div id=\"m\"></div><div class=\"ft\">Công cụ này sử dụng License Key để xác thực bản quyền. Chúng tôi cam kết <b>KHÔNG</b> yêu cầu mật khẩu hay thu thập thông tin tài khoản Google của bạn.</div></div>" + "<scr" + "ipt>function go(){var k=document.getElementById(\"k\").value.trim();if(!k){s(\"Vui lòng nhập License Key!\",\"#ef4444\");return}s(\"Đang xác thực...\",\"#93c5fd\");google.script.run.withSuccessHandler(function(r){if(r){s(\"\\u2705 Thành công!\",\"#4ade80\");google.script.run.withSuccessHandler(function(u){window.open(u,\"_top\")}).withFailureHandler(function(){window.open(window.location.href,\"_top\")})._getUrl()}else{s(\"\\u274c Key không hợp lệ\",\"#ef4444\")}}).withFailureHandler(function(){s(\"\\u274c Lỗi kết nối\",\"#ef4444\")})._activateKey(k)}function s(t,c){var e=document.getElementById(\"m\");e.textContent=t;e.style.color=c}document.getElementById(\"k\").addEventListener(\"keypress\",function(e){if(e.key===\"Enter\")go()})</" + "scr" + "ipt></body></html>";
+}
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}

@@ -1,0 +1,110 @@
+{
+  "xorDecode": { "_0x3fc6b0": "codes" },
+  "cyrb53Hash": { "_0x263443": "input" },
+  "isValidLicenseKey": { "_0x6cbd6d": "key" },
+  "_activateKey": { "_0xc69f52": "key" },
+  "include": { "_0x547718": "filename", "_0x195a4a": "filename" },
+  "extractTasksFromProjectValues": {
+    "_0x2d1291": "values",
+    "_0x3ce013": "headers",
+    "_0x25ea40": "row"
+  },
+  "parseSheetData": { "_0x4eaf05": "values", "_0x2ff564": "headers" },
+  "authenticateUser": { "_0x350871": "email", "_0x88bb4c": "password" },
+  "storeUserSession": { "_0x5c8892": "user" },
+  "isAdmin": { "_0x734b7b": "user" },
+  "isManager": { "_0x18a5b1": "user" },
+  "getCurrentUser": { "_0x38e6f7": "propertyKey" },
+  "logout": { "_0x3276aa": "propertyKey" },
+  "doGet": { "_0x4192cf": "request" },
+  "getInitialDataFast": { "_0x119cdc": "batchResponse", "_0x36f7af": "tasks" },
+
+  "addProjectWithAuth": { "_0x1e3e4f": "projectData" },
+  "updateProjectWithAuth": { "_0x3440d2": "projectId", "_0x4b0585": "projectData" },
+  "deleteProjectWithAuth": { "_0x29208f": "projectId" },
+  "addTaskWithAuth": { "_0x28e3d9": "taskData" },
+  "updateTaskWithAuth": { "_0x298175": "taskId", "_0x495748": "taskData" },
+  "deleteTaskWithAuth": { "_0x27d941": "taskId" },
+  "addStaffWithAuth": { "_0x5ab280": "staffData" },
+  "updateStaffWithAuth": { "_0x3af091": "staffId", "_0x4ba58d": "staffData" },
+  "deleteStaffWithAuth": { "_0xa05df1": "staffId" },
+  "addNotificationWithAuth": { "_0x4e1a70": "notificationData" },
+  "addProposalWithAuth": { "_0x42558d": "proposalData" },
+  "updateProposalWithAuth": { "_0x58797a": "proposalId" },
+  "deleteProposalWithAuth": { "_0xd6a5cc": "proposalId" },
+  "copyProjectWithAuth": { "_0x4c8696": "sourceProjectId", "_0x455b44": "newProjectName" },
+  "copyTaskWithAuth": { "_0x5cf5b5": "sourceTaskId", "_0x206fd0": "newTaskName" },
+  "checkUserPermission": { "_0x22b205": "action", "_0x465269": "entityType" },
+
+  "addProject": { "_0x616766": "projectData" },
+  "updateProject": {
+    "_0x5ccdc7": "projectId",
+    "_0xcf90b6": "projectData",
+    "_0x42f642": "currentRow"
+  },
+  "deleteProject": { "_0x41cb0f": "projectId" },
+  "checkProjectExists": { "_0x39878c": "projectId" },
+  "copyProject": {
+    "_0x4a2d10": "sourceProjectId",
+    "_0x56e176": "newProjectName",
+    "_0x57314f": "sourceRow"
+  },
+  "addTask": { "_0x563617": "taskData", "_0x4d4404": "newTaskId" },
+  "updateTask": {
+    "_0xa8f785": "taskId",
+    "_0x308e9e": "taskData",
+    "_0x4dd3dd": "sourceProjectId",
+    "_0x4bdc43": "taskIndex",
+    "_0x30811b": "newTaskId"
+  },
+  "deleteTask": { "_0x90f592": "taskId" },
+  "copyTask": {
+    "_0x36e991": "sourceTaskId",
+    "_0x21b07b": "newTaskName",
+    "_0x521de5": "sourceRowNumber",
+    "_0x417258": "newTaskId"
+  },
+  "reorderTasks": {
+    "_0x1aca1c": "projectId",
+    "_0x32b521": "orderedTaskIds",
+    "_0x3f7628": "taskId",
+    "_0x20cf67": "task"
+  },
+  "addTaskReminder": { "_0x27f765": "taskId", "_0x2dfd91": "reminderData" },
+  "updateTaskReminder": {
+    "_0x24f703": "taskId",
+    "_0x1d81f5": "reminderId",
+    "_0x520506": "reminderData"
+  },
+  "deleteTaskReminder": { "_0x123a1a": "taskId", "_0x5bc097": "reminderId" },
+
+  "addStaff": { "_0x38e195": "staffData" },
+  "updateStaff": { "_0x331dd8": "staffId", "_0x3485f3": "staffData", "_0x4d03f8": "currentRow" },
+  "deleteStaff": { "_0x41c7cd": "staffId" },
+  "changePassword": { "_0x2bf547": "newPassword" },
+
+  "updateApp": { "_0x480431": "appId" },
+  "deleteApp": { "_0xbca7e3": "appId" },
+
+  "updateProposal": {
+    "_0x79eb66": "proposalId",
+    "_0x43119f": "proposalData",
+    "_0x53962a": "currentRow"
+  },
+  "deleteProposal": { "_0x4db3f4": "proposalId" },
+
+  "sendChatMessage": { "_0x3dbef8": "messageText", "_0x1a20bc": "todayKey" },
+  "formatChatJSON": { "_0x4bd46b": "messages" },
+
+  "getTaskStatusChartData": { "_0x479846": "tasks", "_0x378dcf": "statusCounts" },
+  "getSummaryStats": { "_0x4dee4a": "projects", "_0x588515": "tasks" },
+
+  "getOrCreateSheet": { "_0x2fcbe4": "sheetName", "_0x415be7": "requiredHeaders" },
+  "getLastId": { "_0x513703": "idColumnIndex", "_0x1763b9": "prefix" },
+  "generateNextId": { "_0x36bfa8": "lastId", "_0x3c70e6": "prefix", "_0x2ab034": "padLength" },
+  "findRowById": { "_0x282f49": "idColumnNumber", "_0x54ae4a": "id" },
+  "formatSheetDate": { "_0x43d98a": "value" },
+  "parseDate": { "_0x21bc28": "value" },
+  "formatJSONCompact": { "_0x28018c": "value" },
+  "logActivity": { "_0x1993ec": "action", "_0x29d60a": "details", "_0x403fd5": "projectId" }
+}

@@ -1,0 +1,1086 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Dự Án</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <?!= include('css'); ?>
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen font-inter">
+
+    <!-- Mobile Menu Overlay -->
+    <div id="mobile-overlay"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 hidden md:hidden opacity-0 transition-opacity duration-300">
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar"
+        class="fixed left-0 top-0 h-full w-72 bg-white/80 backdrop-blur-xl border-r border-white/20 shadow-2xl z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-out flex flex-col">
+        <div class="p-6 border-b border-gray-100/50">
+            <div class="flex items-center space-x-3">
+                <div
+                    class="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <i class="fas fa-rocket text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1>
+                        <a href="<?= sheetUrl ?>" target="_blank" style="font-weight: 700;">
+                            Quản Lý Dự Án
+                        </a>
+                    </h1>
+                    <p class="text-xs text-gray-500">Quản lý thông minh</p>
+                </div>
+            </div>
+
+            <!-- User info and login/logout buttons -->
+            <div id="user-section" class="mt-4">
+                <!-- Logged in user info -->
+                <div id="user-info" class="hidden">
+                    <div
+                        class="flex items-center space-x-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-100">
+                        <div id="user-avatar"
+                            class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p id="user-name" class="text-sm font-medium text-gray-900 truncate"></p>
+                            <p id="user-role" class="text-xs text-gray-600"></p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button id="change-password-btn"
+                            class="flex-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors duration-200">
+                            <i class="fas fa-key mr-2"></i>Đổi mật khẩu
+                        </button>
+                        <button id="logout-btn"
+                            class="flex-1 px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 hover:text-white rounded-lg transition-colors duration-200">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Đăng xuất
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Login button when not logged in -->
+                <div id="login-prompt" class="hidden">
+                    <button id="login-btn"
+                        class="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Đăng nhập
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <nav class="p-4 space-y-2 flex-1 overflow-y-auto">
+            <a href="#" data-section="overview"
+                class="nav-link active group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200">
+                <div
+                    class="w-8 h-8 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-home text-blue-600 text-sm"></i>
+                </div>
+                <span>Tổng quan</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="gantt"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200">
+                <div
+                    class="w-8 h-8 rounded-lg bg-indigo-100 group-hover:bg-indigo-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-chart-bar text-indigo-600 text-sm"></i>
+                </div>
+                <span>Sơ đồ Gantt</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="projects"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                id="projects-nav">
+                <div
+                    class="w-8 h-8 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-folder-open ${getStatusIconClass(projectStatus)} text-sm"></i>
+                </div>
+                <span>Dự án</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="tasks"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200">
+                <div
+                    class="w-8 h-8 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-tasks text-emerald-600 text-sm"></i>
+                </div>
+                <span>Nhiệm vụ</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="proposals"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                id="proposals-nav">
+                <div
+                    class="w-8 h-8 rounded-lg bg-orange-100 group-hover:bg-orange-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-file-alt text-orange-600 text-sm"></i>
+                </div>
+                <span>Đề nghị</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-orange-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="apps"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                id="apps-nav">
+                <div
+                    class="w-8 h-8 rounded-lg bg-cyan-100 group-hover:bg-cyan-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-th text-cyan-600 text-sm"></i>
+                </div>
+                <span>Quản lý App</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <a href="#" data-section="staff"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                id="staff-nav">
+                <div
+                    class="w-8 h-8 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-users text-amber-600 text-sm"></i>
+                </div>
+                <span>Người dùng</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+        </nav>
+
+        <!-- Footer: Support Info -->
+        <div class="p-4 border-t border-gray-100/50 bg-white/80 backdrop-blur-sm flex-shrink-0">
+            <p class="text-xs text-gray-500 text-center">
+                Thực hiện: <a href="https://gsheets.vn" class="text-blue-500 hover:underline"
+                    target="_blank">gsheets.vn</a>
+                <span class="text-gray-400">(version 5.0)</span>
+            </p>
+        </div>
+    </aside>
+
+    <!-- Login Modal -->
+    <div id="login-modal"
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] opacity-0 invisible transition-all duration-300">
+        <div
+            class="bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8 w-full max-w-md mx-4 transform scale-95 transition-all duration-300">
+            <div class="text-center mb-8">
+                <div
+                    class="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                    <i class="fas fa-rocket text-white text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Đăng nhập</h2>
+                <p class="text-gray-600">Vui lòng đăng nhập để tiếp tục sử dụng hệ thống</p>
+            </div>
+
+            <form id="login-form">
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <div class="relative">
+                            <input type="email" id="login-email" name="email" required
+                                class="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
+                                placeholder="Nhập email của bạn">
+                            <i
+                                class="fas fa-envelope absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label>
+                        <div class="relative">
+                            <input type="password" id="login-password" name="password" required
+                                class="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
+                                placeholder="Nhập mật khẩu">
+                            <i class="fas fa-lock absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </div>
+
+                    <div id="login-error" class="hidden p-3 bg-red-50 border border-red-200 rounded-xl">
+                        <div class="flex items-center">
+                            <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
+                            <span class="text-sm text-red-700" id="login-error-message"></span>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="login-submit-btn" class="w-full btn-primary py-3 text-base font-semibold">
+                        <span id="login-btn-text">Đăng nhập</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Loading indicator while checking credentials -->
+            <div id="login-loading" class="hidden mt-6 text-center">
+                <div class="inline-flex items-center space-x-2 text-blue-600">
+                    <div class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-sm">Đang tải dữ liệu...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay for initial data fetch -->
+    <div id="loading-overlay"
+        class="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-[90] hidden">
+        <div class="text-center">
+            <div class="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4">
+            </div>
+            <p class="text-lg font-medium text-gray-700" id="loading-message">Đang tải dữ liệu...</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="md:ml-72 min-h-screen">
+        <!-- Header -->
+        <header class="sticky top-0 bg-white/80 backdrop-blur-xl border-b border-white/20 z-30">
+            <div class="flex items-center justify-between px-6 py-4">
+                <!-- Left: Title -->
+                <div class="flex items-center space-x-4">
+                    <button id="mobile-menu-btn"
+                        class="md:hidden p-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors duration-200">
+                        <i class="fas fa-bars text-gray-600"></i>
+                    </button>
+                    <h2 id="page-title" class="text-xl font-bold text-gray-900">Tổng Quan</h2>
+                </div>
+
+                <!-- Center: Project Filter -->
+                <div id="overview-filter-container" class="absolute left-1/2 -translate-x-1/2 hidden">
+                    <div class="relative">
+                        <div class="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-xl">
+                        </div>
+                        <div
+                            class="relative bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all">
+                            <i class="fas fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 text-xs"></i>
+                            <input type="text" id="overview-project-filter" list="overview-project-list"
+                                class="w-80 pl-8 pr-8 py-2 text-sm border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all bg-transparent"
+                                placeholder="Lọc theo dự án..." autocomplete="off">
+                            <datalist id="overview-project-list"></datalist>
+                            <button type="button" id="clear-project-filter"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 hidden transition-colors"
+                                title="Xóa bộ lọc">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="project-filter-error"
+                        class="absolute left-1/2 -translate-x-1/2 text-xs text-red-500 mt-1 hidden whitespace-nowrap">Dự
+                        án không hợp lệ
+                    </p>
+                </div>
+
+                <!-- Right: Actions -->
+                <div class="flex items-center space-x-4">
+                    <!-- Refresh Button -->
+                    <button id="refresh-btn"
+                        class="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors duration-200"
+                        title="Làm mới dữ liệu">
+                        <i class="fas fa-sync-alt text-gray-600"></i>
+                    </button>
+                    <!-- Quick Add -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open"
+                            class="flex items-center px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:shadow-lg transform hover:scale-105 transition-all duration-200 whitespace-nowrap">
+                            <i class="fas fa-plus mr-2"></i>
+                            <span>Tạo mới</span>
+                        </button>
+                        <div x-show="open" @click.away="open = false"
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                            class="absolute right-0 mt-2 w-48 glass-card shadow-xl z-20">
+                            <a href="#" id="quick-add-project" class="quick-add-item">
+                                <i class="fas fa-folder-plus text-purple-600"></i>
+                                <span>Dự án mới</span>
+                            </a>
+                            <a href="#" id="quick-add-task" class="quick-add-item">
+                                <i class="fas fa-plus-circle text-emerald-600"></i>
+                                <span>Nhiệm vụ mới</span>
+                            </a>
+                            <a href="#" id="quick-add-staff" class="quick-add-item">
+                                <i class="fas fa-user-plus text-amber-600"></i>
+                                <span>Nhân viên mới</span>
+                            </a>
+                            <a href="#" id="quick-add-proposal" class="quick-add-item">
+                                <i class="fas fa-file-alt text-orange-600"></i>
+                                <span>Đề nghị mới</span>
+                            </a>
+                            <a href="#" id="quick-add-app" class="quick-add-item">
+                                <i class="fas fa-th text-cyan-600"></i>
+                                <span>App mới</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Chat -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" id="chat-btn"
+                            class="relative p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors duration-200">
+                            <i class="fas fa-comments text-gray-600"></i>
+                            <span id="chat-badge"
+                                class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center hidden">0</span>
+                        </button>
+                        <div x-show="open" @click.away="open = false"
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                            class="absolute right-0 mt-2 w-[400px] glass-card shadow-xl z-20 max-h-[500px] overflow-hidden">
+                            <div class="p-4 border-b border-gray-100/50">
+                                <h3 class="font-semibold text-gray-900">Chat chung</h3>
+                            </div>
+                            <div id="chat-messages" class="max-h-64 overflow-y-auto p-4 space-y-3">
+                                <div class="text-center text-gray-500 text-sm">Đang tải tin nhắn...</div>
+                            </div>
+                            <div class="p-4 border-t border-gray-100/50">
+                                <div class="flex gap-2">
+                                    <input type="text" id="chat-input" placeholder="Nhập tin nhắn..."
+                                        class="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500">
+                                    <button id="send-chat-btn"
+                                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="p-6">
+            <!-- Overview Section -->
+            <div id="overview-section" class="section active">
+                <!-- Stats Cards - Enhanced with patterns -->
+                <div class="stats-container">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Card 1: Tổng dự án -->
+                        <div class="modern-stat-card group">
+                            <div class="card-gradient bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700"></div>
+                            <div class="card-content">
+                                <div class="card-header">
+                                    <div class="icon-wrapper blue">
+                                        <i class="fas fa-folder-open"></i>
+                                    </div>
+                                    <div class="main-stat">
+                                        <span class="stat-number" id="total-projects">-</span>
+                                        <span class="stat-label">Tổng dự án</span>
+                                    </div>
+                                </div>
+                                <div class="card-details">
+                                    <div class="detail-item">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Hoàn thành: <strong id="completed-projects">-</strong></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <i class="fas fa-chart-pie"></i>
+                                        <span>Tỷ lệ: <strong id="project-completion-rate">-%</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Tổng nhiệm vụ -->
+                        <div class="modern-stat-card group">
+                            <div
+                                class="card-gradient bg-gradient-to-br from-emerald-500 via-emerald-600 to-emerald-700">
+                            </div>
+                            <div class="card-content">
+                                <div class="card-header">
+                                    <div class="icon-wrapper emerald">
+                                        <i class="fas fa-tasks"></i>
+                                    </div>
+                                    <div class="main-stat">
+                                        <span class="stat-number" id="total-tasks">-</span>
+                                        <span class="stat-label">Tổng nhiệm vụ</span>
+                                    </div>
+                                </div>
+                                <div class="card-details">
+                                    <div class="detail-item">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Hoàn thành: <strong id="completed-tasks">-</strong></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <i class="fas fa-chart-pie"></i>
+                                        <span>Tỷ lệ: <strong id="task-completion-rate">-%</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Nhiệm vụ đang làm -->
+                        <div class="modern-stat-card group">
+                            <div class="card-gradient bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700">
+                            </div>
+                            <div class="card-content">
+                                <div class="card-header">
+                                    <div class="icon-wrapper amber">
+                                        <i class="fas fa-cogs"></i>
+                                    </div>
+                                    <div class="main-stat">
+                                        <span class="stat-number" id="active-tasks">-</span>
+                                        <span class="stat-label">Nhiệm vụ đang làm</span>
+                                    </div>
+                                </div>
+                                <div class="card-details">
+                                    <div class="detail-item">
+                                        <i class="fas fa-play-circle"></i>
+                                        <span>Chưa bắt đầu: <strong id="pending-tasks">-</strong></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <i class="fas fa-pause-circle"></i>
+                                        <span>Tạm dừng: <strong id="paused-tasks">-</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 4: Nhiệm vụ quá hạn -->
+                        <div class="modern-stat-card group">
+                            <div class="card-gradient bg-gradient-to-br from-red-500 via-red-600 to-red-700"></div>
+                            <div class="card-content">
+                                <div class="card-header">
+                                    <div class="icon-wrapper red">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </div>
+                                    <div class="main-stat">
+                                        <span class="stat-number" id="overdue-tasks">-</span>
+                                        <span class="stat-label">Nhiệm vụ quá hạn</span>
+                                    </div>
+                                </div>
+                                <div class="card-details">
+                                    <div class="detail-item">
+                                        <i class="fas fa-list"></i>
+                                        <span>Tổng nhiệm vụ: <strong id="overdue-total-tasks">-</strong></span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <i class="fas fa-percentage"></i>
+                                        <span>Tỷ lệ: <strong id="overdue-rate">-%</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Section - DI CHUYỂN LÊN TRÊN -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Hoạt động gần đây</h3>
+                        <div id="recent-activity" class="space-y-3 max-h-80 overflow-y-auto">
+                            <div class="loading-card">Đang tải...</div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Nhiệm vụ ưu tiên cao</h3>
+                        <div id="priority-tasks-mini"
+                            class="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-80 overflow-y-auto">
+                            <div class="loading-card lg:col-span-2">Đang tải...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid - DI CHUYỂN XUỐNG DƯỚI -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Row 1: Task Status, Project Progress, Task Priority -->
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Trạng thái nhiệm vụ</h3>
+                        <div class="relative h-64">
+                            <canvas id="status-chart"></canvas>
+                            <div id="chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Phân bố tiến độ dự án</h3>
+                        <div class="relative h-64">
+                            <canvas id="project-progress-chart"></canvas>
+                            <div id="project-chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Phân bố ưu tiên nhiệm vụ</h3>
+                        <div class="relative h-64">
+                            <canvas id="task-priority-chart"></canvas>
+                            <div id="priority-chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Staff Performance, Timeline Progress, Project Comparison -->
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Hiệu quả nhân viên</h3>
+                        <div class="relative h-64">
+                            <canvas id="staff-performance-chart"></canvas>
+                            <div id="staff-chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Xu hướng hoàn thành</h3>
+                        <div class="relative h-64">
+                            <canvas id="timeline-progress-chart"></canvas>
+                            <div id="timeline-chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">So sánh dự án</h3>
+                        <div class="relative h-64">
+                            <canvas id="project-comparison-chart"></canvas>
+                            <div id="comparison-chart-message"
+                                class="absolute inset-0 flex items-center justify-center text-gray-500 hidden">
+                                Đang tải biểu đồ...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects Section -->
+            <div id="projects-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý dự án</h3>
+                    <div class="flex items-center space-x-3">
+                        <!-- Search input mới -->
+                        <div class="relative">
+                            <input type="text" id="projects-search" placeholder="Tìm kiếm dự án..."
+                                class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+                        </div>
+                        <select id="projects-status-filter" class="form-select w-40">
+                            <option value="">Tất cả</option>
+                            <option value="Chưa bắt đầu">Chưa bắt đầu</option>
+                            <option value="Đang thực hiện">Đang thực hiện</option>
+                            <option value="Hoàn thành">Hoàn thành</option>
+                            <option value="Tạm dừng">Tạm dừng</option>
+                        </select>
+                        <button id="add-project-standalone" class="btn-primary">
+                            <i class="fas fa-plus mr-2"></i>Tạo dự án mới
+                        </button>
+                    </div>
+                </div>
+                <!-- Project Stats Cards -->
+                <div class="grid grid-cols-5 gap-6 mb-6">
+                    <div class="glass-card p-2 text-center">
+                        <h4 id="projects-pending-count"
+                            class="text-lg font-bold text-gray-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-pause-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Chưa bắt đầu</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-blue-50">
+                        <h4 id="projects-active-count"
+                            class="text-lg font-bold text-blue-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-play-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Đang thực hiện</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-green-50">
+                        <h4 id="projects-completed-count"
+                            class="text-lg font-bold text-green-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-check-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Hoàn thành</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-amber-50">
+                        <h4 id="projects-paused-count"
+                            class="text-lg font-bold text-amber-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-pause text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Tạm dừng</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-red-50">
+                        <h4 id="projects-canceled-count"
+                            class="text-lg font-bold text-red-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-times-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Hủy bỏ</p>
+                    </div>
+                </div>
+                <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="loading-card">Đang tải dự án...</div>
+                </div>
+            </div>
+
+            <!-- Tasks Section -->
+            <div id="tasks-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý nhiệm vụ</h3>
+                    <div class="flex items-center space-x-3">
+                        <div class="relative">
+                            <input type="text" id="tasks-search" placeholder="Tìm kiếm nhiệm vụ..."
+                                class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <i class="fas fa-calendar-day text-blue-500"></i>
+                          <input type="date" id="tasks-date-filter" class="form-input py-2 px-2 text-sm w-36"
+                                title="Lọc nhiệm vụ theo khoảng Ngày bắt đầu - Hạn chót">
+                          <button type="button" id="tasks-date-clear" class="text-gray-400 hover:text-red-500" title="Bỏ lọc ngày">
+                            <i class="fas fa-times-circle"></i>
+                          </button>
+                        </div>
+                        <select id="tasks-status-filter" class="form-select w-40">
+                            <option value="">Tất cả</option>
+                            <option value="Chưa bắt đầu">Chưa bắt đầu</option>
+                            <option value="Đang thực hiện">Đang thực hiện</option>
+                            <option value="Hoàn thành">Hoàn thành</option>
+                            <option value="Tạm dừng">Tạm dừng</option>
+                        </select>
+                        <button id="add-task-standalone" class="btn-secondary">
+                            <i class="fas fa-plus mr-2"></i>Tạo nhiệm vụ mới
+                        </button>
+                    </div>
+                </div>
+                <!-- Task Stats Cards -->
+                <div class="grid grid-cols-4 gap-6 mb-6">
+                    <div class="glass-card p-2 text-center">
+                        <h4 id="tasks-pending-count"
+                            class="text-lg font-bold text-gray-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-pause-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Chưa bắt đầu</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-blue-50">
+                        <h4 id="tasks-active-count"
+                            class="text-lg font-bold text-blue-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-play-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Đang thực hiện</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-green-50">
+                        <h4 id="tasks-completed-count"
+                            class="text-lg font-bold text-green-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-check-circle text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Hoàn thành</p>
+                    </div>
+                    <div class="glass-card p-2 text-center bg-amber-50">
+                        <h4 id="tasks-paused-count"
+                            class="text-lg font-bold text-amber-600 flex items-center justify-center gap-1">
+                            <i class="fas fa-pause text-sm"></i>-
+                        </h4>
+                        <p class="text-xs text-gray-500">Tạm dừng</p>
+                    </div>
+                </div>
+                <div id="tasks-grid" class="w-full">
+                    <div class="loading-card">Đang tải nhiệm vụ...</div>
+                </div>
+            </div>
+
+            <!-- Staff Section -->
+            <div id="staff-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý đối tượng</h3>
+                    <button id="add-staff-btn" class="btn-accent"
+                        onclick="if(isAuthenticated && isAdmin()) openModal('staff')">
+                        <i class="fas fa-user-plus mr-2"></i>Thêm đối tượng
+                    </button>
+                </div>
+
+                <div id="staff-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Người dùng Column -->
+                    <div class="glass-card p-4">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <i class="fas fa-users text-blue-500 mr-2"></i>Người dùng
+                            <span id="staff-user-count" class="ml-2 text-sm font-normal text-gray-500">(0)</span>
+                        </h4>
+                        <div class="overflow-y-auto" style="max-height: 250px;">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th
+                                            class="text-left px-3 py-2 font-medium text-gray-700 sticky left-0 z-20 bg-gray-50 max-w-[35vw] md:max-w-none whitespace-normal break-words">
+                                            Họ tên</th>
+                                        <th class="text-left px-3 py-2 font-medium text-gray-700">Chức vụ</th>
+                                        <th class="text-left px-3 py-2 font-medium text-gray-700">Phân quyền</th>
+                                        <th class="text-center px-3 py-2 font-medium text-gray-700 w-20">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="staff-users-tbody" class="divide-y divide-gray-100">
+                                    <tr>
+                                        <td colspan="4" class="px-3 py-4 text-center text-gray-500">Đang tải...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Nhà cung cấp Column -->
+                    <div class="glass-card p-4">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <i class="fas fa-building text-orange-500 mr-2"></i>Nhà cung cấp
+                            <span id="staff-supplier-count" class="ml-2 text-sm font-normal text-gray-500">(0)</span>
+                        </h4>
+                        <div class="overflow-y-auto" style="max-height: 250px;">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th
+                                            class="text-left px-3 py-2 font-medium text-gray-700 sticky left-0 z-20 bg-gray-50 max-w-[35vw] md:max-w-none whitespace-normal break-words">
+                                            Nhà cung cấp</th>
+                                        <th class="text-left px-3 py-2 font-medium text-gray-700">Ghi chú</th>
+                                        <th class="text-center px-3 py-2 font-medium text-gray-700 w-20">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="staff-suppliers-tbody" class="divide-y divide-gray-100">
+                                    <tr>
+                                        <td colspan="4" class="px-3 py-4 text-center text-gray-500">Đang tải...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bảng phân quyền hệ thống -->
+                <div class="mt-6 glass-card p-6">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                        Phân quyền hệ thống
+                    </h4>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="border border-gray-200 px-4 py-1 text-left font-semibold text-gray-900">
+                                        Chức năng</th>
+                                    <th class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-crown text-orange-500 mr-2"></i>
+                                            <span class="font-semibold text-orange-600">ADMIN</span>
+                                        </div>
+                                    </th>
+                                    <th class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-user-tie text-blue-500 mr-2"></i>
+                                            <span class="font-semibold text-blue-600">QUẢN LÝ</span>
+                                        </div>
+                                    </th>
+                                    <th class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="flex items-center justify-center">
+                                            <i class="fas fa-user text-green-500 mr-2"></i>
+                                            <span class="font-semibold text-green-600">NHÂN VIÊN</span>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Dự án -->
+                                <tr class="bg-blue-50">
+                                    <td colspan="4"
+                                        class="border border-gray-200 px-4 py-2 font-semibold text-blue-800 bg-blue-100">
+                                        <i class="fas fa-folder-open mr-2"></i>QUẢN LÝ DỰ ÁN
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Tạo dự án mới</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="text-xs text-gray-500 mt-1">Chỉ tạo cho bản thân phụ trách</div>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Xem tất cả dự án</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sửa/xóa dự án được phân công
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="text-xs text-gray-500 mt-1">Chỉ sửa được trạng thái dự án</div>
+                                    </td>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sao chép dự án</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                </tr>
+
+                                <!-- Nhiệm vụ -->
+                                <tr class="bg-emerald-50">
+                                    <td colspan="4"
+                                        class="border border-gray-200 px-4 py-2 font-semibold text-emerald-800 bg-emerald-100">
+                                        <i class="fas fa-tasks mr-2"></i>QUẢN LÝ NHIỆM VỤ
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Tạo nhiệm vụ mới</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="text-xs text-gray-500 mt-1">Trong dự án được giao</div>
+                                    </td>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Giao việc cho người khác</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách dự án</div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Xem tất cả nhiệm vụ</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-times text-red-500 text-lg"></i>
+                                    </td>
+                                </tr>
+                                <tr class="bg-gray-50">
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sửa/xóa nhiệm vụ của mình
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sao chép nhiệm vụ</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <i class="fas fa-check text-green-500 text-lg"></i>
+                                    </td>
+                                    <td class="border border-gray-200 px-4 py-1 text-center">
+                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách dự án</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="gantt-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Sơ đồ Gantt</h3>
+
+                    <!-- Phần chọn ngày (3 tháng) -->
+                    <div class="flex items-center space-x-3">
+                        <label class="text-sm text-gray-600">Từ:</label>
+                        <input type="date" id="gantt-start-date" class="form-input py-1 px-2 text-sm w-36">
+                        <label class="text-sm text-gray-600">Đến:</label>
+                        <input type="date" id="gantt-end-date" class="form-input py-1 px-2 text-sm w-36" readonly>
+                        <div id="current-period" class="font-semibold text-gray-700 px-2 hidden"></div>
+                    </div>
+
+                    <!-- Bộ lọc và tìm kiếm -->
+                    <div class="flex items-center space-x-3">
+                        <select id="gantt-staff-filter" class="form-select py-2 px-3 text-sm w-44">
+                            <option value="">Tất cả nhân viên</option>
+                        </select>
+                        <div class="relative">
+                            <input type="text" id="gantt-search" placeholder="Tìm kiếm..."
+                                class="w-48 pl-10 pr-4 py-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <div id="gantt-container" class="mt-4 gantt-scroll-container">
+                        <!-- Header - Ngày tháng -->
+                        <div id="gantt-header" class="flex border-b border-gray-200 pb-2 gantt-header-sticky">
+                            <div class="w-[22rem] min-w-[22rem] font-medium text-gray-700 pr-4 gantt-label-sticky">Tên
+                            </div>
+                            <div class="flex-1 gantt-days"></div>
+                        </div>
+
+                        <!-- Danh sách dự án và nhiệm vụ -->
+                        <div id="gantt-items" class="relative">
+                            <div class="loading-card py-16">Đang tải dữ liệu sơ đồ Gantt...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <!-- Apps Section -->
+            <div id="apps-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý Ứng dụng</h3>
+                    <button id="add-app-btn" class="btn-primary"
+                        onclick="if(isAuthenticated && isAdmin()) openModal('app')">
+                        <i class="fas fa-plus mr-2"></i>Thêm App
+                    </button>
+                </div>
+
+                <div id="apps-grid"
+                    class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    <div class="loading-card col-span-full">Đang tải ứng dụng...</div>
+                </div>
+            </div>
+
+            <!-- Proposals Section -->
+
+            <div id="proposals-section" class="section">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý đề nghị</h3>
+                    <button id="add-proposal-btn" class="btn-primary" onclick="openModal('proposal')">
+                        <i class="fas fa-plus mr-2"></i>Tạo đề nghị mới
+                    </button>
+                </div>
+                <!-- Status Tabs with counts -->
+                <div class="flex flex-wrap items-center gap-4 mb-6">
+                    <div class="flex flex-wrap gap-2" id="proposal-status-tabs">
+                        <button class="proposal-status-tab active bg-gray-100 text-gray-700" data-status="">
+                            <span>Tất cả</span>
+                            <span class="count-badge bg-gray-200 text-gray-600" id="proposal-count-all">0</span>
+                        </button>
+                        <button class="proposal-status-tab bg-blue-50 text-blue-600" data-status="Đề xuất mới">
+                            <span>Đề xuất mới</span>
+                            <span class="count-badge bg-blue-100 text-blue-600" id="proposal-count-new">0</span>
+                        </button>
+                        <button class="proposal-status-tab bg-amber-50 text-amber-600" data-status="Chờ duyệt">
+                            <span>Chờ duyệt</span>
+                            <span class="count-badge bg-amber-100 text-amber-600" id="proposal-count-pending">0</span>
+                        </button>
+                        <button class="proposal-status-tab bg-green-50 text-green-600" data-status="Đã duyệt">
+                            <span>Đã duyệt</span>
+                            <span class="count-badge bg-green-100 text-green-600" id="proposal-count-approved">0</span>
+                        </button>
+                        <button class="proposal-status-tab bg-red-50 text-red-600" data-status="Từ chối">
+                            <span>Từ chối</span>
+                            <span class="count-badge bg-red-100 text-red-600" id="proposal-count-rejected">0</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3 ml-auto">
+                        <select id="proposal-type-filter"
+                            class="form-select text-sm py-2 px-3 rounded-lg border border-gray-200"
+                            onchange="renderProposals()">
+                            <option value="">Tất cả loại</option>
+                            <option value="Trong kế hoạch">Trong kế hoạch</option>
+                            <option value="Ngoài kế hoạch">Ngoài kế hoạch</option>
+                        </select>
+                        <div class="relative">
+                            <i
+                                class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10 pointer-events-none"></i>
+                            <input type="text" id="proposal-search"
+                                class="form-input text-sm py-2 pl-9 pr-4 rounded-lg border border-gray-200 w-56"
+                                placeholder="Tìm kiếm đề nghị..." oninput="renderProposals()">
+                        </div>
+                    </div>
+                </div>
+                <div id="proposals-grid" class="space-y-4">
+                    <div class="loading-card">Đang tải đề nghị...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals will be inserted here -->
+    <div id="modals-container"></div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal"
+        class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 transform transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                    <i class="fas fa-trash-alt text-red-500 text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Xác nhận xóa</h3>
+                    <p id="delete-confirm-message" class="text-sm text-gray-600">Bạn có chắc chắn muốn xóa?</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button id="delete-cancel-btn"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    Hủy
+                </button>
+                <button id="delete-confirm-btn"
+                    class="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
+                    Xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-3"></div>
+
+    <?!= include('js'); ?>
+</body>
+
+</html>
