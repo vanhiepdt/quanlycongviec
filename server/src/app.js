@@ -1,9 +1,16 @@
-// Dựng Express. Phase 0 chỉ có bộ xương + /healthz; route nghiệp vụ vào từ Phase 1.
+// Dựng Express: thứ tự middleware ở đây là phần dễ sai nhất của cả tầng máy chủ, nên mỗi lớp
+// đều ghi rõ vì sao nó phải nằm đúng chỗ đó.
+import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
-import { env, isTest } from './config/env.js';
+import { isTest } from './config/env.js';
 import { query } from './db/pool.js';
+import { audit } from './middleware/audit.js';
+import { issueCsrfCookie, verifyCsrf } from './middleware/csrf.js';
+import { errorHandler, notFoundHandler, ok } from './middleware/errorHandler.js';
+import { attachSession, requirePasswordChanged } from './middleware/session.js';
+import { authRouter } from './modules/auth/routes.js';
 import { logger } from './utils/logger.js';
 
 export function createApp() {
@@ -16,10 +23,12 @@ export function createApp() {
   app.use(helmet());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+  app.use(cookieParser()); // không dùng secret: cookie phiên tự ký bằng HMAC ở cookies.js
   if (!isTest) app.use(pinoHttp({ logger }));
 
   // M4 — /healthz cho Nginx và giám sát. CÔNG KHAI, không cần đăng nhập: đó là chủ ý, vì
   // Nginx phải gọi được. Vì vậy nó chỉ trả trạng thái, KHÔNG trả số liệu hay tên bảng.
+  // Đặt TRƯỚC attachSession để mỗi lần Nginx ping không phải đi một vòng CSDL.
   app.get('/healthz', (req, res) => {
     res.json({ ok: true, uptime_s: Math.round(process.uptime()) });
   });
@@ -34,20 +43,36 @@ export function createApp() {
     }
   });
 
-  // 404 theo đúng quy ước phản hồi §5.3.
-  app.use((req, res) => {
-    res.status(404).json({ success: false, error: 'Không tìm thấy đường dẫn này' });
-  });
+  const api = express.Router();
 
-  // Bộ xử lý lỗi cuối. Không bao giờ trả stack trace ra ngoài.
-  app.use((err, req, res, next) => {
-    logger.error({ err: err.message, stack: err.stack, url: req.originalUrl }, 'Lỗi chưa xử lý');
-    if (res.headersSent) return next(err);
-    res.status(err.status || 500).json({
-      success: false,
-      error: env.NODE_ENV === 'production' ? 'Lỗi hệ thống, vui lòng thử lại' : err.message,
-    });
-  });
+  // Thứ tự bốn lớp dưới đây là cố ý:
+  //  1. attachSession    — mọi lớp sau đều cần biết ai đang gọi.
+  //  2. issueCsrfCookie  — token phát ra phải suy từ phiên vừa đọc được ở (1).
+  //  3. verifyCsrf       — chặn request ghi từ trang khác trước khi nó chạm nghiệp vụ.
+  //  4. audit            — chỉ đăng ký `res.on('finish')`, ghi sau khi phản hồi đã gửi.
+  api.use(attachSession);
+  api.use(issueCsrfCookie);
+  api.use(verifyCsrf);
+  api.use(audit);
+
+  // Trình duyệt lấy token CSRF ở đây trước khi gọi bất kỳ API ghi nào (kể cả đăng nhập).
+  api.get('/csrf', (req, res) => ok(res, { csrfToken: res.locals.csrfToken }));
+
+  api.use('/v1/auth', authRouter);
+
+  // ĐẶT SAU route auth và TRƯỚC mọi route nghiệp vụ: Express xét theo thứ tự khai báo, nên
+  // `/api/v1/auth/*` không bao giờ chạm tới đây — người bị bắt đổi mật khẩu vẫn gọi được
+  // `/v1/auth/password` để tự thoát, còn phần còn lại của hệ thống thì bị chặn (§7 việc 1.8).
+  api.use(requirePasswordChanged);
+
+  // Route nghiệp vụ (Phase 2+) và cầu RPC `/api/rpc/*` (Phase 4) mắc vào từ đây.
+  // Cầu RPC phải tự gắn `loginRateLimiter` cho `authenticateUser` vì nó không đi qua
+  // `/v1/auth/login` — xem §7 việc 1.10.
+
+  app.use('/api', api);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
 
   return app;
 }

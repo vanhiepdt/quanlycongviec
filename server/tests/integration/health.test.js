@@ -29,8 +29,11 @@ describe('bộ xương HTTP', () => {
   it('TC-HEALTH-03: đường dẫn lạ trả 404 theo đúng quy ước §5.3', async () => {
     const res = await request(app).get('/duong-dan-khong-ton-tai');
     expect(res.status).toBe(404);
-    expect(res.body.success).toBe(false);
-    expect(typeof res.body.error).toBe('string');
+    // §5.3: {ok:false, error:{code,message}}. Bộ xương Phase 0 từng trả {success:false,error:'…'}
+    // — sai quy ước; Phase 1 nối vào notFoundHandler nên test sửa theo.
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(typeof res.body.error.message).toBe('string');
   });
 
   it('TC-HEALTH-04: không trả header X-Powered-By, có header bảo mật của helmet', async () => {
