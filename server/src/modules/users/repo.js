@@ -34,7 +34,9 @@ export async function findAuthByEmail(email, client = null) {
 }
 
 export async function findById(id, client = null) {
-  const { rows } = await db(client).query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = $1`, [id]);
+  const { rows } = await db(client).query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = $1`, [
+    id,
+  ]);
   return rows[0] ?? null;
 }
 

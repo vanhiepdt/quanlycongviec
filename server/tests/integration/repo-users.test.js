@@ -108,7 +108,10 @@ describe('recordFailedLogin — khoá sau 5 lần sai trong 15 phút', () => {
     expect(fifth.locked_until).toBeInstanceOf(Date);
     const phut = (fifth.locked_until.getTime() - Date.now()) / 60000;
     expect(phut).toBeGreaterThan(14);
-    expect(phut).toBeLessThanOrEqual(15);
+    // Trần 16 chứ không phải 15: `locked_until` do `now()` của Postgres tính, còn `Date.now()` là
+    // đồng hồ của máy chạy test. Hai đồng hồ lệch vài chục ms là bình thường (container db-test),
+    // và một khẳng định "≤ 15" sẽ đỏ ngẫu nhiên vì đúng chỗ đó chứ không vì code sai.
+    expect(phut).toBeLessThan(16);
   });
 
   it('lần sai cũ hơn 15 phút không cộng dồn — bộ đếm về 1, tài khoản ít dùng không bị khoá oan', async () => {
