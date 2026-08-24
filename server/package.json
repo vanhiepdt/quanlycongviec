@@ -15,8 +15,6 @@
     "migrate:down": "npm run migrate -- down 1",
     "migrate:redo": "npm run migrate:down && npm run migrate:up",
     "seed:dev": "node src/db/seeds/run.js dev.sql",
-    "import:sheets": "node src/modules/import/cli.js",
-    "import:sheets:dry": "node src/modules/import/cli.js --dry-run",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
