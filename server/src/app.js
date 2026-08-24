@@ -11,6 +11,7 @@ import { issueCsrfCookie, verifyCsrf } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler, ok } from './middleware/errorHandler.js';
 import { attachSession, requirePasswordChanged } from './middleware/session.js';
 import { authRouter } from './modules/auth/routes.js';
+import { worksRouter } from './modules/works/routes.js';
 import { logger } from './utils/logger.js';
 
 export function createApp() {
@@ -68,6 +69,7 @@ export function createApp() {
   // Route nghiệp vụ (Phase 2+) và cầu RPC `/api/rpc/*` (Phase 4) mắc vào từ đây.
   // Cầu RPC phải tự gắn `loginRateLimiter` cho `authenticateUser` vì nó không đi qua
   // `/v1/auth/login` — xem §7 việc 1.10.
+  api.use('/v1/works', worksRouter);
 
   app.use('/api', api);
 

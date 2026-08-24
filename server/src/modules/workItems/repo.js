@@ -223,10 +223,15 @@ export async function remove(id, client = null) {
 
 /**
  * Nhân bản MỘT dòng. Cột reset đúng như `copyTask`/`copyProject` bản cũ: tiến độ 0, trạng thái
- * "Chưa bắt đầu", ngày báo cáo trống — bản sao là việc chưa làm. Các cột còn lại giữ nguyên.
+ * "Chưa bắt đầu", ngày báo cáo trống — bản sao là việc chưa làm.
+ *
+ * Khoá duyệt cũng reset về `Đã duyệt` (mặc định của cột, đúng như bản cũ `addTask` gán cho dòng
+ * mới): bản sao KHÔNG được thừa hưởng `Từ chối` của bản gốc (sao xong đã bị từ chối sẵn), và
+ * cũng không nên là `Chờ duyệt` vì mục đó bị loại khỏi mọi con số thống kê (§13.5) nên dòng vừa
+ * tạo sẽ vô hình. Ghi ở §13.3.
  *
  * Nhắc việc KHÔNG được nhân bản: nhắc việc gắn với một mốc ngày cụ thể của bản gốc, sao chép
- * sang bản sao chỉ tạo ra thông báo sai ngày. Ghi ở §13.3.
+ * sang bản sao chỉ tạo ra thông báo sai ngày.
  */
 export async function copyRow(
   sourceId,
@@ -239,12 +244,12 @@ export async function copyRow(
        assignee_id, assignee_name, status, priority,
        start_date, due_date, report_date, completion,
        target, output, notes, result_links,
-       approval_status, sort_order, created_by)
+       sort_order, created_by)
      SELECT $1, $2, $3, level, coalesce($4, name), description,
             assignee_id, assignee_name, 'Chưa bắt đầu', priority,
             start_date, due_date, NULL, 0,
             target, output, notes, result_links,
-            approval_status, coalesce($5, sort_order), $6
+            coalesce($5, sort_order), $6
        FROM work_items WHERE id = $7
      RETURNING ${COLUMNS}`,
     [code, workId, parentId, name, sortOrder, createdBy, sourceId]

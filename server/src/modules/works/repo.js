@@ -132,3 +132,23 @@ export async function remove(id, client = null) {
   const { rowCount } = await db(client).query('DELETE FROM works WHERE id = $1', [id]);
   return rowCount;
 }
+
+/**
+ * Nhân bản dòng công việc (chưa gồm cây bên dưới — phần đó ở `service.copyWork`).
+ *
+ * Bản sao là việc chưa làm: `status` về "Chưa bắt đầu", khoá duyệt về mặc định `Đã duyệt` và
+ * không mang theo người duyệt / thời điểm duyệt / lý do từ chối của bản gốc (§13.3).
+ */
+export async function copyRow(sourceId, { code, name, createdBy = null }, client = null) {
+  const { rows } = await db(client).query(
+    `INSERT INTO works (
+       code, name, description, manager_id, manager_name, department_id,
+       start_date, end_date, status, sort_order, created_by)
+     SELECT $1, coalesce($2, name), description, manager_id, manager_name, department_id,
+            start_date, end_date, 'Chưa bắt đầu', sort_order, $3
+       FROM works WHERE id = $4
+     RETURNING ${COLUMNS}`,
+    [code, name, createdBy, sourceId]
+  );
+  return rows[0] ?? null;
+}
