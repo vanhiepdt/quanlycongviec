@@ -15,7 +15,7 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 | Phase đã xong | **0** và **1** trọn vẹn (Phase 1: 12/12 việc — xác thực, phiên, CSRF, RBAC, nhật ký, giới hạn tần suất, dữ liệu mẫu) |
 | Test đang xanh | **299** (243 của Phase 0 + 2 việc đầu Phase 1, cộng 56 mới: 6 password, 7 cookie, 4 rateLimit, 11 login, 13 phiên/CSRF, 9 đổi mật khẩu + nhật ký, 6 seed) |
 | Phase kế tiếp | **2 — nhập dữ liệu từ Google Sheets** (§7 Phase 2 + §8.4 nhóm TC-IMP) |
-| Còn treo | Gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chỉ có từ **Phase 4** (đã ghi chú trong `src/app.js`). Nợ từ Phase 0: chạy `dump-sheets.js` trên `.xlsx` thật (§13.4 mục 5) |
+| Còn treo | Chỉ **một** việc: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chỉ có từ **Phase 4** (đã ghi chú trong `src/app.js`) |
 | Đang chờ người dùng | §13.4 mục 8 (nhiệm vụ cũ nhập thành cấp 2 hay cấp 3 — **không chặn**, mặc định cấp 2) và mục 9 (sheet `Thông báo` không tồn tại — không chặn) |
 | Đã có dữ liệu thật | `file tai xuong tu google sheet.xlsx` → `data/snapshot-20260824.json` (5 người dùng, 4 phòng, 2 công việc, 1 đề nghị, 1 chat). Số liệu chi tiết ở §13.8 — **đọc trước khi viết công cụ nhập** |
 | Tài khoản thử tay | `npm run seed:dev` → 10 tài khoản `TEST001..TEST010` (§13.7), mật khẩu `Test@12345`, tất cả bị bắt đổi ở lần đăng nhập đầu |
