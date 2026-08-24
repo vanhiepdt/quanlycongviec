@@ -1,0 +1,74 @@
+# Chỉ dùng cho MÁY DEV. Không phải bản chạy thật (bản thật ở docker-compose.yml, Phase 8).
+#
+#   cd deploy && cp .env.example .env   (sửa mật khẩu nếu muốn)
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down        # giữ dữ liệu
+#   docker compose -f docker-compose.dev.yml down -v     # XOÁ luôn dữ liệu
+#
+# Cả hai cổng đều buộc vào 127.0.0.1: máy khác trong mạng LAN không mở được CSDL dev,
+# dù mật khẩu dev là mật khẩu yếu.
+
+name: quanlycongviec-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: qlcv-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quanlycongviec}
+      POSTGRES_USER: ${POSTGRES_USER:-qlcv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?thiếu POSTGRES_PASSWORD trong deploy/.env}
+      # Cần cho so sánh chữ có dấu và sắp xếp tên tiếng Việt.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C.UTF-8'
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-qlcv} -d ${POSTGRES_DB:-quanlycongviec}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # CSDL riêng cho test: `npm test` TRUNCATE/tạo lại liên tục, không được đụng vào db dev (§8.2).
+  db-test:
+    image: postgres:16-alpine
+    container_name: qlcv-test-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quanlycongviec}_test
+      POSTGRES_USER: ${POSTGRES_USER:-qlcv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?thiếu POSTGRES_PASSWORD trong deploy/.env}
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C.UTF-8'
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      - '127.0.0.1:${POSTGRES_TEST_PORT:-5434}:5432'
+    # Dữ liệu test nằm trong tmpfs: mất khi tắt container, và nhanh hơn nhiều.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-qlcv} -d ${POSTGRES_DB:-quanlycongviec}_test']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  adminer:
+    image: adminer:5
+    container_name: qlcv-dev-adminer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - '127.0.0.1:${ADMINER_PORT:-8080}:8080'
+
+volumes:
+  db-data:
