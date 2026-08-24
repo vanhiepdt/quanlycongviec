@@ -64,13 +64,17 @@ CREATE TABLE users (
   notes         text NOT NULL DEFAULT '',
   is_active     boolean NOT NULL DEFAULT true,
   failed_logins int NOT NULL DEFAULT 0,
+  -- Thời điểm sai mật khẩu gần nhất. Cần để hiểu đúng "sai 5 lần TRONG 15 PHÚT": lần sai từ
+  -- hôm qua không được cộng dồn vào hôm nay, nếu không thì tài khoản ít dùng bị khoá oan.
+  last_failed_login_at timestamptz,
   locked_until  timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
   -- 6 vai trò của A5. So khớp CHÍNH XÁC, không `includes('admin')` như bản cũ — nếu không
   -- thì "Trợ lý admin" cũng thành admin (bẫy §13.5, TC-RBAC-07/08).
+  -- Từ vựng: "Quản lý công việc", KHÔNG phải "Quản lý dự án" (§0 Từ vựng chốt 2026-08-24).
   CONSTRAINT users_role_valid CHECK (role IN
-    ('admin','Phó Giám đốc','Trưởng phòng','Phó phòng','Quản lý dự án','Nhân viên'))
+    ('admin','Phó Giám đốc','Trưởng phòng','Phó phòng','Quản lý công việc','Nhân viên'))
 );
 
 -- Ai phụ trách phòng nào — thay 3 cột email cách nhau dấu ';' của sheet "Phòng".
@@ -83,6 +87,8 @@ CREATE TABLE department_managers (
 );
 
 -- ======================= Công việc cấp 1 (sheet "Dự án/Nhiệm vụ") =======================
+-- Tên sheet giữ nguyên văn vì đó là tên THẬT trong Google Sheets, không đổi được. Từ vựng của
+-- hệ mới là "công việc"; tiền tố mã vẫn là `DA` để đối chiếu được với dữ liệu đang chạy (§0).
 
 CREATE TABLE works (
   id              bigserial PRIMARY KEY,
