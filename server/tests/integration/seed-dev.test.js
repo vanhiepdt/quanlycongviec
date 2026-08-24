@@ -17,18 +17,18 @@ afterAll(async () => {
 
 /** Số dòng mong đợi của dev.sql. Đổi dữ liệu mẫu thì sửa Ở ĐÂY, một chỗ duy nhất. */
 const EXPECTED = Object.freeze({
-  departments: 4,
-  users: 12,
+  departments: 5,
+  users: 13,
   managers: 7,
-  works: 8,
-  subworks: 12,
-  tasks: 13,
-  reminders: 5,
+  works: 9,
+  subworks: 13,
+  tasks: 17,
+  reminders: 7,
   proposals: 5,
   apps: 4,
-  chats: 5,
+  chats: 12,
   notifications: 6,
-  logs: 8,
+  logs: 20,
 });
 
 const numbers = (r) => Object.fromEntries(Object.keys(EXPECTED).map((k) => [k, Number(r[k])]));
@@ -104,6 +104,43 @@ describe('dữ liệu mẫu dev.sql', () => {
       ].sort()
     );
   });
+
+  it('có email viết CHỮ HOA, và tra bằng chữ thường vẫn ra đúng người', async () => {
+    await runSeed('dev.sql');
+    // Bệnh §4.1 của bản cũ: nó so chuỗi thẳng nên người này không đăng nhập nổi. Cột `citext`
+    // chữa được, nhưng chỉ chứng minh được nếu dữ liệu mẫu CÓ một email chữ hoa thật.
+    const { rows: upper } = await pool.query(
+      `SELECT code, email::text AS email FROM users WHERE email::text <> lower(email::text)`
+    );
+    expect(upper.map((r) => r.code)).toEqual(['TEST011']);
+
+    const { rows: found } = await pool.query('SELECT code FROM users WHERE email = $1', [
+      upper[0].email.toLowerCase(),
+    ]);
+    expect(found).toEqual([{ code: 'TEST011' }]);
+  });
+
+  it('có hai người TRÙNG HỌ TÊN khác email — chỗ nào dò người theo tên là sai', async () => {
+    await runSeed('dev.sql');
+    const { rows } = await pool.query(
+      `SELECT full_name, count(*)::int AS n FROM users GROUP BY 1 HAVING count(*) > 1`
+    );
+    expect(rows).toEqual([{ full_name: 'Nhân viên Đào tạo', n: 2 }]);
+  });
+
+  it('có một phòng RỖNG HOÀN TOÀN để thử xoá phòng, và phòng có việc thì không rỗng', async () => {
+    await runSeed('dev.sql');
+    // Xoá phòng chỉ được phép khi không còn gì tham chiếu tới. Không có phòng rỗng thì test xoá
+    // của Phase 3 sẽ luôn đi vào nhánh "bị chặn" và nhánh xoá thật chẳng bao giờ chạy.
+    const { rows } = await pool.query(
+      `SELECT d.code FROM departments d
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.department_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM works w WHERE w.department_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM department_managers m WHERE m.department_id = d.id)
+        ORDER BY d.code`
+    );
+    expect(rows.map((r) => r.code)).toEqual(['PH05']);
+  });
 });
 
 // Phần nghiệp vụ: mỗi test dưới đây khẳng định MỘT điều kiện mà API Phase 3 sẽ dựa vào. Thiếu
@@ -122,7 +159,7 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
     expect(rows).toEqual([
       { approval_status: 'Chờ duyệt', n: 2 },
       { approval_status: 'Từ chối', n: 1 },
-      { approval_status: 'Đã duyệt', n: 5 },
+      { approval_status: 'Đã duyệt', n: 6 },
     ]);
     // Từ chối mà không nói lý do thì người bị trả lại không biết sửa gì.
     const rejected = await list(
@@ -147,17 +184,56 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
     );
     expect(lvl2WithParent).toEqual([]);
 
-    const lvl3NoParent = await list(
-      `SELECT code FROM work_items WHERE level = 3 AND parent_id IS NULL`
-    );
-    expect(lvl3NoParent).toEqual([]);
-
     // Cha khác công việc là lỗi nặng nhất của cây: con hiện ra dưới công việc không phải của nó.
     const crossWork = await list(
       `SELECT c.code FROM work_items c JOIN work_items p ON p.id = c.parent_id
         WHERE c.work_id <> p.work_id OR p.level <> 2`
     );
     expect(crossWork).toEqual([]);
+  });
+
+  it('có ĐÚNG MỘT nhiệm vụ mồ côi (cấp 3, parent_id NULL) — dữ liệu bẩn §8.3', async () => {
+    // CSDL cho phép cấp 3 không cha (chỉ cấp 2 mới BẮT BUỘC không cha), và bản Sheets cũ có
+    // thật những dòng như vậy. API dựng cây phải hiện nó ra, không được âm thầm bỏ.
+    const orphans = await list(
+      `SELECT code, work_id FROM work_items WHERE level = 3 AND parent_id IS NULL ORDER BY code`
+    );
+    expect(orphans.map((r) => r.code)).toEqual(['CV001-030']);
+    // Mồ côi cha CẤP 2 nhưng vẫn thuộc một công việc — nếu mất luôn work_id thì nó biến mất
+    // khỏi mọi màn hình, không cách nào tìm lại.
+    expect(orphans[0].work_id).not.toBeNull();
+  });
+
+  it('có dữ liệu ngày biên: việc vắt qua năm và nhiệm vụ ngày 29/02 năm nhuận', async () => {
+    // Lọc theo tháng/năm mà so `year(start) = year(end)` là mất hẳn CV009 khỏi cả hai năm.
+    const crossYear = await list(
+      `SELECT code FROM works WHERE date_part('year', start_date) <> date_part('year', end_date)`
+    );
+    expect(crossYear.map((r) => r.code)).toEqual(['CV009']);
+
+    // 29/02 chỉ có ở năm nhuận: ghép chuỗi ngày cho năm bất kỳ là đổ ở đúng dòng này.
+    const leapDay = await list(
+      `SELECT code FROM work_items WHERE due_date = DATE '2028-02-29' ORDER BY code`
+    );
+    expect(leapDay.map((r) => r.code)).toEqual(['CV003-028']);
+  });
+
+  it('có nhiệm vụ nhiều link kết quả, trong đó một link SAI định dạng', async () => {
+    const many = await list(
+      `SELECT code, jsonb_array_length(result_links)::int AS n FROM work_items
+        WHERE jsonb_array_length(result_links) > 1 ORDER BY code`
+    );
+    expect(many).toEqual([{ code: 'CV002-029', n: 4 }]);
+
+    // Link thiếu 'http' là link tương đối: bấm vào ra trang của chính hệ thống, không ra tài
+    // liệu. Phải có sẵn một dòng như vậy để màn hình phải xử lý, chứ không phải in thẳng ra.
+    const bad = await list(
+      `SELECT wi.code, l->>'url' AS url FROM work_items wi,
+              jsonb_array_elements(wi.result_links) AS l
+        WHERE l->>'url' NOT LIKE 'http%'`
+    );
+    expect(bad).toHaveLength(1);
+    expect(bad[0].code).toBe('CV002-029');
   });
 
   it('có công việc con RỖNG (chưa có nhiệm vụ) để thử tính tiến độ chia cho 0', async () => {
@@ -217,7 +293,15 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
          JOIN work_items wi ON wi.id = r.work_item_id
         GROUP BY wi.code HAVING count(*) > 1`
     );
-    expect(many).toEqual([{ code: 'CV006-022', n: 2 }]);
+    expect(many).toEqual([{ code: 'CV006-022', n: 3 }]);
+
+    // Nhắc việc nội dung RỖNG (§8.3): người dùng bấm đặt nhắc rồi không gõ gì. Màn hình phải
+    // hiện tên nhiệm vụ thay cho nội dung, không được hiện một dòng trắng.
+    const blank = await list(
+      `SELECT wi.code FROM reminders r JOIN work_items wi ON wi.id = r.work_item_id
+        WHERE r.content = '' ORDER BY wi.code`
+    );
+    expect(blank.map((r) => r.code)).toEqual(['CV009-027']);
   });
 
   it('đề nghị đủ 2 loại, đủ 4 trạng thái, và có dòng không gắn công việc nào', async () => {
@@ -264,6 +348,16 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
     expect(log).toHaveLength(1);
   });
 
+  it('tin chat trải nhiều NGÀY khác nhau, không dồn hết vào lúc chạy seed', async () => {
+    // Dồn một cục thì phân trang theo thời gian và mốc "tin mới từ lần xem trước" không có gì
+    // mà cắt — test của Phase 3 sẽ xanh mà chẳng kiểm được gì.
+    const days = await list(
+      `SELECT DISTINCT date(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AS d
+         FROM chat_messages ORDER BY d`
+    );
+    expect(days.length).toBeGreaterThanOrEqual(4);
+  });
+
   it('thông báo có cả đã đọc và chưa đọc, và có dòng không trỏ tới bản ghi nào', async () => {
     const rows = await list(
       `SELECT is_read, count(*)::int AS n FROM notifications GROUP BY 1 ORDER BY 1`
@@ -301,12 +395,12 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
               next_code('PH', 'seq_department_code', 2) AS dept`
     );
     expect(gen).toEqual({
-      work: 'CV009',
-      item: 'CV026',
+      work: 'CV010',
+      item: 'CV031',
       proposal: 'DN006',
       app: 'APP005',
-      usr: 'NV013',
-      dept: 'PH05',
+      usr: 'NV014',
+      dept: 'PH06',
     });
 
     const clash = await list(

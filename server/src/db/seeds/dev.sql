@@ -3,9 +3,13 @@
 -- Chạy bằng: npm run seed:dev   (bộ chạy TỪ CHỐI khi NODE_ENV=production, xem run.js)
 -- Chạy lại được nhiều lần: mọi INSERT đều có ON CONFLICT, không sinh bản trùng.
 --
--- Mật khẩu của cả 10 người: Test@12345   (bcrypt cost 12, xem hằng bên dưới)
--- Cả 10 đều must_change_password = true để chính đường "bắt đổi mật khẩu lần đầu" luôn được đi
+-- Mật khẩu của cả 13 người: Test@12345   (bcrypt cost 12, xem hằng bên dưới)
+-- Cả 13 đều must_change_password = true để chính đường "bắt đổi mật khẩu lần đầu" luôn được đi
 -- thử tay ở UAT, chứ không chỉ có test tự động đi qua.
+--
+-- Dữ liệu mẫu CỐ Ý CÓ DỮ LIỆU BẨN (§8.3): email chữ hoa, hai người trùng họ tên, nhiệm vụ mồ
+-- côi, link sai định dạng, ngày vắt qua năm và ngày 29/02. Thấy mấy dòng trông "sai" thì đó là
+-- chủ ý — API phải chịu được, không được sửa cho "sạch".
 --
 -- Sinh lại hằng băm khi đổi mật khẩu mẫu:
 --   node --input-type=module -e "import {hashSync} from '@node-rs/bcrypt';console.log(hashSync('MậtKhẩuMới',12))"
@@ -13,14 +17,17 @@
 BEGIN;
 
 -- 4 phòng lấy đúng tên và thứ tự của file thật (§13.8) để dev thấy cùng thứ tự Gantt như UAT.
+-- PH05 là phòng RỖNG HOÀN TOÀN: không người, không công việc, không ai phụ trách — dòng duy
+-- nhất mà API "xoá phòng" xoá được thật. PH04 có công việc nên xoá phải bị chặn: cần cả hai.
 INSERT INTO departments (code, name, sort_order) VALUES
   ('PH01', 'Quản lý Đào tạo',        1),
   ('PH02', 'Nghiên cứu Khoa học',    2),
   ('PH03', 'Kế toán',                3),
-  ('PH04', 'Hành chính Nhân sự',     4)
+  ('PH04', 'Hành chính Nhân sự',     4),
+  ('PH05', 'Phòng Tạm (chưa có người)', 5)
 ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order;
 
--- 10 người dùng. `department_id` dò theo MÃ phòng bằng truy vấn con: không viết số id cứng vào
+-- 13 người dùng. `department_id` dò theo MÃ phòng bằng truy vấn con: không viết số id cứng vào
 -- đây, vì `bigserial` không đảm bảo PH01 = 1 sau khi bảng đã bị xoá/nhập lại vài lần.
 INSERT INTO users (code, full_name, email, password_hash, must_change_password,
                    position, role, object_type, department_id, dept_role)
@@ -76,7 +83,9 @@ VALUES
 
   -- PH02 phải có người của mình, nếu không thì không kiểm được "Phó GĐ Một thấy PH01+PH02
   -- nhưng không thấy PH03+PH04".
-  ('TEST011', 'Nhân viên Nghiên cứu',    'nv02@test.local',
+  -- BẪY EMAIL CHỮ HOA (§8.3): cột `email` là `citext` nên người này đăng nhập được bằng
+  -- 'nghien.cuu@test.local'. Bản Sheets cũ so chuỗi thẳng nên đăng nhập trượt — TC-AUTH-03.
+  ('TEST011', 'Nhân viên Nghiên cứu',    'Nghien.Cuu@test.local',
    '$2y$12$MeTdJlT/v3hUz4i0LdHBj.5Htma4Oh2iABUBBq7QDMr8Cw/WGXOIK', true,
    'Nghiên cứu viên',   'Nhân viên',           'Nội bộ',
    (SELECT id FROM departments WHERE code = 'PH02'), 'Nhân viên'),
@@ -84,7 +93,14 @@ VALUES
   -- Đối tượng NGOÀI cơ quan: đứng tên trên đề nghị mua sắm, không thuộc phòng nào.
   ('TEST012', 'Nhà cung cấp Mẫu',        'ncc@test.local',
    '$2y$12$MeTdJlT/v3hUz4i0LdHBj.5Htma4Oh2iABUBBq7QDMr8Cw/WGXOIK', true,
-   '',                  'Nhân viên',           'Nhà cung cấp', NULL, NULL)
+   '',                  'Nhân viên',           'Nhà cung cấp', NULL, NULL),
+
+  -- BẪY TRÙNG HỌ TÊN (§8.3): trùng đúng tên với TEST008. Mọi chỗ dò người **theo tên** đều sai
+  -- từ đây — phải dò theo email hoặc mã, và màn hình phải hiện thêm gì đó để phân biệt.
+  ('TEST013', 'Nhân viên Đào tạo',       'nv01b@test.local',
+   '$2y$12$MeTdJlT/v3hUz4i0LdHBj.5Htma4Oh2iABUBBq7QDMr8Cw/WGXOIK', true,
+   'Chuyên viên',       'Nhân viên',           'Nội bộ',
+   (SELECT id FROM departments WHERE code = 'PH01'), 'Nhân viên')
 ON CONFLICT (code) DO UPDATE SET
   full_name            = EXCLUDED.full_name,
   email                = EXCLUDED.email,
@@ -126,16 +142,18 @@ ON CONFLICT (department_id, user_id, role) DO NOTHING;
 -- nhiệm vụ (cả hai ở bảng `work_items`). KHÔNG gọi cấp 1 là "dự án" (§0 Từ vựng).
 --
 -- Mục tiêu: đủ để chạy hết Phase 3 mà không phải bịa thêm dữ liệu bằng tay —
---   * 8 công việc trải 4 phòng, đủ 3 trạng thái duyệt (Chờ duyệt / Đã duyệt / Từ chối);
+--   * 9 công việc trải 4 phòng, đủ 3 trạng thái duyệt (Chờ duyệt / Đã duyệt / Từ chối);
 --   * công việc con có nhiệm vụ bên dưới, có cả công việc con RỖNG (chưa có nhiệm vụ);
 --   * nhiệm vụ đủ 4 trạng thái, có nhiệm vụ QUÁ HẠN và nhiệm vụ xong trước hạn (TC-STAT-03);
---   * người phụ trách có người dò ra được, có người để trống (API phải chịu được NULL).
+--   * người phụ trách có người dò ra được, có người để trống (API phải chịu được NULL);
+--   * dữ liệu bẩn của §8.3: nhiệm vụ mồ côi, 4 link kết quả kèm 1 link sai định dạng,
+--     nhắc việc nội dung rỗng, việc vắt qua năm (31/12 → 01/01) và việc ngày 29/02.
 -- Mốc thời gian tính quanh 2026-09 để Gantt có việc đang chạy, việc đã xong, việc quá hạn.
 --
 -- Chạy lại được: bảng có `code` thì ON CONFLICT; bảng KHÔNG có khoá tự nhiên (nhắc việc,
 -- chat, thông báo, nhật ký) thì INSERT ... WHERE NOT EXISTS theo nội dung.
 
--- 8 CÔNG VIỆC (cấp 1)
+-- 9 CÔNG VIỆC (cấp 1)
 INSERT INTO works (code, name, description, manager_id, manager_name, department_id,
                    start_date, end_date, status, approval_status, approver_id, approved_at,
                    reject_reason, sort_order, created_by)
@@ -182,7 +200,14 @@ FROM (VALUES
 
   ('CV008', 'Tổng kết công tác đào tạo năm 2026',
    '', 'TEST005', 'PH01', '2026-12-01', '2026-12-31', 'Chưa bắt đầu',
-   'Chờ duyệt', NULL, NULL, '', 8, 'TEST005')
+   'Chờ duyệt', NULL, NULL, '', 8, 'TEST005'),
+
+  -- NGÀY BIÊN (§8.3): bắt đầu 31/12/2026, kết thúc 01/01/2027. Lọc theo tháng/năm mà viết
+  -- `year(start) = year(end)` là mất hẳn công việc này khỏi cả hai năm.
+  ('CV009', 'Trực Tết Dương lịch 2027',
+   'Vắt qua đêm giao thừa — cố ý để thử lọc theo tháng và theo năm.',
+   'TEST010', 'PH04', '2026-12-31', '2027-01-01', 'Chưa bắt đầu',
+   'Đã duyệt', 'TEST003', '2026-12-20 03:00+00', '', 9, 'TEST001')
 ) AS w(code, name, description, manager_code, dept_code, start_date, end_date, status,
        approval_status, approver_code, approved_at, reject_reason, sort_order, creator_code)
 LEFT JOIN users       mu ON mu.code = w.manager_code
@@ -256,7 +281,10 @@ FROM (VALUES
   -- Bị trả lại: `approval_status` = 'Từ chối' có kèm lý do (chuỗi rỗng là sai nghiệp vụ).
   ('CV007-025', 'CV007', 'Soạn đề cương lớp kế toán', '', 'TEST009', '',
    'Chưa bắt đầu',    'Thấp',        '2026-10-01', '2026-10-20', NULL,           0, '',
-   'Từ chối', 'Chờ gộp với CV002 rồi trình lại.', 1)
+   'Từ chối', 'Chờ gộp với CV002 rồi trình lại.', 1),
+  ('CV009-026', 'CV009', 'Phân ca trực đêm giao thừa', '', 'TEST010', '',
+   'Chưa bắt đầu',    'Cao',         '2026-12-31', '2027-01-01', NULL,           0, '',
+   'Đã duyệt', '', 1)
 ) AS i(code, work_code, name, description, assignee_code, assignee_name, status, priority,
        start_date, due_date, report_date, completion, notes, approval_status, reject_reason,
        sort_order)
@@ -334,7 +362,26 @@ FROM (VALUES
    '[]', 'Đã duyệt', 1),
   ('CV006-023', 'CV006', 'CV006-021', 'Bỏ hướng đồng bộ Google Sheets', 'TEST001', '',
    'Hoàn thành',     'Cao',        '2026-08-24', '2026-08-24', '2026-08-24', 100, '',
-   'Đã xoá công cụ nhập và test của nó', '[]', 'Đã duyệt', 2)
+   'Đã xoá công cụ nhập và test của nó', '[]', 'Đã duyệt', 2),
+  -- NGÀY BIÊN (§8.3): ca trực vắt từ 31/12 sang 01/01 năm sau.
+  ('CV009-027', 'CV009', 'CV009-026', 'Trực ca đêm 31/12 sang 01/01', 'TEST010', '',
+   'Chưa bắt đầu',   'Cao',        '2026-12-31', '2027-01-01', NULL,           0, '', '',
+   '[]', 'Đã duyệt', 1),
+  -- NGÀY BIÊN thứ hai: 29/02/2028 chỉ tồn tại vì 2028 là năm nhuận. Sinh ngày bằng cách cộng
+  -- 365 ngày hay ghép chuỗi '29/02' cho năm bất kỳ là đổ ở đúng dòng này.
+  ('CV003-028', 'CV003', 'CV003-012', 'Đối chiếu số liệu ngày 29/02/2028', 'TEST011', '',
+   'Chưa bắt đầu',   'Thấp',       '2028-02-29', '2028-02-29', NULL,           0, '', '',
+   '[]', 'Đã duyệt', 4),
+  -- LINK KẾT QUẢ (§8.3): 4 link, trong đó link cuối SAI ĐỊNH DẠNG (thiếu giao thức http). Màn
+  -- hình bấm vào link đó sẽ ra đường dẫn tương đối của chính trang web, không phải tài liệu.
+  ('CV002-029', 'CV002', 'CV002-009', 'Tổng hợp tài liệu 12 chuyên đề', 'TEST008', '',
+   'Hoàn thành',     'Trung bình', '2026-07-01', '2026-07-25', '2026-07-25', 100, '',
+   'Đã nộp bộ tài liệu đầy đủ',
+   '[{"label": "Bộ chuyên đề (bản PDF)", "url": "https://vidu.test/tai-lieu/bo-chuyen-de.pdf"},
+     {"label": "Biên bản họp chốt khung", "url": "https://vidu.test/tai-lieu/bien-ban.docx"},
+     {"label": "Bảng phân công giảng viên", "url": "https://vidu.test/tai-lieu/phan-cong.xlsx"},
+     {"label": "Ảnh chụp bản ký (link sai định dạng)", "url": "vidu.test/thieu-giao-thuc"}]',
+   'Đã duyệt', 3)
 ) AS i(code, work_code, parent_code, name, assignee_code, assignee_name, status, priority,
        start_date, due_date, report_date, completion, target, output, result_links,
        approval_status, sort_order)
@@ -359,6 +406,30 @@ ON CONFLICT (code) DO UPDATE SET
   sort_order      = EXCLUDED.sort_order,
   updated_at      = now();
 
+-- NHIỆM VỤ MỒ CÔI (§8.3) — cấp 3 mà `parent_id` NULL. CSDL CHO PHÉP (chỉ cấp 2 mới bắt buộc
+-- không có cha), và bản Sheets cũ có thật những dòng thế này: `Mã cha` trỏ tới công việc con đã
+-- bị xoá. Phải có đúng MỘT dòng như vậy, vì:
+--   * API dựng cây phải hiện nó ra chứ không được âm thầm bỏ (mất việc của người ta);
+--   * tính tiến độ công việc con không được đếm nó vào cha nào cả.
+-- Đứng riêng một câu INSERT vì khối cấp 3 ở trên JOIN work_items để dò cha — không JOIN được NULL.
+INSERT INTO work_items (code, work_id, parent_id, level, name, description, assignee_id,
+                        assignee_name, status, priority, start_date, due_date, report_date,
+                        completion, target, output, notes, result_links, approval_status,
+                        approver_id, approved_at, reject_reason, sort_order, created_by)
+SELECT 'CV001-030', w.id, NULL, 3, 'Rà soát lại danh sách học viên đã tốt nghiệp', '',
+       au.id, coalesce(au.full_name, ''), 'Chưa bắt đầu', 'Thấp',
+       DATE '2026-09-20', DATE '2026-09-30', NULL, 0, '', '',
+       'Mất mã công việc con cha khi chuyển từ hệ thống cũ — cố ý để mồ côi.',
+       '[]'::jsonb, 'Đã duyệt', NULL, NULL, '', 9, cu.id
+FROM works w
+LEFT JOIN users au ON au.code = 'TEST008'
+LEFT JOIN users cu ON cu.code = 'TEST001'
+WHERE w.code = 'CV001'
+ON CONFLICT (code) DO UPDATE SET
+  parent_id  = NULL,
+  notes      = EXCLUDED.notes,
+  updated_at = now();
+
 -- NHẮC VIỆC — chỉ đặt được trên nhiệm vụ cấp 3 (trigger `reminders_only_level3`).
 -- Bảng không có khoá tự nhiên nên chống trùng bằng WHERE NOT EXISTS theo (nhiệm vụ, ngày).
 INSERT INTO reminders (work_item_id, remind_date, content, created_by)
@@ -367,8 +438,12 @@ FROM (VALUES
   ('CV001-006', '2026-09-11', 'Gọi nhà in xác nhận giao đúng hẹn'),
   ('CV001-007', '2026-08-19', 'Vé máy bay vẫn chưa đặt, sát hạn rồi'),
   ('CV003-014', '2026-09-25', 'Chốt số phiếu khảo sát Nghệ An'),
+  ('CV006-022', '2026-08-26', 'Xem trước danh sách bảng cần sinh dữ liệu'),
   ('CV006-022', '2026-08-28', 'Xem lại dữ liệu mẫu trước khi bắt đầu Phase 3'),
-  ('CV006-022', '2026-08-30', 'Nhắc lần hai — cùng một nhiệm vụ có nhiều nhắc việc')
+  ('CV006-022', '2026-08-30', 'Nhắc lần hai — cùng một nhiệm vụ có nhiều nhắc việc'),
+  -- NỘI DUNG RỖNG (§8.3): người dùng bấm đặt nhắc rồi không gõ gì. Màn hình phải hiện tên nhiệm
+  -- vụ thay cho nội dung, không được hiện dòng trắng.
+  ('CV009-027', '2026-12-30', '')
 ) AS r(item_code, remind_date, content)
 JOIN work_items wi ON wi.code = r.item_code
 LEFT JOIN users cu ON cu.code = 'TEST001'
@@ -445,19 +520,34 @@ ON CONFLICT (code) DO UPDATE SET
   allowed_roles = EXCLUDED.allowed_roles,
   updated_at    = now();
 
--- CHAT — không có khoá tự nhiên, chống trùng theo (người gửi, nội dung).
--- `created_at` đặt tay để danh sách có thứ tự thời gian thật, không dồn hết vào lúc seed.
+-- CHAT — không có khoá tự nhiên, chống trùng theo nội dung.
+-- `created_at` đặt tay để danh sách có thứ tự thời gian thật, không dồn hết vào lúc seed. 12 tin
+-- trải nhiều ngày để phân trang và mốc "tin mới từ lần xem trước" có gì mà cắt.
 INSERT INTO chat_messages (user_id, user_name, message, created_at)
 SELECT u.id, coalesce(u.full_name, c.user_name), c.message, c.created_at::timestamptz
 FROM (VALUES
   ('TEST004', '', 'Cả nhóm nhớ chốt danh sách học viên trước 05/9 nhé.',
    '2026-09-01 01:15+00'),
+  ('TEST008', '', 'Vâng em đang gọi từng chi nhánh, chiều nay xong ạ.',
+   '2026-09-01 02:40+00'),
+  ('TEST005', '', 'Hội trường Vũng Tàu đã đặt, còn chỗ ăn nghỉ thì mai có báo giá.',
+   '2026-09-01 08:05+00'),
   ('TEST008', '', 'Danh sách lớp Vũng Tàu xong rồi ạ, đủ 40 người.',
    '2026-09-04 07:40+00'),
+  ('TEST004', '', 'Tốt. Gửi luôn cho ba chi nhánh để họ xác nhận lại.',
+   '2026-09-04 08:00+00'),
   ('TEST007', '', 'Vé máy bay cho giảng viên vẫn chưa đặt được, đang chờ báo giá.',
    '2026-08-21 02:05+00'),
+  ('TEST004', '', 'Sát hạn rồi, mai không có báo giá thì mua vé lẻ trước đi.',
+   '2026-08-21 03:30+00'),
   ('TEST001', '', 'Hệ thống mới đã có dữ liệu mẫu, mọi người thử đăng nhập giúp.',
    '2026-08-24 09:30+00'),
+  ('TEST006', '', 'Em đăng nhập được, nó bắt đổi mật khẩu ngay lần đầu.',
+   '2026-08-24 10:05+00'),
+  ('TEST011', '', 'Khảo sát Hà Tĩnh phải tạm dừng, chờ công văn của tỉnh.',
+   '2026-08-16 01:20+00'),
+  ('TEST003', '', 'Ghi rõ lý do tạm dừng vào nhiệm vụ để lúc tổng kết còn biết.',
+   '2026-08-16 04:45+00'),
   -- Người gửi không dò ra: `user_id` NULL nhưng vẫn còn tên để hiển thị.
   (NULL, 'Người cũ đã nghỉ', 'Tin nhắn từ tài khoản không còn trong hệ thống.',
    '2026-07-15 03:00+00')
@@ -520,6 +610,32 @@ FROM (VALUES
    '10.0.0.13', '2026-09-02 07:20+00'),
   ('TEST001', 'auth.login',      'user',      NULL, '{}',
    '10.0.0.10', '2026-08-24 09:00+00'),
+  ('TEST001', 'auth.logout',     'user',      NULL, '{}',
+   '10.0.0.10', '2026-08-24 11:30+00'),
+  -- Đăng nhập sai: nhật ký KHÔNG được ghi mật khẩu đã nhập, chỉ ghi email và số lần sai.
+  ('TEST006', 'auth.loginFailed', 'user',     NULL, '{"email": "tp03@test.local", "lan_sai": 2}',
+   '10.0.0.16', '2026-08-24 09:58+00'),
+  ('TEST001', 'user.create',     'user',      NULL, '{"code": "TEST013", "vai_tro": "Nhân viên"}',
+   '10.0.0.10', '2026-08-23 02:00+00'),
+  ('TEST001', 'user.update',     'user',      NULL, '{"dept_role": {"tu": "", "sang": "Nhân viên"}}',
+   '10.0.0.10', '2026-08-23 02:05+00'),
+  ('TEST001', 'department.create', 'department', NULL, '{"code": "PH05"}',
+   '10.0.0.10', '2026-08-23 01:40+00'),
+  ('TEST004', 'work.update',     'work',      'CV002', '{"status": {"tu": "Đang thực hiện", "sang": "Hoàn thành"}}',
+   '10.0.0.11', '2026-07-31 09:00+00'),
+  ('TEST011', 'workItem.create', 'work_item', 'CV003-015', '{"level": 3, "parent": "CV003-012"}',
+   '10.0.0.19', '2026-08-01 00:30+00'),
+  ('TEST002', 'workItem.approve', 'work_item', 'CV001-001', '{}',
+   '10.0.0.12', '2026-08-20 02:01+00'),
+  ('TEST002', 'proposal.approve', 'proposal', 'DN001', '{"ghi_chu": "Giá trong định mức"}',
+   '10.0.0.12', '2026-08-19 03:00+00'),
+  ('TEST003', 'proposal.reject', 'proposal',  'DN004', '{"ly_do": "Chưa có kinh phí"}',
+   '10.0.0.13', '2026-08-13 01:15+00'),
+  ('TEST001', 'app.create',      'app',       NULL, '{"code": "APP004"}',
+   '10.0.0.10', '2026-08-22 06:20+00'),
+  -- Xoá là việc không lấy lại được: nhật ký giữ luôn tên đã xoá, vì bản ghi thì không còn nữa.
+  ('TEST001', 'work.delete',     'work',      NULL, '{"code": "CV000", "name": "Công việc nhập thử rồi bỏ"}',
+   '10.0.0.10', '2026-08-22 07:45+00'),
   -- Chủ thể không dò ra (tài khoản đã xoá): actor_id NULL nhưng tên còn để đối chiếu.
   (NULL,      'auth.login',      'user',      NULL, '{"ghi_chu": "tài khoản đã xoá"}',
    '10.0.0.99', '2026-07-01 00:00+00')
@@ -542,10 +658,10 @@ WHERE NOT EXISTS (
 --
 -- Dùng GREATEST chứ không setval thẳng: seed chạy lại sau khi Phase 3 đã tạo CV009 thì
 -- setval(8) sẽ KÉO LÙI sequence và mã mới lại trùng lần nữa.
-SELECT setval('seq_department_code', GREATEST((SELECT last_value FROM seq_department_code),  4)),
-       setval('seq_user_code',       GREATEST((SELECT last_value FROM seq_user_code),       12)),
-       setval('seq_work_code',       GREATEST((SELECT last_value FROM seq_work_code),        8)),
-       setval('seq_work_item_code',  GREATEST((SELECT last_value FROM seq_work_item_code),  25)),
+SELECT setval('seq_department_code', GREATEST((SELECT last_value FROM seq_department_code),  5)),
+       setval('seq_user_code',       GREATEST((SELECT last_value FROM seq_user_code),       13)),
+       setval('seq_work_code',       GREATEST((SELECT last_value FROM seq_work_code),        9)),
+       setval('seq_work_item_code',  GREATEST((SELECT last_value FROM seq_work_item_code),  30)),
        setval('seq_proposal_code',   GREATEST((SELECT last_value FROM seq_proposal_code),    5)),
        setval('seq_app_code',        GREATEST((SELECT last_value FROM seq_app_code),         4));
 
