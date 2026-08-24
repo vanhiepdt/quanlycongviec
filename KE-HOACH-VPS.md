@@ -4,7 +4,40 @@ Chốt ngày 24/08/2026. Đọc [HUONG-DAN-BAO-TRI.md](HUONG-DAN-BAO-TRI.md) đ�
 và [KE-HOACH-PHAT-TRIEN.md](KE-HOACH-PHAT-TRIEN.md) để biết 6 tính năng đang làm dở trên bản
 Apps Script. File này thay thế §3 (chia giai đoạn) của kế hoạch cũ.
 
-## 0. Bốn quyết định đã chốt
+## 0. Từ vựng và bốn quyết định đã chốt
+
+### 0.1 Từ vựng — gọi đúng tên
+
+Hệ cũ gọi cấp 1 là **"dự án"**. Bản VPS **bỏ hẳn** cách gọi đó: một "dự án" ở đây chỉ là một
+đầu việc của phòng, không phải project theo nghĩa quản trị dự án. Từ 24/08/2026, tài liệu và
+code mới dùng đúng ba từ sau:
+
+| Cấp | Gọi là | Bảng | Mã | Ghi chú |
+|---|---|---|---|---|
+| 1 | **Công việc** | `works` | `CV0xx` | Có phòng, quản lý, ngày bắt đầu/kết thúc. **Không gọi là "dự án"** |
+| 2 | **Công việc con** | `work_items` (`level = 2`) | `CV0xx-0yy` | `parent_id` phải NULL (`lvl2_no_parent`) |
+| 3 | **Nhiệm vụ** | `work_items` (`level = 3`) | `CV0xx-0yy` | Cha là một cấp 2 cùng công việc, hoặc NULL (nhiệm vụ mồ côi) |
+
+Kéo theo hai hệ quả bắt buộc:
+
+- Vai trò là **`Quản lý công việc`**, không phải `Quản lý dự án`. Đây là giá trị nằm trong ràng
+  buộc `users_role_valid` của cơ sở dữ liệu, viết sai là `INSERT` bị chặn — xem §5.2 và §8.3.
+- Mọi con số thống kê chỉ đếm **cấp 3**. "Số nhiệm vụ" không bao giờ gồm cấp 2 (§2.1 C15).
+
+**Ba thứ vẫn giữ nguyên chữ "dự án"**, cố ý, không phải sót:
+
+1. Tên sheet, tên cột và tên hàm của hệ Google Sheets đang chạy: sheet `Dự án/Nhiệm vụ`, cột
+   `Mã dự án`, giá trị `Quản lý dự án` trong cột phân quyền, các hàm `getProjects` /
+   `addProject`. Đổi những cái này thì mất đường đối chiếu khi nhập dữ liệu (§4.3).
+2. **Mã cũ** dạng `DA001`, `DA001-01`, `ID<yymmddhhmmssSSS>` của 28 dòng nhập tay ở Phase 9:
+   giữ **nguyên văn**, không đánh số lại (§13.4 mục 6). Mã cũ và mã mới sống chung trong cùng
+   một cột `code`; chỉ có mã **sinh mới** mới dùng tiền tố `CV`.
+3. Chữ "dự án" khi nói về **chính phần mềm này** ("thư mục gốc của dự án", "dự án dùng Node 24").
+
+Bản Apps Script cũ chỉ đổi **nhãn giao diện**; xem dòng 1 của §0 trong
+[KE-HOACH-PHAT-TRIEN.md](KE-HOACH-PHAT-TRIEN.md).
+
+### 0.2 Bốn quyết định đã chốt
 
 | # | Vấn đề | Chốt |
 |---|---|---|
@@ -45,7 +78,7 @@ chuyển. Cột "Nguồn" là hàm/vùng code hiện tại để đối chiếu 
 | A2 | Lưu phiên, tự hết hạn | `storeUserSession`, `getCurrentUser` |
 | A3 | Đăng xuất | `logout` |
 | A4 | Đổi mật khẩu | `changePassword`, `showChangePasswordModal` |
-| A5 | 6 vai trò: `admin`, `Phó Giám đốc`, `Trưởng phòng`, `Phó phòng`, `Quản lý dự án`, `Nhân viên` | `isAdmin`, `isManager`, `isDeputyDirector`, `isDepartmentHead` |
+| A5 | 6 vai trò: `admin`, `Phó Giám đốc`, `Trưởng phòng`, `Phó phòng`, `Quản lý công việc`, `Nhân viên` | `isAdmin`, `isManager`, `isDeputyDirector`, `isDepartmentHead` |
 | A6 | Kiểm quyền theo hành động × loại thực thể × dòng dữ liệu | `checkUserPermission(action, entityType, row)` |
 | A7 | Ẩn/hiện nút theo quyền ở giao diện | `updateUIForUser`, `showAdminButtons`, `canUserEditResource`, `canUserDeleteResource`, `canUserCopyResource`, `canUserCreateTask` |
 
@@ -186,7 +219,7 @@ chuyển. Cột "Nguồn" là hàm/vùng code hiện tại để đối chiếu 
 | Mã | Tính năng |
 |---|---|
 | M1 | Xuất Excel: danh sách công việc 3 tầng, nhiệm vụ theo người, thống kê theo phòng |
-| M2 | Nhập dữ liệu một lần từ Google Sheets, chạy lại nhiều lần không hỏng |
+| M2 | Nạp dữ liệu mẫu cho dev/staging bằng một lệnh, chạy lại nhiều lần không nhân đôi; bản chính thức **từ chối** chạy (đổi hướng 2026-08-24, xem §7 Phase 2) |
 | M3 | Sao lưu cơ sở dữ liệu tự động hằng ngày + kịch bản phục hồi đã thử |
 | M4 | Trang `/healthz` cho Nginx và giám sát |
 
@@ -251,8 +284,8 @@ quanlycongviec/
 ├─ data/                          # [đã có] chỗ để snapshot .xlsx đã xuất — KHÔNG commit
 │  └─ .gitkeep                    #          (.gitignore: data/* trừ .gitkeep)
 ├─ tools/                         # giữ nguyên bộ tool cũ
-│  ├─ dump-sheets.js              # [đã có] xuất Sheets ra JSON — chỉ đọc
-│  └─ import-from-sheets.js       # MỚI — nạp JSON vào Postgres
+│  └─ dump-sheets.js              # [đã có] xuất Sheets ra JSON — chỉ đọc
+│                                 # (import-from-sheets.js đã BỎ — xem §7 Phase 2)
 ├─ deploy/
 │  ├─ docker-compose.yml  Dockerfile
 │  ├─ docker-compose.dev.yml      # [đã có] db + db-test (tmpfs) + adminer
@@ -316,7 +349,7 @@ users(
   position      text DEFAULT '',               -- Chức vụ, chữ tự do
   role          text NOT NULL DEFAULT 'Nhân viên',   -- Phân quyền
                 -- Đã thêm ở 001_init.sql: CONSTRAINT users_role_valid CHECK (role IN
-                -- ('admin','Phó Giám đốc','Trưởng phòng','Phó phòng','Quản lý dự án','Nhân viên'))
+                -- ('admin','Phó Giám đốc','Trưởng phòng','Phó phòng','Quản lý công việc','Nhân viên'))
                 -- Chặn thẳng ở CSDL, vì bẫy "Trợ lý admin" của bản cũ (§13.5) sinh ra từ chỗ
                 -- chấp nhận chữ tự do. Phase 2 nhập dữ liệu phải chuẩn hoá giá trị "Phân quyền"
                 -- lạ và **báo cáo từng dòng**, không âm thầm gán 'Nhân viên'.
@@ -337,7 +370,7 @@ users(
 -- Công việc (cấp 1) — sheet "Dự án/Nhiệm vụ"
 works(
   id            bigserial PK,
-  code          text UNIQUE NOT NULL,          -- DA001
+  code          text UNIQUE NOT NULL,          -- CV001 (mã cũ 'DA001' nhập tay thì giữ nguyên)
   name          text NOT NULL,
   description   text DEFAULT '',
   manager_id    bigint NULL FK users,
@@ -359,7 +392,7 @@ work_items(
   id            bigserial PK,
   code          text UNIQUE NOT NULL,          -- bản cũ có 2 dạng lẫn nhau: 'DA001-01' và
                 -- 'ID<yymmddhhmmssSSS>' (dạng sau chính là bẫy trùng mã ở §13.5). Mã tạo mới
-                -- dùng '<mã công việc>-NNN' lấy số từ seq_work_item_code — chờ §13.4 mục 6.
+                -- dùng '<mã công việc>-NNN' lấy số từ seq_work_item_code — chốt ở §13.4 mục 6.
   work_id       bigint NOT NULL FK works ON DELETE CASCADE,
   parent_id     bigint NULL FK work_items ON DELETE CASCADE,
   level         smallint NOT NULL CHECK (level IN (2,3)),
@@ -398,6 +431,12 @@ work_items(
 Sinh mã dùng 6 sequence + hàm `next_code(p_prefix text, p_seq regclass, p_width int DEFAULT 3)`:
 `seq_department_code`, `seq_user_code`, `seq_work_code`, `seq_work_item_code`, `seq_proposal_code`,
 `seq_app_code`. Đã kiểm 500 lần gọi liên tiếp không trùng (TC-DB-14).
+
+**Mã đặt tay thì phải đẩy sequence.** Dữ liệu nào chèn bằng mã viết cứng — dữ liệu mẫu, và cả
+28 dòng nhập tay lúc lên bản chính thức — đều **không** làm sequence nhích, nên `next_code()` vẫn
+trả về `CV001` và việc tạo mới đầu tiên đổ vì trùng `UNIQUE`. Sau mọi lần chèn kiểu đó phải chạy
+`setval(seq, GREATEST((SELECT last_value FROM seq), n))`. `GREATEST` là phần bắt buộc: `setval`
+thẳng sẽ **kéo lùi** sequence đã đi xa hơn và làm trùng mã lần nữa (§8.3, TC-SEED-22/23).
 
 Vòng lặp `parent → con → cha` **chưa** chặn bằng trigger: với đúng 2 cấp thì `lvl2_no_parent` +
 "cha phải là cấp 2" đã khoá hết mọi đường tạo vòng. Nếu sau này có cấp 4 thì phải viết thêm.
@@ -455,7 +494,9 @@ CREATE INDEX ON sessions (expires_at);
 
 ### 4.3 Bảng đối chiếu cột Sheets → CSDL
 
-Dùng khi viết `import-from-sheets.js`. Cột nào không có trong bảng này là **không nhập**.
+Bảng này viết cho công cụ nhập từ Sheets — công cụ **đã bỏ** (§7 Phase 2). Vẫn giữ lại vì nó là
+nơi duy nhất ghi **ý nghĩa từng cột của hệ thống cũ**: lúc nhập tay 28 dòng dữ liệu thật khi lên
+bản chính thức, và lúc đọc `data/snapshot-20260824.json` để tra cứu, phải theo đúng bảng này.
 
 | Sheet | Cột Sheets | Bảng.cột |
 |---|---|---|
@@ -580,7 +621,7 @@ trong `data` cho 36 hàm cũ.
 | `admin` | Toàn đơn vị | Có, `Đã duyệt` ngay | Có | Có, mọi phòng |
 | `Phó Giám đốc` | Các phòng mình phụ trách | Có, `Đã duyệt` ngay | Có | **Có, trong phòng phụ trách** |
 | `Trưởng phòng` / `Phó phòng` | Cả phòng mình | Có → **`Chờ duyệt`** | Có | Không |
-| `Quản lý dự án` | Công việc mình quản lý | Như hiện tại | Có | Không |
+| `Quản lý công việc` | Công việc mình quản lý | Như hiện tại | Có | Không |
 | `Nhân viên` | Cả phòng mình (chỉ đọc); nhiệm vụ của mình (sửa được) | Không | Chỉ trong công việc được giao | Không |
 
 Cài đặt: **một hàm duy nhất** `can(user, action, entityType, row)` — cùng chữ ký với
@@ -655,26 +696,39 @@ danh sách vai trò cho phép, và Phase 2 in ra mọi giá trị `Phân quyền
 
 ---
 
-### Phase 2 — Nhập dữ liệu từ Google Sheets (3 ngày)
+### Phase 2 — Dữ liệu test tự tạo (1 ngày) · ĐÃ ĐỔI HƯỚNG
 
-**Mục tiêu**: dữ liệu thật nằm trong Postgres, có báo cáo đối chiếu số lượng.
+> **Đổi hướng ngày 2026-08-24** (người dùng chốt): "bỏ qua đồng bộ data cũ đi, tự tạo data test".
+> Phase 2 bản đầu là **nhập dữ liệu thật từ Google Sheets** (`tools/import-from-sheets.js`, việc
+> 2.1–2.7, TC-IMP-01..14). Công cụ đó đã viết xong, chạy thật đúng 28/28 dòng, rồi **bị xoá hẳn
+> khỏi kho** cùng toàn bộ test của nó. Lý do đổi: dữ liệu thật chỉ có **28 dòng** (§13.8) — ít
+> hơn cả dữ liệu mẫu — mà kéo theo email và mật khẩu văn bản thuần của người thật vào máy dev,
+> vào CSDL dev và vào mọi bản sao lưu. Nhập tay lại 28 dòng khi lên bản chính thức rẻ hơn nhiều.
+>
+> Còn giữ: `tools/dump-sheets.js` (chỉ đọc) và `data/snapshot-20260824.json` để tra cứu cấu trúc
+> dữ liệu cũ. Phần **§13.8 phân tích dữ liệu thật vẫn còn giá trị** — đó là nơi biết được vai trò
+> viết hoa/thường lẫn lộn, mật khẩu rỗng, `Trạng thái duyệt` rỗng: những cái đó thành ràng buộc
+> của lược đồ, không cần công cụ nhập mới học được.
+
+**Mục tiêu**: một lệnh `npm run seed:dev` dựng đủ dữ liệu để bấm thử tay hết Phase 3, **không có
+một dòng nào là nhân sự thật**.
 
 | # | Việc | Chi tiết |
 |---|---|---|
-| 2.1 | `tools/import-from-sheets.js` | Đọc snapshot Phase 0, nhập theo thứ tự: `departments` → `users` → `department_managers` → `works` → `work_items` (2 lượt) → `reminders` → `proposals` → `apps` → `chat_messages` → `notifications` → `activity_logs` |
-| 2.2 | Chạy lại không hỏng | `INSERT … ON CONFLICT (code) DO UPDATE`; chạy lần 2 phải ghi **0 dòng mới** |
-| 2.3 | `--dry-run` | Chỉ in báo cáo, không ghi |
-| 2.4 | Nối cha–con 2 lượt | Lượt 1 chèn tất cả `work_items`; lượt 2 `UPDATE parent_id` theo `Mã cha`. Cha không tồn tại ⇒ `NULL` + ghi báo cáo |
-| 2.5 | Mật khẩu | Băm mật khẩu **văn bản thuần** đang có bằng bcrypt, đặt `must_change_password = true` |
-| 2.6 | Dò `Họ tên → user_id` | Trùng tên hoặc không tìm thấy ⇒ để `NULL`, giữ `*_name`, in vào `import-report.txt` |
-| 2.7 | Báo cáo đối chiếu | Bảng: mỗi thực thể — số dòng ở Sheets / số dòng đã nhập / số bỏ qua / lý do |
+| 2.1 | `src/db/seeds/dev.sql` | Một file, một `BEGIN … COMMIT`. Nội dung và số lượng: **§8.3** |
+| 2.2 | Chạy lại không sinh trùng | Bảng có `code` ⇒ `ON CONFLICT (code) DO UPDATE`; bảng không có khoá tự nhiên (nhắc việc, chat, thông báo, nhật ký) ⇒ `INSERT … WHERE NOT EXISTS` theo nội dung |
+| 2.3 | Chốt an toàn | `src/db/seeds/run.js` **từ chối** khi `NODE_ENV=production` **hoặc** tên CSDL chứa `prod`, thoát mã 1 |
+| 2.4 | Đẩy sequence sinh mã | `setval(seq, GREATEST(last_value, n))` cho cả 6 sequence — xem đoạn cuối §8.3 |
+| 2.5 | Dữ liệu bẩn có chủ ý | Email chữ hoa, trùng họ tên, nhiệm vụ mồ côi, link sai định dạng, nhắc việc rỗng, ngày vắt qua năm, ngày 29/02 |
+| 2.6 | Test đi kèm | `tests/integration/seed-dev.test.js` — hằng `EXPECTED` là **chỗ duy nhất** ghi số lượng; mỗi test khẳng định một điều kiện mà API Phase 3 sẽ dựa vào |
 
-**Xong khi**: số dòng khớp 100% (trừ dòng có lý do được ghi rõ) · JSON hỏng được đếm và liệt kê,
-không làm dừng lần nhập · chạy lần 2 ghi 0 dòng · đối chiếu tay **10 mẫu ngẫu nhiên** (3 công
-việc, 5 nhiệm vụ, 2 người dùng) khớp từng trường.
+**Xong khi**: `npm run seed:dev` xanh trên CSDL dev · chạy lần 2 ra **đúng cùng số dòng** · mã do
+`next_code()` sinh ra không đụng mã đặt tay trong seed · `seed-dev.test.js` xanh.
 
-**Rủi ro**: ngày tháng. Sheets trả về `Date` của Google theo múi giờ script, dễ lệch một ngày.
-Phải chuyển qua `date` (không có giờ) và có test riêng cho 3 mốc: 01/01, 31/12, ngày 29/02.
+**Rủi ro**: dữ liệu mẫu "sạch quá". Seed toàn dòng đẹp thì test Phase 3 xanh mà chẳng đi qua
+nhánh nào — không có `NULL`, không có mồ côi, không có ngày biên. Chống bằng cách để mỗi trường
+hợp bẩn ở §8.3 có **một test riêng khẳng định nó còn đó**, để lần sau ai "dọn cho sạch" thì test
+đỏ ngay chứ không âm thầm mất.
 
 ---
 
@@ -692,7 +746,7 @@ Phải chuyển qua `date` (không có giờ) và có test riêng cho 3 mốc: 0
 | 3.6 | `GET /works/tree` | Truy vấn `WITH RECURSIVE`; nhiệm vụ có `parent_id IS NULL` gom vào nhóm `(chưa gán công việc con)` |
 | 3.7 | `reorder` | Cập nhật `sort_order` trong **một** transaction |
 | 3.8 | `reminders` CRUD | Chỉ cho `level = 3`; gọi trên cấp 2 trả `409 REMINDER_ON_SUBWORK` |
-| 3.9 | Sinh mã | `DA001`, `NV010` — sinh bằng chuỗi tăng dần trong CSDL, **không** dựa mốc thời gian như `generateTaskIdForProject` |
+| 3.9 | Sinh mã | `CV001`, `NV010` — sinh bằng chuỗi tăng dần trong CSDL (`next_code`, §0.1), **không** dựa mốc thời gian như `generateTaskIdForProject` |
 | 3.10 | Ràng buộc ngày | Ngày nhiệm vụ nằm trong khoảng ngày công việc cha; vi phạm là cảnh báo (không chặn), đúng như hiện tại |
 
 **Xong khi**: **toàn bộ 40 phép kiểm** của `tools/test-tasks-gd2.js` được port thành integration
@@ -833,7 +887,8 @@ bộ thì vẫn nên có HTTPS bằng chứng thư tự ký hoặc CA nội bộ
 
 | # | Việc | Chi tiết |
 |---|---|---|
-| 9.1 | Nhập lại dữ liệu bản cuối | Chạy `import-from-sheets.js` với snapshot mới nhất vào CSDL production |
+| 9.1 | Dựng dữ liệu bản cuối | **Nhập tay** 28 dòng thật của Sheets vào CSDL production theo bảng đối chiếu §4.3 (không còn công cụ nhập — §7 Phase 2). Số dòng phải khớp §13.8. CSDL production **không** chạy `seed:dev` (bộ chạy tự từ chối) |
+| 9.1b | Đổi mật khẩu người thật | Mật khẩu cũ của Sheets là **văn bản thuần**: không mang sang. Mỗi người được đặt một mật khẩu tạm riêng, `must_change_password = true`, giao trực tiếp cho từng người — không gửi qua chat nhóm, không ghi vào file trong kho |
 | 9.2 | UAT theo vai | 5 người, mỗi vai một người, chạy `docs/UAT.md` (~90 mã tính năng) |
 | 9.3 | Chạy song song 1 tuần | Bản VPS là **bản chính**; Sheets đặt **chỉ đọc** để không ai sửa hai nơi |
 | 9.4 | Đào tạo | 1 buổi 60 phút + tài liệu 2 trang: đăng nhập, đổi mật khẩu, tạo việc, gửi duyệt, xuất Excel |
@@ -896,29 +951,44 @@ mỗi lần sửa đều phải thử tay và vẫn sót lỗi im lặng. Bản 
 | Môi trường | Dữ liệu | Dùng để |
 |---|---|---|
 | `test` (máy dev + CI) | Postgres trong Docker, tạo lại từ migration + seed **trước mỗi file test** | unit + integration |
-| `dev` (máy dev) | Bản sao dữ liệu thật đã làm mờ tên/email | thử tay khi làm |
-| `staging` (VPS, subdomain riêng) | Bản nhập từ snapshot Sheets, làm mới hằng tuần | E2E, UAT, thử lên bản mới |
+| `dev` (máy dev) | **Dữ liệu test tự tạo** (`npm run seed:dev`) — bịa hết, không có nhân sự thật | thử tay khi làm |
+| `staging` (VPS, subdomain riêng) | Cùng bộ dữ liệu test đó, seed lại khi cần | E2E, UAT, thử lên bản mới |
 | `production` (VPS) | Dữ liệu thật | không test trên đây, trừ smoke sau khi lên bản |
 
 Mỗi file integration test chạy trong **một transaction rồi rollback**, hoặc `TRUNCATE … CASCADE`
 rồi seed lại. Không được để test này ảnh hưởng test kia.
 
-### 8.3 Dữ liệu mẫu — `db/seeds/test.sql`
+> **Không dùng bản sao dữ liệu thật ở dev/staging.** Bản kế hoạch đầu ghi "bản sao dữ liệu thật
+> đã làm mờ" và "nhập từ snapshot Sheets"; hướng đó đã bỏ (§7 Phase 2, §13.3 ngày 2026-08-24).
+> Dữ liệu thật có email và mật khẩu văn bản thuần của người thật, làm mờ thì vẫn còn cấu trúc
+> nhân sự — không đáng để đánh đổi lấy chút "giống thật".
 
-Phải có đủ **cả dữ liệu bẩn**, vì dữ liệu thật đã có sẵn những trường hợp này:
+### 8.3 Dữ liệu mẫu — `src/db/seeds/dev.sql`
+
+Một file duy nhất, một câu `BEGIN … COMMIT`, chạy bằng `npm run seed:dev`, **chạy lại bao nhiêu
+lần cũng không sinh bản trùng** (bảng có `code` thì `ON CONFLICT`; bảng không có khoá tự nhiên —
+nhắc việc, chat, thông báo, nhật ký — thì `INSERT … WHERE NOT EXISTS`). Bộ chạy TỪ CHỐI khi
+`NODE_ENV=production` hoặc tên CSDL chứa `prod`.
+
+Số lượng thật (kiểm bằng `seed-dev.test.js`, hằng `EXPECTED` là chỗ duy nhất phải sửa khi đổi):
 
 | Nhóm | Nội dung |
 |---|---|
-| Phòng | 4 phòng `PH01`–`PH04`, thứ tự 1–4; 1 phòng **rỗng không có người** (để test xoá được) |
-| Người dùng | 1 admin · 2 Phó GĐ (A phụ trách PH01+PH02, B phụ trách PH03) · 2 Trưởng phòng · 1 Phó phòng · 1 Quản lý dự án · 3 Nhân viên · 1 người **không thuộc phòng nào** |
-| Bẫy email | 1 email có **chữ hoa** (`Hoa.Pham@congty.vn`) — đúng bệnh §4.1 của bản cũ |
-| Bẫy tên | 2 người **trùng họ tên** khác email |
-| Công việc | 6 công việc: 1 đã xong · 1 đang làm · 1 quá hạn · 1 `Chờ duyệt` · 1 `Từ chối` · 1 kéo dài **3 tháng** (để test lọc tháng) |
-| Cây | 1 công việc có 3 công việc con, mỗi con 2–4 nhiệm vụ · 1 nhiệm vụ **mồ côi** (`parent_id` NULL) · 1 công việc **không có nhiệm vụ nào** |
-| Nhắc việc | 1 nhiệm vụ có 3 nhắc việc, 1 nhắc việc nội dung rỗng |
-| Link | 1 nhiệm vụ có 4 link kết quả, 1 link sai định dạng |
-| Ngày biên | Việc bắt đầu 31/12 kết thúc 01/01 năm sau · việc trong ngày 29/02 |
-| Khác | 5 đề nghị đủ 4 trạng thái · 3 app · 12 tin chat trong 4 ngày · 20 dòng nhật ký |
+| Phòng | **5**: `PH01`–`PH04` đúng tên và thứ tự file thật · `PH05` **rỗng hoàn toàn** (không người, không việc, không ai phụ trách) để nhánh "xoá phòng thành công" có dòng mà xoá |
+| Người dùng | **13**, mật khẩu chung `Test@12345`, ai cũng `must_change_password`: 1 admin · 2 Phó GĐ (Một phụ trách PH01+PH02, Hai phụ trách PH03+PH04) · 2 Trưởng phòng · 1 Phó phòng · 1 **Quản lý công việc** · 5 Nhân viên · 1 Nhà cung cấp. **2 người không thuộc phòng nào** vì hai lý do khác nhau: `TEST010` nội bộ chưa xếp phòng, `TEST012` ngoài cơ quan |
+| Bẫy email | `TEST011` có email **chữ hoa** (`Nghien.Cuu@test.local`) — đúng bệnh §4.1 của bản cũ, TC-AUTH-03 |
+| Bẫy tên | `TEST008` và `TEST013` **trùng đúng họ tên**, khác email ⇒ dò người theo tên là sai |
+| Công việc | **9** trải đủ 4 phòng, đủ 3 trạng thái duyệt (6 `Đã duyệt` · 2 `Chờ duyệt` · 1 `Từ chối` **kèm lý do**) · `CV005` **chưa có người phụ trách** · `CV003`/`CV006` kéo dài nhiều tháng |
+| Cây | **13 công việc con + 17 nhiệm vụ**. `CV001-008` là công việc con **rỗng** (tính tiến độ chia cho 0) · `CV001-030` là nhiệm vụ **mồ côi** (`parent_id` NULL — CSDL cho phép, dữ liệu cũ có thật) · nhiệm vụ đủ 4 trạng thái, 2 nhiệm vụ **quá hạn** ở 2 trạng thái khác nhau (TC-STAT-03) |
+| Nhắc việc | **7**, chỉ nằm trên nhiệm vụ cấp 3 · `CV006-022` có **3 nhắc** · 1 nhắc **nội dung rỗng** |
+| Link | `CV002-029` có **4 link kết quả**, trong đó 1 link **sai định dạng** (thiếu `http`) |
+| Ngày biên | `CV009` bắt đầu 31/12/2026 kết thúc 01/01/2027 · `CV003-028` hạn **29/02/2028** (năm nhuận) |
+| Khác | **5 đề nghị** đủ 2 loại và đủ 4 trạng thái, 1 dòng không gắn công việc nào · **4 app**, 2 app mở cho mọi người (`allowed_roles` rỗng) · **12 tin chat** trải nhiều ngày, 1 tin của người đã nghỉ (`user_id` NULL) · **6 thông báo** (4 chưa đọc / 2 đã đọc, 1 không trỏ tới bản ghi nào) · **20 dòng nhật ký** dạng `<nhóm>.<việc>`, 1 dòng của tài khoản đã xoá |
+
+Cuối file **đẩy 6 sequence sinh mã** vượt qua dữ liệu mẫu bằng
+`setval(seq, GREATEST(last_value, n))`. Mã trong seed là mã **đặt tay** nên `next_code()` vẫn ở
+1: không đẩy thì việc đầu tiên tạo bằng API sinh ra `CV001` và đổ vì trùng `UNIQUE`. Dùng
+`GREATEST` để seed chạy lại không kéo lùi sequence đã đi xa hơn.
 
 ### 8.4 Test case theo module
 
@@ -999,24 +1069,38 @@ Mã test đi vào tên hàm test để tra ngược được. `E2E` = phải có
 | TC-TREE-34 | Ngày nhiệm vụ ngoài khoảng ngày công việc | Cảnh báo, cho lưu |
 | TC-TREE-35 | Lỗi giữa transaction (giả lập) | Rollback sạch, không còn dòng nửa vời |
 
-#### D. Nhập dữ liệu (Phase 2)
+#### D. Dữ liệu test tự tạo (Phase 2)
+
+> **TC-IMP-01..14 đã bỏ** cùng công cụ nhập từ Sheets (§7 Phase 2, đổi hướng 2026-08-24). Chỗ nào
+> trong tài liệu còn nhắc TC-IMP thì đọc là "đã rút". Những điều TC-IMP kiểm mà **vẫn còn cần**
+> — ngày biên 31/12–01/01, ngày 29/02, họ tên trùng, email chữ hoa — chuyển thành yêu cầu về
+> **nội dung dữ liệu mẫu** dưới đây, vì Phase 3 cần chúng để có nhánh mà đi.
 
 | Mã | Tình huống | Kết quả mong đợi |
 |---|---|---|
-| TC-IMP-01 | Nhập snapshot đầy đủ | Số dòng từng bảng khớp báo cáo |
-| TC-IMP-02 | Chạy lần 2 | **0 dòng mới**, 0 lỗi |
-| TC-IMP-03 | Ô `Nhiệm vụ JSON` hỏng | Đếm và liệt kê, các công việc khác vẫn nhập đủ |
-| TC-IMP-04 | `Mã cha` trỏ vào mã không tồn tại | `parent_id = NULL`, có trong báo cáo, **không mất dòng** |
-| TC-IMP-05 | Họ tên trùng nhau | `*_id = NULL`, giữ tên, có trong báo cáo |
-| TC-IMP-06 | Họ tên không có trong `Người dùng` | Như trên |
-| TC-IMP-07 | Mật khẩu văn bản thuần | Đã băm bcrypt, `must_change_password = true`, **không** còn ở dạng đọc được |
-| TC-IMP-08 | Ngày 31/12 và 01/01 | Không lệch một ngày |
-| TC-IMP-09 | Ngày 29/02 | Nhập đúng |
-| TC-IMP-10 | Ô ngày rỗng | `NULL`, không thành 30/12/1899 |
-| TC-IMP-11 | Cột `Phân quyền` có giá trị lạ | In ra danh sách để sửa tay, **không** tự đoán vai trò |
-| TC-IMP-12 | Email trùng nhau giữa 2 dòng | Dừng nhập, báo lỗi rõ (vì `email` là `UNIQUE`) |
-| TC-IMP-13 | `--dry-run` | Không ghi một dòng nào vào CSDL |
-| TC-IMP-14 | Đối chiếu tổng hợp | Tổng số nhiệm vụ, tổng số nhắc việc, tổng số đề nghị khớp Sheets |
+| TC-SEED-01 | `npm run seed:dev` trên CSDL rỗng | Đúng số dòng của §8.3, không lỗi |
+| TC-SEED-02 | Chạy lần 2 | **Đúng cùng số dòng** — không sinh bản trùng ở cả 4 bảng không có khoá tự nhiên |
+| TC-SEED-03 | `NODE_ENV=production` | Từ chối chạy, thoát mã 1, **không ghi gì** |
+| TC-SEED-04 | Tên CSDL chứa `prod` | Từ chối chạy, kể cả khi `NODE_ENV` là `development` |
+| TC-SEED-05 | Mật khẩu mẫu | `verifyPassword('Test@12345', hash)` đúng · mọi người `must_change_password = true` |
+| TC-SEED-06 | Đủ 6 vai trò | 6 giá trị của `users_role_valid` đều có người thật mang, nhập được (không vi phạm CHECK) |
+| TC-SEED-07 | Email chữ hoa | Có ít nhất 1 người, và tra bằng chữ thường vẫn ra đúng người đó (`citext`) |
+| TC-SEED-08 | Trùng họ tên | Có đúng 1 cặp trùng tên khác email |
+| TC-SEED-09 | Phòng rỗng hoàn toàn | Có đúng 1 phòng không người, không việc, không ai phụ trách |
+| TC-SEED-10 | Cây 3 cấp hợp lệ | Không cấp 2 nào có cha · không con nào có cha khác công việc hoặc cha cấp 3 |
+| TC-SEED-11 | Nhiệm vụ mồ côi | Có **đúng 1** nhiệm vụ cấp 3 `parent_id` NULL, vẫn còn `work_id` |
+| TC-SEED-12 | Công việc con rỗng | Có công việc con không có nhiệm vụ nào (tính tiến độ chia cho 0) |
+| TC-SEED-13 | Quá hạn | Có ≥2 nhiệm vụ quá hạn ở **2 trạng thái khác nhau**; việc `Hoàn thành` không bị tính quá hạn |
+| TC-SEED-14 | Chưa phân người | Có dòng `assignee_id` NULL mà `assignee_name` **không rỗng** |
+| TC-SEED-15 | Nhắc việc | Chỉ nằm trên cấp 3 · có nhiệm vụ nhiều nhắc · có 1 nhắc nội dung rỗng |
+| TC-SEED-16 | Link kết quả | Có nhiệm vụ 4 link, trong đó 1 link thiếu giao thức `http` |
+| TC-SEED-17 | Ngày biên | Có công việc vắt qua năm (31/12 → 01/01) và nhiệm vụ hạn 29/02 năm nhuận |
+| TC-SEED-18 | `allowed_roles` của app | Chỉ chứa tên vai trò hợp lệ · có app mảng rỗng (mọi người thấy) |
+| TC-SEED-19 | Người đã xoá | Chat và nhật ký có dòng `*_id` NULL mà vẫn còn tên |
+| TC-SEED-20 | Thông báo | Có cả đã đọc và chưa đọc · có dòng không trỏ bản ghi nào · không dòng nào `ref_type` có chữ mà `ref_id` NULL |
+| TC-SEED-21 | Dạng `action` nhật ký | Mọi dòng khớp `<nhóm>.<việc>` đúng như `middleware/audit.js` sinh ra |
+| TC-SEED-22 | Sequence sinh mã | `next_code()` cho cả 6 loại mã ra mã **chưa tồn tại** trong dữ liệu mẫu |
+| TC-SEED-23 | Không kéo lùi sequence | Đẩy `seq_work_code` lên 50 rồi seed lại ⇒ mã kế tiếp là `CV051`, không phải `CV009` |
 
 #### E. Luồng duyệt (Phase 5)
 
@@ -1183,9 +1267,9 @@ chữ sai, thiếu thông báo. Chỉ lỗi **Nhẹ** được phép mang sang b
 | 1 | Frontend 3653 dòng không có build step, lỗi im lặng | **Cao** | Cầu tương thích §5.1 để không sửa logic; Phase 4 chỉ được làm 4 việc đã liệt kê; 35 luồng E2E Playwright thay cho việc bấm tay |
 | 2 | Sót chỗ loại `Chờ duyệt` khỏi thống kê | **Cao** | Dùng **view** `v_countable_*`, không thêm điều kiện rải rác; TC-APR-06 kiểm cả 4 thẻ số và 6 biểu đồ |
 | 3 | Sót chỗ chỉ đếm cấp 3 | **Cao** | `filterLevel3Tasks` đã có ở backend; ở SQL thì đặt `level = 3` **trong view**, không ở từng truy vấn |
-| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | Báo cáo đối chiếu số lượng bắt buộc (TC-IMP-14) + đối chiếu tay 10 mẫu |
+| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | 28 dòng thật **nhập tay** ở Phase 9 theo bảng đối chiếu §4.3, đối chiếu từng dòng với `data/snapshot-20260824.json` (§13.8) và giữ Sheets làm bản đọc lại. ~~TC-IMP-14~~ đã rút cùng công cụ nhập tự động |
 | 5 | Trùng mã nhiệm vụ khi nhiều người bấm cùng lúc | Trung bình | Đổi cách sinh mã sang chuỗi tăng dần trong CSDL + `UNIQUE`; TC-TREE-31 |
-| 6 | Bẫy `role.includes()` cho quyền quá rộng | Trung bình | So khớp chính xác; TC-RBAC-07, TC-RBAC-08; Phase 2 in ra mọi giá trị `Phân quyền` lạ |
+| 6 | Bẫy `role.includes()` cho quyền quá rộng | Trung bình | So khớp chính xác; TC-RBAC-07, TC-RBAC-08; ràng buộc `users_role_valid` chặn ngay ở CSDL nên giá trị `Phân quyền` lạ không vào được bảng |
 | 7 | XSS qua 53 chỗ `innerHTML` | Trung bình | Soát toàn bộ ở Phase 4; TC-SEC-02, TC-SEC-03, TC-MISC-08 |
 | 8 | Mất dữ liệu do VPS chết | Trung bình | Sao lưu hằng ngày + **đã thử phục hồi**; giữ Sheets 30 ngày làm đường lùi |
 | 9 | Người dùng không quen giao diện web mới | Thấp | Giao diện **không đổi** — đó là lý do chọn port nguyên trạng; thêm 1 buổi đào tạo |
@@ -1232,12 +1316,14 @@ VPS. Đây là lý do đặt hạ tầng ở Phase 8 chứ không phải Phase 1
    người thuộc MỘT phòng** (§13.4 mục 1).
 2. ~~Tôi tạo nhánh `vps/phase-0-setup` và làm trọn Phase 0.~~ **Xong 2026-08-24**, 28 test xanh
    (§13.3). Phase kế tiếp là Phase 1 — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3.
-3. Bạn chạy `node tools/dump-sheets.js <file.xlsx>` (hoặc gửi tôi bản `.xlsx` xuất từ Sheets)
-   để có snapshot thật — **đây là việc đang chặn Phase 2** (§13.4 mục 5).
+3. ~~Bạn chạy `node tools/dump-sheets.js <file.xlsx>` để có snapshot thật.~~ **Xong 2026-08-24**:
+   `data/snapshot-20260824.json` + báo cáo, số liệu ở §13.8. Snapshot **không còn chặn Phase 2**
+   (Phase 2 đã đổi sang dữ liệu test tự tạo) — nó là tài liệu đối chiếu cho việc nhập tay ở Phase 9.
 4. Bản Apps Script **đóng băng** từ lúc này: chỉ sửa lỗi chặn, không thêm tính năng. Mọi tính
    năng mới đi vào bản VPS.
-5. Trả lời §13.4 mục 6 (dạng mã công việc con/nhiệm vụ tạo mới) trước khi làm Phase 3; mục 2,
-   3, 4 trước khi làm Phase 5 và Phase 8.
+5. ~~Trả lời §13.4 mục 6 (dạng mã công việc con/nhiệm vụ tạo mới) trước khi làm Phase 3.~~
+   **Xong 2026-08-24.** Còn cần trước Phase 3: **§13.4 mục 10** (tiền tố mã `CV` hay `DA`) —
+   không chặn, đang làm theo giả định `CV`. Mục 2, 3, 4 trả lời trước Phase 5 và Phase 8.
 
 ---
 
@@ -1295,16 +1381,16 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | Phase | Nội dung | Trạng thái | Ghi chú |
 |---|---|---|---|
 | — | Kế hoạch `KE-HOACH-VPS.md` | ✅ | Xong 2026-08-24, §0–§13 |
-| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · còn nợ 1 việc: chạy `dump-sheets.js` trên `.xlsx` **thật** (§13.4 mục 5) |
+| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · **hết nợ**: `dump-sheets.js` đã chạy trên `.xlsx` thật (§13.4 mục 5, số liệu §13.8) |
 | 1 | Xác thực, phiên, phân quyền, nhật ký | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-1-auth` — **12/12 việc** (1.1 và 1.12 làm từ Phase 0). **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Còn **một** việc treo sang Phase 4: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chưa tồn tại (§13.5, dòng cuối bảng bẫy Phase 1) |
-| 2 | Nhập dữ liệu từ Google Sheets | ⬜ | Việc kế tiếp. Snapshot thật đã có (§13.8) — Phase 2 chỉ cần lược đồ + repo + `hashPassword()`, tất cả đã xong |
-| 3 | API công việc 3 tầng | ⬜ | |
+| 2 | **Dữ liệu test tự tạo** (đã đổi hướng — không nhập từ Sheets) | ✅ | Xong 2026-08-24 · `src/db/seeds/dev.sql` = 1 phòng rỗng + 5 phòng, 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký (§8.3) · chạy lại **không nhân đôi** · 2 chốt an toàn có test tiến trình con · **322 test xanh**. `tools/import-from-sheets.js` **đã bỏ**, TC-IMP-01..14 khai tử |
+| 3 | API công việc 3 tầng | ⬜ | **Việc kế tiếp.** Đã có sẵn: lược đồ + `next_code()` + dữ liệu mẫu 3 tầng (kể cả nhiệm vụ mồ côi và công việc con rỗng) để viết test không phải tự dựng dữ liệu |
 | 4 | Cắt frontend sang API | ⬜ | **Điểm dừng an toàn** hết phase này |
 | 5 | Luồng duyệt + thông báo + lịch chạy | ⬜ | |
 | 6 | Thống kê, lọc, Gantt | ⬜ | |
 | 7 | Đề nghị, Quản lý App, Chat, Excel | ⬜ | |
 | 8 | Hạ tầng VPS, bảo mật, sao lưu | ⬜ | Chờ §11 mục 1–4 |
-| 9 | Nghiệm thu, chạy song song, cắt chuyển | ⬜ | |
+| 9 | Nghiệm thu, chạy song song, cắt chuyển | ⬜ | **Nhập tay 28 dòng thật** ở đây (việc 9.1, theo bảng đối chiếu §4.3) — bản chính thức **không bao giờ** chạy `seed:dev` |
 
 ### 13.3 Nhật ký session — THÊM MỘT DÒNG MỖI SESSION, KHÔNG SỬA DÒNG CŨ
 
@@ -1315,6 +1401,7 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 2026-08-24 | **Phase 1 làm dở, 2/12 việc** trên nhánh `vps/phase-1-auth` (2 commit): `middleware/rbac.js` — `can()` thuần theo §6, ma trận 6 vai × 5 thực thể × 4 hành động = 120 phép kiểm sinh tự động từ MỘT bảng khai báo; repo `users` + `departments` + `department_managers` — SQL viết tay, tham số hoá 100%. **95 test xanh** (28 của Phase 0 + 67 mới). Session đó hết ngữ cảnh nên **chưa kịp cập nhật §13** — §13.2 và mục 1 của `BAT-DAU-SESSION.md` bị lệch, session sau đã sửa | `server/src/middleware/rbac.js`, `server/src/modules/{users,departments}/repo.js`, `server/tests/unit/rbac-*.test.js`, `server/tests/integration/repo-*.test.js`, `server/tests/helpers/rbac.js` | Phần còn nợ của Phase 1 |
 | 2026-08-24 | Người dùng trả lời §13.4 mục 1: **một người thuộc MỘT phòng** ⇒ giữ `users.department_id`, không thêm bảng nối. Đối chiếu §13 với code thật rồi sửa §13.2 cho khớp (Phase 1 🟡 2/12) và ghi rõ 8 việc Phase 1 còn nợ. **Chốt đổi thứ tự: làm Phase 2 TRƯỚC phần còn nợ của Phase 1** — Phase 2 chỉ cần lược đồ + repo + hàm băm, không cần login/phiên/CSRF; nhập dữ liệu thật sớm để phát hiện lệch thiết kế khi sửa còn rẻ. Viết lại mục 1 + mục 3 của `docs/BAT-DAU-SESSION.md` thành prompt Phase 2 | §13.2, §13.3 của `KE-HOACH-VPS.md`; `docs/BAT-DAU-SESSION.md` | **Phase 2** — `tools/import-from-sheets.js` (§7 việc 2.1–2.7, TC-IMP-01..14). Xong Phase 2 thì quay lại làm hết 8 việc còn nợ của Phase 1 |
 | 2026-08-24 | **Phase 1 XONG 12/12 việc.** Làm nốt 8 việc còn nợ: `auth/password.js` (chỗ **duy nhất** gọi bcrypt, chặn cả mật khẩu > 72 byte vì bcrypt cắt âm thầm); `auth/cookies.js` (cookie `sid` = `uuid.HMAC` nên cookie giả bị loại **không cần đi CSDL**; token CSRF = `HMAC(sid)` nên không thêm cột, khởi động lại máy chủ vẫn tính đúng token cũ); `auth/repo.js` (`sessions`: tạo/đọc/gia hạn/xoá, gia hạn chỉ ghi khi lần cuối > 1 phút); `activityLogs/repo.js`; `auth/service.js` (login theo thứ tự **khoá → mật khẩu → is_active**, so với băm giả khi email không tồn tại để chống dò email); 5 middleware `session/csrf/validate/rateLimit/audit`; `auth/routes.js` (login · logout · password · me); `seeds/dev.sql` + bộ chạy từ chối `NODE_ENV=production` **và** CSDL có tên chứa `prod`. **Nối lại `app.js`**: cookie-parser → attachSession → issueCsrfCookie → verifyCsrf → audit → `/v1/auth` → `requirePasswordChanged` → route nghiệp vụ; thay 404 + bộ xử lý lỗi nội tuyến (đang trả `{success:false}` **trái §5.3**) bằng `notFoundHandler` + `errorHandler`. **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Ghi chú số liệu: dòng §13.3 phía trên viết "95 test" là **đếm sai**, số thật lúc đó là 243 | `server/src/modules/auth/{password,cookies,repo,service,routes}.js`, `server/src/modules/activityLogs/repo.js`, `server/src/middleware/{session,csrf,validate,rateLimit,audit}.js`, `server/src/app.js`, `server/src/db/seeds/{dev.sql,run.js}`, `server/tests/unit/{password,cookies,rateLimit}.test.js`, `server/tests/integration/{auth-login,auth-session,auth-password,seed-dev}.test.js`, `server/tests/helpers/http.js`, `server/{package.json,eslint.config.js}`, §13.2/§13.3/§13.5/§13.7 của `KE-HOACH-VPS.md`, `docs/BAT-DAU-SESSION.md` | **Phase 2** — `tools/import-from-sheets.js` (§7 việc 2.1–2.7, TC-IMP-01..14). Còn treo: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` khi Phase 4 dựng cầu RPC |
+| 2026-08-24 | **Phase 2 ĐỔI HƯỚNG rồi XONG.** Người dùng chốt *"bỏ qua đồng bộ data cũ đi, tự tạo data test"* ⇒ **bỏ hẳn** `tools/import-from-sheets.js` khỏi kế hoạch, khai tử TC-IMP-01..14, viết lại §7 Phase 2 · §8.2 · §8.3 · §8.4-D (23 mã mới **TC-SEED-01..23**) và chuyển việc nhập tay 28 dòng thật sang **Phase 9** (bản chính thức không bao giờ chạy `seed:dev`). Mở rộng `dev.sql` cho đủ **dữ liệu bẩn CỐ Ý** mà §8.3 đòi: email chữ hoa `Nghien.Cuu@test.local`, hai người trùng họ tên, phòng `PH05` rỗng hoàn toàn (để có đường xoá phòng thành công), nhiệm vụ **mồ côi** `CV001-030` (`parent_id` NULL — CSDL cho phép, `lvl2_no_parent` chỉ ràng cấp 2), công việc vắt qua năm `CV009`, hạn 29/02/2028 ở `CV003-028`, 4 link kết quả trong đó **1 link thiếu `http`**. Chạy lại seed **không nhân đôi** (`ON CONFLICT (code)` cho bảng có mã, `WHERE NOT EXISTS` cho bảng không mã) và 6 `setval(GREATEST(...))` đẩy sequence. Thêm `seed-guard.test.js` chạy bằng **tiến trình con** — hai chốt an toàn kết thúc bằng `process.exit(1)` nên import trực tiếp sẽ giết vitest. **Đổi từ vựng "Dự án" → "Công việc"** trên toàn bộ tài liệu và thêm **§0.1 Từ vựng** — mục này bị `dev.sql` + `001_init.sql` + `KE-HOACH-PHAT-TRIEN.md` trích dẫn nhưng **chưa từng tồn tại**; kèm đó chốt tiền tố mã sinh mới là **`CV`** (mã cũ `DA0xx` nhập tay giữ nguyên văn) và sửa mọi chỗ còn viết `DA001` như thể đó là mã mới. **322 test xanh** (299 + 23), lint + prettier sạch | `server/src/db/seeds/dev.sql`, `server/tests/integration/{seed-dev,seed-guard}.test.js`, `server/src/db/migrations/001_init.sql` (chỉ chú thích), §0/§3.2/§4.1/§4.3/§7/§8.2/§8.3/§8.4/§13 của `KE-HOACH-VPS.md`, `docs/UAT.md`, `docs/BAT-DAU-SESSION.md`, `HUONG-DAN-BAO-TRI.md`, `KE-HOACH-PHAT-TRIEN.md` | **Phase 3** — API công việc / công việc con / nhiệm vụ, 10 việc 3.1–3.10 (§7 Phase 3 + §8.4 nhóm **C**, TC-TREE-01..35). Dữ liệu mẫu 3 tầng đã sẵn (kể cả nhiệm vụ mồ côi và công việc con rỗng) nên test không phải tự dựng dữ liệu. Lưu ý: **đề nghị nằm ở Phase 7** (§8.4 nhóm G, TC-MISC) — ghi chú cũ ở `BAT-DAU-SESSION.md` xếp đề nghị vào Phase 3 là **sai**, đã sửa. Còn treo từ Phase 1: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` khi Phase 4 dựng cầu RPC |
 
 ### 13.4 Quyết định đang chờ người dùng — KHÔNG TỰ ĐOÁN
 
@@ -1325,10 +1412,13 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 3 | Danh sách Phó Giám đốc / Trưởng phòng / Phó phòng thật (§11 mục 5–6) | Phase 5, 9 | ✅ **đã trả lời 2026-08-24**: dùng **danh sách test tự tạo**, người dùng sửa sau. Chốt ở §13.7 — Phase 1 đưa vào `src/db/seeds/dev.sql`. Bắt buộc: seed chỉ chạy khi `NODE_ENV <> 'production'` |
 | 4 | Có SMTP gửi email không (§11 mục 9) | Phase 5 | ✅ **đã trả lời 2026-08-24: KHÔNG gửi email**. `MAIL_ENABLED=false`, **không** cài `nodemailer`, không viết `services/mailer.js`. Thông báo (nhóm J, K8) chỉ nằm trong bảng `notifications` + badge trên giao diện. Nếu sau này cần email thì thêm sau, phần trong ứng dụng không phải sửa |
 | 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB). Đã chạy `dump-sheets.js` → `data/snapshot-20260824.json` + `.report.txt`. Số dòng thật: xem §13.8 |
-| 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? | Phase 3 | ✅ **đã trả lời 2026-08-24**: dùng **`<mã công việc>-NNN`** (ví dụ `DA001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng. Nhiệm vụ chuyển sang công việc khác thì **giữ nguyên mã cũ**, không đánh số lại. Mã cũ dạng `ID<yymmddhhmmssSSS>` khi nhập vào thì **giữ nguyên nguyên văn**, không đổi — đổi mã là mất dấu vết đối chiếu |
+| 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? | Phase 3 | ✅ **đã trả lời 2026-08-24**: dùng **`<mã công việc>-NNN`** (ví dụ `CV001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng. Nhiệm vụ chuyển sang công việc khác thì **giữ nguyên mã cũ**, không đánh số lại. Mã cũ dạng `ID<yymmddhhmmssSSS>` khi nhập vào thì **giữ nguyên nguyên văn**, không đổi — đổi mã là mất dấu vết đối chiếu |
 | 7 | Google đổi tên sheet `Dự án/Nhiệm vụ` thành gì khi tải `.xlsx`? | Phase 2 | ✅ **đã biết 2026-08-24**: thành **`Dự ánNhiệm vụ`** — Google **xoá hẳn** dấu `/`, không thay bằng ký tự khác. `dump-sheets.js` khớp đúng nhờ so tên chuẩn hoá |
-| 8 | Ô `Nhiệm vụ JSON` thật **không có** khoá `Cấp` và `Mã cha` (xem §13.8) — vậy khi nhập, nhiệm vụ cũ thành **cấp 2 hay cấp 3**? Đề xuất: **cấp 2 (công việc con)**, vì chúng là con trực tiếp của công việc và đã có ngày, người thực hiện, tiến độ riêng — đúng nghĩa "công việc con". Người dùng thêm cấp 3 bên dưới sau. Cách khác: cho hết thành cấp 3 mồ côi, gom vào nhóm `(chưa gán công việc con)` theo mục C2 | **Phase 2** | ❓ chờ — nếu không trả lời, Phase 2 dùng đề xuất cấp 2 |
-| 9 | Sheet `Thông báo` **không tồn tại** trong file tải về, dù §4.3 khai là bắt buộc. Cần xác nhận: bản Apps Script chưa từng tạo sheet này (thông báo mất khi tải lại trang), hay bạn đã xoá? | Phase 2 (bảng `notifications` nhập rỗng) | ❓ chờ — không chặn, Phase 2 sẽ nhập 0 dòng thông báo |
+| 8 | Ô `Nhiệm vụ JSON` thật **không có** khoá `Cấp` và `Mã cha` (xem §13.8) — vậy khi nhập, nhiệm vụ cũ thành **cấp 2 hay cấp 3**? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24** vì Phase 2 đã đổi hướng sang dữ liệu test tự tạo, không còn công cụ nhập tự động. Câu hỏi **sống lại ở Phase 9** khi nhập tay 28 dòng, nhưng lúc đó người nhập tự quyết từng dòng nên không cần chốt trước. Đề xuất cũ vẫn hợp lý: cho thành **cấp 2 (công việc con)** vì chúng đã có ngày, người thực hiện, tiến độ riêng |
+| 9 | Sheet `Thông báo` **không tồn tại** trong file tải về, dù §4.3 khai là bắt buộc — bản Apps Script chưa từng tạo, hay đã bị xoá? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24**: không nhập dữ liệu cũ nữa nên không có gì phụ thuộc. Bảng `notifications` bắt đầu từ dữ liệu mẫu (6 dòng) ở dev, và **rỗng** ở bản chính thức |
+| 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ❓ chờ — Phase 3 **đang làm theo giả định `CV`** (§0.1): dữ liệu mẫu và test đều dùng `CV`, mã cũ nhập tay giữ nguyên văn. Muốn đổi thành `DA` thì chỉ phải sửa tham số truyền vào `next_code()` + dữ liệu mẫu, không đụng lược đồ |
+| 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ❓ chờ — **đang giữ**: `dump-sheets.js` chỉ đọc, và snapshot là nguồn duy nhất để đối chiếu khi nhập tay 28 dòng ở Phase 9. `data/*` vẫn **không commit** (chứa mật khẩu văn bản thuần của người thật) |
+| 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ❓ chờ — không chặn Phase 3–8. Đề xuất: nhập **qua giao diện** để nghiệm thu luôn đường tạo mới, trừ `activity_logs` cũ thì bỏ hẳn |
 
 Nếu một mục ở đây chặn việc đang làm: **làm hết phần không phụ thuộc**, ghi rõ giả định đang
 dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được trả lời.
@@ -1339,7 +1429,7 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 
 | Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
 |---|---|---|
-| Nhiệm vụ nằm trong **một ô JSON** của cột `Nhiệm vụ JSON`, không có sheet riêng | Thiết kế sai bảng; một ô hỏng xoá sạch nhiệm vụ cả dự án | §4.1 bảng `work_items` |
+| Nhiệm vụ nằm trong **một ô JSON** của cột `Nhiệm vụ JSON`, không có sheet riêng | Thiết kế sai bảng; một ô hỏng xoá sạch nhiệm vụ của cả một công việc | §4.1 bảng `work_items` |
 | Cấp 2 và cấp 3 **cùng một mảng**, phân biệt bằng `Cấp` + `Mã cha` | Đếm cấp 2 thành nhiệm vụ ⇒ thống kê phồng | view `v_countable_items`, TC-TREE |
 | `Chờ duyệt` phải bị loại khỏi **mọi** con số | Số liệu sai ở chỗ không ai để ý | view, không viết điều kiện rải rác · TC-APR-06 |
 | Mật khẩu lưu **văn bản thuần**, `authenticateUser` so `===` | Rò mật khẩu khi nhập dữ liệu | bcrypt cost 12 + buộc đổi lần đầu · Phase 2 |
@@ -1379,6 +1469,21 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | §13.7 từng ghi vai trò `Quản lý dự án`, còn CHECK `users_role_valid` chờ `Quản lý công việc` | `npm run seed:dev` đổ ngay ở câu INSERT, và nhầm lẫn từ vựng lan sang Phase 2 | sửa §13.7 · `seed-dev.test.js` kiểm đủ 6 vai trò nhập được thật |
 | `/api/rpc/authenticateUser` (§7 việc 1.10) **chưa tồn tại** — cầu RPC dựng ở Phase 4 | Đường đăng nhập cũ của frontend không có giới hạn tần suất, chỉ còn khoá tài khoản chặn | Phase 4 phải gắn `loginRateLimiter` cho đúng đường đó; đã ghi chú ngay trong `app.js` |
 
+**Bẫy phát hiện thêm khi làm Phase 2 (2026-08-24) — dữ liệu mẫu:**
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| Dữ liệu mẫu chèn bằng **mã viết cứng** (`CV001`, `NV013`…) nên 6 sequence vẫn nằm ở 1 | `next_code()` trả `CV001` ⇒ **việc đầu tiên tạo bằng API đổ vì trùng `UNIQUE`**. Không test nào của Phase 2 chạm tới, lỗi chỉ nổ ở Phase 3 | 6 câu `setval` cuối `dev.sql` · TC-SEED-22/23 đòi đúng `CV010 / CV031 / DN006 / APP005 / NV014 / PH06` |
+| `setval(seq, n)` **thẳng** thay vì `GREATEST` | Seed chạy lại sau khi đã tạo `CV010`, `CV011` sẽ **kéo lùi** sequence về 9 ⇒ trùng mã lần nữa, lần này khó đoán hơn | `setval(seq, GREATEST((SELECT last_value FROM seq), n))` · §4.1 |
+| 4 bảng **không có cột `code`** (`reminders`, `chat_messages`, `notifications`, `activity_logs`) nên không `ON CONFLICT` được | Chạy `seed:dev` lần thứ hai **nhân đôi** đúng 4 bảng đó, mà số liệu tổng quan lại đếm từ chúng | `INSERT … SELECT … WHERE NOT EXISTS` với khoá tự chọn: `(work_item_id, remind_date)` · nội dung tin nhắn · `(user_id, content)` · `(action, created_at)` |
+| Hai chốt an toàn của bộ chạy seed kết thúc bằng `process.exit(1)` | Test gọi trực tiếp sẽ **giết luôn vitest**, nên cả hai chốt dễ bị bỏ không test — đúng hai chốt bảo vệ mật khẩu của người thật | `seed-guard.test.js` dùng `spawnSync(process.execPath, [run.js])` · TC-SEED-03/04 |
+| `NODE_ENV=production` khiến `env.js` **không nạp** `deploy/.env` (cố ý, §3.4) | Thử chốt bằng tay ngoài vitest thì chết ở bước kiểm 13 biến thiếu, **chưa tới** chốt ⇒ tưởng chốt hỏng | chạy tiến trình con **từ trong vitest** (đã có sẵn 14 biến trong `process.env`), chỉ ghi đè `NODE_ENV` + `DATABASE_URL` |
+| Khối chèn cấp 3 dùng `JOIN work_items p ON p.code = i.parent_code` | `INNER JOIN` **âm thầm bỏ** nhiệm vụ mồ côi (`parent_code` NULL) — dòng biến mất, không báo lỗi gì | nhiệm vụ mồ côi `CV001-030` phải có **câu `INSERT` riêng** · TC-SEED-13 |
+| Ràng buộc `lvl2_no_parent` chỉ ràng **cấp 2**; cấp 3 `parent_id` NULL là **hợp lệ** | Test từng khẳng định "không cấp 3 nào thiếu cha" ⇒ **bảo kê cho một ràng buộc không tồn tại**, và mục C2 (gom nhóm `(chưa gán công việc con)`) không bao giờ có dữ liệu để thử | đảo khẳng định thành test riêng đòi đúng `['CV001-030']` · §8.3 |
+| Sửa `001_init.sql` sau khi đã `migrate up` | CSDL dev giữ lược đồ **cũ**, seed hoặc test đỏ ở chỗ trông như lỗi SQL | `npm run migrate:redo` (down 1 + up) mỗi khi đụng vào migration |
+| Số dòng của dữ liệu mẫu bị chép rải rác trong nhiều test | Thêm một dòng vào `dev.sql` làm đỏ 5–6 test ở 5–6 chỗ, phải sửa tay từng chỗ | **một** hằng `EXPECTED` đóng băng ở đầu `seed-dev.test.js` là nguồn duy nhất |
+| Dữ liệu mẫu "sạch" quá | API xanh hết trên dev rồi vỡ ngay ngày đầu chạy thật vì dữ liệu thật có email chữ hoa, trùng tên, link thiếu `http`, nhiệm vụ mồ côi | §8.3 bắt dữ liệu mẫu **cố ý bẩn**, kèm chú thích đầu `dev.sql` để người sau không "sửa cho sạch" |
+
 ### 13.6 Mở session mới — dán prompt là chạy
 
 `docs/BAT-DAU-SESSION.md` giữ 6 mục: (1) đang ở đâu · (2) prompt mẫu điền `<PHASE>` ·
@@ -1395,7 +1500,8 @@ thiết kế chỉ ghi ở đây.
 
 Dữ liệu **bịa để test**, không phải nhân sự thật. Đưa vào `server/src/db/seeds/dev.sql` ở Phase 1,
 chỉ chạy khi `NODE_ENV <> 'production'`. Mật khẩu tất cả: `Test@12345`, `must_change_password = true`.
-4 phòng lấy đúng theo file thật (§13.8).
+PH01–PH04 lấy đúng tên theo file thật (§13.8); PH05 là phòng **rỗng hoàn toàn** thêm ở Phase 2 để
+có một dòng xoá phòng thành công (§8.3).
 
 | Mã | Họ tên | Email | Phân quyền | Phòng | Vai trò phòng |
 |---|---|---|---|---|---|
@@ -1409,17 +1515,26 @@ chỉ chạy khi `NODE_ENV <> 'production'`. Mật khẩu tất cả: `Test@1234
 | TEST008 | Nhân viên Đào tạo | nv01@test.local | Nhân viên | PH01 | Nhân viên |
 | TEST009 | Nhân viên Kế toán | nv03@test.local | Nhân viên | PH03 | Nhân viên |
 | TEST010 | Nhân viên Không phòng | nv00@test.local | Nhân viên | — | — |
+| TEST011 | Nhân viên Nghiên cứu | **`Nghien.Cuu@test.local`** (chữ hoa, cố ý) | Nhân viên | PH02 | Nhân viên |
+| TEST012 | Nhà cung cấp Mẫu | ncc@test.local | Nhân viên (đối tượng *Nhà cung cấp*) | — | — |
+| TEST013 | **Nhân viên Đào tạo** (trùng tên TEST008, cố ý) | nv01b@test.local | Nhân viên | PH01 | Nhân viên |
 
 TEST010 tồn tại để kiểm TC-RBAC-09 (người không thuộc phòng nào không được làm sập API).
 Hai Phó GĐ phụ trách hai nhóm phòng khác nhau để kiểm TC-RBAC-05 (Phó GĐ A **không** duyệt được
-mục của phòng do B phụ trách).
+mục của phòng do B phụ trách). Ba người thêm ở Phase 2 phục vụ dữ liệu bẩn của §8.3: TEST011 cho
+email chữ hoa (`citext` phải cho đăng nhập bằng chữ thường — TC-AUTH-03) **và** để PH02 có người
+của mình; TEST012 cho đối tượng ngoài cơ quan đứng tên đề nghị mua sắm; TEST013 để mọi chỗ dò
+người **theo họ tên** lộ ra là sai.
 
 **Đã làm xong ở Phase 1 (2026-08-24):** `server/src/db/seeds/dev.sql` + `run.js`, chạy bằng
 `npm run seed:dev`. Bảng `department_managers` có **7 dòng**: 4 dòng `deputy_director` theo bảng
 trên, cộng 3 dòng suy ra từ cột *Vai trò phòng* (`head` cho TEST004/TEST006, `vice` cho TEST005) —
 hai lớp phân quyền của §6 cần cả hai loại dòng này. Câu seed viết lại được nhiều lần
 (`ON CONFLICT`) và bộ chạy **từ chối** khi `NODE_ENV=production` hoặc khi tên CSDL chứa `prod`.
-`seed-dev.test.js` (6 test) kiểm đúng những con số này để bảng trên và file .sql không lệch nhau.
+
+**Mở rộng ở Phase 2 (2026-08-24):** thêm TEST011–TEST013 (bảng trên) và toàn bộ dữ liệu nghiệp
+vụ của §8.3. `seed-dev.test.js` lên **27 test** và `seed-guard.test.js` thêm **2 test** cho hai
+chốt an toàn — bảng trên và file `.sql` không thể lệch nhau mà test vẫn xanh.
 
 ### 13.8 Số liệu snapshot thật — `data/snapshot-20260824.json`
 
