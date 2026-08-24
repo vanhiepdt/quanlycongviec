@@ -1228,12 +1228,16 @@ VPS. Đây là lý do đặt hạ tầng ở Phase 8 chứ không phải Phase 1
 
 ## 12. Việc làm ngay khi bạn duyệt kế hoạch này
 
-1. Trả lời mục 7 của §11 (một người một phòng, hay nhiều phòng).
-2. Tôi tạo nhánh `vps/phase-0-setup` và làm trọn Phase 0 (3 ngày): cây thư mục, migration
-   `001_init.sql`, `docker-compose.dev.yml`, `tools/dump-sheets.js`, `docs/UAT.md`.
-3. Bạn chạy `tools/dump-sheets.js` (hoặc gửi tôi bản `.xlsx` xuất từ Sheets) để có snapshot thật.
+1. ~~Trả lời mục 7 của §11 (một người một phòng, hay nhiều phòng).~~ **Xong 2026-08-24: một
+   người thuộc MỘT phòng** (§13.4 mục 1).
+2. ~~Tôi tạo nhánh `vps/phase-0-setup` và làm trọn Phase 0.~~ **Xong 2026-08-24**, 28 test xanh
+   (§13.3). Phase kế tiếp là Phase 1 — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3.
+3. Bạn chạy `node tools/dump-sheets.js <file.xlsx>` (hoặc gửi tôi bản `.xlsx` xuất từ Sheets)
+   để có snapshot thật — **đây là việc đang chặn Phase 2** (§13.4 mục 5).
 4. Bản Apps Script **đóng băng** từ lúc này: chỉ sửa lỗi chặn, không thêm tính năng. Mọi tính
    năng mới đi vào bản VPS.
+5. Trả lời §13.4 mục 6 (dạng mã công việc con/nhiệm vụ tạo mới) trước khi làm Phase 3; mục 2,
+   3, 4 trước khi làm Phase 5 và Phase 8.
 
 ---
 
@@ -1254,6 +1258,9 @@ gsheets.vn (§4.1 và §7 của hai tài liệu kia). Chuyển sang VPS **xoá h
 
 **Đầu session — làm đúng 3 bước này, không đọc lan ra:**
 
+0. Nếu đang mở một session **hoàn toàn mới**: dán prompt sẵn có ở `docs/BAT-DAU-SESSION.md`
+   mục 3 (đã điền phase kế tiếp). File đó cũng chứa lệnh chạy môi trường dev và bẫy riêng
+   của máy đang dùng. Nó là bàn đạp, **§13 vẫn là nguồn sự thật**.
 1. Đọc **§13** (mục này) trước tiên — trạng thái, việc đang dở, quyết định đang chờ.
 2. Đọc **đúng phase đang làm** ở §7 và **đúng module test tương ứng** ở §8.4. Không đọc cả §7.
 3. Chỉ đọc thêm mục §2/§4/§5/§6 khi **phase hiện tại cần**. Ví dụ đang làm Phase 3 thì đọc §4.1
@@ -1270,6 +1277,8 @@ tên hàm cần port. Đọc tràn hai file này là nguyên nhân cháy ngữ c
 4. Nếu phát hiện bẫy/lỗi có sẵn mới → thêm vào **§13.5** kèm số test case.
 5. Nếu thiết kế đổi (khác §4/§5/§6) → **sửa luôn mục gốc**, đừng chỉ ghi ở §13. Kế hoạch phải
    phản ánh hệ thống thật; kế hoạch lệch code là kế hoạch vô dụng.
+6. Cập nhật `docs/BAT-DAU-SESSION.md`: **mục 1** (đang ở đâu) và **mục 3** (prompt đã điền sẵn
+   cho phase kế tiếp). Session sau chỉ cần dán là chạy được, không phải dò lại.
 
 **Trong session — chống cháy ngữ cảnh:**
 
@@ -1349,3 +1358,15 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | Cổng 5433 đã bị Postgres của dự án khác chiếm trên máy này | `docker compose up` đỏ với "port is already allocated", dễ tưởng cấu hình sai | CSDL test dùng **5434**, mọi cổng khai qua biến trong `deploy/.env` |
 | `vitest` truyền biến môi trường riêng cho test; `LOG_LEVEL: 'silent'` là mức hợp lệ của pino nhưng lúc đầu **không** có trong enum của `env.js` | Cả bộ test chết bằng `process.exit(1)` mà không nói lý do — tưởng lỗi CSDL | `LOG_LEVEL` nhận cả `'silent'` · `env.js` · TC-ENV-05 |
 | `process.loadEnvFile()` **không** ghi đè biến đã có trong `process.env` (đã kiểm bằng thực nghiệm) | Nếu tưởng ngược lại thì test sẽ chạy vào **CSDL dev** và xoá sạch dữ liệu | `vitest.config.js` chặn thêm: `DATABASE_URL === TEST_DATABASE_URL` là dừng; `global-setup.js` không xoá CSDL nào không có hậu tố `_test` |
+
+### 13.6 Mở session mới — dán prompt là chạy
+
+`docs/BAT-DAU-SESSION.md` giữ 6 mục: (1) đang ở đâu · (2) prompt mẫu điền `<PHASE>` ·
+(3) **prompt đã điền sẵn cho phase kế tiếp** · (4) lệnh chạy môi trường dev theo đúng thứ tự ·
+(5) lưu ý bắt buộc + bẫy riêng của máy đang dùng + quy ước code đã chốt · (6) checklist cuối session.
+
+Quan hệ giữa hai file: §13 là **nguồn sự thật về tiến độ**; `BAT-DAU-SESSION.md` là **bàn đạp
+thao tác**. Lệch nhau thì §13 đúng. Cuối mỗi session phải cập nhật cả hai (§13.1 quy tắc 6).
+
+Không nhân bản nội dung: lệnh chạy và bẫy của máy chỉ ghi ở `BAT-DAU-SESSION.md`, tiến độ và
+thiết kế chỉ ghi ở đây.
