@@ -231,7 +231,7 @@ quanlycongviec/
 │  │  │  ├─ reminders/  approvals/  proposals/  apps/  chat/
 │  │  │  ├─ notifications/  stats/  gantt/  activity/  export/
 │  │  ├─ rpc/index.js             # cầu tương thích: 36 tên hàm cũ → service
-│  │  ├─ services/ cron.js  mailer.js  excel.js
+│  │  ├─ services/ cron.js  excel.js       # KHÔNG có mailer.js — §13.4 mục 4
 │  │  ├─ utils/
 │  │  │  ├─ logger.js             # [đã có] pino, che cookie/authorization/mật khẩu
 │  │  │  └─ dates.js  ids.js  tree.js  strings.js
@@ -274,7 +274,7 @@ quanlycongviec/
 | Ghi log | `pino` + `pino-http` | JSON, nhanh, ghép được với `docker logs` |
 | Lịch chạy | `node-cron` | Thay `setupDailyTrigger` của Apps Script |
 | Excel | `exceljs` | Ghi `.xlsx` thật, có định dạng, không phải CSV đổi tên |
-| Email | `nodemailer` | Tuỳ chọn, bật khi có SMTP |
+| Email | ~~`nodemailer`~~ **không dùng** | Chốt 2026-08-24 (§13.4 mục 4): không gửi email. Thông báo chỉ nằm trong bảng `notifications` + badge trên giao diện. `MAIL_ENABLED=false`, không cài gói, không viết `services/mailer.js` |
 | Test | `vitest` + `supertest` + `@playwright/test` | Nhanh, cùng cú pháp cho unit và integration |
 
 Frontend **không thêm** thư viện nào. Tailwind / Chart.js / Font Awesome / font Inter đang nạp
@@ -742,7 +742,7 @@ vendor, escape) — **cấm** đổi tên hàm, đổi id DOM, dọn code. Ai mu
 | 5.6 | Nhãn vàng | Cả phòng thấy mục `Chờ duyệt`, có nhãn, không sửa được nếu không phải người tạo |
 | 5.7 | Thông báo | Có mục mới chờ ⇒ thông báo cho Phó GĐ phụ trách; được duyệt / bị từ chối ⇒ thông báo cho người tạo |
 | 5.8 | `services/cron.js` | 07:00 hằng ngày: quét nhiệm vụ quá hạn, tạo thông báo (thay `setupDailyTrigger`). Chạy trong container `app`, có cờ `CRON_ENABLED` để staging tắt |
-| 5.9 | Email (tuỳ chọn) | `nodemailer`; không có SMTP thì chỉ ghi log, **không** làm lỗi request |
+| 5.9 | ~~Email~~ | **Bỏ** — chốt 2026-08-24 (§13.4 mục 4): không gửi email, không cài `nodemailer`. Thông báo chỉ trong bảng `notifications` + badge |
 
 **Xong khi**: test "tạo 1 công việc `Chờ duyệt` ⇒ **cả 4 thẻ số và 6 biểu đồ không đổi một đơn
 vị nào**" xanh · Phó GĐ phòng A không duyệt được mục của phòng B (403) · lý do từ chối rỗng bị chặn.
@@ -1296,8 +1296,8 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 |---|---|---|---|
 | — | Kế hoạch `KE-HOACH-VPS.md` | ✅ | Xong 2026-08-24, §0–§13 |
 | 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · còn nợ 1 việc: chạy `dump-sheets.js` trên `.xlsx` **thật** (§13.4 mục 5) |
-| 1 | Xác thực, phiên, phân quyền, nhật ký | ⬜ | Làm tiếp ngay: §7 Phase 1 + §8.4 module test tương ứng |
-| 2 | Nhập dữ liệu từ Google Sheets | ⬜ | Cần snapshot `.xlsx` thật |
+| 1 | Xác thực, phiên, phân quyền, nhật ký | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-1-auth` — **12/12 việc** (1.1 và 1.12 làm từ Phase 0). **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Còn **một** việc treo sang Phase 4: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chưa tồn tại (§13.5, dòng cuối bảng bẫy Phase 1) |
+| 2 | Nhập dữ liệu từ Google Sheets | ⬜ | Việc kế tiếp. Snapshot thật đã có (§13.8) — Phase 2 chỉ cần lược đồ + repo + `hashPassword()`, tất cả đã xong |
 | 3 | API công việc 3 tầng | ⬜ | |
 | 4 | Cắt frontend sang API | ⬜ | **Điểm dừng an toàn** hết phase này |
 | 5 | Luồng duyệt + thông báo + lịch chạy | ⬜ | |
@@ -1312,18 +1312,23 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 |---|---|---|---|
 | 2026-08-24 | Đọc toàn bộ dự án hiện tại (Apps Script + Sheets), chốt 4 quyết định kiến trúc, viết trọn kế hoạch VPS: kiểm kê 90 tính năng, lược đồ CSDL, hợp đồng API + cầu tương thích RPC, 10 phase, ~120 test case | `KE-HOACH-VPS.md` (mới, 1194 dòng) | Chờ người dùng trả lời §13.4 mục 1 rồi làm Phase 0 |
 | 2026-08-24 | **Phase 0 xong** trên nhánh `vps/phase-0-setup`. Dựng cây thư mục §3.2; `001_init.sql` (12 bảng nghiệp vụ + `pgmigrations`, 6 sequence + `next_code()`, 10 index §4.2 + 4 index FK, 3 trigger kiểm cấu trúc cây/nhắc việc, 6 trigger `updated_at`) — đã chạy up → down → up sạch trên Postgres 16 thật; `docker-compose.dev.yml` (db + db-test tmpfs + adminer, mọi cổng bind 127.0.0.1); `env.js` kiểm 14 biến bắt buộc bằng zod, thiếu là chết ngay; pool pg giữ DATE dạng chuỗi `YYYY-MM-DD`; app + `/healthz` + `/readyz`; logger pino có che mật khẩu/cookie; `dump-sheets.js` (chỉ đọc, xuất nguyên văn chuỗi, không parse cột JSON, tự khớp tên sheet bị .xlsx đổi tên); `docs/UAT.md` đủ **88 mã** tính năng theo §2. **28 test xanh** (18 lược đồ + 6 env + 4 health), lint + prettier sạch. Đổi `bcrypt` → `@node-rs/bcrypt` (xem §3.3) | `server/**` (25 file), `deploy/docker-compose.dev.yml`, `deploy/.env.example`, `tools/dump-sheets.js`, `docs/UAT.md`, `.gitignore`, §3.2/§3.3/§4.1/§7/§13 của `KE-HOACH-VPS.md` | Phase 1 (xác thực, phiên, RBAC, nhật ký). Việc còn nợ của Phase 0: chạy `node tools/dump-sheets.js <file.xlsx>` khi có file thật (§13.4 mục 5) |
+| 2026-08-24 | **Phase 1 làm dở, 2/12 việc** trên nhánh `vps/phase-1-auth` (2 commit): `middleware/rbac.js` — `can()` thuần theo §6, ma trận 6 vai × 5 thực thể × 4 hành động = 120 phép kiểm sinh tự động từ MỘT bảng khai báo; repo `users` + `departments` + `department_managers` — SQL viết tay, tham số hoá 100%. **95 test xanh** (28 của Phase 0 + 67 mới). Session đó hết ngữ cảnh nên **chưa kịp cập nhật §13** — §13.2 và mục 1 của `BAT-DAU-SESSION.md` bị lệch, session sau đã sửa | `server/src/middleware/rbac.js`, `server/src/modules/{users,departments}/repo.js`, `server/tests/unit/rbac-*.test.js`, `server/tests/integration/repo-*.test.js`, `server/tests/helpers/rbac.js` | Phần còn nợ của Phase 1 |
+| 2026-08-24 | Người dùng trả lời §13.4 mục 1: **một người thuộc MỘT phòng** ⇒ giữ `users.department_id`, không thêm bảng nối. Đối chiếu §13 với code thật rồi sửa §13.2 cho khớp (Phase 1 🟡 2/12) và ghi rõ 8 việc Phase 1 còn nợ. **Chốt đổi thứ tự: làm Phase 2 TRƯỚC phần còn nợ của Phase 1** — Phase 2 chỉ cần lược đồ + repo + hàm băm, không cần login/phiên/CSRF; nhập dữ liệu thật sớm để phát hiện lệch thiết kế khi sửa còn rẻ. Viết lại mục 1 + mục 3 của `docs/BAT-DAU-SESSION.md` thành prompt Phase 2 | §13.2, §13.3 của `KE-HOACH-VPS.md`; `docs/BAT-DAU-SESSION.md` | **Phase 2** — `tools/import-from-sheets.js` (§7 việc 2.1–2.7, TC-IMP-01..14). Xong Phase 2 thì quay lại làm hết 8 việc còn nợ của Phase 1 |
+| 2026-08-24 | **Phase 1 XONG 12/12 việc.** Làm nốt 8 việc còn nợ: `auth/password.js` (chỗ **duy nhất** gọi bcrypt, chặn cả mật khẩu > 72 byte vì bcrypt cắt âm thầm); `auth/cookies.js` (cookie `sid` = `uuid.HMAC` nên cookie giả bị loại **không cần đi CSDL**; token CSRF = `HMAC(sid)` nên không thêm cột, khởi động lại máy chủ vẫn tính đúng token cũ); `auth/repo.js` (`sessions`: tạo/đọc/gia hạn/xoá, gia hạn chỉ ghi khi lần cuối > 1 phút); `activityLogs/repo.js`; `auth/service.js` (login theo thứ tự **khoá → mật khẩu → is_active**, so với băm giả khi email không tồn tại để chống dò email); 5 middleware `session/csrf/validate/rateLimit/audit`; `auth/routes.js` (login · logout · password · me); `seeds/dev.sql` + bộ chạy từ chối `NODE_ENV=production` **và** CSDL có tên chứa `prod`. **Nối lại `app.js`**: cookie-parser → attachSession → issueCsrfCookie → verifyCsrf → audit → `/v1/auth` → `requirePasswordChanged` → route nghiệp vụ; thay 404 + bộ xử lý lỗi nội tuyến (đang trả `{success:false}` **trái §5.3**) bằng `notFoundHandler` + `errorHandler`. **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Ghi chú số liệu: dòng §13.3 phía trên viết "95 test" là **đếm sai**, số thật lúc đó là 243 | `server/src/modules/auth/{password,cookies,repo,service,routes}.js`, `server/src/modules/activityLogs/repo.js`, `server/src/middleware/{session,csrf,validate,rateLimit,audit}.js`, `server/src/app.js`, `server/src/db/seeds/{dev.sql,run.js}`, `server/tests/unit/{password,cookies,rateLimit}.test.js`, `server/tests/integration/{auth-login,auth-session,auth-password,seed-dev}.test.js`, `server/tests/helpers/http.js`, `server/{package.json,eslint.config.js}`, §13.2/§13.3/§13.5/§13.7 của `KE-HOACH-VPS.md`, `docs/BAT-DAU-SESSION.md` | **Phase 2** — `tools/import-from-sheets.js` (§7 việc 2.1–2.7, TC-IMP-01..14). Còn treo: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` khi Phase 4 dựng cầu RPC |
 
 ### 13.4 Quyết định đang chờ người dùng — KHÔNG TỰ ĐOÁN
 
 | # | Câu hỏi | Chặn | Trạng thái |
 |---|---|---|---|
 | 1 | Một người có thể thuộc **nhiều phòng** không? Đang thiết kế một người một phòng (`users.department_id`) | Phase 0 (lược đồ CSDL) | ✅ **đã trả lời 2026-08-24: một người thuộc MỘT phòng** → giữ `users.department_id`. Việc phụ trách nhiều phòng (Phó GĐ / Trưởng phòng) đi qua bảng riêng `department_managers`, không đụng vào `department_id` |
-| 2 | Thông số VPS, tên miền, quyền SSH, nội bộ hay Internet (§11 mục 1–4) | Phase 8 | ❓ chờ |
-| 3 | Danh sách Phó Giám đốc / Trưởng phòng / Phó phòng thật (§11 mục 5–6) | Phase 5, 9 | ❓ chờ |
-| 4 | Có SMTP gửi email không (§11 mục 9) | Phase 5 | ❓ chờ |
-| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets. Cách lấy: mở Sheets > File > Tải xuống > Microsoft Excel (.xlsx), đặt vào máy rồi chạy `node tools/dump-sheets.js <đường-dẫn>` | Phase 2 · và **việc còn nợ của Phase 0** | ❓ chờ |
-| 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? Bản cũ có 2 dạng lẫn nhau: `DA001-01` (dễ đọc, gắn với công việc cha) và `ID<yymmddhhmmssSSS>` (sinh theo millisecond — chính là bẫy trùng mã ở §13.5). Đề xuất: **`<mã công việc>-NNN`** (ví dụ `DA001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng, kể cả khi nhiệm vụ chuyển sang công việc khác (mã cũ giữ nguyên, không đánh số lại) | Phase 3 (API tạo cấp 2/cấp 3) | ❓ chờ — nếu không trả lời, Phase 3 sẽ dùng đúng đề xuất này |
-| 7 | Sheet thật tên `Dự án/Nhiệm vụ` có dấu `/`, mà `.xlsx` **cấm** ký tự này trong tên sheet ⇒ bản tải về gần như chắc chắn bị đổi tên. `dump-sheets.js` đã tự khớp theo tên chuẩn hoá, nhưng cần xem file thật xem Google đổi thành gì để ghi lại vào §4.3 | Phase 2 | ❓ chờ cùng mục 5 |
+| 2 | Thông số VPS, tên miền, quyền SSH, nội bộ hay Internet (§11 mục 1–4) | Phase 8 | ✅ **đã trả lời 2026-08-24**: giai đoạn này **chạy hẳn trên PC của người dùng** (Windows + Docker Desktop), test xong mới đưa lên VPS. Phase 1–7 làm bình thường; **Phase 8 tạm hoãn** cho tới khi có VPS thật. Hệ quả: `SESSION_COOKIE_SECURE=false` và `APP_BASE_URL=http://localhost:3000` khi chạy local — lên VPS phải đổi cả hai |
+| 3 | Danh sách Phó Giám đốc / Trưởng phòng / Phó phòng thật (§11 mục 5–6) | Phase 5, 9 | ✅ **đã trả lời 2026-08-24**: dùng **danh sách test tự tạo**, người dùng sửa sau. Chốt ở §13.7 — Phase 1 đưa vào `src/db/seeds/dev.sql`. Bắt buộc: seed chỉ chạy khi `NODE_ENV <> 'production'` |
+| 4 | Có SMTP gửi email không (§11 mục 9) | Phase 5 | ✅ **đã trả lời 2026-08-24: KHÔNG gửi email**. `MAIL_ENABLED=false`, **không** cài `nodemailer`, không viết `services/mailer.js`. Thông báo (nhóm J, K8) chỉ nằm trong bảng `notifications` + badge trên giao diện. Nếu sau này cần email thì thêm sau, phần trong ứng dụng không phải sửa |
+| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB). Đã chạy `dump-sheets.js` → `data/snapshot-20260824.json` + `.report.txt`. Số dòng thật: xem §13.8 |
+| 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? | Phase 3 | ✅ **đã trả lời 2026-08-24**: dùng **`<mã công việc>-NNN`** (ví dụ `DA001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng. Nhiệm vụ chuyển sang công việc khác thì **giữ nguyên mã cũ**, không đánh số lại. Mã cũ dạng `ID<yymmddhhmmssSSS>` khi nhập vào thì **giữ nguyên nguyên văn**, không đổi — đổi mã là mất dấu vết đối chiếu |
+| 7 | Google đổi tên sheet `Dự án/Nhiệm vụ` thành gì khi tải `.xlsx`? | Phase 2 | ✅ **đã biết 2026-08-24**: thành **`Dự ánNhiệm vụ`** — Google **xoá hẳn** dấu `/`, không thay bằng ký tự khác. `dump-sheets.js` khớp đúng nhờ so tên chuẩn hoá |
+| 8 | Ô `Nhiệm vụ JSON` thật **không có** khoá `Cấp` và `Mã cha` (xem §13.8) — vậy khi nhập, nhiệm vụ cũ thành **cấp 2 hay cấp 3**? Đề xuất: **cấp 2 (công việc con)**, vì chúng là con trực tiếp của công việc và đã có ngày, người thực hiện, tiến độ riêng — đúng nghĩa "công việc con". Người dùng thêm cấp 3 bên dưới sau. Cách khác: cho hết thành cấp 3 mồ côi, gom vào nhóm `(chưa gán công việc con)` theo mục C2 | **Phase 2** | ❓ chờ — nếu không trả lời, Phase 2 dùng đề xuất cấp 2 |
+| 9 | Sheet `Thông báo` **không tồn tại** trong file tải về, dù §4.3 khai là bắt buộc. Cần xác nhận: bản Apps Script chưa từng tạo sheet này (thông báo mất khi tải lại trang), hay bạn đã xoá? | Phase 2 (bảng `notifications` nhập rỗng) | ❓ chờ — không chặn, Phase 2 sẽ nhập 0 dòng thông báo |
 
 Nếu một mục ở đây chặn việc đang làm: **làm hết phần không phụ thuộc**, ghi rõ giả định đang
 dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được trả lời.
@@ -1359,6 +1364,21 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | `vitest` truyền biến môi trường riêng cho test; `LOG_LEVEL: 'silent'` là mức hợp lệ của pino nhưng lúc đầu **không** có trong enum của `env.js` | Cả bộ test chết bằng `process.exit(1)` mà không nói lý do — tưởng lỗi CSDL | `LOG_LEVEL` nhận cả `'silent'` · `env.js` · TC-ENV-05 |
 | `process.loadEnvFile()` **không** ghi đè biến đã có trong `process.env` (đã kiểm bằng thực nghiệm) | Nếu tưởng ngược lại thì test sẽ chạy vào **CSDL dev** và xoá sạch dữ liệu | `vitest.config.js` chặn thêm: `DATABASE_URL === TEST_DATABASE_URL` là dừng; `global-setup.js` không xoá CSDL nào không có hậu tố `_test` |
 
+**Bẫy phát hiện thêm khi làm Phase 1 (2026-08-24):**
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| Bộ xương Phase 0 trả 404 dạng `{success:false, error:'…'}` — **trái §5.3** — mà test `TC-HEALTH-03` lại khẳng định đúng cái hình dạng sai đó | Test xanh **bảo kê** cho lỗi: frontend Phase 4 sẽ đọc `error.code` và luôn nhận `undefined` | `app.js` dùng `notFoundHandler`/`errorHandler`; `TC-HEALTH-03` sửa theo §5.3. Bài học: khi test và tài liệu lệch nhau, **tài liệu đúng** cho tới khi người dùng nói khác |
+| `requirePasswordChanged` nếu đặt ở đầu `/api` sẽ chặn luôn `/api/v1/auth/password` | Người bị bắt đổi mật khẩu lần đầu **không có đường nào ra** — 403 vĩnh viễn, phải sửa CSDL bằng tay | mắc **sau** `api.use('/v1/auth', authRouter)`, dựa vào thứ tự khai báo của Express · TC-AUTH-10 |
+| Cột `sessions.id` kiểu `uuid`: truyền chuỗi rỗng vào `id <> $2` là **lỗi cú pháp** của Postgres, không phải "không khớp" | `deleteOtherSessions` đổ giữa transaction đổi mật khẩu ⇒ đổi mật khẩu thất bại toàn bộ | `WHERE user_id = $1 AND ($2::uuid IS NULL OR id <> $2::uuid)`, truyền `null` chứ không phải `''` |
+| bcrypt chỉ dùng **72 byte đầu** và bỏ im phần sau; 25 ký tự tiếng Việt có dấu = 75 byte | Hai mật khẩu khác nhau cùng đăng nhập được, mà đếm `.length` không thấy gì bất thường | `assertPasswordUsable` đếm `Buffer.byteLength` · `MAX_PASSWORD_BYTES` |
+| Cookie CSRF phải **KHÔNG** `httpOnly` (ngược với phản xạ "cookie nào cũng httpOnly") | Frontend không đọc được token ⇒ mọi request ghi 403, dễ tưởng lỗi phiên | `setCsrfCookie` đặt `httpOnly: false`; cookie `sid` vẫn `httpOnly: true` |
+| `locked_until` do `now()` của **Postgres** tính, còn test so với `Date.now()` của **máy chạy test** | Khẳng định `≤ 15 phút` đỏ ngẫu nhiên vì lệch đồng hồ container, mất thời gian tìm lỗi ở chỗ không có lỗi | biên độ `> 13` và `< 16` phút · `repo-users.test.js`, `auth-login.test.js` |
+| `audit.js` ghi ở `res.on('finish')`, tức là **sau** khi supertest đã trả về | Test đọc `activity_logs` ngay là thấy bảng rỗng ⇒ tưởng audit không chạy | helper `waitForLogs()` chờ có dòng · `auth-password.test.js` |
+| `eslint.config.js` khai `globals` bằng **danh sách tay** | Dùng `Buffer` là `no-undef`, lint đỏ dù code đúng | thêm `Buffer: 'readonly'`; biến global mới phải khai thêm ở đó |
+| §13.7 từng ghi vai trò `Quản lý dự án`, còn CHECK `users_role_valid` chờ `Quản lý công việc` | `npm run seed:dev` đổ ngay ở câu INSERT, và nhầm lẫn từ vựng lan sang Phase 2 | sửa §13.7 · `seed-dev.test.js` kiểm đủ 6 vai trò nhập được thật |
+| `/api/rpc/authenticateUser` (§7 việc 1.10) **chưa tồn tại** — cầu RPC dựng ở Phase 4 | Đường đăng nhập cũ của frontend không có giới hạn tần suất, chỉ còn khoá tài khoản chặn | Phase 4 phải gắn `loginRateLimiter` cho đúng đường đó; đã ghi chú ngay trong `app.js` |
+
 ### 13.6 Mở session mới — dán prompt là chạy
 
 `docs/BAT-DAU-SESSION.md` giữ 6 mục: (1) đang ở đâu · (2) prompt mẫu điền `<PHASE>` ·
@@ -1370,3 +1390,76 @@ thao tác**. Lệch nhau thì §13 đúng. Cuối mỗi session phải cập nh�
 
 Không nhân bản nội dung: lệnh chạy và bẫy của máy chỉ ghi ở `BAT-DAU-SESSION.md`, tiến độ và
 thiết kế chỉ ghi ở đây.
+
+### 13.7 Danh sách nhân sự TEST (§13.4 mục 3) — người dùng sẽ sửa sau
+
+Dữ liệu **bịa để test**, không phải nhân sự thật. Đưa vào `server/src/db/seeds/dev.sql` ở Phase 1,
+chỉ chạy khi `NODE_ENV <> 'production'`. Mật khẩu tất cả: `Test@12345`, `must_change_password = true`.
+4 phòng lấy đúng theo file thật (§13.8).
+
+| Mã | Họ tên | Email | Phân quyền | Phòng | Vai trò phòng |
+|---|---|---|---|---|---|
+| TEST001 | Quản trị Hệ thống | admin@test.local | admin | — | — |
+| TEST002 | Phó GĐ Một | pgd1@test.local | Phó Giám đốc | phụ trách PH01, PH02 | — |
+| TEST003 | Phó GĐ Hai | pgd2@test.local | Phó Giám đốc | phụ trách PH03, PH04 | — |
+| TEST004 | Trưởng phòng Đào tạo | tp01@test.local | Trưởng phòng | PH01 | Trưởng phòng |
+| TEST005 | Phó phòng Đào tạo | pp01@test.local | Phó phòng | PH01 | Phó phòng |
+| TEST006 | Trưởng phòng Kế toán | tp03@test.local | Trưởng phòng | PH03 | Trưởng phòng |
+| TEST007 | Quản lý Công việc | qlcv@test.local | Quản lý công việc | PH01 | Nhân viên |
+| TEST008 | Nhân viên Đào tạo | nv01@test.local | Nhân viên | PH01 | Nhân viên |
+| TEST009 | Nhân viên Kế toán | nv03@test.local | Nhân viên | PH03 | Nhân viên |
+| TEST010 | Nhân viên Không phòng | nv00@test.local | Nhân viên | — | — |
+
+TEST010 tồn tại để kiểm TC-RBAC-09 (người không thuộc phòng nào không được làm sập API).
+Hai Phó GĐ phụ trách hai nhóm phòng khác nhau để kiểm TC-RBAC-05 (Phó GĐ A **không** duyệt được
+mục của phòng do B phụ trách).
+
+**Đã làm xong ở Phase 1 (2026-08-24):** `server/src/db/seeds/dev.sql` + `run.js`, chạy bằng
+`npm run seed:dev`. Bảng `department_managers` có **7 dòng**: 4 dòng `deputy_director` theo bảng
+trên, cộng 3 dòng suy ra từ cột *Vai trò phòng* (`head` cho TEST004/TEST006, `vice` cho TEST005) —
+hai lớp phân quyền của §6 cần cả hai loại dòng này. Câu seed viết lại được nhiều lần
+(`ON CONFLICT`) và bộ chạy **từ chối** khi `NODE_ENV=production` hoặc khi tên CSDL chứa `prod`.
+`seed-dev.test.js` (6 test) kiểm đúng những con số này để bảng trên và file .sql không lệch nhau.
+
+### 13.8 Số liệu snapshot thật — `data/snapshot-20260824.json`
+
+Nguồn: `file tai xuong tu google sheet.xlsx`, SHA-256 `c5d560af…9efd12`, 96 KB.
+File snapshot **không commit** (chứa email và mật khẩu văn bản thuần thật).
+
+| Sheet trong Sheets | Tên trong `.xlsx` | Số dòng | Số cột |
+|---|---|---|---|
+| Người dùng | Người dùng | 5 | 10 |
+| Phòng | Phòng | 4 | 7 |
+| Dự án/Nhiệm vụ | **`Dự ánNhiệm vụ`** (mất dấu `/`) | 2 | 15 |
+| Đề nghị | Đề nghị | 1 | 11 |
+| Quản lý App | Quản lý App | 0 | 8 |
+| Chat | Chat | 1 | 3 |
+| Thông báo | **không tồn tại** | — | — |
+| Nhiệm vụ | không tồn tại (đã biết trước) | — | — |
+
+Dữ liệu ít ⇒ **Phase 2 nhẹ hơn dự kiến**, nhưng phải chính xác vì không có chỗ để sai:
+
+- 4 phòng: `PH01 Quản lý Đào tạo` (thứ tự 1), `PH02 Nghiên cứu Khoa học`, `PH03 Kế toán`,
+  `PH04 Hành chính Nhân sự`. Chỉ PH01 có Email Phó GĐ phụ trách; cột Trưởng phòng và Phó phòng
+  **rỗng hết** ⇒ `department_managers` chỉ có 1 dòng thật.
+- 5 người dùng, mã `NV001, NV004, NV005, NV006, NV007` — **có lỗ**, đừng suy ra mã liên tục.
+- Giá trị `Phân quyền` thật: `Admin` (chữ A hoa!), `Nhân viên`, `Phó Giám đốc`. `Admin` **không
+  khớp** CHECK `users_role_valid` (chờ `'admin'`) ⇒ Phase 2 phải chuẩn hoá hoa/thường cho vai trò
+  và **in ra từng dòng đã đổi**.
+- `Vai trò phòng` chỉ có `''` và `Nhân viên`. `Phòng` chỉ có `''` và `Quản lý Đào tạo` — nhập
+  theo **tên** phòng, phải dò sang `departments.name` chứ không phải mã.
+- Mật khẩu: **văn bản thuần**, dài 4 / 0 / 0 / 9 / 3 ký tự. Có **2 người mật khẩu rỗng** ⇒ Phase 2
+  phải sinh mật khẩu tạm ngẫu nhiên, đặt `must_change_password = true`, in danh sách ra cho người
+  dùng phát lại. Không được để tài khoản không mật khẩu.
+- 2 công việc `DA001`, `DA002`; cột `Trạng thái duyệt` **rỗng** cả hai ⇒ Phase 2 gán `'Đã duyệt'`
+  (dữ liệu cũ đang dùng, không thể bắt đi duyệt lại).
+- `Nhiệm vụ JSON`: DA001 có 3 nhiệm vụ, DA002 rỗng. **0 ô JSON hỏng** trong file này — vẫn giữ
+  nguyên đường xử lý ô hỏng, vì file thật lúc cắt chuyển có thể khác.
+- Khoá thật trong mỗi nhiệm vụ (15 khoá): `Mã nhiệm vụ, Tên nhiệm vụ, Mô tả nhiệm vụ,
+  Người thực hiện, Trạng thái, Ưu tiên, Ngày bắt đầu, Hạn chót, Tiến độ (%), Ngày hoàn thành,
+  Mục tiêu, Link kết quả, Kết quả đầu ra, Ghi chú, Nhắc việc`.
+  **KHÔNG có `Cấp`, KHÔNG có `Mã cha`** ⇒ dữ liệu cũ là cây **2 tầng**, chưa từng dùng cấp 3.
+  Quyết định nhập chúng thành cấp mấy: §13.4 mục 8.
+- Mã nhiệm vụ thật đều dạng `ID260824081007935` (`ID<yymmddhhmmssSSS>`) — giữ nguyên khi nhập.
+- `Người thực hiện` và `Quản lý dự án` lưu **họ tên**, không phải email ⇒ dò người theo tên,
+  không dò ra thì để `assignee_id = NULL` + giữ `assignee_name`, và **ghi vào báo cáo**.

@@ -9,6 +9,12 @@ pg.types.setTypeParser(1082, (v) => v);
 // bigint (OID 20): trả chuỗi thì an toàn về giá trị nhưng phiền khi so sánh. Id của hệ này
 // không bao giờ vượt 2^53 nên đổi sang Number cho dễ dùng.
 pg.types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
+// MẢNG bigint (OID 1016) là kiểu RIÊNG: đặt parser cho OID 20 KHÔNG áp cho nó. Bỏ dòng này thì
+// `array_agg(id)` trả về ['1','2'] — so sánh id bằng === sẽ luôn sai mà không có lỗi nào hiện ra.
+const parseBigintArray = pg.types.getTypeParser(1016);
+pg.types.setTypeParser(1016, (v) =>
+  v === null ? null : parseBigintArray(v).map((x) => (x === null ? null : Number(x)))
+);
 
 export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,

@@ -91,7 +91,7 @@ describe('001_init — lược đồ', () => {
       'Phó Giám đốc',
       'Trưởng phòng',
       'Phó phòng',
-      'Quản lý dự án',
+      'Quản lý công việc',
       'Nhân viên',
     ]) {
       await expect(
