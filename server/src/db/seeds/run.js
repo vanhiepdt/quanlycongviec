@@ -39,10 +39,21 @@ export async function runSeed(fileName = 'dev.sql') {
   const dbName = assertSafeTarget();
   const sql = await readFile(resolve(HERE, fileName), 'utf8');
   await query(sql);
+  // Đếm cả phần nghiệp vụ: người chạy seed cần thấy ngay là dữ liệu mẫu có công việc và nhiệm
+  // vụ để bấm thử, không phải chỉ có tài khoản.
   const { rows } = await query(
     `SELECT (SELECT count(*) FROM departments)         AS departments,
-            (SELECT count(*) FROM users)              AS users,
-            (SELECT count(*) FROM department_managers) AS managers`
+            (SELECT count(*) FROM users)               AS users,
+            (SELECT count(*) FROM department_managers) AS managers,
+            (SELECT count(*) FROM works)               AS works,
+            (SELECT count(*) FROM work_items WHERE level = 2) AS subworks,
+            (SELECT count(*) FROM work_items WHERE level = 3) AS tasks,
+            (SELECT count(*) FROM reminders)           AS reminders,
+            (SELECT count(*) FROM proposals)           AS proposals,
+            (SELECT count(*) FROM apps)                AS apps,
+            (SELECT count(*) FROM chat_messages)       AS chats,
+            (SELECT count(*) FROM notifications)       AS notifications,
+            (SELECT count(*) FROM activity_logs)       AS logs`
   );
   return { dbName, ...rows[0] };
 }
@@ -52,9 +63,13 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   try {
     const r = await runSeed(process.argv[2] ?? 'dev.sql');
     process.stdout.write(
-      `[seed] xong trên CSDL "${r.dbName}": ${r.departments} phòng, ${r.users} người dùng, ` +
-        `${r.managers} phân công quản lý.\n[seed] Mật khẩu mọi tài khoản mẫu: Test@12345 ` +
-        `(bị bắt đổi ở lần đăng nhập đầu).\n`
+      `[seed] xong trên CSDL "${r.dbName}":\n` +
+        `[seed]   ${r.departments} phòng, ${r.users} người dùng, ${r.managers} phân công quản lý\n` +
+        `[seed]   ${r.works} công việc, ${r.subworks} công việc con, ${r.tasks} nhiệm vụ, ` +
+        `${r.reminders} nhắc việc\n` +
+        `[seed]   ${r.proposals} đề nghị, ${r.apps} app, ${r.chats} tin nhắn, ` +
+        `${r.notifications} thông báo, ${r.logs} dòng nhật ký\n` +
+        `[seed] Mật khẩu mọi tài khoản mẫu: Test@12345 (bị bắt đổi ở lần đăng nhập đầu).\n`
     );
   } catch (err) {
     process.stderr.write(`[seed] lỗi: ${err.message}\n`);
