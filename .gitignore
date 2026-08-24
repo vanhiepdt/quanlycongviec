@@ -8,3 +8,19 @@ node_modules/
 temp.html
 *.tmp.gs
 unmapped_report.txt
+
+# ===== Bản VPS =====
+
+# Bí mật: mật khẩu CSDL, SESSION_SECRET, SMTP. Chỉ commit .env.example.
+.env
+deploy/.env
+*.env.local
+
+# Bản chụp dữ liệu thật xuất từ Google Sheets — có họ tên, email, mật khẩu thật.
+# Tuyệt đối không commit.
+data/*
+!data/.gitkeep
+
+# Đầu ra của test và build
+coverage/
+*.log
