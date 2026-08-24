@@ -654,10 +654,11 @@ WHERE NOT EXISTS (
 -- =====================================================================================
 -- Dữ liệu mẫu dùng mã ĐẶT TAY (CV001, DN005, APP004...) nên `next_code()` vẫn đang ở 1.
 -- Không đẩy sequence thì API Phase 3 tạo công việc đầu tiên sẽ sinh ra 'CV001' và đổ vì
--- trùng UNIQUE — lỗi này chỉ hiện khi bấm tạo mới, không test nào ở Phase 2 chạm tới.
+-- trùng UNIQUE — lỗi chỉ hiện khi bấm tạo mới, nên phải có test riêng: TC-SEED-22/23 gọi
+-- `next_code()` sau khi seed và đòi đúng CV010 / CV031 / DN006 / APP005 / NV014 / PH06.
 --
--- Dùng GREATEST chứ không setval thẳng: seed chạy lại sau khi Phase 3 đã tạo CV009 thì
--- setval(8) sẽ KÉO LÙI sequence và mã mới lại trùng lần nữa.
+-- Dùng GREATEST chứ không setval thẳng: seed chạy lại sau khi Phase 3 đã tạo CV010, CV011 thì
+-- setval(9) sẽ KÉO LÙI sequence và mã mới lại trùng lần nữa.
 SELECT setval('seq_department_code', GREATEST((SELECT last_value FROM seq_department_code),  5)),
        setval('seq_user_code',       GREATEST((SELECT last_value FROM seq_user_code),       13)),
        setval('seq_work_code',       GREATEST((SELECT last_value FROM seq_work_code),        9)),
