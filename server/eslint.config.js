@@ -9,7 +9,15 @@ export default [
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',
-      globals: { process: 'readonly', console: 'readonly', setTimeout: 'readonly', URL: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        URL: 'readonly',
+        // Buffer: dùng để đếm ĐỘ DÀI BYTE của mật khẩu (bcrypt cắt sau 72 byte) và để so chuỗi
+        // theo thời gian hằng ở cookies.js.
+        Buffer: 'readonly',
+      },
     },
     rules: {
       // Ba lỗi im lặng đã gặp ở bản Apps Script, nay là lỗi cứng:
