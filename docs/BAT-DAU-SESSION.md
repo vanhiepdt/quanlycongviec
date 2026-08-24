@@ -11,7 +11,7 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 
 | | |
 |---|---|
-| Nhánh đang làm | `vps/phase-1-auth` (tách từ `vps/phase-0-setup`) |
+| Nhánh đang làm | `vps/phase-2-import` (tách từ `vps/phase-1-auth`) — giữ nguyên tên đã khai ở §13 dù Phase 2 đã đổi hướng sang dữ liệu test tự tạo. **Toàn bộ công việc Phase 2 nằm ở nhánh này**, `vps/phase-1-auth` đang dừng ở `8aed2a8` |
 | Phase đã xong | **0**, **1** và **2** — Phase 1: 12/12 việc (xác thực, phiên, CSRF, RBAC, nhật ký, giới hạn tần suất) · Phase 2: **đã đổi hướng** sang dữ liệu test tự tạo, `tools/import-from-sheets.js` **bị bỏ hẳn** |
 | Test đang xanh | **322** trong 15 file (299 sau Phase 1 + 23 của Phase 2: 21 test `seed-dev` mở rộng + 2 test `seed-guard` chạy bằng tiến trình con) |
 | Phase kế tiếp | **3 — API công việc 3 tầng** (§7 Phase 3, 10 việc 3.1–3.10 + §8.4 nhóm **C**, TC-TREE-01..35). Đề nghị / App / Chat / Excel là **Phase 7**, không phải Phase 3 |
@@ -76,7 +76,8 @@ moveTaskToProject, duplicateProject, generateTaskIdForProject, filterLevel3Tasks
 NGƯỢC LẠI, tools/test-tasks-gd2.js (40 phép kiểm đang xanh) thì ĐỌC CẢ FILE: đó là đặc tả
 hành vi đã kiểm chứng của cây 3 tầng, việc của Phase 3 là port nó sang vitest + Postgres thật.
 
-TRẠNG THÁI: Phase 0, 1, 2 đã xong. 322 test xanh trong 15 file. Nhánh vps/phase-1-auth.
+TRẠNG THÁI: Phase 0, 1, 2 đã xong. 322 test xanh trong 15 file. Nhánh vps/phase-2-import
+(KHÔNG phải vps/phase-1-auth — nhánh đó dừng ở 8aed2a8, thiếu toàn bộ dữ liệu mẫu Phase 2).
 ĐÃ CÓ SẴN, ĐỪNG LÀM LẠI: src/config/env.js (14 biến, zod), src/db/pool.js (withTransaction,
 DATE trả về chuỗi YYYY-MM-DD), src/app.js (đã nối đủ attachSession → issueCsrfCookie →
 verifyCsrf → audit → /v1/auth → requirePasswordChanged), src/utils/logger.js,
@@ -96,8 +97,10 @@ CSDL ĐÃ LÀM SẴN PHẦN KHÓ, ĐỪNG VIẾT LẠI Ở TẦNG JS:
 - next_code('CV', 'seq_work_item_code') sinh mã; sequence đã được dev.sql đẩy qua CV030
 Việc của service là DỊCH lỗi CSDL thành mã lỗi §5.3 (PARENT_NOT_SUBWORK, PARENT_OTHER_WORK,
 SELF_PARENT, CYCLE, REMINDER_ON_SUBWORK...), không phải kiểm trùng lặp rồi bỏ trigger.
+
 VIỆC CỦA SESSION NÀY: làm trọn Phase 3 trên nhánh mới vps/phase-3-works (tách từ
-vps/phase-1-auth). Theo đúng §7 Phase 3, 10 việc:
+vps/phase-2-import — nhánh có sẵn dữ liệu mẫu, KHÔNG tách từ vps/phase-1-auth).
+Theo đúng §7 Phase 3, 10 việc:
 - 3.1 works CRUD + nhân bản: nhân bản kéo theo CẢ cây con, sinh mã mới, parent_id của bản sao
   trỏ vào BẢN SAO của cha chứ không trỏ về cây gốc (lỗi có sẵn ở bản cũ — TC-TREE-26/27)
 - 3.2 workItems CRUD: MỘT service cho cả cấp 2 và cấp 3, phân biệt bằng level
