@@ -68,6 +68,20 @@ export function client(app) {
       if (token !== null) req.set('x-csrf-token', token);
       return req.send(body);
     },
+    // PATCH và DELETE cũng là request ghi ⇒ cũng phải qua verifyCsrf. Dùng chung một đường lấy
+    // token với `post` để không có chỗ nào tự xoay token riêng.
+    async patch(url, body = {}, { csrf } = {}) {
+      const token = csrf === undefined ? await api.csrfToken() : csrf;
+      const req = agent.patch(url);
+      if (token !== null) req.set('x-csrf-token', token);
+      return req.send(body);
+    },
+    async del(url, body = {}, { csrf } = {}) {
+      const token = csrf === undefined ? await api.csrfToken() : csrf;
+      const req = agent.delete(url);
+      if (token !== null) req.set('x-csrf-token', token);
+      return req.send(body);
+    },
     /** Đăng nhập và trả nguyên phản hồi để test tự kiểm. */
     login(email, password = TEST_PASSWORD) {
       return api.post('/api/v1/auth/login', { email, password });

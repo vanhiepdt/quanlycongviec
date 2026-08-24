@@ -21,6 +21,20 @@ export const ERROR_STATUS = Object.freeze({
   ACCOUNT_LOCKED: 423,
   RATE_LIMITED: 429,
   INTERNAL: 500,
+
+  // --- Cây 3 tầng (Phase 3, §8.4 nhóm C) ---------------------------------------------------
+  // Tất cả là 400 "dữ liệu vào sai", trừ REMINDER_ON_SUBWORK: đặt nhắc việc cho công việc con
+  // không phải lỗi cú pháp mà là xung đột với quy tắc "chỉ Nhiệm vụ mới có nhắc việc" ⇒ 409.
+  PARENT_NOT_FOUND: 400, // TC-TREE-06 — mã cha không có trong CSDL
+  PARENT_NOT_SUBWORK: 400, // TC-TREE-04 — lấy nhiệm vụ cấp 3 làm cha
+  PARENT_OTHER_WORK: 400, // TC-TREE-05 — cha thuộc công việc khác
+  SELF_PARENT: 400, // TC-TREE-09 — tự trỏ vào chính mình
+  CYCLE: 400, // TC-TREE-10/11 — trỏ vào con cháu, hoặc dữ liệu đã vòng sẵn
+  LEVEL_IMMUTABLE: 400, // TC-TREE-08 — đổi cấp của dòng đã tạo
+  LVL2_NO_PARENT: 400, // TC-TREE-02 — công việc con không được có cha
+  MOVE_PARENT_HAS_CHILDREN: 400, // TC-TREE-16 — chuyển công việc con đang có nhiệm vụ
+  TARGET_WORK_NOT_FOUND: 400, // TC-TREE-19 — công việc đích không tồn tại
+  REMINDER_ON_SUBWORK: 409, // TC-TREE-28 — nhắc việc chỉ dành cho cấp 3
 });
 
 export class AppError extends Error {
