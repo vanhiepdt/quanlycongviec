@@ -16,6 +16,13 @@ Phase 4 là XSS, không phải nghiệp vụ.**
 Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean.html` cũ (56 dòng có nhắc
 `innerHTML`, trong đó có cả chỗ ĐỌC). Con số phải soát thật là **474**.
 
+> **Cập nhật Phase 5 (việc 5.6).** Nhãn vàng "Chờ duyệt" thêm 5 chỗ gọi `pendingApprovalBadge(...)`
+> vào ba hàm vẽ (`createProjectCard`, `renderTasks`, `createTaskTableRowSimple`,
+> `createTaskListItem`) ⇒ **481 giá trị**, vẫn **70 chỗ ghi HTML** (không thêm `innerHTML` nào).
+> Năm chỗ này nằm trong danh sách "cố ý không bọc" của `xss-guard.test.js`: hàm trả về HTML đã
+> thoát sẵn, bọc thêm là hiện thẻ ra dưới dạng chữ. Hành vi thoát của chính nó do
+> `tests/unit/pending-badge.test.js` canh.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |
@@ -104,7 +111,8 @@ cd server && npx vitest run tests/unit/xss-guard.test.js tests/unit/xss-escape.t
   `"` và `'` lồng nhau nên mọi mẫu kiểu `[^"']*$` đều trượt — đúng nhóm nguy hiểm nhất).
 - `tests/unit/xss-guard.test.js` (TC-SEC-10…20) — chốt: không còn lỗ nào ngoài 8 chỗ ở §4, mọi
   `on*` dùng `escapeForInlineHandler`, mọi `href/src` qua `safeUrl`, không có thuộc tính thiếu dấu
-  bao, và hai con số 70/474. TC-SEC-18…20 soát `tests/fixtures/xss-mau.js` — file có lỗ **đã biết**
+  bao, và hai con số 70/481 (474 của việc 4.6 + 5 nhãn vàng của việc 5.6). TC-SEC-18…20 soát
+  `tests/fixtures/xss-mau.js` — file có lỗ **đã biết**
   — để một bộ soát bị hỏng không thể báo "xanh" oan.
 - `tests/unit/xss-escape.test.js` (TC-SEC-21…34) — hành vi thật trong jsdom: đọc
   `getAttribute('onclick')` rồi **chạy** đoạn mã đó, đòn tấn công phải đến nơi dưới dạng dữ liệu và

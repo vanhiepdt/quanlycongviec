@@ -43,6 +43,7 @@ export default [
       'tests/unit/api-bridge.test.js',
       'tests/unit/change-password-modal.test.js',
       'tests/unit/xss-escape.test.js',
+      'tests/unit/pending-badge.test.js',
     ],
     languageOptions: {
       globals: {
