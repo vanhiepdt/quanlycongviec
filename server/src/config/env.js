@@ -48,6 +48,10 @@ const optional = {
   DB_POOL_MAX: intIn(1, 100).default('10'),
   DB_STATEMENT_TIMEOUT_MS: intIn(100, 600000).default('15000'),
   CRON_OVERDUE: z.string().default('0 7 * * *'),
+  // Cờ tắt lịch chạy (§7 việc 5.8). MẶC ĐỊNH TẮT chứ không bật: staging và máy dev dùng chung
+  // một CSDL bản sao, hai container cùng bật lịch là hai lượt thông báo trùng cho mỗi người.
+  // Production bật tường minh trong `deploy/.env`.
+  CRON_ENABLED: boolFromString.default('false'),
   MAIL_ENABLED: boolFromString.default('false'),
   SMTP_HOST: z.string().default(''),
   SMTP_PORT: intIn(1, 65535).default('587'),

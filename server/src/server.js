@@ -3,6 +3,7 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { closePool, query } from './db/pool.js';
+import { batLichChay, dungLichChay } from './services/cron.js';
 import { logger } from './utils/logger.js';
 
 const app = createApp();
@@ -23,8 +24,13 @@ const server = app.listen(env.PORT, () => {
   );
 });
 
+// Lịch chạy bật SAU khi cổng đã mở: một lượt quét hỏng không được ngăn máy chủ phục vụ người
+// dùng. `batLichChay` tự xem cờ `CRON_ENABLED`, ở đây không kiểm lại (§7 việc 5.8).
+batLichChay();
+
 function shutdown(signal) {
   logger.info({ signal }, 'Đang tắt máy chủ');
+  dungLichChay();
   server.close(async () => {
     await closePool();
     process.exit(0);
