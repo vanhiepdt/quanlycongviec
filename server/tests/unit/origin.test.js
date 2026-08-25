@@ -1,4 +1,4 @@
-// Suy nguồn gốc và tính khác biệt hai lần lưu — hàm thuần, không cần CSDL (§2.3).
+// Suy nguồn gốc và tính khác biệt hai lần lưu — hàm thuần, không cần CSDL (§2.3, TC-ORIGIN-15).
 import { describe, expect, it } from 'vitest';
 import { deriveOrigin, diffRows, originOf } from '../../src/utils/origin.js';
 
