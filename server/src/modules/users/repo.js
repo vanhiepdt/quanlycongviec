@@ -142,6 +142,17 @@ export async function findIdsByFullName(fullName, client = null) {
   return rows;
 }
 
+/** Nhiều người theo danh sách id (dùng để hiện tên danh sách lãnh đạo phòng đã chọn). */
+export async function listByIds(ids, client = null) {
+  const clean = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n));
+  if (clean.length === 0) return [];
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ANY($1::bigint[]) ORDER BY id`,
+    [clean]
+  );
+  return rows;
+}
+
 /** Băm mật khẩu của một người — chỉ dùng cho đổi mật khẩu (cần so mật khẩu cũ). */
 export async function findPasswordHash(id, client = null) {
   const { rows } = await db(client).query('SELECT password_hash FROM users WHERE id = $1', [id]);

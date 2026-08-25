@@ -29,6 +29,11 @@ export const COL = Object.freeze({
   P_APPROVER: 'Người duyệt',
   P_APPROVED_DATE: 'Ngày duyệt',
   P_REJECT_REASON: 'Lý do từ chối',
+  // Phân công ba lớp (005_phan_cong.sql) — khoá MỚI, không tồn tại trong bảng Sheets cũ nên
+  // đặt tên theo từ vựng hiện hành, không cần giữ tên cột cũ.
+  P_DEPT_ID: 'ID phòng',
+  P_SUP: 'Ban lãnh đạo kiểm soát',
+  P_LEADERS: 'Lãnh đạo phòng phụ trách',
   T_ID: 'Mã nhiệm vụ',
   T_PID: 'Mã dự án',
   T_NAME: 'Tên nhiệm vụ',
@@ -48,6 +53,8 @@ export const COL = Object.freeze({
   T_REMINDERS: 'Nhắc việc',
   T_LEVEL: 'Cấp',
   T_PARENT: 'Mã cha',
+  T_SUP: 'Ban lãnh đạo kiểm soát',
+  T_LEADERS: 'Lãnh đạo phòng phụ trách',
   T_APPROVAL: 'Trạng thái duyệt',
   T_APPROVER: 'Người duyệt',
   T_APPROVED_DATE: 'Ngày duyệt',
@@ -88,6 +95,19 @@ function numberOrUndefined(value) {
 }
 
 /**
+ * Ô "Lãnh đạo phòng phụ trách" của form là MỘT `<input type="hidden">` chứa các id phân tách
+ * dấu phẩy (checkbox cập nhật), vì `FormData` vòng lặp của `handleAdd` chỉ giữ giá trị cuối.
+ * `""` ⇒ `[]`: form luôn gửi trường này khi người dùng được sửa phân công — rỗng là chủ ý xoá hết.
+ */
+function leaderIdsFromForm(value) {
+  if (value === '' || value == null) return [];
+  return String(value)
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+/**
  * Payload GHI của `#project-form` → thân request `/api/v1/works`.
  *
  * Form chỉ có 6 trường (`name`, `description`, `manager`, `startDate`, `endDate`, `status`);
@@ -99,6 +119,10 @@ export function projectFromLegacy(data = {}) {
     name: pick(data, 'name'),
     description: pick(data, 'description'),
     managerName: pick(data, 'manager'),
+    // Ô phòng mới của form (yêu cầu 2026-08-26): `""` = "Công việc chung" ⇒ không ghi ⇒ NULL.
+    departmentId: numberOrUndefined(pick(data, 'departmentId')),
+    supervisorId: numberOrUndefined(pick(data, 'supervisorId')),
+    leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
     endDate: Object.hasOwn(data, 'endDate') ? dateOrNull(data.endDate) : undefined,
     status: pick(data, 'status'),
@@ -120,6 +144,10 @@ export function taskFromLegacy(data = {}) {
     name: pick(data, 'name'),
     description: pick(data, 'description'),
     assigneeName: pick(data, 'assignee'),
+    // Phân công ba lớp (005_phan_cong.sql): cấp 2 có cả hai ô; nhiệm vụ chỉ có leader — máy chủ
+    // chặn supervisor khác rỗng ở service nên cứ truyền nguyên những gì form gửi.
+    supervisorId: numberOrUndefined(pick(data, 'supervisorId')),
+    leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     status: pick(data, 'status'),
     priority: pick(data, 'priority'),
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
@@ -213,6 +241,7 @@ function dayOf(value) {
  */
 export function projectToLegacy(row, ctx = {}) {
   const deptNameById = ctx.deptNameById ?? new Map();
+  const nameById = ctx.nameById ?? new Map();
   return {
     [COL.P_ID]: row.code,
     [COL.P_NAME]: row.name ?? '',
@@ -222,6 +251,12 @@ export function projectToLegacy(row, ctx = {}) {
     [COL.P_END]: row.end_date ?? '',
     [COL.P_STATUS]: row.status ?? '',
     [COL.P_DEPT]: deptNameById.get(row.department_id) ?? '',
+    // Phân công ba lớp: id để form điền sẵn select, tên để modal chi tiết hiển thị.
+    [COL.P_DEPT_ID]: row.department_id ?? '',
+    [COL.P_SUP]: nameById.get(row.supervisor_id) ?? '',
+    supervisorId: row.supervisor_id ?? '',
+    [COL.P_LEADERS]: (row.leader_ids ?? []).map((id) => nameById.get(id) ?? `#${id}`).join(', '),
+    leaderIds: [...(row.leader_ids ?? [])],
     [COL.P_MANAGER_EMAIL]: ctx.emailById?.get(row.manager_id) ?? '',
     [COL.P_APPROVAL]: row.approval_status ?? '',
     [COL.P_APPROVER]: ctx.nameById?.get(row.approver_id) ?? '',
@@ -251,6 +286,11 @@ export function taskToLegacy(row, ctx = {}) {
     [COL.T_NAME]: row.name ?? '',
     [COL.T_DESC]: row.description ?? '',
     [COL.T_ASSIGNEE]: row.assignee_name ?? '',
+    // Phân công ba lớp: nhiệm vụ chỉ có "Lãnh đạo phòng phụ trách" (một người); cấp 2 có cả hai.
+    [COL.T_SUP]: ctx.nameById?.get(row.supervisor_id) ?? '',
+    supervisorId: row.supervisor_id ?? '',
+    [COL.T_LEADERS]: (row.leader_ids ?? []).map((id) => ctx.nameById?.get(id) ?? `#${id}`).join(', '),
+    leaderIds: [...(row.leader_ids ?? [])],
     [COL.T_ASSIGNEE_EMAIL]: ctx.emailById?.get(row.assignee_id) ?? '',
     [COL.T_STATUS]: row.status ?? '',
     [COL.T_PRIORITY]: row.priority ?? '',

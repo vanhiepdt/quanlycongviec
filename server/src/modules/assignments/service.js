@@ -8,9 +8,12 @@
 // Từ vựng (§0.1): Công việc = cấp 1 · Công việc con = cấp 2 · Nhiệm vụ = cấp 3.
 import { AppError } from '../../utils/errors.js';
 import * as deptRepo from '../departments/repo.js';
+import * as itemsRepo from '../workItems/repo.js';
 import * as usersRepo from '../users/repo.js';
 
 const err = (code, message, extra = {}) => new AppError(code, message, extra);
+
+const LEVEL_SUBWORK = 2;
 
 /** Hai vai được làm Ban lãnh đạo kiểm soát, khớp CHÍNH XÁC cột users.role (bẫy includes, §13.5). */
 const VAI_KIEM_SOAT = Object.freeze(['admin', 'Phó Giám đốc']);
@@ -146,4 +149,23 @@ export async function assertTaskLeader(taskLeaderIds, source, client = null) {
       { field: 'leaderIds' }
     );
   }
+}
+
+/**
+ * Ứng viên "Lãnh đạo phòng phụ trách" CHO NHIỆM VỤ trên form: nếu nhiệm vụ nằm trong công việc
+ * con (`parentRef` là mã/id cấp 2) thì nguồn = `leader_ids` của chính công việc con đó; nếu thuộc
+ * cha trực tiếp thì nguồn = Phó GĐ phụ trách phòng (công việc chung ⇒ supervisor + admin).
+ * Trả cùng hình dạng `{supervisors, leaders}` với `listCandidates` để form vẽ không phân biệt nguồn.
+ */
+export async function listTaskCandidates({ departmentId = null, parentRef = null }, client = null) {
+  if (parentRef != null && String(parentRef).trim() !== '') {
+    const parent = await itemsRepo.findByRef(String(parentRef).trim(), client);
+    if (parent && Number(parent.level) === LEVEL_SUBWORK) {
+      const people = await usersRepo.listByIds(parent.leader_ids ?? [], client);
+      const leaders = people.map((p) => ({ id: Number(p.id), name: p.full_name }));
+      return { supervisors: [], leaders, defaultLeaderId: leaders[0]?.id ?? null };
+    }
+  }
+  const opts = await listCandidates(departmentId, client);
+  return { ...opts, defaultLeaderId: opts.leaders[0]?.id ?? null };
 }

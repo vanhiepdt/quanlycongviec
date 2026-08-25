@@ -85,7 +85,14 @@ departmentsRouter.get('/assignment-options', async (req, res, next) => {
     if (departmentId !== null && !Number.isInteger(departmentId)) {
       throw new AppError('VALIDATION_ERROR', 'Mã phòng không hợp lệ', { field: 'departmentId' });
     }
-    return ok(res, await assignments.listCandidates(departmentId));
+    // `parentRef` có mặt khi form NHIỆM VỤ hỏi nguồn leader: nhiệm vụ nằm trong công việc con
+    // thì nguồn là leader_ids của chính công việc con đó (005_phan_cong.sql).
+    const parentRaw = req.query.parentRef;
+    const parentRef =
+      parentRaw === undefined || parentRaw === null || String(parentRaw).trim() === ''
+        ? null
+        : String(parentRaw);
+    return ok(res, await assignments.listTaskCandidates({ departmentId, parentRef }));
   } catch (err) {
     return next(err);
   }
