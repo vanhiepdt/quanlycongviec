@@ -11,9 +11,9 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 
 | | |
 |---|---|
-| Nhánh đang làm | `vps/phase-6-stats` (tách từ `vps/phase-5-approval`, HEAD `3df2e44`) — **toàn bộ Phase 6 nằm ở nhánh này**. Nhánh trước: `vps/phase-5-approval` dừng ở `5e89293`, `vps/phase-4-frontend` ở `d99759f` |
-| Phase đã xong | **0**, **1**, **2**, **3**, **4**, **5** và **6** — Phase 6: 9/9 việc (6.1 summary · 6.2 charts ×6 · 6.3 activities phân trang · 6.4 lọc tháng giao nhau · 6.5 ép phòng ở server · 6.6 gantt nhóm 3 kiểu · 6.7 chọn 1/2/3 tháng · 6.8 thu gọn localStorage · 6.9 đối chiếu chênh 0) **+ trả nợ N+1 của `getTasks`**. RPC vẫn **27 chạy / 10 còn 501** |
-| Test đang xanh | **879** trong 49 file, lint + `format:check` sạch. Pin XSS mới: **74 chỗ / 541 giá trị** (`docs/XSS-4.6.md`) |
+| Nhánh đang làm | `vps/tinh-nang-phan-cong` (tách từ `vps/phase-6-stats`, HEAD `b2e65f1`) — **Phase 6 + tính năng phân công ba lớp** (yêu cầu người dùng 2026-08-26). Nhánh trước: `vps/phase-6-stats` dừng ở `b2e65f1`, `vps/phase-5-approval` ở `5e89293` |
+| Phase đã xong | **0**–**6** (6/9 việc Phase 6 + trả nợ N+1 `getTasks`; RPC **27 chạy / 10 còn 501**) **+ tính năng ngoài kế hoạch**: phân công ba lớp — migration `005_phan_cong.sql` (`works`/`work_items` thêm `supervisor_id`, `leader_ids`, CHECK `task_leader_single`), module `assignments/service.js` (nguồn ứng viên + chặn sai nguồn), endpoint `GET /departments/assignment-options`, cầu RPC mang trường mới, giao diện form/modal |
+| Test đang xanh | **898** trong 50 file, lint + `format:check` sạch. Pin XSS mới: **77 chỗ / 555 giá trị** (`docs/XSS-4.6.md`) |
 | Phase kế tiếp | **7 — đề nghị, quản lý app, chat, xuất Excel** (§7 việc 7.1–7.6; §8.4 nhóm G TC-MISC-01..13; khói R8–R12). Prompt dán sẵn ở mục 3 |
 | Còn treo | **D3–D8 UI**: máy chủ REST `/approvals/.../{submit,approve,reject}` + `pending-count` có từ Phase 5; `app.js` chưa có nút trên cây — **không** tự làm trừ khi người dùng yêu cầu. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt** trên mảng đã do server chạm phạm vi (muốn server-side thì thêm `GET /stats/items`); Gantt nhóm `assignee` đưa công việc vào nhóm MỖI người có nhiệm vụ trong đó và hiện toàn cây con (sửa `nhomTheoAssignee` nếu muốn chỉ hiện nhánh). **R8–R12** đề nghị/chat/app/Excel + `addNotificationWithAuth` = Phase 7 |
 | Đang chờ người dùng | **KHÔNG còn câu nào.** |
@@ -72,23 +72,29 @@ TRƯỚC KHI LÀM BẤT CỨ VIỆC GÌ:
    test chèn tay mã viết cứng không nhích sequence ⇒ API tạo mới 409 IM LẶNG nếu không assert
    status; audit ghi SAU phản hồi nên test đếm activity_logs phải chờ + lấy mốc động; PowerShell
    Get-Content|Set-Content hỏng UTF-8 không BOM (node --check vẫn xanh!); helper trả HTML phải
-   tên create*/build*/render* với pin TC-SEC-17 = 74 chỗ / 541 giá trị.
+   tên create*/build*/render* với pin TC-SEC-17 = 77 chỗ / 555 giá trị; app.js dùng CRLF và giữ
+   chuỗi HTML trong string literal (mọi \" và \n là 2 ký tự raw) — sửa bằng script node có guard
+   chống chạy lặp, đừng replace tay; view v_countable_* tạo bằng SELECT * nên thêm cột mới phải
+   CREATE OR REPLACE VIEW trong migration (đã làm trong 005).
 3. Đọc §7 Phase 7 — 6 việc 7.1–7.6. Đọc §8.4 nhóm G (TC-MISC-01..13), §5.2 (10 tên pending),
    §2.7/§2.8/§2.9/§2.13 khi cần. Không đọc cả §7, không đọc cả §8.
 4. Đọc docs/UAT.md phần "Checklist khói §8.5" — lượt Phase 6 (2026-08-25, HEAD 3df2e44):
-   49 ✅ · 0 ❌ · 10 ⏳ · 1 —. Phase 7 phải đưa R8–R11 (+R12 xuất Excel) sang xanh. Đừng tô
-   xanh D3–D8 — nút Duyệt trên cây là UI riêng, chưa ai yêu cầu.
+   49 ✅ · 0 ❌ · 10 ⏳ · 1 —; lượt sau tính năng phân công (2026-08-26, nhánh
+   vps/tinh-nang-phan-cong) vẫn xanh tương đương trên CSDL UAT đã migrate 005. Phase 7 phải đưa
+   R8–R11 (+R12 xuất Excel) sang xanh. Đừng tô xanh D3–D8 — nút Duyệt trên cây là UI riêng,
+   chưa ai yêu cầu.
 5. Đọc docs/BAT-DAU-SESSION.md mục 4 và 5 (lệnh chạy + bẫy máy + quy ước code).
 
-KHÔNG đọc tràn Code.gs.moi (3645 dòng) và web/assets/js/app.js (~4000 dòng) — đây là
+KHÔNG đọc tràn Code.gs.moi (3645 dòng) và web/assets/js/app.js (~4300 dòng) — đây là
 nguyên nhân cháy ngữ cảnh phổ biến nhất của dự án này. Cần biết giao diện gọi gì thì Grep:
 "getProposals", "addProposalWithAuth", "addApp", "getChatMessages", "sendChatMessage",
 "renderProposals", "renderApps", "proposal", "chat". Việc quét rộng thì giao subagent và
 chỉ nhận danh sách kết luận.
 
-TRẠNG THÁI: Phase 0–6 đã xong. 879 test xanh trong 49 file, lint + format:check sạch.
-Nhánh vps/phase-6-stats (HEAD 3df2e44) — Phase 7 tách nhánh mới vps/phase-7-misc TỪ
-vps/phase-6-stats (không tách từ nhánh khác).
+TRẠNG THÁI: Phase 0–6 đã xong + tính năng phân công ba lớp đã xong. 898 test xanh trong
+50 file, lint + format:check sạch. Nhánh vps/tinh-nang-phan-cong — Phase 7 tách nhánh mới
+vps/phase-7-misc TỪ vps/tinh-nang-phan-cong (nó chứa cả Phase 6 lẫn phân công; không tách từ
+nhánh khác).
 
 ĐÃ CÓ SẴN, ĐỪNG LÀM LẠI:
 - Hai view v_countable_works / v_countable_items (việc 5.4) — thống kê xuất Excel (mẫu c,
