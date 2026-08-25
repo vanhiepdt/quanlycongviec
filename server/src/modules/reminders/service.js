@@ -7,10 +7,11 @@
 //
 // Hai chỗ khác bản cũ, mỗi chỗ sửa một lỗi thật:
 //  1. **Quyền**: bản cũ chỉ cho `admin` thêm/sửa/xoá nhắc việc ("Chỉ Admin mới có quyền thêm nhắc
-//     việc", Code.gs.moi:2136). Quyết định của người dùng (§13.4 mục 13): **admin + Trưởng phòng /
-//     Phó phòng CỦA PHÒNG ĐÓ**. Nhắc việc là công cụ điều hành của lãnh đạo phòng, không phải ghi
-//     chú cá nhân của người thực hiện — nên KHÔNG dùng "ai sửa được nhiệm vụ thì đặt được", vì thế
-//     thì Nhân viên tự nhắc việc của mình được (giả định cũ của Phase 3, đã bị thay).
+//     việc", Code.gs.moi:2136). Quyết định của người dùng (§13.4 mục 13, nới ở mục 15 ngày
+//     2026-08-25): **admin + Phó Giám đốc phụ trách phòng đó + Trưởng phòng / Phó phòng CỦA PHÒNG
+//     ĐÓ**. Nhắc việc là công cụ điều hành của lãnh đạo phòng, không phải ghi chú cá nhân của
+//     người thực hiện — nên KHÔNG dùng "ai sửa được nhiệm vụ thì đặt được", vì thế thì Nhân viên
+//     tự nhắc việc của mình được (giả định cũ của Phase 3, đã bị thay).
 //     Xem `assertCanManage`: đọc thì mở theo §6, còn ghi thì hẹp hơn ma trận §6.
 //  2. **Nhắc việc phải thuộc đúng nhiệm vụ trong đường dẫn**: sửa/xoá theo `reminderId` mà không
 //     đối chiếu `work_item_id` thì người có quyền trên nhiệm vụ A xoá được nhắc việc của nhiệm vụ
@@ -30,26 +31,34 @@ function assertCan(user, action, item) {
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
 }
 
-/** Hai vai được đặt nhắc việc trong phòng mình (§13.4 mục 13). `admin` xét riêng: không theo phòng. */
-const VAI_DAT_NHAC_VIEC = Object.freeze(['Trưởng phòng', 'Phó phòng']);
+/**
+ * Ba vai lãnh đạo được đặt nhắc việc trong phạm vi phòng của mình (§13.4 mục 13 + mục 15).
+ * `admin` xét riêng: không theo phòng.
+ *
+ * `Phó Giám đốc` vào danh sách này ngày 2026-08-25 (§13.4 mục 15) và KHÔNG cần thêm dòng nào để
+ * giới hạn "phòng đấy": `inScope()` đã bó vai này theo `user.managedDepartmentIds`, tức chỉ các
+ * phòng có dòng `department_managers.role = 'deputy_director'` (rbac.js:161).
+ */
+const VAI_DAT_NHAC_VIEC = Object.freeze(['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng']);
 
 /**
  * Cổng ghi của nhắc việc — HẸP HƠN ma trận §6, cố ý.
  *
  * Gọi `can(..., 'update', ...)` trước để giữ đúng các mã lỗi chung (`UNAUTHENTICATED`,
  * `ACCOUNT_DISABLED`, vai trò lạ) và để `inScope()` lo phần "đúng phòng mình" — nhờ vậy Trưởng
- * phòng của phòng KHÁC bị chặn ở đó, không cần so `department_id` lần thứ hai ở đây.
+ * phòng của phòng KHÁC (và Phó Giám đốc không phụ trách phòng đó) bị chặn ở đó, không cần so
+ * `department_id` lần thứ hai ở đây.
  *
- * Sau đó siết theo vai: `Phó Giám đốc` và `Quản lý công việc` **không** đặt được nhắc việc dù §6
- * cho họ sửa nhiệm vụ, và `Nhân viên` không tự nhắc việc của mình được. Muốn nới cho `Phó Giám
- * đốc` thì thêm vai vào `VAI_DAT_NHAC_VIEC` và đảo 2 phép kiểm trong `reminders-api.test.js`.
+ * Sau đó siết theo vai: `Quản lý công việc` **không** đặt được nhắc việc dù §6 cho họ sửa nhiệm
+ * vụ, và `Nhân viên` không tự nhắc việc của mình được. Muốn đổi danh sách vai thì sửa
+ * `VAI_DAT_NHAC_VIEC` rồi đảo phép kiểm tương ứng trong `reminders-api.test.js`.
  */
 function assertCanManage(user, item) {
   assertCan(user, 'update', item);
   if (user.role === 'admin' || VAI_DAT_NHAC_VIEC.includes(user.role)) return;
   throw new AppError(
     'FORBIDDEN',
-    'Chỉ Admin, Trưởng phòng hoặc Phó phòng của phòng đó mới đặt được nhắc việc'
+    'Chỉ Admin, Phó Giám đốc phụ trách phòng, Trưởng phòng hoặc Phó phòng của phòng đó mới đặt được nhắc việc'
   );
 }
 

@@ -4,7 +4,8 @@
 //   1. Nhắc việc CHỈ gắn được vào Nhiệm vụ cấp 3; gọi trên Công việc con phải báo rõ (bản cũ còn
 //      nợ chỗ này nên cấp 2 vẫn lọt, mục C10).
 //   2. Nhắc việc của nhiệm vụ này không sửa/xoá được qua đường dẫn của nhiệm vụ khác.
-//   3. Ai được đặt nhắc việc: **Admin + Trưởng phòng / Phó phòng của phòng đó** (§13.4 mục 13).
+//   3. Ai được đặt nhắc việc: **Admin + Phó Giám đốc PHỤ TRÁCH phòng đó + Trưởng phòng / Phó phòng
+//      của phòng đó** (§13.4 mục 13, nới cho Phó Giám đốc ở mục 15 ngày 2026-08-25).
 //      Bản cũ chỉ cho admin (Code.gs.moi:2136); Phase 3 tạm nới thành "ai sửa được nhiệm vụ";
 //      người dùng chốt ở giữa, nên phép kiểm "Nhân viên tự nhắc việc của mình" đã bị ĐẢO.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -207,7 +208,7 @@ describe('GET / PATCH / DELETE — đọc, sửa, xoá nhắc việc', () => {
     expect((await api.get(url(other.code))).body.data.reminders).toEqual([]);
   });
 });
-describe('Quyền đặt nhắc việc (§13.4 mục 13)', () => {
+describe('Quyền đặt nhắc việc (§13.4 mục 13 + mục 15)', () => {
   let staff;
   let mine;
 
@@ -229,7 +230,7 @@ describe('Quyền đặt nhắc việc (§13.4 mục 13)', () => {
 
   // Đây là phép kiểm ĐÃ ĐẢO so với Phase 3. Phase 3 chạy theo giả định "nhắc việc là một phần của
   // nhiệm vụ, ai sửa được nhiệm vụ thì đặt được nhắc việc", nên Nhân viên tự nhắc việc của mình
-  // được. Người dùng chốt hẹp hơn: chỉ Admin + Trưởng/Phó phòng của phòng đó. Giữ nguyên phần
+  // được. Người dùng chốt hẹp hơn: chỉ Admin + lãnh đạo phụ trách phòng đó. Giữ nguyên phần
   // "đọc vẫn được" — siết quyền GHI không được làm mất quyền XEM lời nhắc của việc mình đang làm.
   it('Nhân viên KHÔNG tự đặt được nhắc việc cho nhiệm vụ CỦA MÌNH ⇒ 403, nhưng vẫn đọc được', async () => {
     const asStaff = client(app);
@@ -282,6 +283,52 @@ describe('Quyền đặt nhắc việc (§13.4 mục 13)', () => {
       expect({ role, status: res.status }).toEqual({ role, status: 200 });
       expect(res.body.data.reminder.created_by).toBe(head.id);
     }
+  });
+
+  // §13.4 mục 15 (chốt 2026-08-25): nới thêm cho Phó Giám đốc, nhưng CHỈ ở phòng họ phụ trách.
+  // Không có dòng `department_managers` nào thì vai này không phụ trách phòng nào ⇒ vẫn 403, nên
+  // hai phép kiểm dưới đây phải đi thành đôi.
+  it('Phó Giám đốc PHỤ TRÁCH phòng đó đặt được nhắc việc (§13.4 mục 15)', async () => {
+    const pgd = await makeLoginUser({
+      code: 'NV040',
+      full_name: 'Phó Giám đốc E',
+      email: 'e@congty.vn',
+      role: 'Phó Giám đốc',
+      department_id: null,
+    });
+    await pool.query(
+      "INSERT INTO department_managers (department_id, user_id, role) VALUES ($1,$2,'deputy_director')",
+      [dept.id, pgd.id]
+    );
+    const asPgd = client(app);
+    await asPgd.login(pgd.email);
+    const res = await asPgd.post(url(mine.code), {
+      remindDate: '2026-09-09',
+      content: 'Phó Giám đốc nhắc',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.reminder.created_by).toBe(pgd.id);
+  });
+
+  it('Phó Giám đốc KHÔNG phụ trách phòng đó ⇒ 403 (chặn ở phạm vi, không phải ở vai)', async () => {
+    const other = await makeDepartment({ code: 'PH03', name: 'Phòng Kế hoạch', sort_order: 3 });
+    const pgd = await makeLoginUser({
+      code: 'NV041',
+      full_name: 'Phó Giám đốc F',
+      email: 'f@congty.vn',
+      role: 'Phó Giám đốc',
+      department_id: null,
+    });
+    await pool.query(
+      "INSERT INTO department_managers (department_id, user_id, role) VALUES ($1,$2,'deputy_director')",
+      [other.id, pgd.id]
+    );
+    const asPgd = client(app);
+    await asPgd.login(pgd.email);
+    const res = await asPgd.post(url(mine.code), { remindDate: '2026-09-09' });
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toMatch(/ngoài phạm vi/);
+    expect(await countRows()).toBe(0);
   });
 
   it('Trưởng phòng của phòng KHÁC ⇒ 403 (bị chặn ở phạm vi §6, không phải ở vai)', async () => {
