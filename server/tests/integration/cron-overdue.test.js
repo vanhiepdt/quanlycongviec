@@ -185,7 +185,17 @@ describe('quetQuaHan — không sinh thông báo trùng', () => {
     });
 
     await quetQuaHan({ now: HOM_NAY });
-    const maiSau = new Date('2026-08-26T07:00:00+07:00');
+    // Thông báo vừa tạo mang created_at = ĐỒNG HỒ THẬT, không phải `now` giả. Lùi nó về
+    // HOM_NAY để lần quét "sáng hôm sau" không bị bộ gộp trùng coi là đã nhắc HÔM NAY —
+    // nếu không thì test chỉ xanh khi chạy trước nửa đêm theo giờ thật.
+    await pool.query(
+      `UPDATE notifications SET created_at = $1
+        WHERE user_id = $2 AND type = $3`,
+      [HOM_NAY, nguoiLam.id, notiRepo.LOAI.QUA_HAN]
+    );
+
+    const maiSau = new Date(HOM_NAY);
+    maiSau.setDate(maiSau.getDate() + 1);
     const lan2 = await quetQuaHan({ now: maiSau });
 
     expect(lan2.daBao).toBe(1);

@@ -1771,6 +1771,7 @@ Nhóm công cụ và môi trường (lượt khói §8.5):
 | Helper trả HTML đặt tên tiếng Việt (`tao*Html`) | `xss-guard` xếp vào CAN-THOAT dù đã escape bên trong — pin đỏ 23 giá trị | đổi tên theo quy ước BUILDER: `createGanttToggleHtml`, `buildGanttCellHtml`, `renderGanttDaysHtml`…; builder nhận VĂN BẢN thô tự escape MỘT lần, caller đừng escape trước (tránh thoát hai lớp); thuộc tính id/class phát sinh cũng phải `escapeHtml` |
 | RPC `getDataForUser` trả cây GỒM mục Chờ duyệt (đúng việc 5.6) | Thuật toán cũ port vào test sẽ ĐẾM cả mục chờ duyệt nếu không lọc — tưởng REST mới sai | trong `stats-parity.test.js` lọc trước bằng port của `getFilteredProjects/TasksCu` (đúng luật UI hiện hành) rồi mới so |
 | `bash` trên máy này trúng **WSL** (`execvpe(/bin/bash) failed`) thay vì Git Bash | Bộ khói không chạy được, tưởng script hỏng | gọi đường dẫn rõ: `C:\Program Files\Git\bin\bash.exe tools/smoke-8.5.sh` |
+| Test cắm cứng «ngày mai» theo lịch kế hoạch (`new Date('2026-08-26T07:00+07')` — cron-overdue) trong khi thông báo insert mang **created_at = đồng hồ thật** | Đúng nửa đêm, ngày thật trùng «ngày mai» giả ⇒ bộ gộp trùng coi đã nhắc ⇒ đỏ ổn định sau 00:00, xanh trước đó — flake theo giờ chạy | lùi `created_at` về đồng hồ giả bằng UPDATE ngay trong test + suy «mai» từ `HOM_NAY`, không hardcode · đã vá trong `cron-overdue.test.js` |
 
 ### 13.6 Mở session mới — dán prompt là chạy
 
