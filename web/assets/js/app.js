@@ -433,7 +433,7 @@ function updatePageTitle() {
   if (pageTitleEl && currentUser) {
     const data = {
         overview: "Tổng Quan",
-        projects: "Quản lý Dự án",
+        projects: "Quản lý Công việc",
         tasks: "Quản lý Nhiệm vụ",
         staff: "Quản lý đối tượng"
       },
@@ -529,7 +529,7 @@ function setupEventListeners() {
         id = target.dataset.id;
       if (document.getElementById("project-details-modal") && type === "task") {
         const projectDetailsModalEl = document.getElementById("project-details-modal"),
-          text = projectDetailsModalEl.querySelector("h3").textContent.replace("Chi tiết dự án: ", ""),
+          text = projectDetailsModalEl.querySelector("h3").textContent.replace("Chi tiết công việc: ", ""),
           taskPid = allTasks.find(task => task[COL.T_ID] === id)?.[COL.T_PID];
         openedFromProjectDetails = {
           projectId: taskPid,
@@ -571,7 +571,7 @@ function setupEventListeners() {
       chatMessagesEl && chatMessagesEl.innerHTML.trim() === "" && loadChatMessagesAsync();
     }
   }), document.getElementById("total-projects")?.closest(".modern-stat-card")?.addEventListener("click", () => {
-    openStatListModal("project", "all", "Danh sách tất cả dự án");
+    openStatListModal("project", "all", "Danh sách tất cả công việc");
   }), document.getElementById("total-tasks")?.closest(".modern-stat-card")?.addEventListener("click", () => {
     openStatListModal("task", "all", "Danh sách tất cả nhiệm vụ");
   }), document.getElementById("active-tasks")?.closest(".modern-stat-card")?.addEventListener("click", () => {
@@ -719,7 +719,7 @@ function showProjectDetailsModal(projectId, projectName) {
     count4 = filteredTasks.filter(filteredTask => isTaskOverdue(filteredTask[COL.T_DUE]) && !(filteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
     filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
     num = filteredTaskCount > 0 ? Math.round(filteredTaskTotal / filteredTaskCount) : 0,
-    text = "\n    <div id=\"project-details-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-0 md:mx-4 h-full md:h-[90vh] flex flex-col p-0 rounded-none md:rounded-2xl\">\n            <!-- Header -->\n            <div class=\"flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10 sticky top-0 md:relative\">\n                <h3 class=\"text-lg md:text-xl font-bold text-gray-900 truncate pr-2\">Chi tiết dự án: " + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 p-2\">\n                    <i class=\"fas fa-times text-lg\"></i>\n                </button>\n            </div>\n            \n            <!-- Main Content -->\n            <div class=\"flex-1 overflow-y-auto md:overflow-hidden\">\n                <div class=\"grid grid-cols-1 lg:grid-cols-4 h-auto md:h-full divide-y lg:divide-y-0 lg:divide-x divide-gray-100\">\n                    \n                    <!-- Left Column: Stats -->\n                    <div class=\"p-3 md:p-6 h-auto md:h-full overflow-visible md:overflow-y-auto space-y-4 md:space-y-6 bg-gray-50/50\">\n                        <h4 class=\"font-semibold text-gray-800 hidden md:block\">Tổng quan</h4>\n                        \n                        <!-- Add Task Button (Moved to top) -->\n                        " + createSubworkFromWorkButtonHtml(projectId, projectName, "w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base mb-2", true) + "\n                        <button onclick=\"openTaskModalFromProject('" + escapeForInlineHandler(projectId) + "', '" + escapeForInlineHandler(projectName) + "')\" class=\"w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base\">\n                            <i class=\"fas fa-plus mr-2\"></i>Thêm nhiệm vụ\n                        </button>\n\n                        <!-- Stats Grid stacked -->\n                        <div class=\"grid grid-cols-2 lg:grid-cols-1 gap-2 md:gap-4\">\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Tổng nhiệm vụ</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-gray-700 leading-none\">" + escapeHtml(filteredTaskCount) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-list text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Hoàn thành</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-green-600 leading-none\">" + escapeHtml(count) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-check text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Đang thực hiện</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-blue-600 leading-none\">" + escapeHtml(count2) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-spinner text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Quá hạn</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-red-600 leading-none\">" + escapeHtml(count4) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-exclamation-triangle text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                        </div>\n\n                        <!-- Progress -->\n                        <div class=\"glass-card p-3 md:p-4\">\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <h4 class=\"font-semibold text-gray-700 text-sm md:text-base\">Tiến độ chung</h4>\n                                <span class=\"text-base md:text-lg font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                            </div>\n                            <div class=\"h-2 md:h-3 bg-gray-100 rounded-full overflow-hidden\">\n                                <div class=\"h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                            </div>\n                        </div>\n                    </div>\n\n                    <!-- Right Column: Tasks -->\n                    <div class=\"lg:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden\">\n                        <div class=\"flex-1 overflow-visible md:overflow-y-auto p-3 md:p-4 custom-scrollbar h-auto md:h-full\">\n                            " + (filteredTaskCount > 0 ? "<div class=\"grid grid-cols-2 md:grid-cols-2 xl:grid-cols-2 gap-2 md:gap-3\">\n                                    " + filteredTasks.map(filteredTask => createTaskListItem(filteredTask, true)).join("") + "\n                                </div>" : "<div class=\"h-40 md:h-full flex flex-col items-center justify-center text-gray-400\">\n                                    <i class=\"fas fa-tasks text-3xl md:text-4xl mb-2 opacity-30\"></i>\n                                    <p class=\"text-sm md:text-base\">Chưa có nhiệm vụ nào</p>\n                                </div>") + "\n                        </div>\n                         <!-- Removed Bottom Actions -->\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n";
+    text = "\n    <div id=\"project-details-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-0 md:mx-4 h-full md:h-[90vh] flex flex-col p-0 rounded-none md:rounded-2xl\">\n            <!-- Header -->\n            <div class=\"flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10 sticky top-0 md:relative\">\n                <h3 class=\"text-lg md:text-xl font-bold text-gray-900 truncate pr-2\">Chi tiết công việc: " + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 p-2\">\n                    <i class=\"fas fa-times text-lg\"></i>\n                </button>\n            </div>\n            \n            <!-- Main Content -->\n            <div class=\"flex-1 overflow-y-auto md:overflow-hidden\">\n                <div class=\"grid grid-cols-1 lg:grid-cols-4 h-auto md:h-full divide-y lg:divide-y-0 lg:divide-x divide-gray-100\">\n                    \n                    <!-- Left Column: Stats -->\n                    <div class=\"p-3 md:p-6 h-auto md:h-full overflow-visible md:overflow-y-auto space-y-4 md:space-y-6 bg-gray-50/50\">\n                        <h4 class=\"font-semibold text-gray-800 hidden md:block\">Tổng quan</h4>\n                        \n                        <!-- Add Task Button (Moved to top) -->\n                        " + createSubworkFromWorkButtonHtml(projectId, projectName, "w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base mb-2", true) + "\n                        <button onclick=\"openTaskModalFromProject('" + escapeForInlineHandler(projectId) + "', '" + escapeForInlineHandler(projectName) + "')\" class=\"w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base\">\n                            <i class=\"fas fa-plus mr-2\"></i>Thêm nhiệm vụ\n                        </button>\n\n                        <!-- Stats Grid stacked -->\n                        <div class=\"grid grid-cols-2 lg:grid-cols-1 gap-2 md:gap-4\">\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Tổng nhiệm vụ</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-gray-700 leading-none\">" + escapeHtml(filteredTaskCount) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-list text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Hoàn thành</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-green-600 leading-none\">" + escapeHtml(count) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-check text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Đang thực hiện</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-blue-600 leading-none\">" + escapeHtml(count2) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-spinner text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Quá hạn</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-red-600 leading-none\">" + escapeHtml(count4) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-exclamation-triangle text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                        </div>\n\n                        <!-- Progress -->\n                        <div class=\"glass-card p-3 md:p-4\">\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <h4 class=\"font-semibold text-gray-700 text-sm md:text-base\">Tiến độ chung</h4>\n                                <span class=\"text-base md:text-lg font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                            </div>\n                            <div class=\"h-2 md:h-3 bg-gray-100 rounded-full overflow-hidden\">\n                                <div class=\"h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                            </div>\n                        </div>\n                    </div>\n\n                    <!-- Right Column: Tasks -->\n                    <div class=\"lg:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden\">\n                        <div class=\"flex-1 overflow-visible md:overflow-y-auto p-3 md:p-4 custom-scrollbar h-auto md:h-full\">\n                            " + (filteredTaskCount > 0 ? "<div class=\"grid grid-cols-2 md:grid-cols-2 xl:grid-cols-2 gap-2 md:gap-3\">\n                                    " + filteredTasks.map(filteredTask => createTaskListItem(filteredTask, true)).join("") + "\n                                </div>" : "<div class=\"h-40 md:h-full flex flex-col items-center justify-center text-gray-400\">\n                                    <i class=\"fas fa-tasks text-3xl md:text-4xl mb-2 opacity-30\"></i>\n                                    <p class=\"text-sm md:text-base\">Chưa có nhiệm vụ nào</p>\n                                </div>") + "\n                        </div>\n                         <!-- Removed Bottom Actions -->\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n";
   document.getElementById("modals-container").innerHTML = text;
   const projectDetailsModalEl = document.getElementById("project-details-modal");
   projectDetailsModalEl.classList.add("active");
@@ -818,7 +818,7 @@ function switchSection(sectionName) {
   }), document.querySelector("[data-section=\"" + sectionName + "\"]").classList.add("active");
   const data = {
     overview: "Tổng Quan",
-    projects: "Quản lý Dự án",
+    projects: "Quản lý Công việc",
     tasks: "Quản lý Nhiệm vụ",
     staff: "Quản lý đối tượng",
     departments: "Cấu hình phòng",
@@ -933,7 +933,7 @@ function renderTasks() {
   let text = "";
   sorted.forEach(sorted2 => {
     const project = allProjects.find(project2 => project2[COL.P_ID] === sorted2),
-      projectName = project ? project[COL.P_NAME] : "Dự án " + sorted2,
+      projectName = project ? project[COL.P_NAME] : "Công việc " + sorted2,
       projectStatus = project ? project[COL.P_STATUS] : "",
       projectManager = project ? project[COL.P_MANAGER] : "",
       text2 = project ? formatDateForDisplay(project[COL.P_START]) : "",
@@ -988,6 +988,10 @@ function renderStaff() {
   if (staffSupplierCountEl) staffSupplierCountEl.textContent = "(" + filteredStaff2.length + ")";
   filteredStaff.length === 0 ? staffUsersTbodyEl.innerHTML = "<tr><td colspan=\"5\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có người dùng</td></tr>" : staffUsersTbodyEl.innerHTML = filteredStaff.map(filteredStaff3 => createStaffTableRow(filteredStaff3, "user")).join(""), filteredStaff2.length === 0 ? staffSuppliersTbodyEl.innerHTML = "<tr><td colspan=\"3\" class=\"px-3 py-4 text-center text-gray-500\">Chưa có Nhà cung cấp</td></tr>" : staffSuppliersTbodyEl.innerHTML = filteredStaff2.map(filteredStaff22 => createStaffTableRow(filteredStaff22, "supplier")).join("");
 }
+/** Vai hiển thị: CSDL gọi 'Nhân viên' nhưng giao diện nói 'Cán bộ' (yêu cầu 2026-08-26). */
+function hienThiVai(role) {
+  return role === "Nhân viên" ? "Cán bộ" : role || "";
+}
 function createStaffTableRow(staff, staffType) {
   const staffId = staff[COL.S_ID] || "N/A",
     staffName = staff[COL.S_NAME] || "Chưa có tên";
@@ -1004,7 +1008,7 @@ function createStaffTableRow(staff, staffType) {
   const lowerRole = staffRole.toLowerCase();
   if (lowerRole.includes("admin")) text = "bg-red-100 text-red-700";else lowerRole.includes("phó giám đốc") ? text = "bg-purple-100 text-purple-700" : lowerRole.includes("quản lý") && (text = "bg-blue-100 text-blue-700");
   const deptCell = staffDept ? staffDept + (staffDeptRole && staffDeptRole !== "Nhân viên" ? " <span class=\"text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700\">" + escapeHtml(staffDeptRole) + "</span>" : "") : "<span class=\"text-gray-400\">—</span>";
-  const text2 = "<span class=\"text-xs px-2 py-1 rounded-full " + escapeHtml(text) + "\">" + escapeHtml(staffRole) + "</span>";
+  const text2 = "<span class=\"text-xs px-2 py-1 rounded-full " + escapeHtml(text) + "\">" + escapeHtml(hienThiVai(staffRole)) + "</span>";
   return "\n        <tr class=\"hover:bg-gray-50 transition-colors\">\n            <td class=\"px-3 py-2 font-medium text-gray-900\">" + escapeHtml(staffName) + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + escapeHtml(staffPos) + "</td>\n            <td class=\"px-3 py-2 text-gray-600\">" + deptCell + "</td>\n            <td class=\"px-3 py-2\">" + text2 + "</td>\n            <td class=\"px-3 py-2 text-center\">\n                <div class=\"flex justify-center gap-1\">\n                    <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit text-xs\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" data-name=\"" + escapeHtml(staffName) + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash text-xs\"></i>\n                    </button>\n                </div>\n            </td>\n        </tr>";
 }
 function createStaffCard(staff) {
@@ -1016,7 +1020,7 @@ function createStaffCard(staff) {
     slice = staffName.split(" ").map(item => item[0]).join("").toUpperCase().slice(0, 2);
   let text = "user-role-user";
   if (staffRole.toLowerCase().includes("admin")) text = "user-role-admin";else staffRole.toLowerCase().includes("quản lý") && (text = "user-role-manager");
-  return "\n  <div class=\"staff-card\" data-id=\"" + escapeHtml(staffId) + "\">\n      <div class=\"staff-avatar\">\n          " + escapeHtml(slice) + "\n      </div>\n      <h4 class=\"font-semibold text-gray-900 mb-1\">" + escapeHtml(staffName) + "</h4>\n      <p class=\"text-sm text-gray-600 mb-1\">" + escapeHtml(staffPos) + "</p>\n      <p class=\"text-xs text-gray-500 mb-2\">" + escapeHtml(staffEmail) + "</p>\n      <div class=\"flex justify-center mb-4\">\n          <span class=\"user-role-badge " + escapeHtml(text) + "\">" + escapeHtml(staffRole) + "</span>\n      </div>\n      <div class=\"flex justify-center space-x-2\">\n          <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" title=\"Chỉnh sửa\">\n              <i class=\"fas fa-edit\"></i>\n          </button>\n          <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" data-name=\"" + escapeHtml(staffName) + "\" title=\"Xóa\">\n              <i class=\"fas fa-trash\"></i>\n          </button>\n      </div>\n  </div>\n";
+  return "\n  <div class=\"staff-card\" data-id=\"" + escapeHtml(staffId) + "\">\n      <div class=\"staff-avatar\">\n          " + escapeHtml(slice) + "\n      </div>\n      <h4 class=\"font-semibold text-gray-900 mb-1\">" + escapeHtml(staffName) + "</h4>\n      <p class=\"text-sm text-gray-600 mb-1\">" + escapeHtml(staffPos) + "</p>\n      <p class=\"text-xs text-gray-500 mb-2\">" + escapeHtml(staffEmail) + "</p>\n      <div class=\"flex justify-center mb-4\">\n          <span class=\"user-role-badge " + escapeHtml(text) + "\">" + escapeHtml(hienThiVai(staffRole)) + "</span>\n      </div>\n      <div class=\"flex justify-center space-x-2\">\n          <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" title=\"Chỉnh sửa\">\n              <i class=\"fas fa-edit\"></i>\n          </button>\n          <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"staff\" data-id=\"" + escapeHtml(staffId) + "\" data-name=\"" + escapeHtml(staffName) + "\" title=\"Xóa\">\n              <i class=\"fas fa-trash\"></i>\n          </button>\n      </div>\n  </div>\n";
 }
 function renderChart(err) {
   const statusChartEl = document.getElementById("status-chart"),
@@ -1087,7 +1091,7 @@ function renderProjectProgressChart() {
   const filteredProjects = getFilteredProjects(),
     filteredTasks = getFilteredTasks();
   if (!filteredProjects || filteredProjects.length === 0) {
-    projectChartMessageEl.textContent = "Không có dữ liệu dự án", projectChartMessageEl.classList.remove("hidden");
+    projectChartMessageEl.textContent = "Không có dữ liệu công việc", projectChartMessageEl.classList.remove("hidden");
     return;
   }
   projectChartMessageEl.classList.add("hidden");
@@ -1133,7 +1137,7 @@ function renderProjectProgressChart() {
     data: {
       labels: keys,
       datasets: [{
-        label: "Số lượng dự án",
+        label: "Số lượng công việc",
         data: mapped,
         backgroundColor: values,
         borderColor: values.map(value => value.replace("0.8", "1")),
@@ -1161,10 +1165,10 @@ function renderProjectProgressChart() {
                 projects = data[label].projects;
               if (projects.length > 0) {
                 const num = 5;
-                let text = "\nDự án:";
+                let text = "\nCông việc:";
                 return projects.slice(0, num).forEach(item => {
                   text += "\n• " + item;
-                }), projects.length > num && (text += "\n... và " + (projects.length - num) + " dự án khác"), text;
+                }), projects.length > num && (text += "\n... và " + (projects.length - num) + " công việc khác"), text;
               }
               return "";
             }
@@ -1195,7 +1199,7 @@ function renderProjectProgressChart() {
           },
           title: {
             display: true,
-            text: "Số lượng dự án"
+            text: "Số lượng công việc"
           }
         },
         x: {
@@ -1219,7 +1223,7 @@ function renderStaffPerformanceChart() {
   staffPerformanceChart && staffPerformanceChart.destroy();
   const filteredTasks = getFilteredTasks();
   if (!allStaff || allStaff.length === 0 || !filteredTasks || filteredTasks.length === 0) {
-    staffChartMessageEl.textContent = "Không có dữ liệu nhân viên hoặc nhiệm vụ", staffChartMessageEl.classList.remove("hidden");
+    staffChartMessageEl.textContent = "Không có dữ liệu cán bộ hoặc nhiệm vụ", staffChartMessageEl.classList.remove("hidden");
     return;
   }
   staffChartMessageEl.classList.add("hidden");
@@ -1426,8 +1430,8 @@ function closeModal(modalId) {
   }, 300));
 }
 function createProjectModal(isEdit, project) {
-  const text = isEdit ? "Chỉnh sửa dự án" : "Tạo dự án mới",
-    text2 = isEdit ? "Cập nhật" : "Tạo dự án";
+  const text = isEdit ? "Chỉnh sửa công việc" : "Tạo công việc mới",
+    text2 = isEdit ? "Cập nhật" : "Tạo công việc";
   let list = [];
   if (isEdit && project && project[COL.P_MANAGER]) {
     const staff = allStaff.find(staff2 => staff2[COL.S_NAME] === project[COL.P_MANAGER]);
@@ -1452,12 +1456,29 @@ function createProjectModal(isEdit, project) {
     }), el2.addEventListener("change", function () {
       el.value && this.value < el.value && (el.value = this.value), el.setAttribute("max", this.value);
     }));
-  }, 100), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên dự án</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Quản lý dự án</label>\n                  <select name=\"manager\" class=\"form-select\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + " " + (isManager() && !isAdmin() ? "disabled" : "") + ">\n                      <option value=\"\">-- Chọn quản lý --</option>\n                      " + list.map(list2 => {
+  }, 100), setTimeout(function () {
+      // Phân công ba lớp: nạp ứng viên theo phòng; đổi phòng là nạp lại toàn bộ nguồn
+      const deptSel = document.getElementById("project-dept-select"),
+        supSel = document.getElementById("project-supervisor-select"),
+        leadBox = document.getElementById("project-leaders-box"),
+        leadInput = document.getElementById("project-leaders-input");
+      if (deptSel && supSel && leadBox && leadInput) {
+        const supGoc = isEdit && project ? project.supervisorId : "",
+          leadGoc = isEdit && project ? project.leaderIds || [] : [];
+        let lanDau = true;
+        const napPhanCong = function () {
+          napUngVienPhanCong({ deptValue: deptSel.value, supervisorSelect: supSel, leadersBox: leadBox, leadersInput: leadInput, selectedSupervisor: lanDau ? supGoc : "", selectedLeaders: lanDau ? leadGoc : [], applyDefault: true });
+          lanDau = false;
+        };
+        deptSel.addEventListener("change", napPhanCong);
+        napPhanCong();
+      }
+    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Quản lý công việc</label>\n                  <select name=\"manager\" class=\"form-select\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + " " + (isManager() && !isAdmin() ? "disabled" : "") + ">\n                      <option value=\"\">-- Chọn quản lý --</option>\n                      " + list.map(list2 => {
     let text3 = "";
     if (isEdit) text3 = project[COL.P_MANAGER] === list2[COL.S_NAME] ? "selected" : "";else isManager() && !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
     const text4 = list2[COL.S_EMAIL] ? " (" + list2[COL.S_EMAIL] + ")" : "";
     return "<option value=\"" + escapeHtml(list2[COL.S_NAME]) + "\" " + text3 + ">" + escapeHtml(list2[COL.S_NAME]) + escapeHtml(text4) + "</option>";
-  }).join("") + "\n                  </select>\n              </div>\n              \n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
+  }).join("") + "\n                  </select>\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      <option value=\"\">Công việc chung</option>\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
 }
 function createTaskModal(isEdit, task) {
   const draft = isEdit ? null : pendingTaskCreate;
@@ -1526,12 +1547,14 @@ function createTaskModal(isEdit, task) {
   }, 100), setTimeout(() => {
     window.innerWidth < 768 && toggleTaskReminders(false);
   }, 100);
+  // Cấp 2 (công việc con) có đủ ô phân công; nhiệm vụ (cấp 3) chỉ chọn MỘT lãnh đạo phòng
+  const laCapHai = isEdit && task ? Number(task[COL.T_LEVEL]) === 2 : createLevel === 2;
   const taskReminders = isEdit && task ? task[COL.T_REMINDERS] || [] : [],
     taskId = isEdit && task ? task[COL.T_ID] : "";
   return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        </div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              <!-- 3 Columns Content -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + (isAdmin() || isManager() ? allProjects : getUserAllowedProjects()).map(item => {
     const text3 = isEdit && task[COL.T_PID] === item[COL.P_ID] ? "selected" : "";
     return "<option value=\"" + escapeHtml(item[COL.P_ID]) + "\" " + text3 + ">" + escapeHtml(item[COL.P_NAME]) + " (" + escapeHtml(item[COL.P_ID]) + ")</option>";
-  }).join("") + "\n                            </select>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mô tả</label>\n                            <textarea name=\"description\" class=\"form-textarea\" rows=\"5\" " + (isEdit22 ? "disabled" : "") + ">" + (isEdit ? escapeHtml(task[COL.T_DESC]) || "" : "") + "</textarea>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Người thực hiện</label>\n                                <select name=\"assignee\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                  <option value=\"\">-- Chọn người thực hiện --</option>\n                                  " + list.map(list2 => {
+  }).join("") + "\n                            </select>\n                          </div>\n                          <div id=\"task-supervisor-group\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                              <select name=\"supervisorId\" id=\"task-supervisor-select\" class=\"form-select\"></select>\n                          </div>\n                          <div id=\"task-leaders-multi\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <div id=\"task-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                          </div>\n                          <div id=\"task-leader-single\" class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <select name=\"leaderIds\" id=\"task-leader-select\" class=\"form-select\"></select>\n                          </div>\n                          <input type=\"hidden\" name=\"leaderIds\" id=\"task-leaders-input\" value=\"" + (isEdit && task ? (task.leaderIds || []).join(",") : "") + "\">\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mô tả</label>\n                            <textarea name=\"description\" class=\"form-textarea\" rows=\"5\" " + (isEdit22 ? "disabled" : "") + ">" + (isEdit ? escapeHtml(task[COL.T_DESC]) || "" : "") + "</textarea>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Người thực hiện</label>\n                                <select name=\"assignee\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                  <option value=\"\">-- Chọn người thực hiện --</option>\n                                  " + list.map(list2 => {
     let text3 = "";
     if (isEdit) text3 = task[COL.T_ASSIGNEE] === list2[COL.S_NAME] ? "selected" : "";else !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
     const text4 = list2[COL.S_EMAIL] ? " (" + list2[COL.S_EMAIL] + ")" : "";
@@ -1556,8 +1579,73 @@ function buildDepartmentOptions(selected) {
 /** GĐ1: Trưởng phòng / Phó phòng / Nhân viên. */
 function buildDeptRoleOptions(selected) {
   const value = String(selected || "").trim() || "Nhân viên";
-  return ["Nhân viên", "Phó phòng", "Trưởng phòng"].map(name => "<option value=\"" + escapeHtml(name) + "\" " + (name === value ? "selected" : "") + ">" + escapeHtml(name) + "</option>").join("");
+  return [["Nhân viên", "Cán bộ"], ["Phó phòng", "Phó phòng"], ["Trưởng phòng", "Trưởng phòng"]].map(([val, label]) => "<option value=\"" + escapeHtml(val) + "\" " + (val === value ? "selected" : "") + ">" + escapeHtml(label) + "</option>").join("");
 }
+
+/* ===================== Phân công ba lớp (yêu cầu 2026-08-26) =====================
+ * Nguồn ứng viên do MÁY CHỦ trả về qua GET /api/v1/departments/assignment-options
+ * (?departmentId=&parentRef=). Giao diện chỉ vẽ dropdown/checkbox từ phản hồi đó.
+ * Quy ước BUILDER: hàm dựng HTML phải có tiền tố build, create hoặc render.
+ */
+
+/** Ô chọn "Ban lãnh đạo kiểm soát" — MỘT người (admin hoặc Phó GĐ phụ trách phòng). */
+function buildSupervisorOptionsHtml(list, selectedId, defaultValue) {
+  const chosen = String(selectedId == null ? "" : selectedId).trim() || String(defaultValue == null ? "" : defaultValue).trim() || "";
+  return "<option value=\"\">-- Không chọn --</option>" + list.map(s => "<option value=\"" + escapeHtmlAttr(s.id) + "\"" + (String(s.id) === chosen ? " selected" : "") + ">" + escapeHtml(s.name) + "</option>").join("");
+}
+
+/** Nhóm checkbox "Lãnh đạo phòng phụ trách" — NHIỀU người, ghi id vào hidden input. */
+function buildLeaderCheckboxesHtml(list, selectedIds) {
+  const dangChon = new Set((selectedIds || []).map(String));
+  if (!list || list.length === 0) return "<span class=\"text-gray-400 text-sm\">Không có lãnh đạo phòng nào để chọn</span>";
+  return list.map(l => "<label class=\"inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-blue-300\"><input type=\"checkbox\" class=\"leader-opt accent-blue-600\" value=\"" + escapeHtmlAttr(l.id) + "\"" + (dangChon.has(String(l.id)) ? " checked" : "") + "><span class=\"text-sm\">" + escapeHtml(l.name) + "</span></label>").join("");
+}
+
+/** Đọc checkbox đang chọn rồi ghi danh sách id (phân tách dấu phẩy) vào hidden input. */
+function capNhatLeaderInput(leadersBoxEl, leadersInputEl) {
+  if (!leadersBoxEl || !leadersInputEl) return;
+  const ids = Array.from(leadersBoxEl.querySelectorAll(".leader-opt:checked")).map(item => item.value);
+  leadersInputEl.value = ids.join(",");
+}
+/** Ô chọn PHÒNG của form công việc — value là id phòng; "" = Công việc chung. */
+function buildDeptIdOptions(selectedId) {
+  const value = String(selectedId == null ? "" : selectedId).trim(),
+    list = Array.isArray(allDepartments) ? allDepartments : [];
+  return '<option value="">-- Công việc chung --</option>' + list.map(d => "<option value=\"" + escapeHtmlAttr(d.id) + "\"" + (String(d.id) === value ? " selected" : "") + ">" + escapeHtml(d.name) + "</option>").join("");
+}
+
+/**
+ * Nạp ứng viên phân công cho form đang mở và vẽ vào DOM.
+ * singleLeaderSelect: nhiệm vụ (chọn MỘT leader); leadersBox + leadersInput: công việc/CV con.
+ */
+async function napUngVienPhanCong(opts) {
+  const { deptValue = "", parentRef = "", supervisorSelect = null, singleLeaderSelect = null,
+          leadersBox = null, leadersInput = null, selectedSupervisor = "", selectedLeaders = [],
+          applyDefault = false } = opts;
+  const query = [];
+  if (deptValue) query.push("departmentId=" + encodeURIComponent(deptValue));
+  if (parentRef) query.push("parentRef=" + encodeURIComponent(parentRef));
+  let payload;
+  try {
+    payload = await restGet("/api/v1/departments/assignment-options" + (query.length ? "?" + query.join("&") : ""));
+    if (!payload || typeof payload !== "object") payload = {};
+  } catch {
+    payload = {};
+  }
+  const supervisors = Array.isArray(payload.supervisors) ? payload.supervisors : [],
+    leaders = Array.isArray(payload.leaders) ? payload.leaders : [];
+  if (supervisorSelect) supervisorSelect.innerHTML = buildSupervisorOptionsHtml(supervisors, selectedSupervisor, applyDefault ? payload.defaultSupervisorId : "");
+  if (singleLeaderSelect) {
+    const chosen = String(selectedLeaders && selectedLeaders[0] != null ? selectedLeaders[0] : "").trim() || (applyDefault && payload.defaultLeaderId != null ? String(payload.defaultLeaderId) : "");
+    singleLeaderSelect.innerHTML = "<option value=\"\">-- Không chọn --</option>" + leaders.map(l => "<option value=\"" + escapeHtmlAttr(l.id) + "\"" + (String(l.id) === chosen ? " selected" : "") + ">" + escapeHtml(l.name) + "</option>").join("");
+  }
+  if (leadersBox && leadersInput) {
+    leadersBox.innerHTML = buildLeaderCheckboxesHtml(leaders, selectedLeaders);
+    capNhatLeaderInput(leadersBox, leadersInput);
+    leadersBox.onchange = () => capNhatLeaderInput(leadersBox, leadersInput);
+  }
+}
+
 // ===== Việc 4.6: ba hàm thoát ký tự dùng chung cho mọi chỗ dựng HTML bằng chuỗi =====
 //
 // Bản cũ chỉ có `escapeHtmlAttr` và thiếu dấu nháy đơn. Thiếu đúng ký tự đó là đủ để chiếm quyền,
@@ -2035,9 +2123,9 @@ function confirmDelete(type, id, name) {
     confirmBtn = document.getElementById("delete-confirm-btn"),
     deleteCancelBtnEl = document.getElementById("delete-cancel-btn"),
     data = {
-      project: "dự án",
+      project: "công việc",
       task: "nhiệm vụ",
-      staff: "nhân viên",
+      staff: "cán bộ",
       proposal: "đề nghị",
       app: "ứng dụng"
     };
@@ -2938,7 +3026,7 @@ function renderProjectComparisonChart() {
     };
   }).filter(item => item.totalTasks > 0).sort((a, b) => b.totalTasks - a.totalTasks).slice(0, 5);
   if (slice.length === 0) {
-    comparisonChartMessageEl.textContent = "Chưa có dự án nào có nhiệm vụ", comparisonChartMessageEl.classList.remove("hidden");
+    comparisonChartMessageEl.textContent = "Chưa có công việc nào có nhiệm vụ", comparisonChartMessageEl.classList.remove("hidden");
     return;
   }
   window.projectComparisonChart = new Chart(projectComparisonChartEl, {
@@ -3211,7 +3299,7 @@ function refreshProjectDetailsModalIfOpen() {
 function validateStaffData(name, email, isEdit = false, staffId = null) {
   const list = [],
     duplicateName = allStaff.find(staff => staff[COL.S_NAME].toLowerCase() === name.toLowerCase() && (!isEdit || staff[COL.S_ID] !== staffId));
-  duplicateName && list.push("Tên nhân viên đã tồn tại");
+  duplicateName && list.push("Tên cán bộ đã tồn tại");
   if (email && email.trim() !== "") {
     const duplicateEmail = allStaff.find(staff => staff[COL.S_EMAIL].toLowerCase() === email.toLowerCase() && (!isEdit || staff[COL.S_ID] !== staffId));
     duplicateEmail && list.push("Email đã được sử dụng");
@@ -3415,7 +3503,7 @@ document.addEventListener("click", function (event) {
     if (document.getElementById("project-details-modal")) {
       const projectDetailsModalEl = document.getElementById("project-details-modal"),
         textContent = projectDetailsModalEl.querySelector("h3").textContent,
-        projectName = textContent.replace("Chi tiết dự án: ", "").split(" (")[0],
+        projectName = textContent.replace("Chi tiết công việc: ", "").split(" (")[0],
         task = allTasks.find(task2 => task2[COL.T_ID] === id);
       task && (openedFromProjectDetails = {
         projectId: task[COL.T_PID],
@@ -4057,7 +4145,7 @@ function veBieuDoTienDoServer(p) {
   document.getElementById("project-chart-message") && document.getElementById("project-chart-message").classList.add("hidden");
   projectProgressChart = new Chart(el, {
     type: "bar",
-    data: { labels: p.labels, datasets: [{ label: "Số lượng dự án", data: p.data, backgroundColor: ["rgba(239, 68, 68, 0.8)", "rgba(245, 158, 11, 0.8)", "rgba(59, 130, 246, 0.8)", "rgba(16, 185, 129, 0.8)", "rgba(34, 197, 94, 0.8)"], borderWidth: 2, borderRadius: 8 }] },
+    data: { labels: p.labels, datasets: [{ label: "Số lượng công việc", data: p.data, backgroundColor: ["rgba(239, 68, 68, 0.8)", "rgba(245, 158, 11, 0.8)", "rgba(59, 130, 246, 0.8)", "rgba(16, 185, 129, 0.8)", "rgba(34, 197, 94, 0.8)"], borderWidth: 2, borderRadius: 8 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, animation: { duration: 1000 } }
   });
 }

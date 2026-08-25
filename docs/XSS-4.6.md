@@ -39,6 +39,15 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `renderGanttDaysHtml`. Thuộc tính id/class phát sinh (`bodyId`, `domId`, `an`) và mọi số
 > đếm/ngày nội suy đều đi qua `escapeHtml`. Hành vi cắt-thanh/ngoài-khoảng/thu-gọn do
 > `tests/unit/gantt-ui.test.js` canh.
+>
+> **Cập nhật 2026-08-26 (tính năng phân công ba lớp).** Modal chi tiết viết lại thành file riêng
+> `web/assets/js/project-details.js` (nạp sau app.js, ghi đè `showProjectDetailsModal`) cùng khối
+> HTML phân công chèn vào form công việc/nhiệm vụ trong app.js: thêm **3 chỗ ghi HTML** và
+> **14 giá trị nội suy** ⇒ **77 chỗ / 555 giá trị**. Helper mới trả HTML đều đặt tên đúng quy ước
+> BUILDER: `buildDetailRowHtml`, `buildStatCardHtml`, `createSubworkDetailHtml`,
+> `buildSupervisorOptionsHtml`, `buildLeaderCheckboxesHtml`, `buildDeptIdOptions`; mọi id/name
+> người dùng nội suy đi qua `escapeHtml`/`escapeHtmlAttr`/`escapeForInlineHandler`. Pin canh bởi
+> TC-SEC-17.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
