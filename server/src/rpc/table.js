@@ -18,6 +18,7 @@ import {
   projectFromLegacy,
   projectToLegacy,
   remindersToLegacy,
+  staffFromLegacy,
   staffToLegacy,
   taskFromLegacy,
   taskToLegacy,
@@ -393,25 +394,84 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
+  // --- Nhân sự / phòng (việc 5.11) -----------------------------------------------------------
+  //
+  // `getStaffList` trả MẢNG THUẦN khoá `COL.S_*`: `handleEdit` gán thẳng `allStaff = response2`.
+  // Ghi trả `{success:true, staffId/departmentId}` là MÃ (`NV003` / `PH01`), không phải id số.
+  getStaffList: {
+    rest: 'GET /users',
+    async handler(args, ctx) {
+      const data = await ctx.call('GET', '/users');
+      const context = { deptNameById: await ctx.deptNameById() };
+      return (data.people ?? []).map((row) => staffToLegacy(row, context));
+    },
+  },
+
+  addStaffWithAuth: {
+    rest: 'POST /users',
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/users', staffFromLegacy(data ?? {}));
+      return { success: true, staffId: created.person.code };
+    },
+  },
+
+  updateStaffWithAuth: {
+    rest: 'PATCH /users/:idOrCode',
+    async handler([id, data], ctx) {
+      required(id, 'Mã nhân viên');
+      const updated = await ctx.call(
+        'PATCH',
+        `/users/${encodeURIComponent(id)}`,
+        staffFromLegacy(data ?? {})
+      );
+      return { success: true, staffId: updated.person.code };
+    },
+  },
+
+  deleteStaffWithAuth: {
+    rest: 'DELETE /users/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã nhân viên');
+      const result = await ctx.call('DELETE', `/users/${encodeURIComponent(id)}`);
+      return { success: true, deletedStaff: result.deletedUser };
+    },
+  },
+
+  addDepartmentWithAuth: {
+    rest: 'POST /departments',
+    fromLegacy: departmentFromLegacy,
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/departments', departmentFromLegacy(data ?? {}));
+      return { success: true, departmentId: created.department.code };
+    },
+  },
+
+  updateDepartmentWithAuth: {
+    rest: 'PATCH /departments/:idOrCode',
+    fromLegacy: departmentFromLegacy,
+    async handler([id, data], ctx) {
+      required(id, 'Mã phòng');
+      const updated = await ctx.call(
+        'PATCH',
+        `/departments/${encodeURIComponent(id)}`,
+        departmentFromLegacy(data ?? {})
+      );
+      return { success: true, departmentId: updated.department.code };
+    },
+  },
+
+  deleteDepartmentWithAuth: {
+    rest: 'DELETE /departments/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã phòng');
+      const result = await ctx.call('DELETE', `/departments/${encodeURIComponent(id)}`);
+      return { success: true, deletedDepartment: result.deletedDepartment };
+    },
+  },
+
   // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
   // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
   // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-  getStaffList: pending('Danh sách nhân sự', 'GET /users'),
-  addStaffWithAuth: pending('Thêm nhân sự', 'POST /users'),
-  updateStaffWithAuth: pending('Sửa nhân sự', 'PATCH /users/:id'),
-  deleteStaffWithAuth: pending('Xoá nhân sự', 'DELETE /users/:id'),
-
-  addDepartmentWithAuth: {
-    ...pending('Thêm phòng', 'POST /departments'),
-    // Giữ lại phép dịch trường để khi có module phòng thì chỉ cần đổi `handler`, không phải dò lại
-    // tên các ô trong modal (`director`/`head`/`vice`/`order`).
-    fromLegacy: departmentFromLegacy,
-  },
-  updateDepartmentWithAuth: {
-    ...pending('Sửa phòng', 'PATCH /departments/:id'),
-    fromLegacy: departmentFromLegacy,
-  },
-  deleteDepartmentWithAuth: pending('Xoá phòng', 'DELETE /departments/:id'),
 
   getProposals: pending('Danh sách đề nghị', 'GET /proposals'),
   addProposalWithAuth: pending('Thêm đề nghị', 'POST /proposals'),

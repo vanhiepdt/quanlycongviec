@@ -5,12 +5,8 @@ import { withTransaction } from '../../db/pool.js';
 import { AppError } from '../../utils/errors.js';
 import * as usersRepo from '../users/repo.js';
 import { newSessionId, csrfTokenFor } from './cookies.js';
-import { assertPasswordUsable, hashPassword, verifyPassword } from './password.js';
+import { assertPasswordUsable, hashPassword, UNUSABLE_HASH, verifyPassword } from './password.js';
 import * as repo from './repo.js';
-
-// Băm giả để so cả khi email không tồn tại. Nhờ vậy thời gian trả lời của "email không có" và
-// "mật khẩu sai" gần như nhau — không dò ra được email nào đang tồn tại (TC-AUTH-02).
-const DUMMY_HASH = '$2b$12$C6UzMDM.H6dfI/f/IKcEe.Xr0i4S0lCMDPl1oXCxHF2qHzKPDCJmC';
 
 const SAME_MESSAGE = 'Email hoặc mật khẩu không đúng';
 
@@ -59,7 +55,7 @@ export async function login({ email, password, ip = null, userAgent = '' }) {
   const user = await usersRepo.findAuthByEmail(email);
 
   if (!user) {
-    await verifyPassword(String(password ?? 'x'), DUMMY_HASH);
+    await verifyPassword(String(password ?? 'x'), UNUSABLE_HASH);
     throw invalidCredentials();
   }
 

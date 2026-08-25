@@ -19,8 +19,10 @@ import * as logsRepo from '../activityLogs/repo.js';
 import * as approvalsService from '../approvals/service.js';
 import { publicUser } from '../auth/service.js';
 import * as deptRepo from '../departments/repo.js';
+import { groupManagerEmails, toPublic as departmentRest } from '../departments/service.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
+import { publicStaff } from '../users/service.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as worksService from '../works/service.js';
 
@@ -36,41 +38,6 @@ export const STATS_QUERIES = Object.freeze({
 });
 
 const entityOf = (level) => (Number(level) === itemsRepo.LEVEL_SUBWORK ? 'subwork' : 'task');
-
-/** Người trong danh sách nhân sự: như `publicUser` thêm `notes` (cột Sheets "Ghi chú"). */
-function publicPerson(row) {
-  return { ...publicUser(row), notes: row.notes ?? '' };
-}
-
-function groupManagerEmails(managers) {
-  const map = new Map();
-  for (const row of managers) {
-    if (!map.has(row.department_id)) {
-      map.set(row.department_id, { deputy_director: [], head: [], vice: [] });
-    }
-    const bucket = map.get(row.department_id);
-    if (Object.hasOwn(bucket, row.role) && row.email) bucket[row.role].push(row.email);
-  }
-  return map;
-}
-
-function departmentRest(row, managerEmailsByDeptId) {
-  const grouped = managerEmailsByDeptId.get(row.id) ?? {
-    deputy_director: [],
-    head: [],
-    vice: [],
-  };
-  return {
-    id: row.id,
-    code: row.code,
-    name: row.name,
-    sortOrder: row.sort_order,
-    notes: row.notes ?? '',
-    directorEmails: grouped.deputy_director,
-    headEmails: grouped.head,
-    viceEmails: grouped.vice,
-  };
-}
 
 /** "yyyy-MM-dd" theo giờ địa phương của tiến trình — cùng luật với `cron.js` (`ngaySo`). */
 function ngaySo(d = new Date()) {
@@ -225,7 +192,7 @@ export async function getBundle(user) {
   return {
     user: publicUser(user),
     departments: departments.map((d) => departmentRest(d, managerEmailsByDeptId)),
-    people: people.map(publicPerson),
+    people: people.map(publicStaff),
     pendingCount: pending,
     summaryStats: stats,
     chartData,

@@ -72,7 +72,7 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
 
   it('TC-RPC-03: mỗi tên đã làm được đều khai đúng method + route REST', () => {
     const implemented = Object.entries(RPC_TABLE).filter(([, e]) => !e.notImplemented);
-    expect(implemented).toHaveLength(20);
+    expect(implemented).toHaveLength(27);
     for (const [name, entry] of implemented) {
       expect(entry.rest, name).toMatch(/^(GET|POST|PATCH|DELETE) \//);
       expect(typeof entry.handler, name).toBe('function');
@@ -84,8 +84,10 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(37);
     const pending = res.body.data.functions.filter((f) => !f.implemented);
-    expect(pending).toHaveLength(17);
-    expect(pending.map((f) => f.name)).toContain('getStaffList');
+    expect(pending).toHaveLength(10);
+    expect(pending.map((f) => f.name)).toContain('getProposals');
+    expect(pending.map((f) => f.name)).not.toContain('getStaffList');
+    expect(pending.map((f) => f.name)).not.toContain('addDepartmentWithAuth');
     expect(pending.map((f) => f.name)).not.toContain('getDataForUser');
     expect(pending.map((f) => f.name)).not.toContain('getInitialDataWithAuth');
     expect(pending.map((f) => f.name)).not.toContain('getDepartmentContext');
@@ -108,14 +110,14 @@ describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
   });
 
   it('TC-RPC-07: tên chưa có nghiệp vụ ⇒ 501 + câu tiếng Việt gọi đúng tên chức năng', async () => {
-    const res = await rpc('getStaffList', []);
+    const res = await rpc('getProposals', []);
     expect(res.status).toBe(501);
     expect(res.body.ok).toBe(false);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toContain('Danh sách nhân sự');
+    expect(res.body.error.message).toContain('Danh sách đề nghị');
   });
 
-  it('TC-RPC-08: cả 17 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
+  it('TC-RPC-08: cả 10 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
     const pendingNames = Object.entries(RPC_TABLE)
       .filter(([, e]) => e.notImplemented)
       .map(([name]) => name);

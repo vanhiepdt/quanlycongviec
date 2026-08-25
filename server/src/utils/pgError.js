@@ -27,6 +27,11 @@ const CONSTRAINT_CODES = Object.freeze({
   no_self_parent: 'SELF_PARENT',
   work_items_code_key: 'CONFLICT',
   works_code_key: 'CONFLICT',
+  users_email_key: 'CONFLICT',
+  users_code_key: 'CONFLICT',
+  departments_name_key: 'CONFLICT',
+  departments_code_key: 'CONFLICT',
+  users_role_valid: 'VALIDATION_ERROR',
 });
 
 /** Câu tiếng Việt cho người dùng, thay cho thông báo kỹ thuật của CSDL. */
@@ -44,6 +49,14 @@ const MESSAGES = Object.freeze({
   CONFLICT: 'Mã đã tồn tại, vui lòng thử lại',
 });
 
+const CONSTRAINT_MESSAGES = Object.freeze({
+  users_email_key: 'Email đã được sử dụng',
+  users_code_key: 'Mã nhân sự đã tồn tại, vui lòng thử lại',
+  departments_name_key: 'Tên phòng đã tồn tại',
+  departments_code_key: 'Mã phòng đã tồn tại, vui lòng thử lại',
+  users_role_valid: 'Phân quyền không hợp lệ',
+});
+
 /**
  * Đổi lỗi của driver `pg` thành `AppError`. Lỗi không nhận ra thì trả về nguyên vẹn để
  * `errorHandler` xử lý như lỗi 500 kèm traceId — không được che lỗi lạ thành 400.
@@ -58,7 +71,11 @@ export function translatePgError(err) {
 
   if (pgCode === '23514') {
     const byConstraint = CONSTRAINT_CODES[err.constraint];
-    if (byConstraint) return new AppError(byConstraint, MESSAGES[byConstraint]);
+    if (byConstraint) {
+      const message =
+        CONSTRAINT_MESSAGES[err.constraint] ?? MESSAGES[byConstraint] ?? 'Dữ liệu không hợp lệ';
+      return new AppError(byConstraint, message);
+    }
     for (const [sign, code] of TRIGGER_SIGNS) {
       if (text.includes(sign)) return new AppError(code, MESSAGES[code]);
     }
@@ -78,7 +95,8 @@ export function translatePgError(err) {
 
   if (pgCode === '23505') {
     const byConstraint = CONSTRAINT_CODES[err.constraint] ?? 'CONFLICT';
-    return new AppError(byConstraint, MESSAGES.CONFLICT);
+    const message = CONSTRAINT_MESSAGES[err.constraint] ?? MESSAGES.CONFLICT;
+    return new AppError(byConstraint, message);
   }
 
   // 22P02 chuỗi không đúng kiểu, 22007/22008 ngày sai định dạng hoặc ngoài miền.

@@ -132,7 +132,28 @@ export function taskFromLegacy(data = {}) {
   return out;
 }
 
-/** Payload GHI của modal phòng → thân request `/api/v1/departments` (Phase 6). */
+/**
+ * Payload GHI của `#staff-form` → thân request `/api/v1/users`.
+ *
+ * Form: `name`, `email`, `position`, `role` (nhãn form: Admin/Quản lý), `password`,
+ * `department` (tên phòng), `deptRole`, `objectType`, `notes`. Service lo ánh xạ vai trò
+ * và dò phòng theo tên — cầu RPC không tự đoán.
+ */
+export function staffFromLegacy(data = {}) {
+  return dropUndefined({
+    name: pick(data, 'name'),
+    email: pick(data, 'email'),
+    position: pick(data, 'position'),
+    role: pick(data, 'role'),
+    password: pick(data, 'password'),
+    department: pick(data, 'department'),
+    deptRole: pick(data, 'deptRole'),
+    objectType: pick(data, 'objectType'),
+    notes: pick(data, 'notes'),
+  });
+}
+
+/** Payload GHI của modal phòng → thân request `/api/v1/departments`. */
 export function departmentFromLegacy(data = {}) {
   return dropUndefined({
     name: pick(data, 'name'),
@@ -345,6 +366,8 @@ export default {
   taskToLegacy,
   remindersToLegacy,
   staffToLegacy,
+  staffFromLegacy,
   departmentToLegacy,
+  departmentFromLegacy,
   activityToLegacy,
 };
