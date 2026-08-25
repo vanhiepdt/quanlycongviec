@@ -7,6 +7,7 @@ import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
+import * as itemsService from '../workItems/service.js';
 import * as service from './service.js';
 
 const createSchema = z.object({
@@ -37,6 +38,12 @@ const querySchema = z.object({
 });
 
 const copySchema = z.object({ name: text(500).optional() });
+
+// Kéo–thả gửi lên danh sách mã (hoặc id) theo thứ tự mới. Chặn trên 2000 phần tử để một request
+// không kéo cả bảng vào một giao dịch; công việc lớn nhất của bản cũ có ~40 dòng.
+const reorderSchema = z.object({
+  order: z.array(z.union([z.string().min(1), z.number().int()])).max(2000),
+});
 
 // Nhật ký có thể dài (một công việc sống cả năm): cho gọi số dòng, chặn trên ở 1000 để một request
 // không kéo cả bảng về.
@@ -174,6 +181,28 @@ worksRouter.post('/:id/copy', validate(copySchema), async (req, res, next) => {
       entityType: 'work',
       entityId: result.work.id,
       details: { from: req.params.id, copiedCount: result.copiedCount },
+    };
+    return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Đổi thứ tự các dòng trong một công việc (§7 việc 3.7). Đặt ở route Công việc chứ không ở route
+ * work-items vì thao tác này thuộc về CẢ công việc: nó đánh số lại toàn bộ danh sách, và quyền cần
+ * xét là quyền sửa công việc đó.
+ */
+worksRouter.post('/:id/reorder', validate(reorderSchema), async (req, res, next) => {
+  try {
+    const result = await itemsService.reorder(req.user, req.params.id, req.body.order);
+    res.locals.audit = {
+      action: 'workItems.reorder',
+      entityType: 'work',
+      entityId: result.work.id,
+      workId: result.work.id,
+      // Ghi cả mã bị bỏ qua: đó là dấu vết duy nhất cho thấy giao diện đang gửi mã đã biến mất.
+      details: { count: result.ordered.length, skipped: result.skipped },
     };
     return ok(res, result);
   } catch (err) {

@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler, ok } from './middleware/errorHandler.js'
 import { attachSession, requirePasswordChanged } from './middleware/session.js';
 import { authRouter } from './modules/auth/routes.js';
 import { worksRouter } from './modules/works/routes.js';
+import { workItemsRouter } from './modules/workItems/routes.js';
 import { logger } from './utils/logger.js';
 
 export function createApp() {
@@ -70,6 +71,7 @@ export function createApp() {
   // Cầu RPC phải tự gắn `loginRateLimiter` cho `authenticateUser` vì nó không đi qua
   // `/v1/auth/login` — xem §7 việc 1.10.
   api.use('/v1/works', worksRouter);
+  api.use('/v1/work-items', workItemsRouter);
 
   app.use('/api', api);
 

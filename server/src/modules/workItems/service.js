@@ -333,3 +333,160 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
     };
   });
 }
+
+/**
+ * Xoá một dòng và cả cây bên dưới nó.
+ *
+ * `ON DELETE CASCADE` của CSDL lo phần xoá (kể cả nhắc việc của các con — TC-TREE-15); việc của
+ * service là **đếm và kể tên trước khi xoá** để giao diện hỏi lại được "xoá công việc con này sẽ
+ * xoá luôn 4 nhiệm vụ: …" (§7 việc 3.5). Bản cũ `deleteTask` tự gom con cháu rồi lọc mảng JSON,
+ * sót một nhánh là còn nhiệm vụ trỏ vào cha đã mất.
+ *
+ * Đọc danh sách con cháu TRƯỚC khi xoá, trong cùng giao dịch: đọc sau thì không còn gì mà đọc.
+ */
+export function remove(user, ref) {
+  return withTransaction(async (client) => {
+    const current = await mustFindItem(ref, client);
+    assertCan(user, 'delete', current);
+    const children = await repo.listDescendants(current.id, client);
+    await repo.remove(current.id, client);
+    return {
+      deletedItem: current.code,
+      deletedChildren: children.map((r) => r.code),
+      deletedCount: 1 + children.length,
+    };
+  });
+}
+
+/**
+ * Nhân bản một dòng. Cấp 2 kéo theo **toàn bộ** cây con của nó (TC-TREE-26), cấp 3 chỉ một dòng.
+ *
+ * Điểm dễ sai nhất — và là lỗi có thật của `copyProject` bản cũ: `parent_id` của các con phải trỏ
+ * vào **BẢN SAO** của cha, không phải cha gốc. Sai chỗ này thì bản sao trông như đã tạo xong, mà
+ * mọi nhiệm vụ con vẫn nằm dưới cây gốc; sửa "bản sao" là sửa dữ liệu bản gốc (§13.5).
+ *
+ * Bản sao ở LẠI trong công việc cũ: nhân bản là "làm thêm một việc giống việc này", còn đổi công
+ * việc là đường khác (`update` với `targetWorkRef`). Mã thì luôn mới — mã không bao giờ dùng lại.
+ */
+export function copy(user, ref, { name = null } = {}) {
+  return withTransaction(async (client) => {
+    const source = await mustFindItem(ref, client);
+    assertCan(user, 'read', source);
+    assertCan(
+      user,
+      'create',
+      {
+        level: source.level,
+        assignee_id: source.assignee_id,
+        work_department_id: source.work_department_id,
+        work_manager_id: source.work_manager_id,
+        assigned_in_work: await repo.isAssignedInWork(source.work_id, user?.id ?? null, client),
+      },
+      source.level
+    );
+
+    // Bản sao là đầu việc MỚI: người lập là người bấm Nhân bản, người nhận giữ theo bản gốc
+    // (`copyRow` sao `assignee_id`), nên nguồn gốc suy từ hai thứ đó (§2.3).
+    const originFor = (row) =>
+      deriveOrigin({
+        actor: user,
+        recipientId: row.assignee_id ?? null,
+        recipientName: row.assignee_name ?? null,
+      });
+
+    const code = await repo.nextItemCode(source.work_code, client);
+    const sortOrder = (await repo.maxSortOrder(source.work_id, client)) + 1;
+    const item = await withPgErrors(() =>
+      repo.copyRow(
+        source.id,
+        {
+          code,
+          workId: source.work_id,
+          // Cấp 2 không có cha; cấp 3 thì bản sao nằm cùng công việc con với bản gốc.
+          parentId: source.parent_id,
+          name,
+          sortOrder,
+          ...originFor(source),
+        },
+        client
+      )
+    );
+
+    // Cây con: `listDescendants` xếp theo `depth` nên cha luôn được sao TRƯỚC con, và bảng tra
+    // `id gốc → id bản sao` luôn có sẵn cha khi tới lượt con.
+    const idMap = new Map([[source.id, item.id]]);
+    const copiedCodes = [];
+    for (const child of await repo.listDescendants(source.id, client)) {
+      const childRow = await repo.findById(child.id, client);
+      const childCode = await repo.nextItemCode(source.work_code, client);
+      const copied = await repo.copyRow(
+        child.id,
+        {
+          code: childCode,
+          workId: source.work_id,
+          parentId: child.parent_id == null ? null : (idMap.get(child.parent_id) ?? null),
+          sortOrder: child.sort_order,
+          ...originFor(childRow),
+        },
+        client
+      );
+      idMap.set(child.id, copied.id);
+      copiedCodes.push(copied.code);
+    }
+
+    return {
+      item: { ...item, reminders: [] },
+      copiedChildren: copiedCodes,
+      copiedCount: 1 + copiedCodes.length,
+    };
+  });
+}
+
+/**
+ * Đổi thứ tự các dòng trong một công việc, tất cả trong MỘT giao dịch (§7 việc 3.7): kéo–thả 20
+ * dòng mà ghi 20 lần rồi lỗi ở lần thứ 11 sẽ để lại thứ tự nửa vời không ai dựng lại được.
+ *
+ * Port đúng hành vi `reorderTasks` bản cũ (Code.gs.moi:3340):
+ *   • mã lạ trong danh sách gửi lên thì **bỏ qua**, không nổ lỗi (TC-TREE-30) — giao diện cũ có
+ *     lúc gửi cả mã của dòng vừa bị người khác xoá, và cả lần kéo–thả đó không được mất;
+ *   • dòng KHÔNG có trong danh sách giữ thứ tự tương đối cũ và **xếp sau** — bản cũ gửi lên mảng
+ *     của đúng nhóm đang mở, phần còn lại của công việc không được nhảy chỗ.
+ */
+export function reorder(user, workRef, refs = []) {
+  return withTransaction(async (client) => {
+    const work = await mustFindWork(workRef, client);
+    const verdict = can(user, 'update', 'work', work);
+    if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+
+    const rows = await repo.listByWork(work.id, {}, client);
+    const byRef = new Map();
+    for (const row of rows) {
+      byRef.set(String(row.code), row);
+      byRef.set(String(row.id), row);
+    }
+
+    const ordered = [];
+    const seen = new Set();
+    const skipped = [];
+    for (const ref of Array.isArray(refs) ? refs : []) {
+      const row = byRef.get(String(ref ?? '').trim());
+      if (!row) {
+        skipped.push(ref);
+        continue;
+      }
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      ordered.push(row);
+    }
+    for (const row of rows) if (!seen.has(row.id)) ordered.push(row);
+
+    // Đánh số lại từ 1 cho cả công việc. Giữ số cũ rồi chèn vào giữa là chỗ để hai dòng cùng
+    // `sort_order`, và khi đó thứ tự hiện ra do mã quyết định — người dùng thấy dòng tự nhảy chỗ.
+    for (const [index, row] of ordered.entries()) {
+      if (row.sort_order === index + 1) continue;
+      await repo.update(row.id, { sort_order: index + 1 }, client);
+    }
+
+    return { work, ordered: ordered.map((r) => r.code), skipped };
+  });
+}
