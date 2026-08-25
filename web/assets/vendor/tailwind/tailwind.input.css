@@ -1,0 +1,8 @@
+/* Nguồn để dựng `tailwind.min.css` — KHÔNG nạp trực tiếp vào trang (§7 việc 4.3).
+ *
+ * Giữ cả ba lớp giống hệt `cdn.tailwindcss.com` từng nạp (base = preflight, components,
+ * utilities), để bỏ CDN không kèm theo thay đổi giao diện nào.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
