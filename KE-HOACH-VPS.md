@@ -293,11 +293,11 @@ quanlycongviec/
 │  ├─ assets/js/app.js            # từ js.clean.html (bỏ 2 thẻ <script>)
 │  ├─ assets/js/api-bridge.js     # MỚI — giả lập google.script.run bằng fetch
 │  └─ assets/vendor/              # tailwind, chart.js, fontawesome, Inter — tự chứa
-├─ data/                          # [đã có] chỗ để snapshot .xlsx đã xuất — KHÔNG commit
+├─ data/                          # [đã có] rỗng — snapshot đã bỏ (§13.4 mục 11)
 │  └─ .gitkeep                    #          (.gitignore: data/* trừ .gitkeep)
 ├─ tools/                         # giữ nguyên bộ tool cũ
-│  └─ dump-sheets.js              # [đã có] xuất Sheets ra JSON — chỉ đọc
-│                                 # (import-from-sheets.js đã BỎ — xem §7 Phase 2)
+│                                 # (dump-sheets.js và import-from-sheets.js đều đã BỎ —
+│                                 #  xem §7 Phase 2 và §13.4 mục 11)
 ├─ deploy/
 │  ├─ docker-compose.yml  Dockerfile
 │  ├─ docker-compose.dev.yml      # [đã có] db + db-test (tmpfs) + adminer
@@ -553,8 +553,9 @@ CREATE INDEX ON sessions (expires_at);
 ### 4.3 Bảng đối chiếu cột Sheets → CSDL
 
 Bảng này viết cho công cụ nhập từ Sheets — công cụ **đã bỏ** (§7 Phase 2). Vẫn giữ lại vì nó là
-nơi duy nhất ghi **ý nghĩa từng cột của hệ thống cũ**: lúc nhập tay 28 dòng dữ liệu thật khi lên
-bản chính thức, và lúc đọc `data/snapshot-20260824.json` để tra cứu, phải theo đúng bảng này.
+nơi duy nhất ghi **ý nghĩa từng cột của hệ thống cũ**: lúc nhập tay 28 dòng dữ liệu thật qua giao
+diện web khi lên bản chính thức (§13.4 mục 12), và lúc mở `file tai xuong tu google sheet.xlsx`
+để tra cứu, phải theo đúng bảng này. Snapshot JSON đã bỏ; số liệu của nó còn ở §13.8.
 
 | Sheet | Cột Sheets | Bảng.cột |
 |---|---|---|
@@ -758,20 +759,21 @@ Tổng: **38–47 ngày làm việc ≈ 8–10 tuần**.
 | 0.3 | `docker-compose.dev.yml`: Postgres 16 + adminer, **thêm `db-test`** dùng tmpfs cho bộ test (§8.2 buộc CSDL test tách riêng, không dùng chung với dev) | `docker compose -f deploy/docker-compose.dev.yml up -d` |
 | 0.4 | `config/env.js` — thiếu biến môi trường là **chết ngay khi khởi động**, không chạy tiếp | `.env.example` đủ 14 biến |
 | 0.5 | Viết `001_init.sql` theo §4 | `npm run migrate:up` và `:down` đều sạch |
-| 0.6 | `tools/dump-sheets.js` — xuất 8 sheet ra `data/snapshot-YYYYMMDD.json`, **chỉ đọc** | 1 file JSON, ghi lại số dòng từng sheet |
+| 0.6 | ~~`tools/dump-sheets.js` — xuất 8 sheet ra `data/snapshot-YYYYMMDD.json`, **chỉ đọc**~~ | ~~1 file JSON, ghi lại số dòng từng sheet~~ · **đã chạy 2026-08-24 rồi BỎ cả công cụ lẫn snapshot** (§13.4 mục 11); số liệu còn ở §13.8 |
 | 0.7 | Chốt §2 thành `docs/UAT.md` — 13 nhóm, mỗi mã một dòng có ô tích | checklist nghiệm thu |
 
 **Xong khi**: `npm run migrate:up` tạo đủ **12 bảng nghiệp vụ + bảng `pgmigrations`** của
-node-pg-migrate (13 bảng trong `information_schema`) · `npm test` xanh · có file snapshot kèm
-bảng đếm số dòng · `docs/UAT.md` có đủ **88** mã tính năng (đếm lại từ §2: 7+6+15+10+11+9+6+4+3+3+8+2+4).
+node-pg-migrate (13 bảng trong `information_schema`) · `npm test` xanh · ~~có file snapshot kèm
+bảng đếm số dòng~~ (bảng đếm đã chuyển vào §13.8) · `docs/UAT.md` có đủ **88** mã tính năng (đếm lại từ §2: 7+6+15+10+11+9+6+4+3+3+8+2+4).
 
-**Kết quả thật 2026-08-24**: xong, 28 test xanh (18 lược đồ + 6 env + 4 health). Việc **0.6 còn
-nợ đầu ra**: công cụ đã viết và đã thử bằng file `.xlsx` giả (có ô JSON hỏng cố ý, sheet bị đổi
-tên, ô ngày, ô công thức, cột không tiêu đề) nhưng **chưa có `.xlsx` thật** để sinh snapshot —
-xem §13.4 mục 5.
+**Kết quả thật 2026-08-24**: xong, 28 test xanh (18 lược đồ + 6 env + 4 health). Việc 0.6 đã chạy
+trên `.xlsx` thật ngày 2026-08-24 (số liệu §13.8), rồi **cả công cụ lẫn snapshot đều bị bỏ**
+ngày 2026-08-25 theo §13.4 mục 11 — không còn việc nợ nào của Phase 0.
 
-**Rủi ro**: Sheets có ô JSON hỏng (đã biết là **có**). `dump-sheets.js` phải xuất **nguyên văn
-chuỗi**, không `JSON.parse` — việc phân tích để Phase 2 làm, có báo cáo lỗi riêng.
+**Rủi ro** (đã hết hiệu lực cùng việc 0.6): Sheets có ô JSON hỏng (đã biết là **có**), nên
+`dump-sheets.js` xuất **nguyên văn chuỗi**, không `JSON.parse`. Giữ lại dòng này vì Phase 9 nhập
+tay cũng gặp đúng mấy ô đó — đọc bằng mắt thì cũng phải chép nguyên văn rồi tự sửa, không tin ô
+JSON của bản cũ là hợp lệ.
 
 ---
 
@@ -814,10 +816,12 @@ danh sách vai trò cho phép, và Phase 2 in ra mọi giá trị `Phân quyền
 > hơn cả dữ liệu mẫu — mà kéo theo email và mật khẩu văn bản thuần của người thật vào máy dev,
 > vào CSDL dev và vào mọi bản sao lưu. Nhập tay lại 28 dòng khi lên bản chính thức rẻ hơn nhiều.
 >
-> Còn giữ: `tools/dump-sheets.js` (chỉ đọc) và `data/snapshot-20260824.json` để tra cứu cấu trúc
-> dữ liệu cũ. Phần **§13.8 phân tích dữ liệu thật vẫn còn giá trị** — đó là nơi biết được vai trò
-> viết hoa/thường lẫn lộn, mật khẩu rỗng, `Trạng thái duyệt` rỗng: những cái đó thành ràng buộc
-> của lược đồ, không cần công cụ nhập mới học được.
+> **Bỏ luôn cả `tools/dump-sheets.js` và `data/snapshot-20260824.json`** (2026-08-25, §13.4 mục
+> 11): công cụ đã làm xong việc của nó, và giữ một file JSON có email + mật khẩu văn bản thuần của
+> người thật trên máy dev là rủi ro không đổi lấy gì. Phần **§13.8 phân tích dữ liệu thật vẫn còn
+> giá trị** — đó là nơi biết được vai trò viết hoa/thường lẫn lộn, mật khẩu rỗng, `Trạng thái
+> duyệt` rỗng: những cái đó thành ràng buộc của lược đồ, không cần công cụ nhập mới học được. Bản
+> `.xlsx` gốc vẫn nằm ngoài kho, đủ để đối chiếu khi nhập tay ở Phase 9.
 
 **Mục tiêu**: một lệnh `npm run seed:dev` dựng đủ dữ liệu để bấm thử tay hết Phase 3, **không có
 một dòng nào là nhân sự thật**.
@@ -1405,7 +1409,7 @@ chữ sai, thiếu thông báo. Chỉ lỗi **Nhẹ** được phép mang sang b
 | 1 | Frontend 3653 dòng không có build step, lỗi im lặng | **Cao** | Cầu tương thích §5.1 để không sửa logic; Phase 4 chỉ được làm 4 việc đã liệt kê; 35 luồng E2E Playwright thay cho việc bấm tay |
 | 2 | Sót chỗ loại `Chờ duyệt` khỏi thống kê | **Cao** | Dùng **view** `v_countable_*`, không thêm điều kiện rải rác; TC-APR-06 kiểm cả 4 thẻ số và 6 biểu đồ |
 | 3 | Sót chỗ chỉ đếm cấp 3 | **Cao** | `filterLevel3Tasks` đã có ở backend; ở SQL thì đặt `level = 3` **trong view**, không ở từng truy vấn |
-| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | 28 dòng thật **nhập tay** ở Phase 9 theo bảng đối chiếu §4.3, đối chiếu từng dòng với `data/snapshot-20260824.json` (§13.8) và giữ Sheets làm bản đọc lại. ~~TC-IMP-14~~ đã rút cùng công cụ nhập tự động |
+| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | 28 dòng thật **nhập tay** ở Phase 9 theo bảng đối chiếu §4.3, đối chiếu từng dòng với chính `file tai xuong tu google sheet.xlsx` (số liệu tổng ở §13.8; snapshot JSON đã bỏ — §13.4 mục 11) và giữ Sheets làm bản đọc lại. ~~TC-IMP-14~~ đã rút cùng công cụ nhập tự động |
 | 5 | Trùng mã nhiệm vụ khi nhiều người bấm cùng lúc | Trung bình | Đổi cách sinh mã sang chuỗi tăng dần trong CSDL + `UNIQUE`; TC-TREE-31 |
 | 6 | Bẫy `role.includes()` cho quyền quá rộng | Trung bình | So khớp chính xác; TC-RBAC-07, TC-RBAC-08; ràng buộc `users_role_valid` chặn ngay ở CSDL nên giá trị `Phân quyền` lạ không vào được bảng |
 | 7 | XSS qua 53 chỗ `innerHTML` | Trung bình | Soát toàn bộ ở Phase 4; TC-SEC-02, TC-SEC-03, TC-MISC-08 |
@@ -1454,9 +1458,9 @@ VPS. Đây là lý do đặt hạ tầng ở Phase 8 chứ không phải Phase 1
    người thuộc MỘT phòng** (§13.4 mục 1).
 2. ~~Tôi tạo nhánh `vps/phase-0-setup` và làm trọn Phase 0.~~ **Xong 2026-08-24**, 28 test xanh
    (§13.3). Phase kế tiếp là Phase 1 — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3.
-3. ~~Bạn chạy `node tools/dump-sheets.js <file.xlsx>` để có snapshot thật.~~ **Xong 2026-08-24**:
-   `data/snapshot-20260824.json` + báo cáo, số liệu ở §13.8. Snapshot **không còn chặn Phase 2**
-   (Phase 2 đã đổi sang dữ liệu test tự tạo) — nó là tài liệu đối chiếu cho việc nhập tay ở Phase 9.
+3. ~~Bạn chạy `node tools/dump-sheets.js <file.xlsx>` để có snapshot thật.~~ **Xong 2026-08-24**,
+   số liệu chép vào §13.8; **2026-08-25 bỏ cả công cụ lẫn snapshot** (§13.4 mục 11). Việc nhập tay
+   ở Phase 9 đối chiếu trực tiếp với `.xlsx` gốc và §13.8.
 4. Bản Apps Script **đóng băng** từ lúc này: chỉ sửa lỗi chặn, không thêm tính năng. Mọi tính
    năng mới đi vào bản VPS.
 5. ~~Trả lời §13.4 mục 6 (dạng mã công việc con/nhiệm vụ tạo mới) trước khi làm Phase 3.~~
@@ -1519,7 +1523,7 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | Phase | Nội dung | Trạng thái | Ghi chú |
 |---|---|---|---|
 | — | Kế hoạch `KE-HOACH-VPS.md` | ✅ | Xong 2026-08-24, §0–§13 |
-| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · **hết nợ**: `dump-sheets.js` đã chạy trên `.xlsx` thật (§13.4 mục 5, số liệu §13.8) |
+| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · **hết nợ**: `dump-sheets.js` đã chạy trên `.xlsx` thật (§13.4 mục 5, số liệu §13.8), rồi cả công cụ lẫn snapshot **đã bỏ** 2026-08-25 (§13.4 mục 11) |
 | 1 | Xác thực, phiên, phân quyền, nhật ký | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-1-auth` — **12/12 việc** (1.1 và 1.12 làm từ Phase 0). **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Còn **một** việc treo sang Phase 4: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chưa tồn tại (§13.5, dòng cuối bảng bẫy Phase 1) |
 | 2 | **Dữ liệu test tự tạo** (đã đổi hướng — không nhập từ Sheets) | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-2-import` (giữ tên cũ dù đã đổi hướng) · `src/db/seeds/dev.sql` = 1 phòng rỗng + 5 phòng, 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký (§8.3) · chạy lại **không nhân đôi** · 2 chốt an toàn có test tiến trình con · **322 test xanh**. `tools/import-from-sheets.js` **đã bỏ**, TC-IMP-01..14 khai tử |
 | 3 | API công việc 3 tầng | ✅ | Xong 2026-08-25 trên nhánh `vps/phase-3-works` (tách từ `vps/phase-2-import`) — **13/13 việc** 3.1–3.13. **495 test xanh** (322 của Phase 2 + 173 mới), lint + prettier sạch. **TC-TREE-01..40** và **TC-ORIGIN-01..15** xanh; **cả 40 phép kiểm** của `tools/test-tasks-gd2.js` đã port sang `legacy-gd2-parity.test.js` (21 test, giữ nguyên cách chia mục [1]..[4] của file cũ) — **một** phép bị đảo có chủ ý: chuyển nhiệm vụ sang công việc khác **không** sinh mã mới nữa (§13.4 mục 6). Chờ người dùng: §13.4 mục 13 (ai được đặt nhắc việc) |
@@ -1550,14 +1554,14 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 2 | Thông số VPS, tên miền, quyền SSH, nội bộ hay Internet (§11 mục 1–4) | Phase 8 | ✅ **đã trả lời 2026-08-24**: giai đoạn này **chạy hẳn trên PC của người dùng** (Windows + Docker Desktop), test xong mới đưa lên VPS. Phase 1–7 làm bình thường; **Phase 8 tạm hoãn** cho tới khi có VPS thật. Hệ quả: `SESSION_COOKIE_SECURE=false` và `APP_BASE_URL=http://localhost:3000` khi chạy local — lên VPS phải đổi cả hai |
 | 3 | Danh sách Phó Giám đốc / Trưởng phòng / Phó phòng thật (§11 mục 5–6) | Phase 5, 9 | ✅ **đã trả lời 2026-08-24**: dùng **danh sách test tự tạo**, người dùng sửa sau. Chốt ở §13.7 — Phase 1 đưa vào `src/db/seeds/dev.sql`. Bắt buộc: seed chỉ chạy khi `NODE_ENV <> 'production'` |
 | 4 | Có SMTP gửi email không (§11 mục 9) | Phase 5 | ✅ **đã trả lời 2026-08-24: KHÔNG gửi email**. `MAIL_ENABLED=false`, **không** cài `nodemailer`, không viết `services/mailer.js`. Thông báo (nhóm J, K8) chỉ nằm trong bảng `notifications` + badge trên giao diện. Nếu sau này cần email thì thêm sau, phần trong ứng dụng không phải sửa |
-| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB). Đã chạy `dump-sheets.js` → `data/snapshot-20260824.json` + `.report.txt`. Số dòng thật: xem §13.8 |
+| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB), vẫn nằm ngoài kho. Đã chạy `dump-sheets.js` → snapshot + báo cáo, số dòng thật chép vào §13.8, rồi **xoá cả ba** ngày 2026-08-25 (mục 11) |
 | 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? | Phase 3 | ✅ **đã trả lời 2026-08-24**: dùng **`<mã công việc>-NNN`** (ví dụ `CV001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng. Nhiệm vụ chuyển sang công việc khác thì **giữ nguyên mã cũ**, không đánh số lại. Mã cũ dạng `ID<yymmddhhmmssSSS>` khi nhập vào thì **giữ nguyên nguyên văn**, không đổi — đổi mã là mất dấu vết đối chiếu |
 | 7 | Google đổi tên sheet `Dự án/Nhiệm vụ` thành gì khi tải `.xlsx`? | Phase 2 | ✅ **đã biết 2026-08-24**: thành **`Dự ánNhiệm vụ`** — Google **xoá hẳn** dấu `/`, không thay bằng ký tự khác. `dump-sheets.js` khớp đúng nhờ so tên chuẩn hoá |
 | 8 | Ô `Nhiệm vụ JSON` thật **không có** khoá `Cấp` và `Mã cha` (xem §13.8) — vậy khi nhập, nhiệm vụ cũ thành **cấp 2 hay cấp 3**? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24** vì Phase 2 đã đổi hướng sang dữ liệu test tự tạo, không còn công cụ nhập tự động. Câu hỏi **sống lại ở Phase 9** khi nhập tay 28 dòng, nhưng lúc đó người nhập tự quyết từng dòng nên không cần chốt trước. Đề xuất cũ vẫn hợp lý: cho thành **cấp 2 (công việc con)** vì chúng đã có ngày, người thực hiện, tiến độ riêng |
 | 9 | Sheet `Thông báo` **không tồn tại** trong file tải về, dù §4.3 khai là bắt buộc — bản Apps Script chưa từng tạo, hay đã bị xoá? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24**: không nhập dữ liệu cũ nữa nên không có gì phụ thuộc. Bảng `notifications` bắt đầu từ dữ liệu mẫu (6 dòng) ở dev, và **rỗng** ở bản chính thức |
-| 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ❓ chờ — Phase 3 **đang làm theo giả định `CV`** (§0.1): dữ liệu mẫu và test đều dùng `CV`, mã cũ nhập tay giữ nguyên văn. Muốn đổi thành `DA` thì chỉ phải sửa tham số truyền vào `next_code()` + dữ liệu mẫu, không đụng lược đồ |
-| 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ❓ chờ — **đang giữ**: `dump-sheets.js` chỉ đọc, và snapshot là nguồn duy nhất để đối chiếu khi nhập tay 28 dòng ở Phase 9. `data/*` vẫn **không commit** (chứa mật khẩu văn bản thuần của người thật) |
-| 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ❓ chờ — không chặn Phase 3–8. Đề xuất: nhập **qua giao diện** để nghiệm thu luôn đường tạo mới, trừ `activity_logs` cũ thì bỏ hẳn |
+| 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ✅ **chốt 2026-08-25: GIỮ `CV`** (`CV010`, `CV011`…). Hai dạng mã sống chung trong cùng cột `code` là chấp nhận được: mã cũ `DA0xx` nhập tay giữ **nguyên văn** để khớp giấy tờ, mã mới do `next_code()` sinh ra mang `CV`. Không phải sửa gì — Phase 3 đã làm đúng theo giả định này |
+| 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ✅ **chốt 2026-08-25: BỎ CẢ HAI**. Đã `git rm tools/dump-sheets.js` và xoá `data/snapshot-20260824.json` + `.report.txt` (`data/` chỉ còn `.gitkeep`). Mất mát duy nhất là bản JSON trung gian: số liệu của nó đã chép hết vào §13.8, `.xlsx` gốc vẫn còn ngoài kho, nên Phase 9 nhập tay vẫn đối chiếu được. Đổi lại, không còn file nào chứa mật khẩu văn bản thuần của người thật nằm trên máy dev |
+| 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ✅ **chốt 2026-08-25: nhập QUA GIAO DIỆN WEB**, không dùng câu SQL. Được hai việc một lúc: dữ liệu vào đúng đường mà người dùng thật sẽ đi (nên lỗi nhập liệu lộ ra ngay), và chính việc nhập là một lượt nghiệm thu §8.5. Nhật ký cũ (`activity_logs` của bản Sheets) **bỏ hẳn**, không nhập lại. Kèm theo: mã cũ `DA0xx` phải nhập nguyên văn (mục 10), và mật khẩu 2 người bị rỗng phải đặt lại kèm `must_change_password` (§13.8) |
 | 13 | **Ai được đặt nhắc việc?** Bản cũ chỉ `admin` ("Chỉ Admin mới có quyền thêm nhắc việc", `Code.gs.moi:2136`) nên người thực hiện không tự nhắc được việc của chính mình | Phase 3 (đã làm) | ✅ **chốt 2026-08-25: `admin` + `Trưởng phòng` / `Phó phòng` CỦA PHÒNG ĐÓ**. Hẹp hơn giả định tạm của Phase 3 ("ai sửa được nhiệm vụ thì đặt được"), nên phép kiểm "Nhân viên tự nhắc việc của mình" **đã bị đảo** thành 403 — đọc lời nhắc thì vẫn được. `Phó Giám đốc` và `Quản lý công việc` cũng **không** đặt được, dù §6 cho họ sửa nhiệm vụ: đây là chỗ siết có chủ ý, đã chốt cứng bằng test riêng để lần sau không ai tự nới. Cài ở `assertCanManage` + `VAI_DAT_NHAC_VIEC` trong `modules/reminders/service.js`; ma trận §6 vẫn không có thực thể `reminder`, chỉ thêm một đoạn ngoại lệ ở cuối §6. `reminders-api.test.js` 17 → 21 phép kiểm |
 
 Nếu một mục ở đây chặn việc đang làm: **làm hết phần không phụ thuộc**, ghi rõ giả định đang
@@ -1689,10 +1693,12 @@ hai lớp phân quyền của §6 cần cả hai loại dòng này. Câu seed vi
 vụ của §8.3. `seed-dev.test.js` lên **27 test** và `seed-guard.test.js` thêm **2 test** cho hai
 chốt an toàn — bảng trên và file `.sql` không thể lệch nhau mà test vẫn xanh.
 
-### 13.8 Số liệu snapshot thật — `data/snapshot-20260824.json`
+### 13.8 Số liệu snapshot thật — chép lại từ `data/snapshot-20260824.json` (file đã xoá)
 
-Nguồn: `file tai xuong tu google sheet.xlsx`, SHA-256 `c5d560af…9efd12`, 96 KB.
-File snapshot **không commit** (chứa email và mật khẩu văn bản thuần thật).
+Nguồn: `file tai xuong tu google sheet.xlsx`, SHA-256 `c5d560af…9efd12`, 96 KB — vẫn nằm ngoài kho.
+Bản snapshot JSON và `dump-sheets.js` **đã bỏ** 2026-08-25 (§13.4 mục 11) vì chứa email và mật
+khẩu văn bản thuần thật. **Mục này là bản ghi duy nhất còn lại** của những gì đã đọc được, nên
+đừng xoá gọn nó khi dọn kế hoạch.
 
 | Sheet trong Sheets | Tên trong `.xlsx` | Số dòng | Số cột |
 |---|---|---|---|
