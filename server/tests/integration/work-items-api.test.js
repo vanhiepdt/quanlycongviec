@@ -457,3 +457,127 @@ describe('POST /api/v1/works/:id/reorder — kéo–thả đổi thứ tự (§7
     expect(res.status).toBe(404);
   });
 });
+
+describe('Đồng thời và cuộn lại (§8.4 mục C)', () => {
+  it('TC-TREE-31: 20 request tạo nhiệm vụ ĐỒNG THỜI ⇒ 20 mã khác nhau, không lỗi', async () => {
+    // Đây là lý do đổi cách sinh mã: bản cũ lấy millisecond nên hai người bấm cùng lúc ra cùng mã
+    // (§13.5). `nextval` không bị giao dịch nào ảnh hưởng, nên 20 request ra 20 số khác nhau.
+    //
+    // Lấy token CSRF MỘT lần rồi dùng cho cả 20 request — đúng như trình duyệt làm, và tránh 20
+    // request lấy token chen ngang làm nhiễu phép đo đồng thời.
+    const csrf = await api.csrfToken();
+    const results = await Promise.all(
+      Array.from({ length: 20 }, (_, n) =>
+        api.post(
+          '/api/v1/work-items',
+          { workRef: work.code, level: 3, name: `Nhiệm vụ ${n + 1}` },
+          { csrf }
+        )
+      )
+    );
+
+    expect(results.map((r) => r.status)).toEqual(Array(20).fill(200));
+    const codes = results.map((r) => r.body.data.item.code);
+    expect(new Set(codes).size).toBe(20);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n, count(DISTINCT code)::int AS d FROM work_items`
+    );
+    expect(rows[0]).toEqual({ n: 20, d: 20 });
+  });
+
+  it('TC-TREE-35: lỗi GIỮA giao dịch nhân bản ⇒ cuộn lại sạch, không dòng nửa vời', async () => {
+    const sub = (await create({ level: 2, name: 'Công việc con A' })).body.data.item;
+    for (const name of ['Nhiệm vụ 1', 'Nhiệm vụ nổ', 'Nhiệm vụ 3']) {
+      await create({ level: 3, name, parentRef: sub.code });
+    }
+
+    // Bẫy đặt SAU khi dữ liệu gốc đã có: nó chỉ nổ khi `copy` chèn bản sao của "Nhiệm vụ nổ",
+    // tức là giữa giao dịch — bản sao của cha đã ghi xong trước đó.
+    await pool.query(`
+      CREATE FUNCTION test_no_bom() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.name = 'Nhiệm vụ nổ' THEN
+          RAISE EXCEPTION 'bẫy test: nổ giữa giao dịch';
+        END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER trg_test_no_bom BEFORE INSERT ON work_items
+        FOR EACH ROW EXECUTE FUNCTION test_no_bom();
+    `);
+    try {
+      const res = await api.post(`/api/v1/work-items/${sub.code}/copy`);
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      // Không còn dòng nào của lần nhân bản dở: vẫn đúng 4 dòng gốc.
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM work_items`);
+      expect(rows[0].n).toBe(4);
+    } finally {
+      await pool.query(`
+        DROP TRIGGER trg_test_no_bom ON work_items;
+        DROP FUNCTION test_no_bom();
+      `);
+    }
+  });
+});
+
+describe('Kiểm dữ liệu vào và phòng cả ba cấp (§7 việc 3.10, 3.11)', () => {
+  it('TC-TREE-32: tiến độ ngoài 0–100 hoặc không phải số ⇒ 400, không ghi giá trị lạ', async () => {
+    for (const completion of [-5, 150, 'abc']) {
+      const res = await create({ name: 'Tiến độ lạ', completion });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.field).toBe('completion');
+    }
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM work_items`);
+    expect(rows[0].n).toBe(0);
+  });
+
+  it('tiến độ 0 và 100 là hợp lệ (biên)', async () => {
+    for (const completion of [0, 100]) {
+      const res = await create({ name: `Tiến độ ${completion}`, completion });
+      expect(res.status).toBe(200);
+      expect(res.body.data.item.completion).toBe(completion);
+    }
+  });
+
+  it('TC-TREE-33: hạn chót TRƯỚC ngày bắt đầu ⇒ cảnh báo, vẫn lưu', async () => {
+    const res = await create({
+      name: 'Hạn ngược',
+      startDate: '2026-09-20',
+      dueDate: '2026-09-10',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.warnings.map((w) => w.code)).toContain('DUE_BEFORE_START');
+    expect(await itemsRepo.findByCode(res.body.data.item.code)).not.toBeNull();
+  });
+
+  // Phòng đã được canh kỹ ở `work-items-department.test.js` (TC-TREE-36..39, gồm cả xoá phòng và
+  // nhân bản). Ở đây chỉ kiểm ĐÚNG phần chạy qua HTTP: giao diện không gửi phòng bao giờ, và lần
+  // Lưu công việc cấp 1 phải lan xuống cả cây.
+  it('TC-TREE-37: không truyền phòng ⇒ nhận phòng công việc cha; cha chưa có phòng thì để trống', async () => {
+    const withDept = (await create({ level: 2, name: 'Có phòng' })).body.data.item;
+    expect(withDept.department_id).toBe(dept.id);
+
+    const noDeptWork = await makeWork({ name: 'Công việc chưa gán phòng', department_id: null });
+    const res = await api.post('/api/v1/work-items', {
+      workRef: noDeptWork.code,
+      name: 'Không phòng',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.item.department_id).toBeNull();
+  });
+
+  it('TC-TREE-38: PATCH đổi phòng công việc cấp 1 ⇒ cả cấp 2 và cấp 3 đổi theo', async () => {
+    const sub = (await create({ level: 2, name: 'Công việc con A' })).body.data.item;
+    const task = (await create({ level: 3, name: 'Nhiệm vụ A1', parentRef: sub.code })).body.data
+      .item;
+    const dept2 = await makeDepartment({ code: 'PH02', name: 'Phòng Kế hoạch', sort_order: 2 });
+
+    const res = await api.patch(`/api/v1/works/${work.code}`, { departmentId: dept2.id });
+    expect(res.status).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT code, department_id FROM work_items WHERE code = ANY($1) ORDER BY code`,
+      [[sub.code, task.code]]
+    );
+    expect(rows.map((r) => r.department_id)).toEqual([dept2.id, dept2.id]);
+  });
+});
