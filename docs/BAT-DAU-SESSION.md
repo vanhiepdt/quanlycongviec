@@ -13,10 +13,10 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 |---|---|
 | Nhánh đang làm | `vps/phase-4-frontend` (tách từ `vps/phase-3-works`) — **toàn bộ Phase 4 nằm ở nhánh này**. `vps/phase-3-works` dừng ở `0e74738`, `vps/phase-2-import` ở `49f42b2`, `vps/phase-1-auth` ở `8aed2a8` |
 | Phase đã xong | **0**, **1**, **2**, **3** và **4** — Phase 4: 8/8 việc (tách `web/` · `api-bridge.js` đủ **37** tên hàm cũ · tự chứa Tailwind/Chart.js/Font Awesome/Inter/Alpine · đăng nhập cookie + phát lại lời gọi khi 401 · modal đổi mật khẩu bắt buộc khi 403 · **soát 55 dòng / 70 chỗ / 474 giá trị `innerHTML`** · bỏ code chết · Nginx phục vụ `web/`) + đã chạy tay **cả 60 điểm** checklist khói §8.5 |
-| Test đang xanh | **673** trong 33 file (495 sau Phase 3 + 178 của Phase 4), lint + `format:check` sạch |
-| Phase kế tiếp | **5 — luồng duyệt + thông báo + lịch chạy** (§7 Phase 5, việc 5.1–5.8 + **5.10** `GET /api/v1/bootstrap` và **5.11** nối 7 tên nhân sự/phòng, cả hai thêm ngày 2026-08-25; §8.4 nhóm E; nhóm Duyệt 8 điểm của §8.5) |
-| Còn treo | Hết nợ Phase 1 (`loginRateLimiter` đã gắn cho `/api/rpc/authenticateUser`, có test 429). Còn **2 điểm đỏ** của §8.5, cả hai đã ghi trong `docs/UAT.md`: **C7** biểu mẫu cũ không tạo được công việc con cấp 2 (chờ §13.4 mục 14) và **D1** Trưởng phòng tạo ra «Đã duyệt» (việc 5.1). Còn **18/37** tên hàm cũ trả `501` — Phase 5 mở 10 + 3, Phase 7 mở phần còn lại |
-| Đang chờ người dùng | §13.4 **mục 14** (thêm ô cấp/cha vào biểu mẫu, hay chỉ tạo cấp 2 từ cây — khuyến nghị (b)) và **mục 15** (có nới quyền đặt nhắc việc cho Phó Giám đốc không — đang **không** cho, theo đúng chữ của mục 13). Mục 1–7, 10–13 đã trả lời; mục 8, 9 hết hiệu lực |
+| Test đang xanh | **675** trong 33 file (495 sau Phase 3 + 180 của Phase 4), lint + `format:check` sạch |
+| Phase kế tiếp | **5 — luồng duyệt + thông báo + lịch chạy** (§7 Phase 5, việc 5.1–5.8 + **5.10** `GET /api/v1/bootstrap`, **5.11** nối 7 tên nhân sự/phòng, **5.12** nút «+ công việc con» trên cây — cả ba thêm ngày 2026-08-25; §8.4 nhóm E; nhóm Duyệt 8 điểm của §8.5) |
+| Còn treo | Hết nợ Phase 1 (`loginRateLimiter` đã gắn cho `/api/rpc/authenticateUser`, có test 429). Còn **2 điểm đỏ** của §8.5, cả hai đã ghi trong `docs/UAT.md`: **C7** biểu mẫu cũ không tạo được công việc con cấp 2 (§13.4 mục 14 đã chốt **phương án (b)** ⇒ **việc 5.12**) và **D1** Trưởng phòng tạo ra «Đã duyệt» (việc 5.1). Còn **18/37** tên hàm cũ trả `501` — Phase 5 mở 10 + 3, Phase 7 mở phần còn lại |
+| Đang chờ người dùng | **KHÔNG còn câu nào.** Mục 14 chốt 2026-08-25 = **phương án (b)** (nút «+ công việc con» trên cây ⇒ việc 5.12, biểu mẫu vẫn tạo cấp 3); mục 15 chốt cùng ngày = **`Phó Giám đốc` phụ trách phòng cũng đặt được nhắc việc** (đã cài, +2 test). Mục 1–7, 10–15 đã trả lời; mục 8, 9 hết hiệu lực |
 | Dữ liệu để làm việc | `npm run seed:dev` → **dữ liệu mẫu §8.3**: 5 phòng (`PH05` rỗng hoàn toàn), 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký. **Cố ý có dữ liệu bẩn** (email chữ hoa, trùng họ tên, nhiệm vụ mồ côi, link thiếu `http`, ngày 29/02) — đừng "sửa cho sạch" |
 | ⚠ CSDL dev đang bị chặn seed | CSDL `quanlycongviec` (dev) còn **5 dòng tay** từ lúc thử tay (`CV001` "Việc gốc"…) trùng `code` nhưng khác `level` ⇒ `npm run seed:dev` nổ `PARENT_NOT_SUBWORK` ở đó. Cách chữa: xoá 5 dòng đó rồi seed lại, hoặc seed sang CSDL khác như Phase 4 đã làm (`DATABASE_URL=…/quanlycongviec_uat npm run seed:dev` — `loadEnvFile()` không ghi đè biến dòng lệnh) |
 | Tài khoản thử tay | `TEST001..TEST013` (§13.7), mật khẩu chung `Test@12345`, tất cả bị bắt đổi ở lần đăng nhập đầu. Có đủ **6 vai trò** |
@@ -82,7 +82,7 @@ nguyên nhân cháy ngữ cảnh phổ biến nhất của dự án này. Cần 
 "google.script.run", "approval", "Chờ duyệt", "pendingCount", "badge". Việc quét rộng thì giao
 subagent và chỉ nhận danh sách kết luận.
 
-TRẠNG THÁI: Phase 0, 1, 2, 3, 4 đã xong. 673 test xanh trong 33 file, lint + format:check sạch.
+TRẠNG THÁI: Phase 0, 1, 2, 3, 4 đã xong. 675 test xanh trong 33 file, lint + format:check sạch.
 Nhánh vps/phase-4-frontend — Phase 5 tách nhánh mới vps/phase-5-approval TỪ vps/phase-4-frontend
 (không tách từ nhánh khác).
 
@@ -102,7 +102,8 @@ Nhánh vps/phase-4-frontend — Phase 5 tách nhánh mới vps/phase-5-approval 
   nguồn tấn công, thêm test XSS cho nó.
 
 VIỆC CỦA SESSION NÀY: làm trọn Phase 5 trên nhánh mới vps/phase-5-approval (tách từ
-vps/phase-4-frontend). Theo đúng §7 Phase 5, 10 việc:
+vps/phase-4-frontend). Theo đúng §7 Phase 5, 11 việc. §13.4 KHÔNG còn câu nào chờ trả lời —
+mục 14 và 15 đã chốt ngày 2026-08-25, cứ làm theo, đừng hỏi lại:
 - 5.1 đặt trạng thái khi tạo: Trưởng/Phó phòng tạo cấp 1 hoặc cấp 2 ⇒ 'Chờ duyệt'; admin và
   Phó GĐ ⇒ 'Đã duyệt'; cấp 3 LUÔN 'Đã duyệt'. Đây là điểm đỏ D1 của §8.5: hiện cột
   works.approval_status có mặc định 'Đã duyệt' và không chỗ nào đặt 'Chờ duyệt', nên kiểm bằng
@@ -129,6 +130,12 @@ vps/phase-4-frontend). Theo đúng §7 Phase 5, 10 việc:
   deleteStaffWithAuth, deleteDepartmentWithAuth + 2 tên phòng đã chạy): nghiệp vụ đã có từ
   Phase 1 ở /api/v1/users và /api/v1/departments, chỉ thiếu lớp ánh xạ. Mở 10 điểm ⏳ (nhóm
   Người dùng & Phòng). Đừng viết lại nghiệp vụ, đừng nới quyền của §6.
+- 5.12 nút «+ công việc con» trên cây — §13.4 mục 14 chốt phương án (b). Bấm ở hàng CÔNG VIỆC
+  ⇒ mở #task-form ở chế độ tạo cấp 2 (không cha); bấm ở hàng CÔNG VIỆC CON ⇒ tạo cấp 3 với
+  parentRef là hàng đó. KHÔNG thêm ô "Cấp" cho người dùng chọn — cấp suy ra từ chỗ bấm.
+  COL.T_LEVEL/COL.T_PARENT (app.js:56–57) đang khai rồi bỏ không, việc này mới dùng đến. Đây là
+  việc ĐƯỢC PHÉP đổi DOM, nên phải thêm id mới vào tests/unit/dom-contract.test.js. Xong thì
+  điểm đỏ C7 của §8.5 mới hết đỏ.
 Đề nghị / chat / app vẫn để 501 tới Phase 7 — đừng tiện tay làm luôn.
 
 RỦI RO LỚN NHẤT CỦA PHASE 5 LÀ SÓT MỘT CHỖ ĐẾM, KHÔNG PHẢI VIẾT ĐƯỢC NÚT DUYỆT:
@@ -137,12 +144,11 @@ nhất không sót là hai view của việc 5.4 + một test chạy EXPLAIN m�
 định chúng đều đọc qua view. Test chốt: ghi lại 4 thẻ số, tạo 1 mục 'Chờ duyệt', đọc lại — không
 đổi MỘT ĐƠN VỊ nào.
 
-TRẢ LỜI TRƯỚC KHI SỬA GIAO DIỆN: §13.4 còn 2 câu chờ tôi — mục 14 (biểu mẫu cũ không tạo được
-công việc con cấp 2: thêm ô "Cấp" + "Công việc cha", hay chỉ cho tạo cấp 2 từ nút trên cây;
-khuyến nghị (b)) và mục 15 (có nới quyền đặt nhắc việc cho Phó Giám đốc không — hiện KHÔNG).
-Hỏi ở đầu session, đừng tự quyết rồi làm cả hai đường.
+QUYỀN ĐẶT NHẮC VIỆC ĐÃ ĐỔI (§13.4 mục 15, chốt 2026-08-25): admin + Phó Giám đốc PHỤ TRÁCH
+phòng đó + Trưởng phòng / Phó phòng của phòng đó. Đã cài ở VAI_DAT_NHAC_VIEC trong
+modules/reminders/service.js, 23 phép kiểm xanh — đừng nới thêm vai nào nữa.
 
-XONG KHI: 673 test cũ vẫn xanh · test "tạo 1 mục Chờ duyệt ⇒ 4 thẻ số và 6 biểu đồ không đổi
+XONG KHI: 675 test cũ vẫn xanh · test "tạo 1 mục Chờ duyệt ⇒ 4 thẻ số và 6 biểu đồ không đổi
 một đơn vị nào" xanh · Phó GĐ phòng A duyệt mục phòng B nhận 403 · lý do từ chối rỗng hoặc
 < 10 ký tự bị chặn · EXPLAIN khẳng định mọi truy vấn thống kê đọc qua v_countable_* · bootstrap
 trả đủ gói và getInitialDataWithAuth lúc chưa đăng nhập vẫn trả {requireLogin:true} · 13 tên hàm
@@ -189,7 +195,7 @@ docker compose -f deploy/docker-compose.dev.yml ps      # cả 3 phải "healthy
 cd server && npm run migrate:up
 
 # 3. Kiểm mọi thứ còn xanh TRƯỚC KHI sửa gì — LUÔN chạy từ trong server/, không từ gốc repo
-cd server && npm test    # phải 673/673 xanh trong 33 file (hết Phase 0 + 1 + 2 + 3 + 4)
+cd server && npm test    # phải 675/675 xanh trong 33 file (hết Phase 0 + 1 + 2 + 3 + 4)
 npm run lint && npm run format:check
 
 # 4. Chạy máy chủ khi cần thử tay

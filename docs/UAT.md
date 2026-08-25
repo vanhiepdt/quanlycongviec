@@ -303,8 +303,9 @@ và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-dep
 
 ### Ba điểm phải làm gì tiếp
 
-1. **C7** — thêm ô chọn cấp + công việc cha vào `#task-form` (Phase sau, vì Phase 4 bị cấm đổi DOM);
-   hướng làm chờ người dùng chốt ở §13.4 mục 14.
+1. **C7** — §13.4 mục 14 đã chốt **phương án (b)** ngày 2026-08-25: tạo cấp 2 bằng nút
+   «+ công việc con» ngay trên cây, `#task-form` giữ nguyên là tạo cấp 3, **không** thêm ô «Cấp».
+   Cài ở việc **5.12** (Phase 5) vì Phase 4 bị cấm đổi DOM.
 2. **D1** — đặt `approval_status = 'Chờ duyệt'` khi người tạo là Trưởng/Phó phòng: việc **5.1**.
 3. **38 điểm ⏳** — 17 điểm (nhóm Tổng quan + R1–R7) mở bằng việc **5.10** `GET /api/v1/bootstrap`;
    10 điểm nhân sự/phòng mở bằng việc **5.11**; 7 điểm nhóm Duyệt bằng việc **5.2–5.7**;
