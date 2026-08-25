@@ -249,6 +249,32 @@ describe('POST /api/v1/works/:id/copy — TC-TREE-27 nhân bản cả cây', () 
     expect(await itemsRepo.listByWork(work.id)).toHaveLength(5);
   });
 
+  it('TC-TREE-40: bản sao và cả cây con cùng phòng với bản gốc', async () => {
+    const res = await api.post(`/api/v1/works/${work.code}/copy`, {});
+    expect(res.status).toBe(200);
+    const copy = res.body.data.work;
+    expect(copy.department_id).toBe(dept.id);
+    for (const row of await itemsRepo.listByWork(copy.id)) {
+      expect(row.department_id).toBe(dept.id);
+    }
+  });
+
+  it('TC-TREE-40: công việc gốc CHƯA có phòng ⇒ bản sao cũng để trống, không nổ', async () => {
+    const noDept = await worksRepo.insert({ name: 'Việc chưa có phòng' });
+    await itemsRepo.insert({
+      code: `${noDept.code}-001`,
+      work_id: noDept.id,
+      level: 2,
+      name: 'Con không phòng',
+    });
+    const res = await api.post(`/api/v1/works/${noDept.code}/copy`, {});
+    expect(res.status).toBe(200);
+    expect(res.body.data.work.department_id).toBeNull();
+    const copied = await itemsRepo.listByWork(res.body.data.work.id);
+    expect(copied).toHaveLength(1);
+    expect(copied[0].department_id).toBeNull();
+  });
+
   it('nhân bản công việc không tồn tại → 404, không tạo dòng rác nào', async () => {
     const before = await pool.query('SELECT count(*)::int AS n FROM works');
     const res = await api.post('/api/v1/works/CV999/copy', {});
