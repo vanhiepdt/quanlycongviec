@@ -35,5 +35,30 @@ export default [
       'require-await': 'error',
     },
   },
+  // Test của phần TRÌNH DUYỆT chạy trong jsdom (`web/assets/js/*.js`), nên có thêm `window`,
+  // `document`, `fetch`. Chỉ mở cho đúng mấy file này để phần máy chủ vẫn không được phép chạm
+  // vào biến toàn cục của trình duyệt.
+  {
+    files: [
+      'tests/unit/api-bridge.test.js',
+      'tests/unit/change-password-modal.test.js',
+      'tests/unit/xss-escape.test.js',
+    ],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        globalThis: 'readonly',
+        fetch: 'readonly',
+        Promise: 'readonly',
+        Function: 'readonly',
+        JSON: 'readonly',
+        Object: 'readonly',
+        String: 'readonly',
+        // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.
+        Proxy: 'readonly',
+      },
+    },
+  },
   prettier,
 ];

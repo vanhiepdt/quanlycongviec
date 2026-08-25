@@ -275,7 +275,7 @@ quanlycongviec/
 │  │  │  ├─ workItems/            # cấp 2 + cấp 3 (một bảng, phân biệt bằng level)
 │  │  │  ├─ reminders/  approvals/  proposals/  apps/  chat/
 │  │  │  ├─ notifications/  stats/  gantt/  activity/  export/
-│  │  ├─ rpc/index.js             # cầu tương thích: 36 tên hàm cũ → service
+│  │  ├─ rpc/index.js             # cầu tương thích: 37 tên hàm cũ → service
 │  │  ├─ services/ cron.js  excel.js       # KHÔNG có mailer.js — §13.4 mục 4
 │  │  ├─ utils/
 │  │  │  ├─ logger.js             # [đã có] pino, che cookie/authorization/mật khẩu
@@ -293,11 +293,11 @@ quanlycongviec/
 │  ├─ assets/js/app.js            # từ js.clean.html (bỏ 2 thẻ <script>)
 │  ├─ assets/js/api-bridge.js     # MỚI — giả lập google.script.run bằng fetch
 │  └─ assets/vendor/              # tailwind, chart.js, fontawesome, Inter — tự chứa
-├─ data/                          # [đã có] chỗ để snapshot .xlsx đã xuất — KHÔNG commit
+├─ data/                          # [đã có] rỗng — snapshot đã bỏ (§13.4 mục 11)
 │  └─ .gitkeep                    #          (.gitignore: data/* trừ .gitkeep)
 ├─ tools/                         # giữ nguyên bộ tool cũ
-│  └─ dump-sheets.js              # [đã có] xuất Sheets ra JSON — chỉ đọc
-│                                 # (import-from-sheets.js đã BỎ — xem §7 Phase 2)
+│                                 # (dump-sheets.js và import-from-sheets.js đều đã BỎ —
+│                                 #  xem §7 Phase 2 và §13.4 mục 11)
 ├─ deploy/
 │  ├─ docker-compose.yml  Dockerfile
 │  ├─ docker-compose.dev.yml      # [đã có] db + db-test (tmpfs) + adminer
@@ -553,8 +553,9 @@ CREATE INDEX ON sessions (expires_at);
 ### 4.3 Bảng đối chiếu cột Sheets → CSDL
 
 Bảng này viết cho công cụ nhập từ Sheets — công cụ **đã bỏ** (§7 Phase 2). Vẫn giữ lại vì nó là
-nơi duy nhất ghi **ý nghĩa từng cột của hệ thống cũ**: lúc nhập tay 28 dòng dữ liệu thật khi lên
-bản chính thức, và lúc đọc `data/snapshot-20260824.json` để tra cứu, phải theo đúng bảng này.
+nơi duy nhất ghi **ý nghĩa từng cột của hệ thống cũ**: lúc nhập tay 28 dòng dữ liệu thật qua giao
+diện web khi lên bản chính thức (§13.4 mục 12), và lúc mở `file tai xuong tu google sheet.xlsx`
+để tra cứu, phải theo đúng bảng này. Snapshot JSON đã bỏ; số liệu của nó còn ở §13.8.
 
 | Sheet | Cột Sheets | Bảng.cột |
 |---|---|---|
@@ -580,14 +581,15 @@ Nhiệm vụ mồ côi vẫn nhập nhưng `parent_id = NULL`, hiện ở nhóm 
 ### 5.1 Cầu tương thích — cách để không phải sửa 3653 dòng frontend
 
 Frontend hiện gọi backend qua **28 chỗ** `google.script.run.withSuccessHandler(...).tênHàm(...)`,
-tổng **36 tên hàm**. Thay vì sửa từng chỗ, thêm một file duy nhất `web/assets/js/api-bridge.js`
+tổng **37 tên hàm** (kế hoạch viết 36 là **đếm sai**: đếm lại từng dòng §5.2 và đối chiếu với
+`web/assets/js/app.js` lúc làm việc 4.2 thì ra 37 — xem bẫy ở §13.5). Thay vì sửa từng chỗ, thêm một file duy nhất `web/assets/js/api-bridge.js`
 định nghĩa lại `window.google.script.run` với đúng giao diện cũ:
 
 ```js
 // api-bridge.js — nạp TRƯỚC app.js
 const RPC = ['authenticateUser','logout','getDataForUser','getInitialDataWithAuth',
   'getProjects','getTasks','getStaffList','getProposals','getChatMessages',
-  'getDepartmentContext','addProjectWithAuth','updateProjectWithAuth', /* … 36 tên … */];
+  'getDepartmentContext','addProjectWithAuth','updateProjectWithAuth', /* … 37 tên … */];
 
 function makeRunner(onOk, onErr) {
   const api = {
@@ -617,7 +619,7 @@ Kết quả: `js.clean.html` **không đổi một dòng logic nào** ở Phase 
 Từ Phase 6 mọi tính năng **mới** dùng `/api/v1/*` chuẩn REST; `/api/rpc/*` giữ nguyên cho phần
 cũ và chỉ dọn khi frontend được tách module (ngoài phạm vi kế hoạch này).
 
-### 5.2 Bảng 36 hàm cũ → service mới
+### 5.2 Bảng 37 hàm cũ → service mới
 
 | Tên cũ (frontend gọi) | Service mới | REST tương đương (Phase 6+) |
 |---|---|---|
@@ -632,12 +634,39 @@ cũ và chỉ dọn khi frontend được tách module (ngoài phạm vi kế ho
 | `addTaskWithAuth` / `updateTaskWithAuth` / `deleteTaskWithAuth` / `copyTaskWithAuth` | `workItems.create/update/remove/copy` | `POST/PATCH/DELETE /api/v1/work-items/:id` |
 | `reorderTasks` | `workItems.reorder` | `POST /api/v1/works/:id/reorder` |
 | `addTaskReminder` / `updateTaskReminder` / `deleteTaskReminder` | `reminders.create/update/remove` | `POST/PATCH/DELETE /api/v1/work-items/:id/reminders` |
-| `getStaffList`, `add/update/deleteStaffWithAuth` | `users.*` | `GET/POST/PATCH/DELETE /api/v1/users` |
-| `add/update/deleteDepartmentWithAuth` | `departments.*` | `/api/v1/departments` |
-| `getProposals`, `add/update/deleteProposalWithAuth` | `proposals.*` | `/api/v1/proposals` |
+| `getStaffList`, `addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth` | `users.*` | `GET/POST/PATCH/DELETE /api/v1/users` |
+| `addDepartmentWithAuth`, `updateDepartmentWithAuth`, `deleteDepartmentWithAuth` | `departments.*` | `/api/v1/departments` |
+| `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`, `deleteProposalWithAuth` | `proposals.*` | `/api/v1/proposals` |
 | `addApp`, `updateApp`, `deleteApp` | `apps.*` | `/api/v1/apps` |
 | `getChatMessages`, `sendChatMessage` | `chat.list/send` | `/api/v1/chat` |
 | `addNotificationWithAuth` | `notifications.create` | `POST /api/v1/notifications` |
+
+Viết đủ từng tên chứ không gộp `add/update/delete…` — chính cách viết gộp làm kế hoạch đếm thành
+36. Đếm theo dòng bảng trên: **3** (ba dòng đăng nhập/phiên) + 2 + 1 + 1 + 4 + 1 + 4 + 1 + 3 + 4 +
+3 + 4 + 3 + 2 + 1 = **37**.
+
+**Tình trạng sau Phase 4** (`server/src/rpc/table.js` là nguồn sự thật, `api-bridge.test.js` chốt
+cứng cả 37 tên): **19 tên đã chạy thật**, **18 tên trả `501 NOT_IMPLEMENTED`** kèm câu tiếng Việt
+nói rõ chức năng nào chưa có — cố ý thất bại rõ ràng, vì tên thiếu hẳn khỏi bảng thì lời gọi im
+lặng trả `undefined` và giao diện hỏng ở chỗ không ai đoán được.
+
+| | Tên |
+|---|---|
+| Đã chạy (19) | `authenticateUser`, `logout`, `changePassword`, `getProjects`, `addProjectWithAuth`, `updateProjectWithAuth`, `deleteProjectWithAuth`, `copyProjectWithAuth`, `getTasks`, `addTaskWithAuth`, `updateTaskWithAuth`, `deleteTaskWithAuth`, `copyTaskWithAuth`, `reorderTasks`, `addTaskReminder`, `updateTaskReminder`, `deleteTaskReminder`, `addDepartmentWithAuth`, `updateDepartmentWithAuth` |
+| 501 (18) | `getDataForUser`, `getInitialDataWithAuth`, `getDepartmentContext`, `getStaffList`, `addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth`, `deleteDepartmentWithAuth`, `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`, `deleteProposalWithAuth`, `addApp`, `updateApp`, `deleteApp`, `getChatMessages`, `sendChatMessage`, `addNotificationWithAuth` |
+
+Ba tên đầu của nhóm 501 là **điểm đỏ đã biết** của việc nghiệm thu §8.5: bảng tổng quan không có
+dữ liệu để vẽ cho tới khi Phase 5 làm `GET /api/v1/bootstrap`. Một ngoại lệ hẹp:
+`getInitialDataWithAuth` khi **chưa** có phiên vẫn trả đúng cờ "chưa đăng nhập" thay vì 501, nếu
+không thì khách vào trang chỉ thấy lỗi thay vì ô đăng nhập.
+
+**`GET /api/v1/bootstrap` — chốt là CÓ, làm ở Phase 5** (việc **5.10**; §7 Phase 5 đã thêm hai
+việc 5.10 và 5.11 sau lượt khói §8.5 của Phase 4). Một lời gọi trả về gói dữ liệu
+đầu trang: người đăng nhập, danh sách phòng, danh sách người, số đếm chờ duyệt, thống kê tổng quan.
+Lý do gộp thay vì để giao diện gọi 5 đường REST: bản cũ mở trang là một lần `getDataForUser`, và
+`app.js` **không được sửa logic** ở Phase 4 — muốn giữ đúng một lần gọi thì máy chủ phải có đúng
+một đường. `getDataForUser` và `getInitialDataWithAuth` cùng ánh xạ vào nó, khác nhau ở chỗ bản
+"WithAuth" trả thêm phần phiên.
 
 **Bổ sung mới, không có tên cũ:**
 
@@ -695,11 +724,17 @@ trace ra trình duyệt.
 
 Mã HTTP: `200` thành công · `400` dữ liệu sai · `401` chưa đăng nhập / hết phiên · `403` không
 đủ quyền · `404` không tìm thấy · `409` xung đột (trùng mã, xoá phòng còn người) · `429` bị chặn
-vì gọi quá nhiều · `500` lỗi hệ thống.
+vì gọi quá nhiều · **`501` tên hàm cũ có thật nhưng nghiệp vụ chưa chuyển sang máy chủ mới** ·
+`500` lỗi hệ thống.
+
+`501 NOT_IMPLEMENTED` thêm vào từ Phase 4 và **chỉ dùng cho `/api/rpc/*`**: cầu tương thích phải
+có đủ 37 tên ngay từ đầu (thiếu tên là lời gọi im lặng trả `undefined`), nên 18 tên chưa có nghiệp
+vụ vẫn có dòng trong bảng và trả 501 kèm câu tiếng Việt chỉ đúng chức năng còn thiếu. Đường
+`/api/v1/*` **không bao giờ** trả 501: đường nào chưa có thì chưa khai báo, và Express trả 404.
 
 Cầu tương thích ở §5.1 trả `res.data` cho `withSuccessHandler`, nên các hàm cũ vẫn nhận đúng
 hình dạng `{success: true, …}` mà chúng đang mong đợi — service mới giữ nguyên hình dạng đó
-trong `data` cho 36 hàm cũ.
+trong `data` cho **37** hàm cũ.
 
 ## 6. Ma trận phân quyền — port sang `middleware/rbac.js`
 
@@ -729,6 +764,17 @@ trên chính đầu việc đó, nên ai không thấy được công việc th�
 (TC-ORIGIN-14). Ngược lại, ai đã thấy được thì thấy **toàn bộ** nhật ký từ đầu — kể cả những lần
 sửa của người khác — vì đó chính là điều mục B8/C17 yêu cầu.
 
+**Một ngoại lệ HẸP HƠN bảng trên: nhắc việc** (§13.4 mục 13 + mục 15, người dùng chốt 2026-08-25).
+Thêm / sửa / xoá nhắc việc chỉ dành cho **`admin` + `Phó Giám đốc` PHỤ TRÁCH phòng đó +
+`Trưởng phòng` / `Phó phòng` của phòng chứa nhiệm vụ đó**; `Quản lý công việc` và `Nhân viên`
+**không** đặt được nhắc việc dù bảng trên cho họ sửa nhiệm vụ. Đọc thì vẫn theo bảng (ai thấy nhiệm
+vụ thì thấy lời nhắc của nó). Ma trận không có thực thể `reminder`: chỗ siết nằm ở `assertCanManage`
+trong `modules/reminders/service.js`, gọi `can(...,'update',...)` trước để giữ nguyên mã lỗi chung
+và phần "đúng phòng mình", rồi mới lọc theo vai. Chữ "phụ trách phòng đó" của `Phó Giám đốc` KHÔNG
+cần dòng mã nào riêng: `inScope()` đã bó vai này theo `managedDepartmentIds`, tức chỉ những phòng có
+dòng `department_managers.role = 'deputy_director'` (rbac.js:161) — Phó Giám đốc phụ trách phòng
+khác nhận 403 "ngoài phạm vi", không phải 403 vì vai.
+
 ## 7. Kế hoạch từng Phase
 
 10 phase, mỗi phase một nhánh git, kết thúc bằng một bản chạy được và test xanh. Thời lượng
@@ -749,20 +795,21 @@ Tổng: **38–47 ngày làm việc ≈ 8–10 tuần**.
 | 0.3 | `docker-compose.dev.yml`: Postgres 16 + adminer, **thêm `db-test`** dùng tmpfs cho bộ test (§8.2 buộc CSDL test tách riêng, không dùng chung với dev) | `docker compose -f deploy/docker-compose.dev.yml up -d` |
 | 0.4 | `config/env.js` — thiếu biến môi trường là **chết ngay khi khởi động**, không chạy tiếp | `.env.example` đủ 14 biến |
 | 0.5 | Viết `001_init.sql` theo §4 | `npm run migrate:up` và `:down` đều sạch |
-| 0.6 | `tools/dump-sheets.js` — xuất 8 sheet ra `data/snapshot-YYYYMMDD.json`, **chỉ đọc** | 1 file JSON, ghi lại số dòng từng sheet |
+| 0.6 | ~~`tools/dump-sheets.js` — xuất 8 sheet ra `data/snapshot-YYYYMMDD.json`, **chỉ đọc**~~ | ~~1 file JSON, ghi lại số dòng từng sheet~~ · **đã chạy 2026-08-24 rồi BỎ cả công cụ lẫn snapshot** (§13.4 mục 11); số liệu còn ở §13.8 |
 | 0.7 | Chốt §2 thành `docs/UAT.md` — 13 nhóm, mỗi mã một dòng có ô tích | checklist nghiệm thu |
 
 **Xong khi**: `npm run migrate:up` tạo đủ **12 bảng nghiệp vụ + bảng `pgmigrations`** của
-node-pg-migrate (13 bảng trong `information_schema`) · `npm test` xanh · có file snapshot kèm
-bảng đếm số dòng · `docs/UAT.md` có đủ **88** mã tính năng (đếm lại từ §2: 7+6+15+10+11+9+6+4+3+3+8+2+4).
+node-pg-migrate (13 bảng trong `information_schema`) · `npm test` xanh · ~~có file snapshot kèm
+bảng đếm số dòng~~ (bảng đếm đã chuyển vào §13.8) · `docs/UAT.md` có đủ **88** mã tính năng (đếm lại từ §2: 7+6+15+10+11+9+6+4+3+3+8+2+4).
 
-**Kết quả thật 2026-08-24**: xong, 28 test xanh (18 lược đồ + 6 env + 4 health). Việc **0.6 còn
-nợ đầu ra**: công cụ đã viết và đã thử bằng file `.xlsx` giả (có ô JSON hỏng cố ý, sheet bị đổi
-tên, ô ngày, ô công thức, cột không tiêu đề) nhưng **chưa có `.xlsx` thật** để sinh snapshot —
-xem §13.4 mục 5.
+**Kết quả thật 2026-08-24**: xong, 28 test xanh (18 lược đồ + 6 env + 4 health). Việc 0.6 đã chạy
+trên `.xlsx` thật ngày 2026-08-24 (số liệu §13.8), rồi **cả công cụ lẫn snapshot đều bị bỏ**
+ngày 2026-08-25 theo §13.4 mục 11 — không còn việc nợ nào của Phase 0.
 
-**Rủi ro**: Sheets có ô JSON hỏng (đã biết là **có**). `dump-sheets.js` phải xuất **nguyên văn
-chuỗi**, không `JSON.parse` — việc phân tích để Phase 2 làm, có báo cáo lỗi riêng.
+**Rủi ro** (đã hết hiệu lực cùng việc 0.6): Sheets có ô JSON hỏng (đã biết là **có**), nên
+`dump-sheets.js` xuất **nguyên văn chuỗi**, không `JSON.parse`. Giữ lại dòng này vì Phase 9 nhập
+tay cũng gặp đúng mấy ô đó — đọc bằng mắt thì cũng phải chép nguyên văn rồi tự sửa, không tin ô
+JSON của bản cũ là hợp lệ.
 
 ---
 
@@ -805,10 +852,12 @@ danh sách vai trò cho phép, và Phase 2 in ra mọi giá trị `Phân quyền
 > hơn cả dữ liệu mẫu — mà kéo theo email và mật khẩu văn bản thuần của người thật vào máy dev,
 > vào CSDL dev và vào mọi bản sao lưu. Nhập tay lại 28 dòng khi lên bản chính thức rẻ hơn nhiều.
 >
-> Còn giữ: `tools/dump-sheets.js` (chỉ đọc) và `data/snapshot-20260824.json` để tra cứu cấu trúc
-> dữ liệu cũ. Phần **§13.8 phân tích dữ liệu thật vẫn còn giá trị** — đó là nơi biết được vai trò
-> viết hoa/thường lẫn lộn, mật khẩu rỗng, `Trạng thái duyệt` rỗng: những cái đó thành ràng buộc
-> của lược đồ, không cần công cụ nhập mới học được.
+> **Bỏ luôn cả `tools/dump-sheets.js` và `data/snapshot-20260824.json`** (2026-08-25, §13.4 mục
+> 11): công cụ đã làm xong việc của nó, và giữ một file JSON có email + mật khẩu văn bản thuần của
+> người thật trên máy dev là rủi ro không đổi lấy gì. Phần **§13.8 phân tích dữ liệu thật vẫn còn
+> giá trị** — đó là nơi biết được vai trò viết hoa/thường lẫn lộn, mật khẩu rỗng, `Trạng thái
+> duyệt` rỗng: những cái đó thành ràng buộc của lược đồ, không cần công cụ nhập mới học được. Bản
+> `.xlsx` gốc vẫn nằm ngoài kho, đủ để đối chiếu khi nhập tay ở Phase 9.
 
 **Mục tiêu**: một lệnh `npm run seed:dev` dựng đủ dữ liệu để bấm thử tay hết Phase 3, **không có
 một dòng nào là nhân sự thật**.
@@ -870,7 +919,7 @@ trong CSDL + `UNIQUE` trên `code`, và có test 20 request đồng thời.
 | # | Việc | Chi tiết |
 |---|---|---|
 | 4.1 | Tách file | `index.html` bỏ `<?!= include('js') ?>` / `include('CSS')`, thay bằng `<script src>` và `<link>`; `js.clean.html` → `web/assets/js/app.js` (bỏ 2 thẻ `<script>` bọc ngoài); `CSS.html` → `web/assets/css/app.css` |
-| 4.2 | `api-bridge.js` | Theo §5.1, đủ 36 tên hàm; nạp **trước** `app.js` |
+| 4.2 | `api-bridge.js` | Theo §5.1, đủ **37** tên hàm (kế hoạch viết 36 là đếm sai — §13.5); nạp **trước** `app.js` |
 | 4.3 | Tự chứa thư viện ngoài | Tải Tailwind (bản build sẵn, không dùng `cdn.tailwindcss.com` trên production), Chart.js, Font Awesome, font Inter về `web/assets/vendor/` |
 | 4.4 | Đăng nhập | Trang đăng nhập dùng cookie phiên; hết phiên (401) ⇒ hiện lại modal đăng nhập, không đứng im |
 | 4.5 | Bắt buộc đổi mật khẩu | Nhận `403 MUST_CHANGE_PASSWORD` ⇒ mở thẳng modal đổi mật khẩu, không cho vào app |
@@ -902,9 +951,14 @@ vendor, escape) — **cấm** đổi tên hàm, đổi id DOM, dọn code. Ai mu
 | 5.7 | Thông báo | Có mục mới chờ ⇒ thông báo cho Phó GĐ phụ trách; được duyệt / bị từ chối ⇒ thông báo cho người tạo |
 | 5.8 | `services/cron.js` | 07:00 hằng ngày: quét nhiệm vụ quá hạn, tạo thông báo (thay `setupDailyTrigger`). Chạy trong container `app`, có cờ `CRON_ENABLED` để staging tắt |
 | 5.9 | ~~Email~~ | **Bỏ** — chốt 2026-08-24 (§13.4 mục 4): không gửi email, không cài `nodemailer`. Thông báo chỉ trong bảng `notifications` + badge |
+| 5.10 | **`GET /api/v1/bootstrap`** | Thêm 2026-08-25 sau lượt khói §8.5 của Phase 4 (§5.2 đã chốt đường này). Một lời gọi trả gói dữ liệu đầu trang: người đăng nhập, danh sách phòng, danh sách người, số đếm chờ duyệt, thống kê tổng quan. Mở `getDataForUser` + `getInitialDataWithAuth` + `getDepartmentContext` trong cầu RPC ⇒ **mở 17 điểm ⏳** của §8.5 (cả nhóm Tổng quan 10 điểm và R1–R7 Gantt). Thống kê trong gói này đọc qua view của việc 5.4; phần biểu đồ đầy đủ vẫn là Phase 6 |
+| 5.11 | Nối 7 tên nhân sự / phòng vào cầu RPC | `getStaffList`, `addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth`, `deleteDepartmentWithAuth` (+ 2 tên phòng đã chạy) — nghiệp vụ **đã có từ Phase 1** (`/api/v1/users`, `/api/v1/departments`), chỉ thiếu lớp ánh xạ ⇒ **mở 10 điểm ⏳** (nhóm Người dùng & Phòng của §8.5). `getProposals`/`addApp`/`getChatMessages`… vẫn `501` tới **Phase 7** |
+
+| 5.12 | Nút «+ công việc con» trên cây (mở điểm đỏ **C7**) | Thêm 2026-08-25 theo §13.4 mục 14 — người dùng chốt **phương án (b)**. Mỗi hàng trên cây có nút «+ công việc con»: bấm ở hàng **công việc** ⇒ mở `#task-form` ở chế độ tạo **cấp 2** (không cha); bấm ở hàng **công việc con** ⇒ tạo **cấp 3** với `parentRef` là hàng đó. Biểu mẫu **không** thêm ô «Cấp» cho người dùng chọn — cấp suy ra từ chỗ bấm; `COL.T_LEVEL`/`COL.T_PARENT` (`web/assets/js/app.js:56–57`) đang khai rồi bỏ không, việc này mới dùng đến. Đây là việc **được phép đổi DOM** (Phase 4 bị cấm), nên phải bổ sung `dom-contract.test.js` cho id mới. Xong thì điểm **C7** của §8.5 hết đỏ |
 
 **Xong khi**: test "tạo 1 công việc `Chờ duyệt` ⇒ **cả 4 thẻ số và 6 biểu đồ không đổi một đơn
-vị nào**" xanh · Phó GĐ phòng A không duyệt được mục của phòng B (403) · lý do từ chối rỗng bị chặn.
+vị nào**" xanh · Phó GĐ phòng A không duyệt được mục của phòng B (403) · lý do từ chối rỗng bị chặn
+· tạo được **cấp 2** từ giao diện (điểm C7).
 
 **Rủi ro**: đây là chỗ dễ sót nhất — quyết định số 7 của kế hoạch cũ. Dùng **view** thay vì thêm
 điều kiện ở từng truy vấn là cách duy nhất không sót. Kèm một test đặc biệt: chạy `EXPLAIN` mọi
@@ -1396,7 +1450,7 @@ chữ sai, thiếu thông báo. Chỉ lỗi **Nhẹ** được phép mang sang b
 | 1 | Frontend 3653 dòng không có build step, lỗi im lặng | **Cao** | Cầu tương thích §5.1 để không sửa logic; Phase 4 chỉ được làm 4 việc đã liệt kê; 35 luồng E2E Playwright thay cho việc bấm tay |
 | 2 | Sót chỗ loại `Chờ duyệt` khỏi thống kê | **Cao** | Dùng **view** `v_countable_*`, không thêm điều kiện rải rác; TC-APR-06 kiểm cả 4 thẻ số và 6 biểu đồ |
 | 3 | Sót chỗ chỉ đếm cấp 3 | **Cao** | `filterLevel3Tasks` đã có ở backend; ở SQL thì đặt `level = 3` **trong view**, không ở từng truy vấn |
-| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | 28 dòng thật **nhập tay** ở Phase 9 theo bảng đối chiếu §4.3, đối chiếu từng dòng với `data/snapshot-20260824.json` (§13.8) và giữ Sheets làm bản đọc lại. ~~TC-IMP-14~~ đã rút cùng công cụ nhập tự động |
+| 4 | Dữ liệu nhập lệch mà không ai biết | **Cao** | 28 dòng thật **nhập tay** ở Phase 9 theo bảng đối chiếu §4.3, đối chiếu từng dòng với chính `file tai xuong tu google sheet.xlsx` (số liệu tổng ở §13.8; snapshot JSON đã bỏ — §13.4 mục 11) và giữ Sheets làm bản đọc lại. ~~TC-IMP-14~~ đã rút cùng công cụ nhập tự động |
 | 5 | Trùng mã nhiệm vụ khi nhiều người bấm cùng lúc | Trung bình | Đổi cách sinh mã sang chuỗi tăng dần trong CSDL + `UNIQUE`; TC-TREE-31 |
 | 6 | Bẫy `role.includes()` cho quyền quá rộng | Trung bình | So khớp chính xác; TC-RBAC-07, TC-RBAC-08; ràng buộc `users_role_valid` chặn ngay ở CSDL nên giá trị `Phân quyền` lạ không vào được bảng |
 | 7 | XSS qua 53 chỗ `innerHTML` | Trung bình | Soát toàn bộ ở Phase 4; TC-SEC-02, TC-SEC-03, TC-MISC-08 |
@@ -1445,9 +1499,9 @@ VPS. Đây là lý do đặt hạ tầng ở Phase 8 chứ không phải Phase 1
    người thuộc MỘT phòng** (§13.4 mục 1).
 2. ~~Tôi tạo nhánh `vps/phase-0-setup` và làm trọn Phase 0.~~ **Xong 2026-08-24**, 28 test xanh
    (§13.3). Phase kế tiếp là Phase 1 — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3.
-3. ~~Bạn chạy `node tools/dump-sheets.js <file.xlsx>` để có snapshot thật.~~ **Xong 2026-08-24**:
-   `data/snapshot-20260824.json` + báo cáo, số liệu ở §13.8. Snapshot **không còn chặn Phase 2**
-   (Phase 2 đã đổi sang dữ liệu test tự tạo) — nó là tài liệu đối chiếu cho việc nhập tay ở Phase 9.
+3. ~~Bạn chạy `node tools/dump-sheets.js <file.xlsx>` để có snapshot thật.~~ **Xong 2026-08-24**,
+   số liệu chép vào §13.8; **2026-08-25 bỏ cả công cụ lẫn snapshot** (§13.4 mục 11). Việc nhập tay
+   ở Phase 9 đối chiếu trực tiếp với `.xlsx` gốc và §13.8.
 4. Bản Apps Script **đóng băng** từ lúc này: chỉ sửa lỗi chặn, không thêm tính năng. Mọi tính
    năng mới đi vào bản VPS.
 5. ~~Trả lời §13.4 mục 6 (dạng mã công việc con/nhiệm vụ tạo mới) trước khi làm Phase 3.~~
@@ -1510,12 +1564,12 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | Phase | Nội dung | Trạng thái | Ghi chú |
 |---|---|---|---|
 | — | Kế hoạch `KE-HOACH-VPS.md` | ✅ | Xong 2026-08-24, §0–§13 |
-| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · **hết nợ**: `dump-sheets.js` đã chạy trên `.xlsx` thật (§13.4 mục 5, số liệu §13.8) |
+| 0 | Chuẩn bị & chốt hợp đồng dữ liệu | ✅ | Xong 2026-08-24 · 28 test xanh · **hết nợ**: `dump-sheets.js` đã chạy trên `.xlsx` thật (§13.4 mục 5, số liệu §13.8), rồi cả công cụ lẫn snapshot **đã bỏ** 2026-08-25 (§13.4 mục 11) |
 | 1 | Xác thực, phiên, phân quyền, nhật ký | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-1-auth` — **12/12 việc** (1.1 và 1.12 làm từ Phase 0). **299 test xanh** (243 cũ + 56 mới), lint + prettier sạch. Còn **một** việc treo sang Phase 4: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chưa tồn tại (§13.5, dòng cuối bảng bẫy Phase 1) |
 | 2 | **Dữ liệu test tự tạo** (đã đổi hướng — không nhập từ Sheets) | ✅ | Xong 2026-08-24 trên nhánh `vps/phase-2-import` (giữ tên cũ dù đã đổi hướng) · `src/db/seeds/dev.sql` = 1 phòng rỗng + 5 phòng, 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký (§8.3) · chạy lại **không nhân đôi** · 2 chốt an toàn có test tiến trình con · **322 test xanh**. `tools/import-from-sheets.js` **đã bỏ**, TC-IMP-01..14 khai tử |
 | 3 | API công việc 3 tầng | ✅ | Xong 2026-08-25 trên nhánh `vps/phase-3-works` (tách từ `vps/phase-2-import`) — **13/13 việc** 3.1–3.13. **495 test xanh** (322 của Phase 2 + 173 mới), lint + prettier sạch. **TC-TREE-01..40** và **TC-ORIGIN-01..15** xanh; **cả 40 phép kiểm** của `tools/test-tasks-gd2.js` đã port sang `legacy-gd2-parity.test.js` (21 test, giữ nguyên cách chia mục [1]..[4] của file cũ) — **một** phép bị đảo có chủ ý: chuyển nhiệm vụ sang công việc khác **không** sinh mã mới nữa (§13.4 mục 6). Chờ người dùng: §13.4 mục 13 (ai được đặt nhắc việc) |
-| 4 | Cắt frontend sang API | ⬜ | **Việc kế tiếp.** **Điểm dừng an toàn** hết phase này |
-| 5 | Luồng duyệt + thông báo + lịch chạy | ⬜ | |
+| 4 | Cắt frontend sang API | ✅ | Xong 2026-08-25 trên nhánh `vps/phase-4-frontend` — **8/8 việc** 4.1–4.8 + lượt khói §8.5. **675 test xanh** (495 của Phase 3 + 180 mới), lint + prettier sạch. `web/` tách khỏi Apps Script (`index.html` + `app.js` + `app.css`); `api-bridge.js` phủ **đủ 37** tên hàm cũ (19 chạy thật, 18 trả `501 NOT_IMPLEMENTED` kèm câu tiếng Việt); đăng nhập bằng cookie phiên + CSRF double-submit, `401` thì bật lại modal rồi **phát lại** lời gọi đang dở; `403 MUST_CHANGE_PASSWORD` mở modal đổi mật khẩu bắt buộc; **soát đủ 55 dòng / 70 chỗ / 474 giá trị `innerHTML`** (rủi ro số 1 của phase, TC-SEC-02/03 xanh); Tailwind + Chart.js + Font Awesome + Inter + Alpine **tự chứa** trong `web/assets/vendor/`, 0 CDN; Nginx phục vụ `web/` (tài sản cache 30 ngày, `index.html` không cache); `loginRateLimiter` đã gắn cho `/api/rpc/authenticateUser` — **hết nợ Phase 1**. Còn **2 điểm đỏ** §8.5, cả hai đã có chủ: C7 (biểu mẫu cũ không tạo được cấp 2 — §13.4 mục 14 chốt **phương án (b)** ⇒ **việc 5.12**) và D1 (Trưởng phòng tạo ra «Đã duyệt» — việc 5.2). Cuối phase làm thêm **§13.4 mục 15**: nới quyền đặt nhắc việc cho `Phó Giám đốc` phụ trách phòng (+2 test). **Điểm dừng an toàn** |
+| 5 | Luồng duyệt + thông báo + lịch chạy | ⬜ | **Việc kế tiếp.** Mở 37 trong 38 điểm ⏳ của §8.5: việc **5.10** `GET /api/v1/bootstrap` (nhóm Tổng quan 10 điểm + R1–R7 Gantt), việc **5.1** «Chờ duyệt» khi Trưởng/Phó phòng tạo (xử điểm đỏ **D1**) + 5.2–5.7 (nhóm Duyệt 7 điểm), việc **5.11** nối 7 tên nhân sự/phòng vào cầu RPC (10 điểm). Đề nghị / chat / app còn `501` tới **Phase 7**. Không cài `nodemailer` (§13.4 mục 4) |
 | 6 | Thống kê, lọc, Gantt | ⬜ | |
 | 7 | Đề nghị, Quản lý App, Chat, Excel | ⬜ | |
 | 8 | Hạ tầng VPS, bảo mật, sao lưu | ⬜ | Chờ §11 mục 1–4 |
@@ -1533,6 +1587,9 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 2026-08-24 | **Phase 2 ĐỔI HƯỚNG rồi XONG.** Người dùng chốt *"bỏ qua đồng bộ data cũ đi, tự tạo data test"* ⇒ **bỏ hẳn** `tools/import-from-sheets.js` khỏi kế hoạch, khai tử TC-IMP-01..14, viết lại §7 Phase 2 · §8.2 · §8.3 · §8.4-D (23 mã mới **TC-SEED-01..23**) và chuyển việc nhập tay 28 dòng thật sang **Phase 9** (bản chính thức không bao giờ chạy `seed:dev`). Mở rộng `dev.sql` cho đủ **dữ liệu bẩn CỐ Ý** mà §8.3 đòi: email chữ hoa `Nghien.Cuu@test.local`, hai người trùng họ tên, phòng `PH05` rỗng hoàn toàn (để có đường xoá phòng thành công), nhiệm vụ **mồ côi** `CV001-030` (`parent_id` NULL — CSDL cho phép, `lvl2_no_parent` chỉ ràng cấp 2), công việc vắt qua năm `CV009`, hạn 29/02/2028 ở `CV003-028`, 4 link kết quả trong đó **1 link thiếu `http`**. Chạy lại seed **không nhân đôi** (`ON CONFLICT (code)` cho bảng có mã, `WHERE NOT EXISTS` cho bảng không mã) và 6 `setval(GREATEST(...))` đẩy sequence. Thêm `seed-guard.test.js` chạy bằng **tiến trình con** — hai chốt an toàn kết thúc bằng `process.exit(1)` nên import trực tiếp sẽ giết vitest. **Đổi từ vựng "Dự án" → "Công việc"** trên toàn bộ tài liệu và thêm **§0.1 Từ vựng** — mục này bị `dev.sql` + `001_init.sql` + `KE-HOACH-PHAT-TRIEN.md` trích dẫn nhưng **chưa từng tồn tại**; kèm đó chốt tiền tố mã sinh mới là **`CV`** (mã cũ `DA0xx` nhập tay giữ nguyên văn) và sửa mọi chỗ còn viết `DA001` như thể đó là mã mới. **322 test xanh** (299 + 23), lint + prettier sạch | `server/src/db/seeds/dev.sql`, `server/tests/integration/{seed-dev,seed-guard}.test.js`, `server/src/db/migrations/001_init.sql` (chỉ chú thích), §0/§3.2/§4.1/§4.3/§7/§8.2/§8.3/§8.4/§13 của `KE-HOACH-VPS.md`, `docs/UAT.md`, `docs/BAT-DAU-SESSION.md`, `HUONG-DAN-BAO-TRI.md`, `KE-HOACH-PHAT-TRIEN.md` | **Phase 3** — API công việc / công việc con / nhiệm vụ, 10 việc 3.1–3.10 (§7 Phase 3 + §8.4 nhóm **C**, TC-TREE-01..35). Dữ liệu mẫu 3 tầng đã sẵn (kể cả nhiệm vụ mồ côi và công việc con rỗng) nên test không phải tự dựng dữ liệu. Lưu ý: **đề nghị nằm ở Phase 7** (§8.4 nhóm G, TC-MISC) — ghi chú cũ ở `BAT-DAU-SESSION.md` xếp đề nghị vào Phase 3 là **sai**, đã sửa. Còn treo từ Phase 1: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` khi Phase 4 dựng cầu RPC |
 | 2026-08-25 | **Phase 3 XONG 13/13 việc** trên nhánh `vps/phase-3-works` (tách từ `vps/phase-2-import`, 12 commit). Tầng repo `works` + `work_items` SQL viết tay, tham số hoá 100%; `utils/pgError.js` **dịch** lỗi trigger/ràng buộc của CSDL sang mã §5.3 (`PARENT_NOT_SUBWORK`, `LVL2_NO_PARENT`, `MOVE_PARENT_HAS_CHILDREN`, `REMINDER_ON_SUBWORK`, `DEPT_MISMATCH_WORK`…) — **không** viết lại quy tắc ở JS, CSDL là nguồn sự thật duy nhất. `works` CRUD + **nhân bản cả cây** (`Map(id gốc → id bản sao)` nên không dòng nào trỏ về cây gốc); MỘT service cho cả cấp 2 và cấp 3 phân biệt bằng `level`; 6 nhánh chặn của `updateTask` chia hai chỗ (4 ở service: `LEVEL_IMMUTABLE`/`SELF_PARENT`/`CYCLE`/`PARENT_NOT_FOUND`, 2 ở CSDL); chuyển sang công việc khác (chặn cấp 2 đang có con, cấp 3 trả `parentCleared: true`, đích không tồn tại thì **dòng cũ còn nguyên**); xoá đệ quy trả **danh sách mã**; `reorder` trong một giao dịch, mã lạ thì bỏ qua; `GET /works/tree` bằng `WITH RECURSIVE … CYCLE` + `depth < 50`, dòng không có cha đọc được gom vào `(chưa gán công việc con)` nên **không đánh rơi dòng nào**; nhắc việc CRUD chỉ cấp 3 (409 do trigger, không kiểm lại ở JS); ba migration mới `002_work_items_department.sql` + `003_work_origin_and_history.sql` cho **phòng cả ba cấp** (luôn khớp phòng công việc cha, lệch thì `DEPT_MISMATCH_WORK`) và **nguồn gốc từng đầu việc** (5 cột + trigger `keep_first_origin` giữ ai giao **đầu tiên**, `deriveOrigin`/`originOf`) + **nhật ký từng đầu việc** (`/history`, `diffRows` ghi `cột: từ → thành`). **Port trọn 40 phép kiểm** của `tools/test-tasks-gd2.js` sang `legacy-gd2-parity.test.js` (21 test, giữ cách chia mục [1]..[4] để đọc song song) — **một** phép đảo có chủ ý: chuyển công việc **không** sinh mã mới (§13.4 mục 6); mục [3] diễn đạt lại vì không còn ô `Nhiệm vụ JSON` và cột email, bảo đảm chuyển từ *vá-khi-đọc* sang *chặn-khi-ghi*. Việc port lộ **lỗi thật**: `listDescendants` đếm cả chính dòng gốc khi dữ liệu trỏ vòng ⇒ `deletedCount` thừa một và `copy` sao lại bản gốc. Thêm TC-TREE-40 (bản sao giữ phòng). **495 test xanh** (322 + 173), lint + prettier sạch. Ghi thêm §13.4 mục 13 (quyền đặt nhắc việc: bản cũ chỉ admin, nay ai sửa được nhiệm vụ) và bảng 8 bẫy Phase 3 ở §13.5 | `server/src/modules/{works,workItems,reminders}/{repo,service,routes}.js`, `server/src/utils/{pgError,origin,dateChecks,zodTypes,errors,sql}.js`, `server/src/db/migrations/00{2,3}_*.sql`, `server/src/db/seeds/dev.sql`, `server/src/app.js`, `server/tests/integration/{works-crud,works-tree,work-items-api,work-items-department,work-origin-history,reminders-api,legacy-gd2-parity,repo-work-items}.test.js`, `server/tests/unit/origin.test.js`, §7/§8.4/§13.2/§13.3/§13.4/§13.5 của `KE-HOACH-VPS.md`, `docs/BAT-DAU-SESSION.md` | **Phase 4 — cắt frontend sang API** (§7 việc 4.1–4.8): tách `index.html`/`js.clean.html`/`CSS.html` ra `web/`, `api-bridge.js` đủ **36 tên hàm** §5.1, soát **53 chỗ `innerHTML`**, checklist khói 60 điểm §8.5, TC-SEC-02/03 §8.7. Còn treo từ Phase 1: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — Phase 4 mới có đường đó |
 
+| 2026-08-25 | **Phase 4 XONG 8/8 việc** trên nhánh `vps/phase-4-frontend` (10 commit). 4.1 tách `web/` khỏi Apps Script (`index.html` 70 KB + `app.js` 305 KB + `app.css` 80 KB, không còn thẻ `<?!= ?>`); 4.2 `api-bridge.js` giả lập `google.script.run` (chuỗi `.withSuccessHandler().withFailureHandler().tên()`, gửi `X-CSRF-Token` cho **mọi** POST, dịch `{ok:false,error}` của §5.3 về chuỗi lỗi tiếng Việt mà `app.js` đang chờ) + `server/src/rpc/` (bảng 37 tên: 19 chạy thật, 18 `pending()` → `501`, tên lạ → `404`, `GET /api/rpc` in cả bảng); 4.3 tự chứa Tailwind/Chart.js/Font Awesome/Inter/Alpine trong `web/assets/vendor/` (0 CDN, CSP không cần `unsafe-*` cho script ngoài); 4.4 đăng nhập cookie phiên: `401` bật lại modal rồi **phát lại** lời gọi đang dở, `loginRateLimiter` gắn cho `/api/rpc/authenticateUser` (**hết nợ Phase 1**), `429` có test; 4.5 `403 MUST_CHANGE_PASSWORD` mở modal đổi mật khẩu bắt buộc, chặn mọi nghiệp vụ đến khi đổi xong; 4.6 **rủi ro số 1**: soát **55 dòng `innerHTML` = 70 chỗ chèn = 474 giá trị**, chỗ nào chỉ là văn bản → `textContent`, chỗ buộc dựng HTML → escape từng giá trị kể cả trong thuộc tính và trong `href` (chặn `javascript:`), TC-SEC-02/03 xanh; 4.7 bỏ listener chết `#add-notification-btn`; 4.8 Nginx phục vụ `web/` (tài sản `max-age=2592000`, `index.html` **không** cache, `404` không bị cache 30 ngày). Rồi dựng hẳn **môi trường khói riêng** (Nginx 8099 → Express → CSDL `quanlycongviec_uat` seed sạch, **không** chạm dữ liệu dev) và chạy tay **cả 60 điểm §8.5** vào `docs/UAT.md`: **19 xanh · 2 đỏ · 38 chờ Phase sau · 1 không có ở bản cũ**; bộ khói đóng thành `tools/smoke-8.5.sh` chạy lại được, tự dọn. **673 test xanh** (495 + 178 mới), lint + prettier sạch | `web/**` (`index.html`, `assets/js/api-bridge.js`, `assets/js/app.js`, `assets/css/app.css`, `assets/vendor/**`), `server/src/rpc/**` (4 file), `server/src/app.js`, `server/src/utils/errors.js`, `deploy/nginx/{app.conf,security-headers.conf}`, `server/tests/**` (7 file mới), `tools/smoke-8.5.sh`, `docs/UAT.md`, §5/§7/§13 của `KE-HOACH-VPS.md`, `docs/BAT-DAU-SESSION.md` | Phase 5 (duyệt + thông báo + lịch chạy) — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3. Việc 5.10 (`GET /api/v1/bootstrap`) mở 17 trong 38 điểm ⏳; việc 5.1 xử điểm đỏ D1; việc 5.11 mở 10 điểm nhân sự/phòng; điểm đỏ C7 chờ §13.4 mục 14 |
+| 2026-08-25 | **Chốt 2 câu treo ở §13.4 + hướng dẫn test tay giao diện.** Mục 14 → **phương án (b)**: tạo cấp 2 bằng nút «+ công việc con» ngay trên cây, `#task-form` giữ nguyên là tạo cấp 3, cấp suy ra từ chỗ bấm chứ không thêm ô «Cấp» — ghi thành **việc 5.12** của §7 Phase 5 nên điểm đỏ **C7** đã có chủ (việc này *được* đổi DOM, phải bổ sung `dom-contract.test.js`). Mục 15 → **nới quyền đặt nhắc việc cho `Phó Giám đốc` phụ trách phòng**: thêm `'Phó Giám đốc'` vào `VAI_DAT_NHAC_VIEC` + đổi câu 403; phần "của phòng đấy" **không cần dòng mã nào** vì `inScope()` đã bó vai này theo `managedDepartmentIds` (`department_managers.role = 'deputy_director'`), nên Phó Giám đốc phụ trách phòng khác bị chặn ở **phạm vi** với câu *ngoài phạm vi*, không phải ở vai. Thêm 2 phép kiểm (phụ trách phòng đó ⇒ 200 · phòng khác ⇒ 403) ⇒ `reminders-api.test.js` 21 → 23, **673 → 675 test xanh**, không phép kiểm nào phải đảo. Viết `docs/HUONG-DAN-TEST-GIAO-DIEN.md`: dựng lại môi trường khói, 8 màn tự làm được **hôm nay** (đăng nhập, sai mật khẩu, khoá 5 lần, đổi mật khẩu bắt buộc, cây công việc, nhắc việc, XSS §8.7, DevTools) và ghi rõ phần **chưa test được** vì `getDataForUser`/`getInitialDataWithAuth`/`getDepartmentContext`/`getStaffList` còn `501` tới việc 5.10/5.11 | `server/src/modules/reminders/service.js`, `server/tests/integration/reminders-api.test.js`, §6/§7/§13.2/§13.3/§13.4 của `KE-HOACH-VPS.md`, `docs/BAT-DAU-SESSION.md`, `docs/HUONG-DAN-TEST-GIAO-DIEN.md` (mới) | Phase 5 — prompt dán sẵn ở `docs/BAT-DAU-SESSION.md` mục 3, **không còn câu nào phải hỏi trước** (mục 14/15 đã chốt). 11 việc: 5.1–5.8 + 5.10 + 5.11 + **5.12** |
+
 ### 13.4 Quyết định đang chờ người dùng — KHÔNG TỰ ĐOÁN
 
 | # | Câu hỏi | Chặn | Trạng thái |
@@ -1541,15 +1598,17 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 2 | Thông số VPS, tên miền, quyền SSH, nội bộ hay Internet (§11 mục 1–4) | Phase 8 | ✅ **đã trả lời 2026-08-24**: giai đoạn này **chạy hẳn trên PC của người dùng** (Windows + Docker Desktop), test xong mới đưa lên VPS. Phase 1–7 làm bình thường; **Phase 8 tạm hoãn** cho tới khi có VPS thật. Hệ quả: `SESSION_COOKIE_SECURE=false` và `APP_BASE_URL=http://localhost:3000` khi chạy local — lên VPS phải đổi cả hai |
 | 3 | Danh sách Phó Giám đốc / Trưởng phòng / Phó phòng thật (§11 mục 5–6) | Phase 5, 9 | ✅ **đã trả lời 2026-08-24**: dùng **danh sách test tự tạo**, người dùng sửa sau. Chốt ở §13.7 — Phase 1 đưa vào `src/db/seeds/dev.sql`. Bắt buộc: seed chỉ chạy khi `NODE_ENV <> 'production'` |
 | 4 | Có SMTP gửi email không (§11 mục 9) | Phase 5 | ✅ **đã trả lời 2026-08-24: KHÔNG gửi email**. `MAIL_ENABLED=false`, **không** cài `nodemailer`, không viết `services/mailer.js`. Thông báo (nhóm J, K8) chỉ nằm trong bảng `notifications` + badge trên giao diện. Nếu sau này cần email thì thêm sau, phần trong ứng dụng không phải sửa |
-| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB). Đã chạy `dump-sheets.js` → `data/snapshot-20260824.json` + `.report.txt`. Số dòng thật: xem §13.8 |
+| 5 | Snapshot `.xlsx` thật xuất từ Google Sheets | Phase 2 · việc còn nợ của Phase 0 | ✅ **đã có 2026-08-24**: `file tai xuong tu google sheet.xlsx` (96 KB), vẫn nằm ngoài kho. Đã chạy `dump-sheets.js` → snapshot + báo cáo, số dòng thật chép vào §13.8, rồi **xoá cả ba** ngày 2026-08-25 (mục 11) |
 | 6 | Mã của **công việc con / nhiệm vụ tạo mới** dùng dạng nào? | Phase 3 | ✅ **đã trả lời 2026-08-24**: dùng **`<mã công việc>-NNN`** (ví dụ `CV001-007`), số lấy từ sequence toàn hệ thống `seq_work_item_code` nên không bao giờ trùng. Nhiệm vụ chuyển sang công việc khác thì **giữ nguyên mã cũ**, không đánh số lại. Mã cũ dạng `ID<yymmddhhmmssSSS>` khi nhập vào thì **giữ nguyên nguyên văn**, không đổi — đổi mã là mất dấu vết đối chiếu |
 | 7 | Google đổi tên sheet `Dự án/Nhiệm vụ` thành gì khi tải `.xlsx`? | Phase 2 | ✅ **đã biết 2026-08-24**: thành **`Dự ánNhiệm vụ`** — Google **xoá hẳn** dấu `/`, không thay bằng ký tự khác. `dump-sheets.js` khớp đúng nhờ so tên chuẩn hoá |
 | 8 | Ô `Nhiệm vụ JSON` thật **không có** khoá `Cấp` và `Mã cha` (xem §13.8) — vậy khi nhập, nhiệm vụ cũ thành **cấp 2 hay cấp 3**? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24** vì Phase 2 đã đổi hướng sang dữ liệu test tự tạo, không còn công cụ nhập tự động. Câu hỏi **sống lại ở Phase 9** khi nhập tay 28 dòng, nhưng lúc đó người nhập tự quyết từng dòng nên không cần chốt trước. Đề xuất cũ vẫn hợp lý: cho thành **cấp 2 (công việc con)** vì chúng đã có ngày, người thực hiện, tiến độ riêng |
 | 9 | Sheet `Thông báo` **không tồn tại** trong file tải về, dù §4.3 khai là bắt buộc — bản Apps Script chưa từng tạo, hay đã bị xoá? | ~~Phase 2~~ | ⛔ **hết hiệu lực 2026-08-24**: không nhập dữ liệu cũ nữa nên không có gì phụ thuộc. Bảng `notifications` bắt đầu từ dữ liệu mẫu (6 dòng) ở dev, và **rỗng** ở bản chính thức |
-| 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ❓ chờ — Phase 3 **đang làm theo giả định `CV`** (§0.1): dữ liệu mẫu và test đều dùng `CV`, mã cũ nhập tay giữ nguyên văn. Muốn đổi thành `DA` thì chỉ phải sửa tham số truyền vào `next_code()` + dữ liệu mẫu, không đụng lược đồ |
-| 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ❓ chờ — **đang giữ**: `dump-sheets.js` chỉ đọc, và snapshot là nguồn duy nhất để đối chiếu khi nhập tay 28 dòng ở Phase 9. `data/*` vẫn **không commit** (chứa mật khẩu văn bản thuần của người thật) |
-| 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ❓ chờ — không chặn Phase 3–8. Đề xuất: nhập **qua giao diện** để nghiệm thu luôn đường tạo mới, trừ `activity_logs` cũ thì bỏ hẳn |
-| 13 | **Ai được đặt nhắc việc?** Bản cũ chỉ `admin` ("Chỉ Admin mới có quyền thêm nhắc việc", `Code.gs.moi:2136`) nên người thực hiện không tự nhắc được việc của chính mình | Phase 3 (đã làm) | ❓ chờ — Phase 3 **đang làm theo giả định "nhắc việc là một phần của nhiệm vụ"**: ai có quyền **sửa** nhiệm vụ đó theo §6 thì thêm/sửa/xoá được nhắc việc của nó (nhân viên tự nhắc việc của mình được, người ngoài nhận 403 nhưng vẫn đọc được). Ma trận §6 **không** có thực thể `reminder`, nên không phải sửa bảng quyền. Muốn quay lại "chỉ admin" thì đổi một chỗ: `assertCan(user, 'update', item)` trong `modules/reminders/service.js` — 2 test sẽ đỏ và phải đảo lại |
+| 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ✅ **chốt 2026-08-25: GIỮ `CV`** (`CV010`, `CV011`…). Hai dạng mã sống chung trong cùng cột `code` là chấp nhận được: mã cũ `DA0xx` nhập tay giữ **nguyên văn** để khớp giấy tờ, mã mới do `next_code()` sinh ra mang `CV`. Không phải sửa gì — Phase 3 đã làm đúng theo giả định này |
+| 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ✅ **chốt 2026-08-25: BỎ CẢ HAI**. Đã `git rm tools/dump-sheets.js` và xoá `data/snapshot-20260824.json` + `.report.txt` (`data/` chỉ còn `.gitkeep`). Mất mát duy nhất là bản JSON trung gian: số liệu của nó đã chép hết vào §13.8, `.xlsx` gốc vẫn còn ngoài kho, nên Phase 9 nhập tay vẫn đối chiếu được. Đổi lại, không còn file nào chứa mật khẩu văn bản thuần của người thật nằm trên máy dev |
+| 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ✅ **chốt 2026-08-25: nhập QUA GIAO DIỆN WEB**, không dùng câu SQL. Được hai việc một lúc: dữ liệu vào đúng đường mà người dùng thật sẽ đi (nên lỗi nhập liệu lộ ra ngay), và chính việc nhập là một lượt nghiệm thu §8.5. Nhật ký cũ (`activity_logs` của bản Sheets) **bỏ hẳn**, không nhập lại. Kèm theo: mã cũ `DA0xx` phải nhập nguyên văn (mục 10), và mật khẩu 2 người bị rỗng phải đặt lại kèm `must_change_password` (§13.8) |
+| 13 | **Ai được đặt nhắc việc?** Bản cũ chỉ `admin` ("Chỉ Admin mới có quyền thêm nhắc việc", `Code.gs.moi:2136`) nên người thực hiện không tự nhắc được việc của chính mình | Phase 3 (đã làm) | ✅ **chốt 2026-08-25: `admin` + `Trưởng phòng` / `Phó phòng` CỦA PHÒNG ĐÓ** — **đã nới thêm `Phó Giám đốc` phụ trách phòng ở mục 15 cùng ngày, đọc hai mục cùng nhau**. Hẹp hơn giả định tạm của Phase 3 ("ai sửa được nhiệm vụ thì đặt được"), nên phép kiểm "Nhân viên tự nhắc việc của mình" **đã bị đảo** thành 403 — đọc lời nhắc thì vẫn được. `Quản lý công việc` vẫn **không** đặt được, dù §6 cho họ sửa nhiệm vụ: đây là chỗ siết có chủ ý, đã chốt cứng bằng test riêng để lần sau không ai tự nới. Cài ở `assertCanManage` + `VAI_DAT_NHAC_VIEC` trong `modules/reminders/service.js`; ma trận §6 vẫn không có thực thể `reminder`, chỉ thêm một đoạn ngoại lệ ở cuối §6. `reminders-api.test.js` 17 → 21 → 23 phép kiểm |
+| 14 | **Biểu mẫu cũ không tạo được công việc con (cấp 2)** — điểm đỏ **C7** của §8.5. `#task-form` không có ô `Cấp` hay `Mã cha`; `COL.T_LEVEL`/`COL.T_PARENT` khai ở `web/assets/js/app.js:56–57` rồi **không** chỗ nào dùng, nên mọi đầu việc bản cũ tạo ra đều là **cấp 3 không cha** (`csdl: CV019-071 cấp=3 cha=NULL`). Chọn hướng nào: (a) thêm 2 ô «Cấp» + «Công việc cha» vào biểu mẫu, (b) chỉ cho tạo cấp 2 bằng nút «+ công việc con» ngay trên cây (biểu mẫu giữ nguyên là tạo cấp 3), (c) giữ đúng hành vi cũ và chấp nhận cấp 2 chỉ sinh ra từ seed/nhập tay | Phase 5 việc **5.12** · điểm đỏ §8.5 C7 | ✅ **chốt 2026-08-25: phương án (b)** — nút «+ công việc con» ngay trên cây, biểu mẫu `#task-form` **giữ nguyên** là tạo cấp 3. Không thêm ô «Cấp» cho người dùng chọn: cấp suy ra từ chỗ bấm (bấm trên hàng công việc ⇒ tạo cấp 2 không cha; bấm trên hàng công việc con ⇒ tạo cấp 3 với `parentRef` là hàng đó). Phase 4 **không được** đổi DOM (điều lệ đầu `app.js`) nên đã dừng đúng chỗ và ghi đỏ; việc cài đặt là **việc 5.12** ở §7 Phase 5, xong thì điểm C7 của §8.5 mới hết đỏ |
+| 15 | **Có nới quyền đặt nhắc việc cho `Phó Giám đốc` phụ trách phòng không?** Mục 13 chốt theo đúng nghĩa chữ là `admin` + `Trưởng phòng`/`Phó phòng` **của phòng đó**, nên `Phó Giám đốc` và `Quản lý công việc` **không** đặt được nhắc việc dù §6 cho họ sửa nhiệm vụ | Đã làm 2026-08-25 (Phase 4) | ✅ **chốt 2026-08-25: CÓ — `admin` + `Phó Giám đốc` PHỤ TRÁCH phòng đó + `Trưởng phòng` / `Phó phòng` của phòng đó** ("lãnh đạo phòng của phòng đấy"). `Quản lý công việc` và `Nhân viên` vẫn không đặt được. Đã cài: thêm `'Phó Giám đốc'` vào `VAI_DAT_NHAC_VIEC` (`server/src/modules/reminders/service.js`) + đổi câu 403; chữ "phụ trách phòng đó" **không cần dòng mã nào** vì `inScope()` đã bó vai này theo `managedDepartmentIds` (`department_managers.role = 'deputy_director'`, rbac.js:161). Thêm **2** phép kiểm mới vào `reminders-api.test.js` (Phó Giám đốc phụ trách phòng ⇒ 200; phụ trách phòng KHÁC ⇒ 403 *ngoài phạm vi*) ⇒ 21 → 23; không phép kiểm nào phải đảo vì bộ cũ chốt cứng `Quản lý công việc`, không chốt `Phó Giám đốc`. §6 sửa đoạn ngoại lệ theo |
 
 Nếu một mục ở đây chặn việc đang làm: **làm hết phần không phụ thuộc**, ghi rõ giả định đang
 dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được trả lời.
@@ -1569,7 +1628,7 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | `String(role).toLowerCase().includes('admin')` | `"Trợ lý admin"` được quyền admin | so khớp chính xác · TC-RBAC-07/08 |
 | **53 chỗ** `innerHTML` ở frontend | XSS | soát ở Phase 4 · TC-SEC-02/03 |
 | Tên cột khai **hai nơi** (`*_COLUMN_NAME` backend, `COL` 79 khoá frontend) | Sửa một bên, vỡ bên kia, không có cảnh báo | §4.3 bảng đối chiếu |
-| **28 chỗ gọi** `google.script.run.<tên>` bằng chuỗi | Đổi tên hàm là vỡ im lặng | cầu tương thích §5.1 — giữ nguyên 36 tên |
+| **28 chỗ gọi** `google.script.run.<tên>` bằng chuỗi | Đổi tên hàm là vỡ im lặng | cầu tương thích §5.1 — giữ nguyên cả **37** tên |
 | Thống kê backend (`getSummaryStats`) và frontend (`renderStats`) có thể **lệch nhau** | Không biết lấy số nào làm mốc so sánh | việc đầu tiên của Phase 6: xác định số đang hiện thật |
 | Không có build step, 16 `onclick` viết trong chuỗi | Sửa tên hàm frontend là vỡ nút bấm | Phase 4 chỉ làm 4 việc đã liệt kê |
 | `tools/test-tasks-gd2.js` — 40 test đang xanh | Là mốc hành vi cây 3 tầng của bản cũ | port sang vitest ở Phase 3 |
@@ -1628,6 +1687,58 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | Bắn **20 request đồng thời** mà mỗi request tự đi lấy token CSRF | supertest dựng 20 kết nối cùng lúc ⇒ `ECONNRESET` ngẫu nhiên, test đồng thời đỏ vì hạ tầng test chứ không vì mã trùng | lấy token **một lần** rồi dùng chung cho cả 20 request · TC-TREE-31 |
 | `copyProject` bản cũ sao cây con nhưng **không** ánh xạ lại `Mã cha` | Bản sao trông như xong, mà mọi nhiệm vụ con vẫn treo dưới cây **gốc**: sửa "bản sao" là sửa thẳng dữ liệu bản gốc | `copy` dựng `Map(id gốc → id bản sao)` rồi ghi `parent_id` theo bản sao · TC-TREE-26/27 |
 
+**Bẫy phát hiện thêm khi làm Phase 4 (2026-08-25) — cắt frontend sang API:**
+
+Nhóm XSS (rủi ro số 1 của phase, việc 4.6):
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| Kế hoạch ghi «**53 chỗ** `innerHTML`» — đếm bằng `grep innerHTML` là đếm **dòng** | Thực tế **55 dòng = 70 chỗ chèn = 474 giá trị** cần soát. Soát theo con số 53 là bỏ sót gần một phần tư | việc 4.6 · đã soát từng giá trị, ghi kết quả từng chỗ · TC-SEC-02/03 |
+| `escapeHtmlAttr` viết tay **thiếu dấu `'`** | Thuộc tính nào dùng nháy đơn (`title='…'`) là thoát ra ngoài được ngay, dù hàm tên là "escape attr" | `escapeHtmlAttr` escape đủ `& < > " '` · `xss-escape.test.js` |
+| Trong thuộc tính `on*`, trình duyệt **giải mã thực thể TRƯỚC** khi chạy JS | `onclick="f('&#39;)"` → JS nhận đúng dấu nháy ⇒ **HTML-escape không cứu được `on*`**; phải escape theo tầng JS hoặc bỏ hẳn `onclick` | không nhúng dữ liệu vào `on*`; chỗ buộc giữ thì escape tầng JS · TC-SEC-03 |
+| `encodeURIComponent` bị dùng như cách "escape cho chuỗi JS" | Không phải escape JS: `%27` vẫn về `'` sau `decodeURIComponent`, và không chặn ngắt chuỗi ở chỗ khác | dùng `JSON.stringify` cho chuỗi JS, `encodeURIComponent` chỉ cho URL |
+| `formatDateForDisplay` **trả nguyên giá trị** khi không parse được ngày | Giá trị bẩn (`<img onerror=…>`) đi thẳng vào HTML qua một hàm trông như đã "định dạng an toàn" | escape ở **chỗ chèn**, không tin hàm định dạng |
+| Escape một **toán hạng số** rồi mới tính | `"Link " + escape(i+1)` ra `Link 01` (chuỗi nối chuỗi) — sai hiển thị mà không ai coi là lỗi bảo mật nên khó thấy | chỉ escape giá trị **văn bản**, giữ số ở dạng số |
+| `javascript:` trong `href` do người dùng nhập (link kết quả) | Bấm vào link "kết quả" là chạy mã của người nhập | lọc theo danh sách trắng `http:`/`https:`/`mailto:` trước khi ghi `href` · TC-SEC-02 |
+
+Nhóm cầu tương thích RPC (việc 4.2 + 4.4 + 4.5):
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| Kế hoạch ghi **36** tên hàm, đếm lại ở `app.js` ra **37** | Thiếu một tên là một nút bấm chết im lặng (`google.script.run` không báo gì). Nguyên nhân: một dòng bảng §5.1 **gộp 2 tên** vào một ô | §5.1 đã sửa thành 37 · `api-bridge.test.js` phủ **đủ 37 tên** |
+| `getInitialDataWithAuth` là **ngoại lệ**: khi chưa đăng nhập phải trả `{requireLogin:true}` | Trả `401` hay `501` thì giao diện báo "lỗi máy chủ" ngay màn hình đầu thay vì mở modal đăng nhập | `rpc/table.js` xử riêng · đã kiểm ở §8.5 nhóm 2 |
+| `changePassword` bản cũ có **2 chữ ký** (2 và 3 tham số) | Nhận 2 tham số rồi âm thầm bỏ qua mật khẩu hiện tại = đổi mật khẩu **không cần biết mật khẩu cũ** | chữ ký 2 tham số → `400` «Thiếu tham số «Mật khẩu hiện tại»» · §8.5 Đ3 |
+| Nhắc việc bản cũ gọi theo **số thứ tự trong mảng**, CSDL mới dùng `id` | Sửa/xoá **nhầm dòng** khi danh sách đã đổi giữa hai lần tải | `reminderIdByIndex` trong `rpc/index.js`; số thứ tự lạ → `404` chứ không sửa bừa · §8.5 C11 |
+| `getTasks` bản cũ trả **phẳng toàn bộ** ⇒ cầu nối gọi N+1 | Mở một công việc là hàng chục truy vấn; dữ liệu thật sẽ chậm rõ | ghi nợ cho Phase 6 (gộp một truy vấn) · đã đo ở §8.5 C6 |
+| `loginRateLimiter` đếm **hai lần** nếu RPC gọi lại route `/api/v1` qua HTTP | Đăng nhập sai 3 lần đã bị `429`, người dùng bị chặn oan | RPC gọi **hàm service**, không tự gọi HTTP nội bộ · `rpc-rate-limit.test.js` |
+| zod trả thông điệp mặc định **bằng tiếng Anh** (`Required`) | Người dùng thấy "Required" giữa màn hình tiếng Việt | mọi field có `message` tiếng Việt; test kiểm chuỗi Việt |
+| `work_items.result_links` là **jsonb**, không phải mảng text | `array_length(...)` nổ `function does not exist` khi kiểm bằng SQL | dùng `jsonb_array_length` |
+| Bảng `sessions` **không có** cột `revoked_at` | Câu SQL kiểm phiên hết hạn nổ giữa lượt khói | hết phiên kiểm bằng `expires_at` · §8.5 Đ6 |
+
+Nhóm Nginx + tài sản tĩnh (việc 4.3 + 4.8):
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| `add_header` **không kế thừa**: khai một `location` có `add_header` là **mất sạch** header của khối cha | Trang chạy bình thường nhưng **không còn** CSP/nosniff — không có lỗi nào để thấy | `deploy/nginx/security-headers.conf` được `include` **trong từng** `location` · `nginx-static.test.js` |
+| `always` gắn vào `Cache-Control: max-age=2592000` | Cache **cả phản hồi 404** 30 ngày: tài sản gõ sai đường dẫn hôm nay thì 30 ngày sau vẫn 404 | `always` **chỉ** cho header bảo vệ, **không** cho `Cache-Control` · đã kiểm: 404 có header bảo vệ, không có cache dài |
+| `upstream`/`proxy_pass` tên cố định được phân giải **lúc nginx khởi động** | Container app lên sau nginx là nginx chết ngay khi khởi động | `resolver 127.0.0.11` + `set $var` + `proxy_pass http://$var$request_uri` (phân giải lúc có request) |
+| Nhưng `resolver 127.0.0.11` **bỏ qua `/etc/hosts`** | `docker run --add-host app:host-gateway` **vô dụng** — vẫn `502`, mất cả buổi đi tìm lỗi ở chỗ khác. Kiểm chứng: đã thử, vẫn 502 | muốn trỏ về ứng dụng chạy trên máy thật thì đặt **một container tên `app`** làm cầu: `alpine/socat tcp-listen:3000,fork,reuseaddr tcp-connect:host.docker.internal:3000` |
+| Thiếu `default_server` trên `listen` | `default.conf` của image nginx **thắng**, người dùng thấy trang "Welcome to nginx" thay vì ứng dụng | `listen 80 default_server;` |
+| Tailwind v3 quét tệp để cắt class ⇒ class **ghép chuỗi lúc chạy** bị cắt | Nhãn trạng thái mất màu, đúng những chỗ tô màu theo dữ liệu | safelist các nhóm `bg-*`/`text-*` sinh động; class `font-inter` **chết** (không có trong config) đã bỏ |
+| `?v=` đặt tay trên `app.js`/`app.css` | Sửa mà người dùng vẫn chạy bản cũ trong cache 30 ngày | tăng tay mỗi lần sửa **đến Phase 8** (Phase 8 mới có bước băm tên tệp) |
+
+Nhóm công cụ và môi trường (lượt khói §8.5):
+
+| Bẫy | Hậu quả nếu bỏ qua | Xử lý ở |
+|---|---|---|
+| **Git Bash làm hỏng tiếng Việt truyền qua argv**: `curl -d '…tiếng Việt…'` hay `psql -c '…'` bị chuyển sang codepage console và tới nơi thành `U+FFFD` | Hệ thống **lưu luôn bản đã hỏng** (`"KH\357\277\275I 8.5"`), rồi mất thời gian đi tìm lỗi encoding trong CSDL/API trong khi chúng đều đúng | mọi thân JSON và mọi câu SQL đi qua **stdin**: `--data-binary @-`, `docker exec -i … psql` — đã ghi rõ ở đầu `tools/smoke-8.5.sh` |
+| `process.loadEnvFile()` **không ghi đè** biến môi trường đã có | Tưởng `deploy/.env` luôn thắng; thực ra `DATABASE_URL=… npm run …` trên dòng lệnh thắng | chính nhờ vậy mà dựng được CSDL khói **riêng** (`quanlycongviec_uat`) không chạm dữ liệu dev |
+| Chạy `seed:dev` lên CSDL **đã có dòng tay** cùng `code` nhưng khác `level` | Nổ `PARENT_NOT_SUBWORK` («Cha phải là công việc con (cấp 2)») — thông điệp trỏ sai hướng, vì `ON CONFLICT (code) DO UPDATE` **không** sửa được `level` | seed lên CSDL sạch/riêng; CSDL dev hiện còn 5 dòng tay (`CV001` "Việc gốc"…) **chặn** `seed:dev` ở đó |
+| `works.approval_status` có mặc định `'Đã duyệt'::text` | Tưởng luồng duyệt đã chạy: **không** chỗ nào ở Phase 3/4 đặt «Chờ duyệt», nên mọi thống kê "bỏ mục chờ duyệt" đều chưa được kiểm thật | điểm đỏ §8.5 **D1** · việc **5.2** của Phase 5 |
+| jsdom **không có** thuộc tính đặt tên của form (`form.tenO`) | Test giao diện đỏ vì `undefined`, tưởng code sai | dùng `form.elements.namedItem('…')` trong test |
+| Biểu mẫu cũ **không gửi** `level`/`Mã cha` (`COL.T_LEVEL`/`COL.T_PARENT` khai ở `app.js:56–57` rồi không dùng) | Mọi đầu việc bản cũ tạo ra là **cấp 3 không cha**; cây 3 tầng chỉ tồn tại trong dữ liệu seed | điểm đỏ §8.5 **C7** · §13.4 mục 14 |
+| Bản cũ còn 3 id DOM **chết** (`#add-notification-btn` và 2 id nữa) có listener nhưng không có phần tử | Đọc code tưởng tính năng đã có; sửa "lỗi không bấm được" của một nút không tồn tại | việc 4.7 đã bỏ listener chết; icon thiếu dùng ảnh dự phòng của flaticon |
+
 ### 13.6 Mở session mới — dán prompt là chạy
 
 `docs/BAT-DAU-SESSION.md` giữ 6 mục: (1) đang ở đâu · (2) prompt mẫu điền `<PHASE>` ·
@@ -1680,10 +1791,12 @@ hai lớp phân quyền của §6 cần cả hai loại dòng này. Câu seed vi
 vụ của §8.3. `seed-dev.test.js` lên **27 test** và `seed-guard.test.js` thêm **2 test** cho hai
 chốt an toàn — bảng trên và file `.sql` không thể lệch nhau mà test vẫn xanh.
 
-### 13.8 Số liệu snapshot thật — `data/snapshot-20260824.json`
+### 13.8 Số liệu snapshot thật — chép lại từ `data/snapshot-20260824.json` (file đã xoá)
 
-Nguồn: `file tai xuong tu google sheet.xlsx`, SHA-256 `c5d560af…9efd12`, 96 KB.
-File snapshot **không commit** (chứa email và mật khẩu văn bản thuần thật).
+Nguồn: `file tai xuong tu google sheet.xlsx`, SHA-256 `c5d560af…9efd12`, 96 KB — vẫn nằm ngoài kho.
+Bản snapshot JSON và `dump-sheets.js` **đã bỏ** 2026-08-25 (§13.4 mục 11) vì chứa email và mật
+khẩu văn bản thuần thật. **Mục này là bản ghi duy nhất còn lại** của những gì đã đọc được, nên
+đừng xoá gọn nó khi dọn kế hoạch.
 
 | Sheet trong Sheets | Tên trong `.xlsx` | Số dòng | Số cột |
 |---|---|---|---|

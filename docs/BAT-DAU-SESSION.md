@@ -11,15 +11,17 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 
 | | |
 |---|---|
-| Nhánh đang làm | `vps/phase-3-works` (tách từ `vps/phase-2-import`) — **toàn bộ Phase 3 nằm ở nhánh này**. `vps/phase-2-import` dừng ở `49f42b2`, `vps/phase-1-auth` dừng ở `8aed2a8` |
-| Phase đã xong | **0**, **1**, **2** và **3** — Phase 3: 13/13 việc (works CRUD + nhân bản cả cây · workItems một service hai cấp · 6 nhánh chặn · chuyển công việc · xoá đệ quy · `/works/tree` · reorder · nhắc việc · sinh mã · cảnh báo ngày · phòng cả ba cấp · nguồn gốc · nhật ký từng đầu việc) |
-| Test đang xanh | **495** trong 24 file (322 sau Phase 2 + 173 của Phase 3, gồm 21 test port từ `tools/test-tasks-gd2.js`) |
-| Phase kế tiếp | **4 — cắt frontend sang API** (§7 Phase 4, việc 4.1–4.8 + §8.5 checklist khói 60 điểm + §8.7 TC-SEC-02/03). **Điểm dừng an toàn** hết phase này |
-| Còn treo | Chỉ **một** việc, và Phase 4 phải làm: gắn `loginRateLimiter` cho `/api/rpc/authenticateUser` — đường dẫn đó chỉ có khi dựng cầu RPC (đã ghi chú trong `src/app.js`) |
-| Đang chờ người dùng | §13.4 **mục 10** (tiền tố mã `CV` hay `DA` — đang làm theo `CV`), **mục 11** (còn giữ `dump-sheets.js` + snapshot không — đang giữ), **mục 12** (Phase 9 nhập tay 28 dòng bằng cách nào), **mục 13** (ai được đặt nhắc việc — đang cho "ai sửa được nhiệm vụ", bản cũ chỉ admin). Mục 8 và 9 đã **hết hiệu lực** |
+| Nhánh đang làm | `vps/phase-4-frontend` (tách từ `vps/phase-3-works`) — **toàn bộ Phase 4 nằm ở nhánh này**. `vps/phase-3-works` dừng ở `0e74738`, `vps/phase-2-import` ở `49f42b2`, `vps/phase-1-auth` ở `8aed2a8` |
+| Phase đã xong | **0**, **1**, **2**, **3** và **4** — Phase 4: 8/8 việc (tách `web/` · `api-bridge.js` đủ **37** tên hàm cũ · tự chứa Tailwind/Chart.js/Font Awesome/Inter/Alpine · đăng nhập cookie + phát lại lời gọi khi 401 · modal đổi mật khẩu bắt buộc khi 403 · **soát 55 dòng / 70 chỗ / 474 giá trị `innerHTML`** · bỏ code chết · Nginx phục vụ `web/`) + đã chạy tay **cả 60 điểm** checklist khói §8.5 |
+| Test đang xanh | **675** trong 33 file (495 sau Phase 3 + 180 của Phase 4), lint + `format:check` sạch |
+| Phase kế tiếp | **5 — luồng duyệt + thông báo + lịch chạy** (§7 Phase 5, việc 5.1–5.8 + **5.10** `GET /api/v1/bootstrap`, **5.11** nối 7 tên nhân sự/phòng, **5.12** nút «+ công việc con» trên cây — cả ba thêm ngày 2026-08-25; §8.4 nhóm E; nhóm Duyệt 8 điểm của §8.5) |
+| Còn treo | Hết nợ Phase 1 (`loginRateLimiter` đã gắn cho `/api/rpc/authenticateUser`, có test 429). Còn **2 điểm đỏ** của §8.5, cả hai đã ghi trong `docs/UAT.md`: **C7** biểu mẫu cũ không tạo được công việc con cấp 2 (§13.4 mục 14 đã chốt **phương án (b)** ⇒ **việc 5.12**) và **D1** Trưởng phòng tạo ra «Đã duyệt» (việc 5.1). Còn **18/37** tên hàm cũ trả `501` — Phase 5 mở 10 + 3, Phase 7 mở phần còn lại |
+| Đang chờ người dùng | **KHÔNG còn câu nào.** Mục 14 chốt 2026-08-25 = **phương án (b)** (nút «+ công việc con» trên cây ⇒ việc 5.12, biểu mẫu vẫn tạo cấp 3); mục 15 chốt cùng ngày = **`Phó Giám đốc` phụ trách phòng cũng đặt được nhắc việc** (đã cài, +2 test). Mục 1–7, 10–15 đã trả lời; mục 8, 9 hết hiệu lực |
 | Dữ liệu để làm việc | `npm run seed:dev` → **dữ liệu mẫu §8.3**: 5 phòng (`PH05` rỗng hoàn toàn), 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký. **Cố ý có dữ liệu bẩn** (email chữ hoa, trùng họ tên, nhiệm vụ mồ côi, link thiếu `http`, ngày 29/02) — đừng "sửa cho sạch" |
+| ⚠ CSDL dev đang bị chặn seed | CSDL `quanlycongviec` (dev) còn **5 dòng tay** từ lúc thử tay (`CV001` "Việc gốc"…) trùng `code` nhưng khác `level` ⇒ `npm run seed:dev` nổ `PARENT_NOT_SUBWORK` ở đó. Cách chữa: xoá 5 dòng đó rồi seed lại, hoặc seed sang CSDL khác như Phase 4 đã làm (`DATABASE_URL=…/quanlycongviec_uat npm run seed:dev` — `loadEnvFile()` không ghi đè biến dòng lệnh) |
 | Tài khoản thử tay | `TEST001..TEST013` (§13.7), mật khẩu chung `Test@12345`, tất cả bị bắt đổi ở lần đăng nhập đầu. Có đủ **6 vai trò** |
-| Dữ liệu thật (chỉ để đối chiếu) | `data/snapshot-20260824.json` (5 người dùng, 4 phòng, 2 công việc, 1 đề nghị, 1 chat — §13.8). **Không nhập tự động nữa**: 28 dòng thật nhập tay ở **Phase 9**. `data/*` không commit |
+| Chạy lại lượt khói | `bash tools/smoke-8.5.sh` — cần một Nginx trỏ về máy chủ (xem mục 4) hoặc đặt `BASE=http://127.0.0.1:3000`. Script tự dọn dòng nó tạo và in số dòng còn lại để đối chiếu với seed (9 / 30) |
+| Dữ liệu thật (chỉ để đối chiếu) | Số liệu ở §13.8 (snapshot JSON **đã bỏ** — §13.4 mục 11). 28 dòng thật **nhập tay qua giao diện web** ở **Phase 9** (§13.4 mục 12) |
 
 Nếu bảng này khác `KE-HOACH-VPS.md` §13.2 thì **§13.2 đúng** — sửa lại bảng này.
 
@@ -53,7 +55,7 @@ VIỆC CỦA SESSION NÀY: <PHASE>
 
 ---
 
-## 3. Prompt cho session tiếp theo — Phase 4 (cắt frontend sang API), dán nguyên khối
+## 3. Prompt cho session tiếp theo — Phase 5 (luồng duyệt + thông báo + lịch chạy), dán nguyên khối
 
 ```text
 Dự án e:\quanlycongviec — chuyển hệ quản lý công việc từ Google Apps Script + Google Sheets
@@ -63,107 +65,113 @@ TRƯỚC KHI LÀM BẤT CỨ VIỆC GÌ:
 1. Đọc §13 của KE-HOACH-VPS.md — nguồn sự thật về việc đang làm đến đâu. Đọc thêm §0.1
    (TỪ VỰNG: cấp 1 = công việc, cấp 2 = công việc con, cấp 3 = nhiệm vụ; KHÔNG gọi cấp 1 là
    "dự án").
-2. Làm theo §13.1. Đọc §13.5 — CẢ BA bảng bẫy (Phase 1, Phase 2, Phase 3), đừng phát hiện lại.
-3. Đọc §7 Phase 4 (8 việc 4.1–4.8), §5.1 (cầu tương thích RPC, có sẵn khung code), §5.2 (bảng
-   36 hàm cũ → service mới — đây là đặc tả của cầu), §8.5 (checklist khói 60 điểm, 6 nhóm) và
-   §8.7 TC-SEC-02/03 (XSS). Không đọc cả §7, không đọc cả §8.
-4. Đọc docs/BAT-DAU-SESSION.md mục 4 và 5 (lệnh chạy + bẫy riêng của máy này + quy ước code).
-5. Đọc §5.3 (hình dạng phản hồi) rồi mở server/src/modules/*/routes.js đúng những route mà cầu
-   RPC cần gọi lại — đừng đoán tên trường, API Phase 3 đã cố định chúng.
+2. Làm theo §13.1. Đọc §13.5 — CẢ NĂM khối bẫy (Phase 1, 2, 3 và 4 chỗ bẫy của Phase 4:
+   XSS / cầu RPC / Nginx / công cụ-môi trường), đừng phát hiện lại.
+3. Đọc §7 Phase 5 — 10 việc: 5.1–5.8 cộng 5.10 và 5.11 (hai việc thêm ngày 2026-08-25 sau lượt
+   khói §8.5). Việc 5.9 (email) ĐÃ BỎ theo §13.4 mục 4: KHÔNG cài nodemailer, KHÔNG viết
+   services/mailer.js. Đọc tiếp §8.4 nhóm E (test luồng duyệt), §5.2 (bảng 37 tên hàm cũ → REST:
+   19 tên đang chạy, 18 tên còn trả 501 — Phase 5 mở 13 trong số đó), §5.3 (hình dạng phản hồi)
+   và §6 (ai duyệt được). Không đọc cả §7, không đọc cả §8.
+4. Đọc docs/UAT.md phần cuối "Checklist khói §8.5 — 6 nhóm / 60 điểm": đó là kết quả chạy tay
+   thật ngày 2026-08-25 (19 xanh / 2 đỏ / 38 chờ / 1 không có ở bản cũ). Phase 5 phải xử điểm đỏ
+   D1 và mở 37 trong 38 điểm ⏳ — danh sách điểm nào thuộc việc nào đã ghi sẵn ở đó.
+5. Đọc docs/BAT-DAU-SESSION.md mục 4 và 5 (lệnh chạy + bẫy riêng của máy này + quy ước code).
 
-KHÔNG đọc tràn Code.gs.moi (3645 dòng) và js.clean.html (3653 dòng) — đây là nguyên nhân cháy
-ngữ cảnh phổ biến nhất của dự án này, và Phase 4 là phase dễ mắc nhất vì việc nằm đúng ở hai
-file đó. Cách làm đúng:
-- Việc 4.1 là việc CƠ HỌC: dùng lệnh copy/move của hệ điều hành để đưa js.clean.html thành
-  web/assets/js/app.js, CSS.html thành web/assets/css/app.css. Chỉ ĐỌC vài dòng đầu và vài
-  dòng cuối để bỏ hai thẻ <script> bọc ngoài (và <style> của CSS). Không đọc giữa file.
-- Cần biết frontend gọi gì thì Grep, đừng đọc: "google.script.run", "innerHTML",
-  "withSuccessHandler", "escapeHtmlAttr", "#add-notification-btn".
-- Việc quét rộng (liệt kê 53 chỗ innerHTML, đối chiếu 36 tên hàm RPC) thì giao subagent và
-  chỉ nhận danh sách kết luận.
+KHÔNG đọc tràn Code.gs.moi (3645 dòng) và web/assets/js/app.js (3653 dòng / 305 KB) — đây là
+nguyên nhân cháy ngữ cảnh phổ biến nhất của dự án này. Cần biết giao diện gọi gì thì Grep:
+"google.script.run", "approval", "Chờ duyệt", "pendingCount", "badge". Việc quét rộng thì giao
+subagent và chỉ nhận danh sách kết luận.
 
-TRẠNG THÁI: Phase 0, 1, 2, 3 đã xong. 495 test xanh trong 24 file. Nhánh vps/phase-3-works —
-Phase 4 tách nhánh mới vps/phase-4-frontend TỪ vps/phase-3-works (không tách từ nhánh khác).
+TRẠNG THÁI: Phase 0, 1, 2, 3, 4 đã xong. 675 test xanh trong 33 file, lint + format:check sạch.
+Nhánh vps/phase-4-frontend — Phase 5 tách nhánh mới vps/phase-5-approval TỪ vps/phase-4-frontend
+(không tách từ nhánh khác).
 
-BACKEND ĐÃ XONG, PHASE 4 KHÔNG VIẾT LẠI NGHIỆP VỤ — chỉ gọi lại:
-- Xác thực: POST /api/v1/auth/login, /auth/logout, /auth/password (ĐỔI MẬT KHẨU — tên route là
-  /password, không phải /change-password), GET /api/v1/auth/me.
-  Phiên bằng cookie HttpOnly, CSRF theo mẫu double-submit (cookie + header X-CSRF-Token) —
-  bridge PHẢI gửi header này cho mọi POST/PATCH/DELETE, nếu không nhận 403.
-- Công việc cấp 1: GET/POST /api/v1/works, GET/PATCH/DELETE /api/v1/works/:idOrCode,
-  POST /works/:id/copy (nhân bản cả cây), POST /works/:id/reorder, GET /works/tree,
-  GET /works/:id/history.
-- Cấp 2 + cấp 3: GET/POST /api/v1/work-items, GET/PATCH/DELETE /work-items/:idOrCode,
-  POST /work-items/:id/copy, GET /work-items/:id/history. Chuyển việc, bỏ cha, đổi cha đều là
-  PATCH trên chính đầu việc đó.
-- Nhắc việc lồng dưới đầu việc: GET/POST /api/v1/work-items/:id/reminders,
-  PATCH/DELETE .../reminders/:reminderId — chỉ gắn được vào cấp 3, gọi trên cấp 2 trả 409
-  REMINDER_ON_SUBWORK. KHÔNG có /api/v1/reminders ở gốc.
-- Mọi phản hồi theo §5.3: { ok: true, data } hoặc { ok: false, error: { code, message, field } }.
-  DELETE cây trả về DANH SÁCH MÃ đã xoá; tạo/sửa có thể kèm data.warnings (ngày ngoài khoảng
-  ngày công việc cha là CẢNH BÁO, không phải lỗi) — giao diện phải hiện cảnh báo đó.
-- Mã (CV0xx, CV0xx-NNN) là DANH TÍNH, không đổi kể cả khi chuyển sang công việc khác. Giao diện
-  đừng suy ra công việc cha từ tiền tố mã; đọc work_id/workCode trong dữ liệu trả về.
+ĐÃ CÓ SẴN, ĐỪNG LÀM LẠI:
+- Cầu RPC: server/src/rpc/{index.js,table.js,legacyFields.js} — bảng 37 tên hàm cũ. Thêm một
+  tên vào đời thật = đổi pending() thành hàm thật trong table.js, KHÔNG sửa web/assets/js/app.js.
+  GET /api/rpc in ra cả bảng ánh xạ để đối chiếu.
+- Frontend: web/ (index.html + assets/js/app.js + assets/js/api-bridge.js + assets/css/app.css
+  + assets/vendor/**). Điều lệ ở đầu app.js vẫn còn hiệu lực: KHÔNG đổi tên hàm, KHÔNG đổi id
+  DOM, KHÔNG dọn code — trừ khi chính việc của Phase 5 buộc phải thêm phần tử mới (nhãn vàng,
+  badge, nút Duyệt/Từ chối), lúc đó thêm mới và ghi rõ trong commit.
+- Xác thực/CSRF/phân quyền/nhật ký (Phase 1), cây 3 tầng + nhắc việc (Phase 3), dữ liệu mẫu
+  §8.3 (Phase 2). Mọi lời ghi POST/PATCH/DELETE phải có header X-CSRF-Token, nếu không nhận 403.
+- Escape XSS: escapeHtml / escapeHtmlAttr trong app.js đã soát đủ 474 giá trị ở Phase 4. Mọi
+  HTML mới của Phase 5 (nhãn vàng, badge, dòng lý do từ chối do người dùng nhập) phải đi qua
+  đúng hai hàm đó, hoặc dùng textContent. Lý do từ chối là dữ liệu người dùng nhập — coi như
+  nguồn tấn công, thêm test XSS cho nó.
 
-RỦI RO LỚN NHẤT CỦA PHASE 4 LÀ XSS, KHÔNG PHẢI NGHIỆP VỤ:
-frontend cũ dựng HTML bằng innerHTML ở 53 chỗ với dữ liệu người dùng nhập (tên việc, ghi chú,
-link kết quả). Trên Apps Script chuyện này bị che bởi iframe sandbox; trên VPS thì không còn gì
-che. Việc 4.6 và TC-SEC-02/03 là bắt buộc, không phải tuỳ chọn: soát ĐỦ 53 chỗ, chỗ nào chỉ
-chèn văn bản thì chuyển sang textContent, chỗ nào buộc dựng HTML thì escape từng giá trị (kể cả
-trong thuộc tính và trong href — chặn cả javascript:). Kiểm bằng đúng chuỗi thử của §8.7.
+VIỆC CỦA SESSION NÀY: làm trọn Phase 5 trên nhánh mới vps/phase-5-approval (tách từ
+vps/phase-4-frontend). Theo đúng §7 Phase 5, 11 việc. §13.4 KHÔNG còn câu nào chờ trả lời —
+mục 14 và 15 đã chốt ngày 2026-08-25, cứ làm theo, đừng hỏi lại:
+- 5.1 đặt trạng thái khi tạo: Trưởng/Phó phòng tạo cấp 1 hoặc cấp 2 ⇒ 'Chờ duyệt'; admin và
+  Phó GĐ ⇒ 'Đã duyệt'; cấp 3 LUÔN 'Đã duyệt'. Đây là điểm đỏ D1 của §8.5: hiện cột
+  works.approval_status có mặc định 'Đã duyệt' và không chỗ nào đặt 'Chờ duyệt', nên kiểm bằng
+  đúng cách của lượt khói: đăng nhập tp01@test.local, tạo một công việc, đọc lại cột trong CSDL.
+- 5.2 ba hành động submit / approve / reject — reject BẮT BUỘC có lý do ≥ 10 ký tự.
+- 5.3 quyền duyệt: admin mọi phòng; Phó GĐ chỉ phòng có tên mình trong department_managers
+  (phòng khác phải 403). Không nới thêm vai nào.
+- 5.4 LOẠI 'Chờ duyệt' KHỎI MỌI CON SỐ bằng hai view v_countable_works / v_countable_items,
+  KHÔNG thêm điều kiện rải rác ở từng truy vấn — đây là chỗ dễ sót nhất của cả dự án.
+- 5.5 badge: GET /approvals/pending-count, gọi lại sau mỗi lần duyệt.
+- 5.6 nhãn vàng: cả phòng thấy mục 'Chờ duyệt', người không phải người tạo không sửa được.
+- 5.7 thông báo: có mục mới chờ ⇒ thông báo Phó GĐ phụ trách; được duyệt / bị từ chối ⇒ thông
+  báo người tạo. Chỉ ghi bảng notifications + badge, KHÔNG gửi email.
+- 5.8 services/cron.js: 07:00 hằng ngày quét nhiệm vụ quá hạn và tạo thông báo, chạy trong
+  container app, có cờ CRON_ENABLED để staging tắt. Test bằng cách gọi trực tiếp hàm quét với
+  đồng hồ giả, đừng chờ 07:00.
+- 5.10 GET /api/v1/bootstrap: một lời gọi trả gói dữ liệu đầu trang (người đăng nhập, danh sách
+  phòng, danh sách người, số đếm chờ duyệt, thống kê tổng quan) rồi nối getDataForUser +
+  getInitialDataWithAuth + getDepartmentContext vào nó trong rpc/table.js. GIỮ NGUYÊN ngoại lệ:
+  khi CHƯA đăng nhập, getInitialDataWithAuth trả {requireLogin:true} chứ không 401/501 — có
+  test rồi, đừng làm đổ. Việc này mở 17 điểm ⏳ (cả nhóm Tổng quan 10 điểm + R1–R7 Gantt).
+  Thống kê trong gói đọc qua view của việc 5.4; biểu đồ đầy đủ vẫn để Phase 6.
+- 5.11 nối 7 tên nhân sự/phòng vào cầu RPC (getStaffList, addStaffWithAuth, updateStaffWithAuth,
+  deleteStaffWithAuth, deleteDepartmentWithAuth + 2 tên phòng đã chạy): nghiệp vụ đã có từ
+  Phase 1 ở /api/v1/users và /api/v1/departments, chỉ thiếu lớp ánh xạ. Mở 10 điểm ⏳ (nhóm
+  Người dùng & Phòng). Đừng viết lại nghiệp vụ, đừng nới quyền của §6.
+- 5.12 nút «+ công việc con» trên cây — §13.4 mục 14 chốt phương án (b). Bấm ở hàng CÔNG VIỆC
+  ⇒ mở #task-form ở chế độ tạo cấp 2 (không cha); bấm ở hàng CÔNG VIỆC CON ⇒ tạo cấp 3 với
+  parentRef là hàng đó. KHÔNG thêm ô "Cấp" cho người dùng chọn — cấp suy ra từ chỗ bấm.
+  COL.T_LEVEL/COL.T_PARENT (app.js:56–57) đang khai rồi bỏ không, việc này mới dùng đến. Đây là
+  việc ĐƯỢC PHÉP đổi DOM, nên phải thêm id mới vào tests/unit/dom-contract.test.js. Xong thì
+  điểm đỏ C7 của §8.5 mới hết đỏ.
+Đề nghị / chat / app vẫn để 501 tới Phase 7 — đừng tiện tay làm luôn.
 
-VIỆC CỦA SESSION NÀY: làm trọn Phase 4 trên nhánh mới vps/phase-4-frontend (tách từ
-vps/phase-3-works). Theo đúng §7 Phase 4, 8 việc:
-- 4.1 tách file: index.html bỏ <?!= include('js') ?> và include('CSS'), thay bằng <script src>
-  + <link rel=stylesheet>; js.clean.html → web/assets/js/app.js (bỏ 2 thẻ <script> bọc ngoài);
-  CSS.html → web/assets/css/app.css. Việc cơ học, làm bằng lệnh copy, đừng đọc cả file.
-- 4.2 web/assets/js/api-bridge.js theo §5.1: định nghĩa lại window.google.script.run với
-  withSuccessHandler / withFailureHandler, ĐỦ 36 tên hàm ở bảng §5.2, nạp TRƯỚC app.js. app.js
-  gọi 28 chỗ google.script.run — mục tiêu là app.js gần như KHÔNG phải sửa. Hàm nào backend
-  chưa có thì gọi thất bại rõ ràng (báo lỗi tiếng Việt), KHÔNG im lặng trả undefined.
-- 4.3 tự chứa thư viện ngoài: Tailwind (bản build sẵn — production KHÔNG dùng
-  cdn.tailwindcss.com), Chart.js, Font Awesome, font Inter tải về web/assets/vendor/.
-- 4.4 đăng nhập bằng cookie phiên; 401 giữa lúc đang dùng ⇒ hiện lại modal đăng nhập rồi chạy
-  lại request vừa hỏng, không đứng im.
-- 4.5 nhận 403 MUST_CHANGE_PASSWORD ⇒ mở thẳng modal đổi mật khẩu, không cho vào app.
-- 4.6 chống XSS: soát ĐỦ 53 chỗ innerHTML; có sẵn escapeHtmlAttr, viết thêm escapeHtml cho
-  nội dung; ưu tiên textContent khi chỉ chèn văn bản.
-- 4.7 bỏ code chết: listener #add-notification-btn không có nút tương ứng trong index.html —
-  hoặc thêm nút, hoặc bỏ listener (chọn bỏ listener nếu tính năng chưa có thật).
-- 4.8 Nginx phục vụ web/: cache assets/ 30 ngày, index.html KHÔNG cache.
+RỦI RO LỚN NHẤT CỦA PHASE 5 LÀ SÓT MỘT CHỖ ĐẾM, KHÔNG PHẢI VIẾT ĐƯỢC NÚT DUYỆT:
+"Chờ duyệt" phải biến mất khỏi 4 thẻ số, 6 biểu đồ, mọi bộ lọc và cả gói bootstrap. Cách duy
+nhất không sót là hai view của việc 5.4 + một test chạy EXPLAIN mọi truy vấn thống kê để khẳng
+định chúng đều đọc qua view. Test chốt: ghi lại 4 thẻ số, tạo 1 mục 'Chờ duyệt', đọc lại — không
+đổi MỘT ĐƠN VỊ nào.
 
-CÒN MỘT VIỆC NỢ TỪ PHASE 1, LÀM LUÔN Ở PHASE 4: gắn loginRateLimiter cho
-/api/rpc/authenticateUser (route RPC mới sinh ra ở việc 4.2 — nếu không gắn thì cầu tương thích
-trở thành đường vòng thoát khỏi chặn dò mật khẩu của /api/v1/auth/login). §8.7 không có mã test
-riêng cho việc này — tự viết một test: sai mật khẩu quá ngưỡng qua đường RPC phải nhận 429.
+QUYỀN ĐẶT NHẮC VIỆC ĐÃ ĐỔI (§13.4 mục 15, chốt 2026-08-25): admin + Phó Giám đốc PHỤ TRÁCH
+phòng đó + Trưởng phòng / Phó phòng của phòng đó. Đã cài ở VAI_DAT_NHAC_VIEC trong
+modules/reminders/service.js, 23 phép kiểm xanh — đừng nới thêm vai nào nữa.
 
-TRẢ LỜI TRƯỚC KHI SỬA GIAO DIỆN: §13.4 còn 4 câu chờ tôi (mục 10, 11, 12, 13). Mục 13 (ai được
-đặt nhắc việc) ảnh hưởng trực tiếp đến nút "Đặt nhắc" trên giao diện — hỏi lại tôi ở đầu
-session, đừng tự quyết rồi làm cả hai đường.
+XONG KHI: 675 test cũ vẫn xanh · test "tạo 1 mục Chờ duyệt ⇒ 4 thẻ số và 6 biểu đồ không đổi
+một đơn vị nào" xanh · Phó GĐ phòng A duyệt mục phòng B nhận 403 · lý do từ chối rỗng hoặc
+< 10 ký tự bị chặn · EXPLAIN khẳng định mọi truy vấn thống kê đọc qua v_countable_* · bootstrap
+trả đủ gói và getInitialDataWithAuth lúc chưa đăng nhập vẫn trả {requireLogin:true} · 13 tên hàm
+cũ mới nối đều có test (đúng route, đúng phương thức, có CSRF) · lý do từ chối có test XSS ·
+lint + format:check sạch · CHẠY LẠI bash tools/smoke-8.5.sh và cập nhật docs/UAT.md: nhóm Tổng
+quan phải từ 0/10 lên xanh, nhóm Duyệt phải xử xong D1 và D2–D8, nhóm Người dùng & Phòng lên
+xanh, R1–R7 lên xanh. Đừng báo "xong" khi còn điểm đỏ — ghi rõ điểm nào chưa đạt và vì sao.
 
-XONG KHI: 495 test cũ vẫn xanh · api-bridge.js có test cho ĐỦ 36 tên hàm (mỗi tên gọi đúng
-route, đúng phương thức, có header CSRF; hàm ghi thiếu CSRF phải hỏng thấy được, không im lặng)
-· TC-SEC-02/03 xanh: gửi <img src=x onerror=alert(1)> vào tên công việc / tên nhiệm vụ / ghi chú
-rồi kiểm HTML dựng ra chỉ có chữ, không có thẻ · đã soát và ghi lại kết quả cho CẢ 53 chỗ
-innerHTML (chỗ nào đổi, chỗ nào an toàn sẵn vì chỉ chèn HTML tĩnh) · /api/rpc/authenticateUser
-có loginRateLimiter và có test 429 · lint + format:check sạch · chạy tay checklist khói §8.5
-(6 nhóm, 60 điểm, tích vào docs/UAT.md) và ghi rõ điểm nào chưa đạt, đừng báo "xong" khi còn
-điểm đỏ.
-
-Viết test song song với code, chạy ngay sau mỗi việc, không dồn đến cuối phase. Frontend chạy
-được trong vitest bằng jsdom cho phần bridge/escape; phần vẽ giao diện thì kiểm tay theo §8.5.
+Viết test song song với code, chạy ngay sau mỗi việc, không dồn đến cuối phase.
 
 CUỐI SESSION, bắt buộc trước khi tổng kết: cập nhật §13.2, thêm 1 dòng vào §13.3 (không sửa
 dòng cũ), bổ sung §13.4 nếu có câu cần tôi trả lời, bổ sung §13.5 nếu phát hiện bẫy mới.
-Nếu thiết kế đổi thì sửa luôn mục gốc (§4/§5/§7), không chỉ ghi ở §13. Cập nhật mục 1 và mục
-3 của docs/BAT-DAU-SESSION.md — mục 3 lần sau là prompt cho Phase 5 (luồng duyệt + thông báo +
-lịch chạy: §7 Phase 5 việc 5.1–5.8, chú ý 5.4 loại "Chờ duyệt" khỏi MỌI thống kê bằng hai view
-v_countable_works / v_countable_items, và 5.9 đã BỎ email theo §13.4 mục 4 — đừng cài
-nodemailer; test §8.4 nhóm duyệt + nhóm Duyệt (8 điểm) của checklist khói §8.5).
-Commit theo từng việc nhỏ, thông điệp có mã phase (phase-4: ...). Không dùng git add .
+Nếu thiết kế đổi thì sửa luôn mục gốc (§4/§5/§6/§7), không chỉ ghi ở §13. Cập nhật mục 1 và mục
+3 của docs/BAT-DAU-SESSION.md — mục 3 lần sau là prompt cho Phase 6 (thống kê, lọc, Gantt: §7
+Phase 6 việc 6.1–6.9, chú ý 6.4 lọc tháng theo GIAO NHAU khoảng ngày, 6.9 đối chiếu số liệu với
+bản Apps Script phải chênh 0, và nợ hiệu năng từ Phase 4: getTasks đang gọi N+1 — gộp một truy
+vấn; test §8.4 nhóm F + nhóm Tổng quan và R1–R7 của checklist khói §8.5).
+Commit theo từng việc nhỏ, thông điệp có mã phase (phase-5: ...). Không dùng git add .
 
 Trả lời tiếng Việt.
 ```
+
+
 
 ---
 
@@ -187,7 +195,7 @@ docker compose -f deploy/docker-compose.dev.yml ps      # cả 3 phải "healthy
 cd server && npm run migrate:up
 
 # 3. Kiểm mọi thứ còn xanh TRƯỚC KHI sửa gì — LUÔN chạy từ trong server/, không từ gốc repo
-cd server && npm test    # phải 495/495 xanh trong 24 file (hết Phase 0 + 1 + 2 + 3)
+cd server && npm test    # phải 675/675 xanh trong 33 file (hết Phase 0 + 1 + 2 + 3 + 4)
 npm run lint && npm run format:check
 
 # 4. Chạy máy chủ khi cần thử tay
@@ -204,9 +212,39 @@ npm run migrate:down          # lùi 1 migration
 npm run migrate:redo          # lùi rồi chạy lại migration cuối
 npm run test:watch            # chạy test liên tục khi đang viết
 npm run coverage              # ngưỡng 70%
-node tools/dump-sheets.js <file.xlsx>          # xuất snapshot từ .xlsx tải về
+docker run --rm -v "$PWD/deploy/nginx/app.conf:/etc/nginx/conf.d/app.conf:ro" \
+  -v "$PWD/deploy/nginx/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro" \
+  nginx:1.27-alpine nginx -t                               # kiểm cú pháp Nginx (§7 việc 4.8)
 docker compose -f deploy/docker-compose.dev.yml down       # tắt, GIỮ dữ liệu dev
 docker compose -f deploy/docker-compose.dev.yml down -v    # tắt và XOÁ SẠCH dữ liệu dev
+```
+
+Dựng Nginx thật để chạy lượt khói §8.5 (đã dùng ở Phase 4, cổng 8099):
+
+```bash
+# 0. Máy chủ Node chạy trên máy thật (cổng 3000), CSDL riêng để không chạm dữ liệu dev:
+docker exec -i qlcv-dev-db psql -U qlcv -d postgres -c 'CREATE DATABASE quanlycongviec_uat'
+cd server && DATABASE_URL=postgres://qlcv:<mk>@127.0.0.1:5432/quanlycongviec_uat npm run migrate:up
+cd server && DATABASE_URL=postgres://qlcv:<mk>@127.0.0.1:5432/quanlycongviec_uat npm run seed:dev
+cd server && DATABASE_URL=postgres://qlcv:<mk>@127.0.0.1:5432/quanlycongviec_uat npm run dev
+
+# 1. Mạng riêng + CẦU tới máy thật. Nginx dùng resolver Docker nên nó BỎ QUA /etc/hosts:
+#    --add-host app:host-gateway KHÔNG có tác dụng, phải có một container TÊN là app.
+docker network create qlcv-uat
+docker run -d --name app --network qlcv-uat alpine/socat \
+  tcp-listen:3000,fork,reuseaddr tcp-connect:host.docker.internal:3000
+
+# 2. Nginx phục vụ web/ và chuyển /api sang container app
+docker run -d --name qlcv-uat-nginx --network qlcv-uat -p 127.0.0.1:8099:80 \
+  -v "$PWD/deploy/nginx/app.conf:/etc/nginx/conf.d/app.conf:ro" \
+  -v "$PWD/deploy/nginx/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro" \
+  -v "$PWD/web:/var/www/qlcv:ro" nginx:1.27-alpine
+
+# 3. Chạy lượt khói (in mã HTTP từng điểm, tự dọn dòng nó tạo)
+bash tools/smoke-8.5.sh            # hoặc BASE=http://127.0.0.1:3000 bash tools/smoke-8.5.sh
+
+# 4. Dọn
+docker rm -f qlcv-uat-nginx app && docker network rm qlcv-uat
 ```
 
 `down -v` xoá volume `db-data` — mất toàn bộ dữ liệu dev. Chỉ dùng khi thật sự muốn làm lại từ đầu.
@@ -232,9 +270,9 @@ docker compose -f deploy/docker-compose.dev.yml down -v    # tắt và XOÁ SẠ
 - Nhánh `main` không commit trực tiếp. Mỗi phase một nhánh `vps/phase-N-<tên>`.
 - Trong repo còn `Code.gs.moi`, `HUONG-DAN-BAO-TRI.md`, `KE-HOACH-PHAT-TRIEN.md`,
   `tools/test-tasks-gd2.js`, `file tai xuong tu google sheet.xlsx` đang sửa dở / chưa theo dõi
-  từ trước — **đừng stage kèm**. Riêng `web/` là **thư mục của Phase 4**: hiện chỉ có khung rỗng
-  `web/assets/{css,js,vendor}` (một file `.gitkeep`), chưa theo dõi. Từ Phase 4 trở đi thì
-  commit, nhưng vẫn `git add` từng file — đừng `git add web/` khi trong đó có bản tải về của
+  từ trước — **đừng stage kèm**. Riêng `web/` **đã là thư mục thật của frontend** từ Phase 4
+  (`index.html`, `assets/js/{app.js,api-bridge.js}`, `assets/css/app.css`, `assets/vendor/**`);
+  vẫn `git add` từng file — đừng `git add web/` khi trong đó có bản tải về của
   thư viện ngoài chưa kiểm.
 
 **Bẫy riêng của máy này** (đã mất thời gian một lần, xem §13.5 của kế hoạch):
@@ -246,7 +284,7 @@ docker compose -f deploy/docker-compose.dev.yml down -v    # tắt và XOÁ SẠ
 | `docker compose up` báo "port is already allocated" | cổng 5433 đã bị Postgres của dự án khác chiếm | CSDL test dùng **5434**, khai qua biến trong `deploy/.env` |
 | Cả bộ test chết bằng `process.exit(1)` không nói lý do | `env.js` từ chối một biến mà `vitest.config.js` truyền vào | đọc stderr của worker; giữ enum trong `env.js` khớp với `vitest.config.js` |
 | Test xoá mất dữ liệu dev | tưởng `process.loadEnvFile()` ghi đè `process.env` — **không** ghi đè | đã có 2 lớp chặn: `vitest.config.js` dừng nếu `DATABASE_URL === TEST_DATABASE_URL`; `global-setup.js` chỉ xoá CSDL có hậu tố `_test` |
-| `dump-sheets.js` báo "thiếu sheet Dự án/Nhiệm vụ" | `.xlsx` cấm dấu `/` trong tên sheet ⇒ bản tải về bị đổi thành `Dự ánNhiệm vụ` | đã xử lý: khớp theo tên **chuẩn hoá**, ghi tên thật vào `actual_name` |
+| ~~`dump-sheets.js` báo "thiếu sheet Dự án/Nhiệm vụ"~~ (công cụ đã bỏ 2026-08-25) | `.xlsx` cấm dấu `/` trong tên sheet ⇒ bản tải về bị đổi thành `Dự ánNhiệm vụ` | vẫn đúng khi **mở tay** file `.xlsx`: đừng tìm sheet có dấu `/` |
 | Tạo công việc đầu tiên bằng API đổ vì trùng `UNIQUE` trên `code` | dữ liệu mẫu chèn bằng mã **viết cứng** nên 6 sequence vẫn ở 1 | `dev.sql` kết thúc bằng 6 câu `setval(seq, GREATEST(last_value, n))`; thêm dòng mới vào seed thì **nhớ nâng số** |
 | `seed:dev` chạy lần 2 làm số liệu phồng lên | 4 bảng không có cột `code` (`reminders`, `chat_messages`, `notifications`, `activity_logs`) nên `ON CONFLICT` không dùng được | dùng `INSERT … SELECT … WHERE NOT EXISTS` với khoá tự chọn — xem cuối `dev.sql` |
 | Test một chốt an toàn làm **cả vitest thoát** giữa lúc chạy | chốt kết thúc bằng `process.exit(1)`, gọi trong tiến trình test là giết luôn runner | chạy bằng `spawnSync(process.execPath, [run.js])` như `tests/integration/seed-guard.test.js` |
@@ -259,6 +297,12 @@ docker compose -f deploy/docker-compose.dev.yml down -v    # tắt và XOÁ SẠ
 | Test đỏ hàng loạt 401, log in ra `RUN v4.1.11 E:/quanlycongviec` | gọi `npx vitest` từ **gốc repo** ⇒ chạy vitest@4 của thư mục gốc, không có `globalSetup` nên CSDL test chưa dựng | luôn `cd server` trước mọi lệnh `npm`/`npx`; kiểm dòng `RUN v2.1.8 E:/quanlycongviec/server` ở đầu output |
 | `api.delete is not a function` | helper HTTP ở `tests/helpers/http.js` đặt tên là **`del`** (`delete` là từ khoá) | dùng `api.del(url)` |
 | `ECONNRESET` khi test đồng thời (TC-TREE-31) | 20 request cùng lúc, mỗi request tự đi lấy token CSRF ⇒ 40 kết nối, supertest dựng server mới mỗi lần | lấy token **một lần** rồi dùng lại cho cả 20 request |
+| Tiếng Việt gửi bằng `curl -d '…'` hoặc `psql -c '…'` vào CSDL thành `U+FFFD` (`KH?I 8.5`) | Git Bash chuyển **argv** sang codepage console trước khi trao cho `.exe`; hệ thống lưu luôn bản đã hỏng | đưa mọi thân JSON và mọi câu SQL qua **stdin**: `printf '%s' "$body" \| curl … --data-binary @-`, `printf '%s' "$sql" \| docker exec -i qlcv-dev-db psql …` |
+| Nginx trong Docker trả 502 dù `--add-host app:host-gateway` | `resolver 127.0.0.11` phân giải qua DNS Docker, **bỏ qua `/etc/hosts`** | chạy một container **tên `app`** làm cầu: `alpine/socat tcp-listen:3000,fork,reuseaddr tcp-connect:host.docker.internal:3000` (xem mục 4) |
+| `npm run seed:dev` đỏ với «Cha phải là công việc con (cấp 2)» | CSDL đã có dòng tay cùng `code` nhưng khác `level`; `ON CONFLICT (code) DO UPDATE` **không** sửa được `level` | xoá dòng tay, hoặc seed sang CSDL khác bằng `DATABASE_URL=…` trên dòng lệnh (biến dòng lệnh thắng `loadEnvFile()`) |
+| `array_length(...) does not exist` khi kiểm link kết quả bằng SQL | `work_items.result_links` là **jsonb**, không phải mảng text | `jsonb_array_length(result_links)` |
+| `column "revoked_at" does not exist` khi thử phiên hết hạn | bảng `sessions` không có cột đó | đẩy `expires_at` về quá khứ: `UPDATE sessions SET expires_at = now() - interval '1 hour'` |
+| `npm run …` báo `Could not read package.json` | đứng ở **gốc repo**, `package.json` nằm trong `server/` | `cd server` trước mọi lệnh npm (kể cả `lint`, `format:check`) |
 
 **Quy ước code đã chốt** (giữ nguyên, đừng đổi giữa đường):
 
@@ -290,7 +334,10 @@ docker compose -f deploy/docker-compose.dev.yml down -v    # tắt và XOÁ SẠ
    §13.4 nếu có câu cần người dùng trả lời · §13.5 nếu có bẫy mới.
 3. Thiết kế đổi thì sửa **mục gốc** (§2/§3/§4/§5/§6/§7), không chỉ ghi ở §13.
 4. Cập nhật **mục 1** của file này (đang ở đâu) và mục 3 (prompt cho phase kế tiếp).
-5. Commit từng việc nhỏ, thông điệp có mã phase. Không `git add .`.
+5. Chạy lại `bash tools/smoke-8.5.sh` nếu phase vừa làm mở thêm điểm §8.5, rồi cập nhật phần
+   "Checklist khói §8.5" trong `docs/UAT.md` (nêu tên điểm đỏ, đừng chỉ đổi con số) và bảng
+   "Ghi chú nghiệm thu" ở cuối file.
+6. Commit từng việc nhỏ, thông điệp có mã phase. Không `git add .`.
 
 
 

@@ -7,7 +7,7 @@ import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
-import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
+import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
 import { remindersRouter } from '../reminders/routes.js';
 import * as service from './service.js';
 
@@ -17,7 +17,7 @@ const createSchema = z.object({
   workRef: z.union([z.string().min(1), z.number().int()]),
   parentRef: z.union([z.string(), z.number().int(), z.null()]).optional(),
   level: z.coerce.number().int().min(2).max(3).optional(),
-  name: text(500).min(1, 'Vui lòng nhập tên công việc con / nhiệm vụ'),
+  name: requiredText('Vui lòng nhập tên công việc con / nhiệm vụ', 500),
   description: text(5000).optional(),
   assigneeId: idInput,
   assigneeName: text(200).optional(),

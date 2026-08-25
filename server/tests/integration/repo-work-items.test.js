@@ -72,6 +72,50 @@ describe('workItems/repo — mã và thứ tự', () => {
   });
 });
 
+describe('workItems/repo — result_links là cột jsonb', () => {
+  // Bẫy tìm ra ở Phase 4: `pg` biến mảng JS thành chuỗi mảng Postgres `{"a","b"}`, jsonb từ chối
+  // với 22P02 nên NGƯỜI DÙNG nhận "Giá trị không đúng định dạng" mà không biết trường nào sai.
+  // Cả Phase 3 không lộ ra vì không test nào gửi `result_links` thật.
+  const links = ['[Bản nháp] https://a.vn/x?a=1,2', 'https://b.vn/y'];
+
+  async function makeItem(over = {}) {
+    return itemsRepo.insert({
+      code: await itemsRepo.nextItemCode(work.code),
+      work_id: work.id,
+      level: 3,
+      name: 'Nhiệm vụ có link',
+      ...over,
+    });
+  }
+
+  it('insert nhận MẢNG chuỗi và đọc lại vẫn là mảng', async () => {
+    const item = await makeItem({ result_links: links });
+    expect(item.result_links).toEqual(links);
+    expect(Array.isArray((await itemsRepo.findById(item.id)).result_links)).toBe(true);
+  });
+
+  it('insert không gửi link thì cột giữ mặc định mảng rỗng', async () => {
+    expect((await makeItem()).result_links).toEqual([]);
+  });
+
+  it('update thay cả danh sách; mảng rỗng là XOÁ hết link, không phải bỏ qua', async () => {
+    const item = await makeItem({ result_links: links });
+    expect(
+      (await itemsRepo.update(item.id, { result_links: ['https://c.vn'] })).result_links
+    ).toEqual(['https://c.vn']);
+    expect((await itemsRepo.update(item.id, { result_links: [] })).result_links).toEqual([]);
+  });
+
+  it('copyRow mang theo nguyên danh sách link của dòng gốc', async () => {
+    const item = await makeItem({ result_links: links });
+    const copy = await itemsRepo.copyRow(item.id, {
+      code: await itemsRepo.nextItemCode(work.code),
+      workId: work.id,
+    });
+    expect(copy.result_links).toEqual(links);
+  });
+});
+
 describe('workItems/repo — cây và CASCADE', () => {
   async function seedTree() {
     const sub = await itemsRepo.insert({

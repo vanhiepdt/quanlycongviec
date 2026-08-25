@@ -45,6 +45,18 @@ export const idInput = z
 /** Chuỗi có cắt trắng hai đầu, giới hạn độ dài để không ai nhét 1MB vào một cột text. */
 export const text = (max = 500) => z.string().trim().max(max);
 
+/**
+ * Chuỗi BẮT BUỘC. Dùng thay cho `text(n).min(1, '…')` ở những trường không thể thiếu: zod chỉ dùng
+ * câu của `.min(1)` khi khoá CÓ mặt nhưng rỗng; khoá THIẾU hẳn thì nó trả 'Required' — tiếng Anh,
+ * và câu đó đi thẳng ra giao diện cũ qua cầu RPC (§5.3 đòi thông báo tiếng Việt).
+ */
+export const requiredText = (message, max = 500) =>
+  z
+    .string({ required_error: message, invalid_type_error: message })
+    .trim()
+    .min(1, message)
+    .max(max);
+
 /** Danh sách liên kết kết quả — phải là MẢNG (CHECK `links_is_array` cũng đòi thế). */
 export const resultLinksInput = z.array(z.unknown()).max(50).optional();
 
