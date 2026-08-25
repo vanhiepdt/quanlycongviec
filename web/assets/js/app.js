@@ -187,7 +187,7 @@ function handleSuccessfulLogin(data) {
     const overviewFilterContainerEl = document.getElementById("overview-filter-container");
     overviewFilterContainerEl && overviewFilterContainerEl.classList.remove("hidden");
   }
-  setupGanttEventListeners(), loadDepartmentContext(), currentSection === "gantt" && renderGanttChart(), setTimeout(() => {
+  setupGanttEventListeners(), loadDepartmentContext(), currentSection === "gantt" && renderGanttChart(), typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), setTimeout(() => {
     currentSection === "overview" && loadChatMessagesAsync();
   }, 500);
 }
@@ -831,7 +831,7 @@ function switchSection(sectionName) {
   const overviewFilterContainerEl = document.getElementById("overview-filter-container");
   overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "departments" && renderDepartments(), sectionName === "gantt" && setTimeout(() => {
     renderGanttChart();
-  }, 10), closeMobileMenu();
+  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), closeMobileMenu();
 }
 function toggleMobileMenu() {
   const sidebarEl = document.getElementById("sidebar"),
@@ -2268,7 +2268,7 @@ function createTaskFromSubworkButtonHtml(task, className) {
 function createNotificationModal(isEdit, notification) {
   return "\n    <div id=\"notification-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n        <div class=\"flex items-center justify-between mb-6\">\n          <h3 class=\"text-xl font-bold text-gray-900\">Tạo thông báo mới</h3>\n          <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n            <i class=\"fas fa-times\"></i>\n          </button>\n        </div>\n        \n        <form id=\"notification-form\">\n          <div class=\"form-group\">\n            <label class=\"form-label\">Nội dung thông báo *</label>\n            <textarea name=\"content\" class=\"form-textarea\" required placeholder=\"Nhập nội dung thông báo...\"></textarea>\n          </div>\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Người nhận</label>\n            <select name=\"recipient\" class=\"form-select\">\n              <option value=\"\">Tất cả mọi người</option>\n              " + allStaff.map(staff => "<option value=\"" + escapeHtml(staff[COL.S_NAME]) + "\">" + escapeHtml(staff[COL.S_NAME]) + " (" + (escapeHtml(staff[COL.S_EMAIL]) || "No email") + ")</option>").join("") + "\n            </select>\n          </div>\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Loại thông báo</label>\n            <select name=\"type\" class=\"form-select\">\n              <option value=\"Thông báo\">Thông báo chung</option>\n              <option value=\"Khẩn cấp\">Khẩn cấp</option>\n              <option value=\"Công việc\">Công việc</option>\n              <option value=\"Hệ thống\">Hệ thống</option>\n            </select>\n          </div>\n          \n          <div class=\"flex justify-end space-x-3 mt-6\">\n            <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n            <button type=\"submit\" class=\"btn-primary\">Gửi thông báo</button>\n          </div>\n        </form>\n      </div>\n    </div>\n  ";
 }
-function renderGanttChart() {
+function renderGanttChartLegacy() {
   if (currentSection !== "gantt") return;
   const ganttContainerEl = document.getElementById("gantt-container"),
     ganttHeaderEl = document.getElementById("gantt-header"),
@@ -2590,6 +2590,8 @@ function setupGanttEventListeners() {
   searchInput && (searchInput.removeEventListener("input", handleGanttSearch), searchInput.addEventListener("input", handleGanttSearch));
   const ganttStaffFilterEl = document.getElementById("gantt-staff-filter");
   ganttStaffFilterEl && (populateGanttStaffFilter(), ganttStaffFilterEl.removeEventListener("change", handleGanttStaffFilter), ganttStaffFilterEl.addEventListener("change", handleGanttStaffFilter));
+  // Phase 6: ô «Xem 1/2/3 tháng» + «Nhóm theo» (việc 6.6/6.7).
+  typeof setupGanttPhase6Controls === "function" && setupGanttPhase6Controls();
 }
 function populateGanttStaffFilter() {
   const ganttStaffFilterEl = document.getElementById("gantt-staff-filter");
@@ -3522,10 +3524,10 @@ function openStatListModal(type, filter, title) {
     if (type === "project") list = list.filter(list2 => list2[COL.P_ID] === currentOverviewProjectFilter);else type === "task" && (list = list.filter(list2 => list2[COL.T_PID] === currentOverviewProjectFilter));
   }
   currentStatListData = list;
-  const text = "\n    <div id=\"stat-list-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-4 max-h-[90vh] flex flex-col\" style=\"padding: 1.5rem;\">\n            <div class=\"flex items-center justify-between mb-4 flex-shrink-0\">\n                <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(title) + " <span class=\"text-sm text-gray-500 font-normal\">(" + list.length + ")</span></h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                    <i class=\"fas fa-times\"></i>\n                </button>\n            </div>\n            \n            <div class=\"mb-4 relative flex-shrink-0\">\n                <input type=\"text\" id=\"stat-list-search\" placeholder=\"Tìm kiếm...\" \n                        class=\"w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all\">\n                <i class=\"fas fa-search absolute left-3 top-3 text-gray-400\"></i>\n            </div>\n\n            <div id=\"stat-list-container\" class=\"overflow-y-auto flex-1 pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min\">\n                </div>\n        </div>\n    </div>\n",
+  const text = "\n    <div id=\"stat-list-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-4 max-h-[90vh] flex flex-col\" style=\"padding: 1.5rem;\">\n            <div class=\"flex items-center justify-between mb-4 flex-shrink-0\">\n                <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(title) + " <span class=\"text-sm text-gray-500 font-normal\">(" + list.length + ")</span></h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                    <i class=\"fas fa-times\"></i>\n                </button>\n            </div>\n            \n            \n            <div id=\"stat-filter-row\" class=\"mb-3 flex flex-wrap items-center gap-2 flex-shrink-0\">\n            <label class=\"text-xs text-gray-500\">Từ</label>\n            <input type=\"date\" id=\"stat-list-from\" class=\"form-input py-1 px-2 text-sm w-36\">\n            <label class=\"text-xs text-gray-500\">Đến</label>\n            <input type=\"date\" id=\"stat-list-to\" class=\"form-input py-1 px-2 text-sm w-36\">\n            <select id=\"stat-list-dept\" class=\"form-select py-1 px-2 text-sm w-44\">\n            <option value=\"\">Mọi phòng</option>\n            </select>\n            </div>\n<div class=\"mb-4 relative flex-shrink-0\">\n                <input type=\"text\" id=\"stat-list-search\" placeholder=\"Tìm kiếm...\" \n                        class=\"w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all\">\n                <i class=\"fas fa-search absolute left-3 top-3 text-gray-400\"></i>\n            </div>\n\n            <div id=\"stat-list-container\" class=\"overflow-y-auto flex-1 pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min\">\n                </div>\n        </div>\n    </div>\n",
     statListModalEl = document.getElementById("stat-list-modal");
   if (statListModalEl) statListModalEl.remove();
-  document.body.insertAdjacentHTML("beforeend", text), renderStatListItems(type, list), document.getElementById("stat-list-search").addEventListener("input", event => {
+  document.body.insertAdjacentHTML("beforeend", text), renderStatListItems(type, list), typeof setupBoLocStatList === "function" && setupBoLocStatList(type), document.getElementById("stat-list-search").addEventListener("input", event => {
     const lower = event.target.value.toLowerCase(),
       filteredCurrentStatListData = currentStatListData.filter(currentStatListData2 => {
         const projectName = type === "project" ? currentStatListData2[COL.P_NAME] : currentStatListData2[COL.T_NAME],
@@ -3864,3 +3866,507 @@ function createAppModal(isEdit, app) {
   return "\n    <div id=\"app-modal\" class=\"modal\">\n      <div class=\"modal-content max-w-lg\">\n        <div class=\"flex items-center justify-between mb-6\">\n          <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n          <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n            <i class=\"fas fa-times\"></i>\n          </button>\n        </div>\n        \n        <form id=\"app-form\">\n          " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(appId) + "\">" : "") + "\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Danh mục <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_CATEGORY) + "\" class=\"form-input\" required placeholder=\"Ví dụ: NHÂN SỰ, KẾ TOÁN\" value=\"" + escapeHtml(appCategory) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Sẽ tự động viết hoa khi lưu.</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Tên Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_NAME) + "\" class=\"form-input\" required placeholder=\"Nhập tên ứng dụng\" value=\"" + escapeHtml(appName) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_URL) + "\" class=\"form-input\" required placeholder=\"Nhập link ứng dụng\" value=\"" + escapeHtml(appUrl) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Icon (Ảnh)</label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_ICON) + "\" class=\"form-input\" placeholder=\"Nhập link Icon\" value=\"" + escapeHtml(appIcon) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Nên dùng ảnh vuông, trong suốt (PNG).</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Mô tả</label>\n            <textarea name=\"" + escapeHtml(COL.A_DESC) + "\" class=\"form-textarea h-24\" placeholder=\"Mô tả ngắn về ứng dụng...\">" + escapeHtml(appDesc) + "</textarea>\n          </div>\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Phân quyền <span class=\"text-xs text-gray-400\">(Chọn người được xem app này)</span></label>\n            <div class=\"border border-gray-200 rounded-lg max-h-40 overflow-y-auto p-2 bg-gray-50\">\n              " + (filteredStaff.length > 0 ? joined : "<p class=\"text-sm text-gray-500 text-center py-2\">Không có người dùng nào</p>") + "\n            </div>\n            <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Admin luôn thấy tất cả app. Nếu không chọn ai, chỉ Admin mới thấy app này.</p>\n          </div>\n          \n          <div class=\"flex justify-end space-x-3 mt-6\">\n            <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n            <button type=\"submit\" class=\"btn-primary\">\n                " + escapeHtml(text2) + "\n            </button>\n          </div>\n        </form>\n      </div>\n    </div>\n    ";
 }
 window.renderApps = renderApps, window.handleAppRedirect = handleAppRedirect, window.createAppModal = createAppModal;
+
+/** Hàng CÔNG VIỆC CON (mức 3) — chứa nhiệm vụ con của nó (mức 4). */
+function createGanttSubRowHtml(sub) {
+  const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
+    totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
+    key = "sub:" + sub.id,
+    bodyId = escapeHtml("gantt-subs-" + ganttDomKey(String(sub.id))),
+    an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
+    nhan = formatDateForGantt(sub.startDate) + " - " + formatDateForGantt(sub.dueDate) + ": " + (sub.name || ""),
+    thanh = buildGanttCellHtml(sub.startDate, sub.dueDate, rangeStart, rangeEnd, totalDays,
+      "gantt-bar-subwork", nhan, Number(sub.completion) || 0),
+    soCon = (sub.children || []).length;
+  return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '">' +
+    '<div class="gantt-item-label" style="padding-left: 24px;">' + (soCon > 0 ? createGanttToggleHtml(key) : '<span class="mr-2 inline-block w-[14px]"></span>') +
+    '<i class="fas fa-code-branch text-blue-400 mr-2"></i>' + escapeHtml(sub.name || "") +
+    '<span class="gantt-task-count">' + escapeHtml(soCon) + "</span></div>" +
+    '<div class="gantt-item-timeline">' + thanh + "</div></div>" +
+    '\n<div id="' + bodyId + '"' + an + ">" +
+    (sub.children || []).map((t) => createGanttTaskRowHtml(t)).join("") + "</div>";
+}
+
+/** Hàng NHIỆM VỤ (mức 4) — thanh bị cắt hai đầu hoặc ẩn hẳn theo khoảng (TC-STAT-13/14). */
+function createGanttTaskRowHtml(task) {
+  const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
+    totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
+    quaHan = isTaskOverdue(task.dueDate) && !(task.status || "").toLowerCase().includes("hoàn thành"),
+    nhan = formatDateForGantt(task.startDate) + " - " + formatDateForGantt(task.dueDate) + ": " + (task.name || "") +
+      (task.assigneeName ? " — " + task.assigneeName : ""),
+    thanh = buildGanttCellHtml(task.startDate, task.dueDate, rangeStart, rangeEnd, totalDays,
+      "gantt-bar-task" + (quaHan ? " gantt-bar-overdue" : ""), nhan, Number(task.completion) || 0);
+  return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '" style="padding-left: 48px;">' +
+    '<div class="gantt-item-label text-sm">' + escapeHtml(task.name || "") +
+    '<span class="text-xs text-gray-400 ml-2">' + escapeHtml(task.assigneeName || "Chưa gán") + "</span></div>" +
+    '<div class="gantt-item-timeline">' + thanh + "</div></div>";
+}
+
+/** Cây gộp: mỗi nhóm một khối; cây rỗng thì ghi chú rõ khoảng đang xem. */
+function createGanttTreeHtml(tree) {
+  if (!tree.groups || tree.groups.length === 0 || tree.groups.every((g) => g.works.length === 0)) {
+    return '\n<div class="text-center py-16 text-gray-500"><i class="fas fa-calendar-times text-4xl mb-3 opacity-30"></i>' +
+      "<p>Không có công việc nào trong khoảng " + escapeHtml(formatDateForDisplay(ganttStartDate)) + " - " +
+      escapeHtml(formatDateForDisplay(ganttEndDate)) + "</p></div>";
+  }
+  return tree.groups.map((g) => createGanttGroupRowHtml(g)).join("");
+}
+
+/**
+ * renderGanttChart MỚI (việc 6.6–6.8): vẽ từ CÂY do GET /api/v1/gantt trả sẵn — phạm vi, quyền,
+ * nhóm và thứ tự đều do máy chủ quyết. Bản cũ đổi tên thành renderGanttChartLegacy giữ ở trên
+ * làm tham chiếu; khai báo SAU cùng nên bản này thắng mọi lời gọi hiện có.
+ */
+async function renderGanttChart() {
+  if (currentSection !== "gantt") return;
+  const ganttItemsEl = document.getElementById("gantt-items"),
+    ganttHeaderEl = document.getElementById("gantt-header");
+  if (!ganttItemsEl || !ganttHeaderEl) return;
+  (!ganttStartDate || isNaN(ganttStartDate.getTime())) &&
+    ((ganttStartDate = new Date()), ganttStartDate.setHours(0, 0, 0, 0));
+  datKhoangThangGantt(ganttMonths); // ngày kết thúc luôn bám theo độ rộng đã chọn
+  const startEl = document.getElementById("gantt-start-date"),
+    endEl = document.getElementById("gantt-end-date");
+  startEl && (startEl.value = formatDateForInput(ganttStartDate));
+  endEl && (endEl.value = formatDateForInput(ganttEndDate));
+  const totalDays = Math.ceil((ganttEndDate - ganttStartDate) / 86400000) + 1,
+    daysEl = document.querySelector(".gantt-days");
+  daysEl && ((daysEl.style.display = "flex"), (daysEl.style.flexDirection = "row"), (daysEl.innerHTML = renderGanttDaysHtml(totalDays)));
+
+  ganttItemsEl.innerHTML =
+    '\n<div class="text-center py-16 text-gray-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
+  if (!(await taiCayGantt())) {
+    ganttItemsEl.innerHTML =
+      '<div class="text-center py-16 text-gray-500">Không tải được sơ đồ Gantt — thử lại sau.</div>';
+    return;
+  }
+  ganttItemsEl.innerHTML = createGanttTreeHtml(ganttTreeData);
+  document.querySelectorAll(".gantt-node-toggle").forEach((item) => {
+    item.removeEventListener("click", xuBatThuGonGantt);
+    item.addEventListener("click", xuBatThuGonGantt);
+  });
+}
+function xuBatThuGonGantt() {
+  doiTrangThaiThuGon(this.dataset.node);
+}
+
+/** Ô chọn «Xem: 1/2/3 tháng» và «Nhóm theo» — nối vào bộ lắng nghe Gantt hiện có. */
+function setupGanttPhase6Controls() {
+  const monthsEl = document.getElementById("gantt-months");
+  if (monthsEl) {
+    monthsEl.removeEventListener("change", handleGanttMonthsChange);
+    monthsEl.addEventListener("change", handleGanttMonthsChange);
+  }
+  const groupEl = document.getElementById("gantt-group-by");
+  if (groupEl) {
+    groupEl.removeEventListener("change", handleGanttGroupChange);
+    groupEl.addEventListener("change", handleGanttGroupChange);
+  }
+}
+function handleGanttMonthsChange(event) {
+  datKhoangThangGantt(event.target.value), renderGanttChart();
+}
+function handleGanttGroupChange(event) {
+  ganttGroupBy = event.target.value || "department", renderGanttChart();
+}
+
+// ============================================================================
+// PHASE 6b — TỔNG QUAN TÍNH Ở SERVER (T5–T10): 6 biểu đồ uống /stats/charts?type=
+// và «hoạt động gần đây» có phân trang qua /stats/activities (việc 6.2/6.3).
+// Các hàm render*Chart bản cũ giữ nguyên làm đường dự phòng khi fetch lỗi.
+// ============================================================================
+
+let hoatDongTrang = 1,
+  hoatDongTongTrang = 1,
+  hoatDongDanhSach = [];
+
+/** Ánh xạ dòng activity_logs của REST sang khoá COL.A_* — cùng luật `activityToLegacy`. */
+function hoatDongSangLegacy(rows) {
+  const moTa = (details) => {
+    if (details == null || details === "") return "";
+    if (typeof details === "string") return details;
+    if (typeof details === "object" && details.code)
+      return details.name ? details.code + " — " + details.name : String(details.code);
+    try {
+      return JSON.stringify(details);
+    } catch (err) {
+      return "";
+    }
+  };
+  return (rows || []).map((row) => ({
+    [COL.A_TIME]: row.created_at ?? "",
+    [COL.A_ACTION]: row.action ?? "",
+    [COL.A_USER]: row.actor_name ?? "",
+    [COL.A_DETAILS]: moTa(row.details),
+  }));
+}
+
+/** Nạp một trang hoạt động; trang > 1 nối tiếp vào danh sách đang hiển thị. */
+async function napHoatDong(trang) {
+  const duLieu = await restGet("/api/v1/stats/activities?page=" + trang + "&limit=22");
+  if (!duLieu) return;
+  hoatDongTrang = duLieu.page || trang;
+  hoatDongTongTrang = duLieu.totalPages || 1;
+  const moi = hoatDongSangLegacy(duLieu.activities);
+  hoatDongDanhSach =
+    Number(trang) > 1 ? hoatDongDanhSach.concat(moi) : moi;
+  renderActivity(hoatDongDanhSach);
+  const khungEl = document.getElementById("recent-activity");
+  if (!khungEl) return;
+  if (hoatDongTrang < hoatDongTongTrang) {
+    const nut = document.createElement("button");
+    nut.type = "button";
+    nut.id = "activity-more-btn";
+    nut.className = "w-full text-center text-sm text-blue-600 hover:text-blue-800 py-2";
+    nut.textContent = "Xem thêm hoạt động cũ hơn (trang " + (hoatDongTrang + 1) + "/" + hoatDongTongTrang + ")";
+    nut.addEventListener("click", () => napHoatDong(hoatDongTrang + 1));
+    khungEl.insertAdjacentElement("afterend", nut);
+  } else {
+    const nutCu = document.getElementById("activity-more-btn");
+    nutCu && nutCu.remove();
+  }
+}
+
+/** Hiện thông báo «không có dữ liệu» đúng khung message của từng biểu đồ. */
+function hienThongDiepBieuDo(msgId, thongDiep) {
+  const el = document.getElementById(msgId);
+  el && ((el.textContent = thongDiep || "Không có dữ liệu biểu đồ"), el.classList.remove("hidden"));
+}
+const MAU_BIEU_DO = ["rgba(59, 130, 246, 0.8)", "rgba(16, 185, 129, 0.8)", "rgba(245, 158, 11, 0.8)", "rgba(239, 68, 68, 0.8)", "rgba(139, 92, 246, 0.8)"];
+
+/** E2 — trạng thái: doughnut, cùng tuỳ chọn với renderChart bản cũ. */
+function veBieuDoTrangThaiServer(p) {
+  const el = document.getElementById("status-chart");
+  if (!el) return;
+  chartInstance && chartInstance.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("chart-message", p && p.message);
+  document.getElementById("chart-message") && document.getElementById("chart-message").classList.add("hidden");
+  chartInstance = new Chart(el, {
+    type: "doughnut",
+    data: { labels: p.labels, datasets: [{ data: p.data, backgroundColor: MAU_BIEU_DO.slice(0, p.labels.length), borderColor: MAU_BIEU_DO.slice(0, p.labels.length).map((c) => c.replace("0.8", "1")), borderWidth: 2, hoverOffset: 8 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: "65%", plugins: { legend: { position: "bottom", labels: { padding: 15, usePointStyle: true, font: { size: 10 } } } }, animation: { duration: 1000, easing: "easeOutCubic" } }
+  });
+}
+
+/** E4 — tiến độ công việc: 5 bucket cố định do server tính sẵn. */
+function veBieuDoTienDoServer(p) {
+  const el = document.getElementById("project-progress-chart");
+  if (!el) return;
+  projectProgressChart && projectProgressChart.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("project-chart-message", p && p.message);
+  document.getElementById("project-chart-message") && document.getElementById("project-chart-message").classList.add("hidden");
+  projectProgressChart = new Chart(el, {
+    type: "bar",
+    data: { labels: p.labels, datasets: [{ label: "Số lượng dự án", data: p.data, backgroundColor: ["rgba(239, 68, 68, 0.8)", "rgba(245, 158, 11, 0.8)", "rgba(59, 130, 246, 0.8)", "rgba(16, 185, 129, 0.8)", "rgba(34, 197, 94, 0.8)"], borderWidth: 2, borderRadius: 8 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }, animation: { duration: 1000 } }
+  });
+}
+
+/** E5 — hiệu suất nhân sự: cột tổng + đường tỷ lệ, dữ liệu `rates[]` do server trả kèm. */
+function veBieuDoNhanSuServer(p) {
+  const el = document.getElementById("staff-performance-chart");
+  if (!el) return;
+  staffPerformanceChart && staffPerformanceChart.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("staff-chart-message", p && p.message);
+  document.getElementById("staff-chart-message") && document.getElementById("staff-chart-message").classList.add("hidden");
+  staffPerformanceChart = new Chart(el, {
+    type: "bar",
+    data: { labels: p.labels, datasets: [
+      { label: "Tổng số nhiệm vụ", data: p.data, backgroundColor: "rgba(16, 185, 129, 0.6)", borderColor: "rgba(16, 185, 129, 1)", borderWidth: 2, borderRadius: 6, yAxisID: "y" },
+      { label: "Tỷ lệ hoàn thành (%)", data: p.rates || [], type: "line", backgroundColor: "rgba(99, 102, 241, 0.2)", borderColor: "rgba(99, 102, 241, 1)", borderWidth: 3, pointBackgroundColor: "rgba(99, 102, 241, 1)", pointBorderColor: "#fff", pointBorderWidth: 2, pointRadius: 5, yAxisID: "y1", tension: 0.4 }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "top", labels: { usePointStyle: true, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, position: "left" }, y1: { beginAtZero: true, max: 100, position: "right", grid: { drawOnChartArea: false }, ticks: { callback: (v) => v + "%" } } } }
+  });
+}
+
+/** E6 — mức ưu tiên: pie ba nhãn cố định. */
+function veBieuDoUuTienServer(p) {
+  const el = document.getElementById("task-priority-chart");
+  if (!el) return;
+  window.taskPriorityChart && window.taskPriorityChart.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("priority-chart-message", p && p.message);
+  document.getElementById("priority-chart-message") && document.getElementById("priority-chart-message").classList.add("hidden");
+  window.taskPriorityChart = new Chart(el, {
+    type: "pie",
+    data: { labels: p.labels, datasets: [{ data: p.data, backgroundColor: ["rgba(34, 197, 94, 0.8)", "rgba(59, 130, 246, 0.8)", "rgba(239, 68, 68, 0.8)"], borderWidth: 2, hoverOffset: 8 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { padding: 15, usePointStyle: true, font: { size: 11 } } } }, animation: { duration: 1000, easing: "easeOutCubic" } }
+  });
+}
+
+/** E7 — tiến độ theo thời gian: 30 ngày gần nhất, server đếm theo report_date. */
+function veBieuDoThoiGianServer(p) {
+  const el = document.getElementById("timeline-progress-chart");
+  if (!el) return;
+  window.timelineProgressChart && window.timelineProgressChart.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("timeline-chart-message", p && p.message);
+  document.getElementById("timeline-chart-message") && document.getElementById("timeline-chart-message").classList.add("hidden");
+  window.timelineProgressChart = new Chart(el, {
+    type: "line",
+    data: { labels: p.labels, datasets: [{ label: "Nhiệm vụ hoàn thành", data: p.data, borderColor: "rgba(16, 185, 129, 1)", backgroundColor: "rgba(16, 185, 129, 0.1)", borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 7, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { stepSize: 1, callback: (v) => Math.floor(v) } } } }
+  });
+}
+
+/** E3 — so sánh công việc top 5: cột tổng + đường tỷ lệ (`completed[]`, `rates[]`). */
+function veBieuDoSoSanhServer(p) {
+  const el = document.getElementById("project-comparison-chart");
+  if (!el) return;
+  window.projectComparisonChart && window.projectComparisonChart.destroy();
+  if (!p || !p.labels || p.labels.length === 0) return hienThongDiepBieuDo("comparison-chart-message", p && p.message);
+  document.getElementById("comparison-chart-message") && document.getElementById("comparison-chart-message").classList.add("hidden");
+  window.projectComparisonChart = new Chart(el, {
+    type: "bar",
+    data: { labels: p.labels, datasets: [
+      { label: "Tổng nhiệm vụ", data: p.data, backgroundColor: "rgba(59, 130, 246, 0.8)", borderColor: "rgba(59, 130, 246, 1)", borderWidth: 1, borderRadius: 6, yAxisID: "y" },
+      { label: "Tỷ lệ hoàn thành (%)", data: p.rates || [], type: "line", borderColor: "rgba(239, 68, 68, 1)", backgroundColor: "rgba(239, 68, 68, 0.1)", borderWidth: 3, pointBackgroundColor: "rgba(239, 68, 68, 1)", pointBorderColor: "#fff", pointRadius: 5, tension: 0.4, yAxisID: "y1" }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "top", labels: { usePointStyle: true, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, position: "left" }, y1: { beginAtZero: true, max: 100, position: "right", grid: { drawOnChartArea: false } } } }
+  });
+}
+
+/** Nạp CẢ SÁU biểu đồ + hoạt động từ máy chủ — gọi khi vào Tổng quan (việc 6.2/6.3). */
+async function napTongQuanTuServer() {
+  const loaiVaVe = [
+    ["status", veBieuDoTrangThaiServer],
+    ["project-progress", veBieuDoTienDoServer],
+    ["staff-performance", veBieuDoNhanSuServer],
+    ["task-priority", veBieuDoUuTienServer],
+    ["timeline-progress", veBieuDoThoiGianServer],
+    ["project-comparison", veBieuDoSoSanhServer],
+  ];
+  await Promise.all(
+    loaiVaVe.map(async ([type, ve]) => {
+      const duLieu = await restGet("/api/v1/stats/charts?type=" + type);
+      duLieu && ve(duLieu);
+    })
+  );
+  await napHoatDong(1);
+}
+
+// ============================================================================
+// PHASE 6c — LỌC THÁNG/PHÒNG trong modal «bấm số mở danh sách» (việc 6.4/6.5).
+// Danh sách lấy từ mảng đã do máy chủ chạm phạm vi (bootstrap), nên bộ lọc này chỉ
+// thu hẹp trên dữ liệu mình được thấy — không có đường nào rò phòng khác. Luật
+// khoảng ngày CHÉP Y TỪ stats/service.js: giao nhau hai đầu đóng, dòng thiếu một
+// trong hai ngày luôn được giữ (TC-STAT-08/09).
+// ============================================================================
+
+function boLocDanhSachStatList(list, type) {
+  const tuEl = document.getElementById("stat-list-from"),
+    denEl = document.getElementById("stat-list-to"),
+    phongEl = document.getElementById("stat-list-dept");
+  const tu = tuEl && tuEl.value ? tuEl.value : null,
+    den = denEl && denEl.value ? denEl.value : null,
+    phong = phongEl ? phongEl.value : "";
+  const batDau = (row) => parseDateString(type === "project" ? row[COL.P_START] : row[COL.T_START]),
+    ketThuc = (row) => parseDateString(type === "project" ? row[COL.P_END] : row[COL.T_DUE]);
+  const phongCua = (row) => {
+    if (type === "project") return row[COL.P_DEPT] || "";
+    const cha = allProjects.find((p) => p[COL.P_ID] === row[COL.T_PID]);
+    return cha ? cha[COL.P_DEPT] || "" : "";
+  };
+  return list.filter((row) => {
+    if (phong && phongCua(row) !== phong) return false;
+    if (!tu || !den) return true;
+    const s = batDau(row),
+      e = ketThuc(row);
+    if (!s || !e) return true; // thiếu một trong hai ngày ⇒ giữ, cùng luật máy chủ
+    return s <= parseDateString(den) && e >= parseDateString(tu);
+  });
+}
+
+/** Nạp phòng vào ô lọc (chỉ admin / Phó GĐ thấy danh sách nhiều phòng) + nối listener. */
+function setupBoLocStatList(type) {
+  const phongEl = document.getElementById("stat-list-dept");
+  if (!phongEl) return;
+  const duocChonNhieu = isAdmin() || typeof isDeputyDirectorUser !== "undefined" && isDeputyDirectorUser;
+  (duocChonNhieu ? visibleDepartments : [myDepartment].filter(Boolean)).forEach((ten) => {
+    if (![...phongEl.options].some((o) => o.value === ten)) {
+      const o = document.createElement("option");
+      o.value = ten, o.textContent = ten, phongEl.appendChild(o);
+    }
+  });
+  const apDung = () =>
+    renderStatListItems(type, boLocDanhSachStatList(currentStatListData, type));
+  ["stat-list-from", "stat-list-to", "stat-list-dept"].forEach((id) => {
+    const el = document.getElementById(id);
+    el && (el.onchange = apDung);
+  });
+}
+// ============================================================================
+// PHASE 6 — Thống kê tính ở SERVER + Gantt nhóm 3 kiểu / cây 4 mức thu gọn
+// (§7 việc 6.2–6.8). Bản renderGanttChartLegacy phía trên giữ làm tham chiếu,
+// mọi đường Gantt giờ đi qua cây do GET /api/v1/gantt trả sẵn.
+// ============================================================================
+
+/** GET REST `/api/v1/...`: trả `data` hoặc `null` — 401 bật lại modal đăng nhập như cầu RPC. */
+async function restGet(path) {
+  try {
+    const res = await fetch(path, { credentials: "same-origin", headers: { Accept: "application/json" } });
+    if (res.status === 401) {
+      showLoginModal();
+      return null;
+    }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    return json && json.data ? json.data : null;
+  } catch (err) {
+    showToast("Không tải được dữ liệu từ máy chủ: " + err.message, "error");
+    return null;
+  }
+}
+
+let ganttMonths = 3; // độ rộng xem 1/2/3 tháng (việc 6.7)
+let ganttGroupBy = "department"; // department | deputy | assignee (việc 6.6)
+let ganttTreeData = null; // cây đã nhóm sẵn do máy chủ trả
+
+const GANTT_THU_GON_KEY = "qlcv_gantt_collapsed";
+let ganttThuGon = docTrangThaiThuGon();
+
+/** Độ rộng cửa sổ theo số tháng: n×30 ngày − 1; n=3 đúng 90 ngày như mặc định của bản cũ. */
+function datKhoangThangGantt(n) {
+  ganttMonths = Math.min(3, Math.max(1, Number(n) || 3));
+  ganttEndDate = new Date(ganttStartDate);
+  ganttEndDate.setDate(ganttEndDate.getDate() + ganttMonths * 30 - 1);
+}
+
+/** TC-STAT-15 — trạng thái thu gọn SỐNG TRONG localStorage, tải lại trang vẫn giữ. */
+function docTrangThaiThuGon() {
+  try {
+    const raw = localStorage.getItem(GANTT_THU_GON_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+function luuTrangThaiThuGon() {
+  try {
+    localStorage.setItem(GANTT_THU_GON_KEY, JSON.stringify([...ganttThuGon]));
+  } catch (err) {
+    /* chế độ riêng tư chặn localStorage — thu gọn vẫn hoạt động, chỉ không nhớ */
+  }
+}
+function doiTrangThaiThuGon(key) {
+  ganttThuGon.has(key) ? ganttThuGon.delete(key) : ganttThuGon.add(key);
+  luuTrangThaiThuGon(), renderGanttChart();
+}
+window.doiTrangThaiThuGon = doiTrangThaiThuGon;
+
+
+/** Lấy cây Gantt đã nhóm sẵn cho khoảng ngày + kiểu nhóm đang chọn. */
+async function taiCayGantt() {
+  const tu = formatDateForInput(ganttStartDate),
+    den = formatDateForInput(ganttEndDate);
+  ganttTreeData = await restGet(
+    "/api/v1/gantt?from=" + tu + "&to=" + den + "&groupBy=" + encodeURIComponent(ganttGroupBy)
+  );
+  return !!ganttTreeData;
+}
+
+/** Ngày 'yyyy-mm-dd' (chuỗi) → Date địa phương, không thì null. */
+function docNgayGantt(value) {
+  if (!value) return null;
+  const d = parseDateString(value);
+  return d && !isNaN(d.getTime()) ? d : null;
+}
+
+/**
+ * Ô thời gian của một dòng: thanh bị CẮT HAI ĐẦU khi dài hơn khoảng (TC-STAT-13), và KHÔNG có
+ * thanh khi nằm ngoài hẳn khoảng — chỉ còn ghi chú mờ (TC-STAT-14).
+ *
+ * `nhanText` là VĂN BẢN THÔNG THƯỜNG: hàm tự escapeHtml MỘT lần ở chỗ chèn — caller KHÔNG escape
+ * trước để khỏi bị thoát hai lớp.
+ */
+function buildGanttCellHtml(startDate, endDate, rangeStart, rangeEnd, totalDays, cls, nhanText, pct) {
+  const s = docNgayGantt(startDate),
+    e = docNgayGantt(endDate),
+    coBatDau = !!s,
+    coKetThuc = !!e;
+  const trong =
+    isDateInRange(s, rangeStart, rangeEnd) ||
+    isDateInRange(e, rangeStart, rangeEnd) ||
+    (coBatDau && coKetThuc && s < rangeStart && e > rangeEnd);
+  if (!trong) {
+    return '<div class="gantt-non-visible-task" style="height: 20px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;">' +
+      "Không hiển thị trong khoảng này</div>";
+  }
+  const style = calculateGanttBarStyleRange(s, e || rangeEnd, rangeStart, rangeEnd, totalDays);
+  return '<div class="gantt-bar ' + escapeHtml(cls) + '" style="' + escapeHtml(style) +
+    '" data-tooltip="' + escapeHtml(nhanText) + '">' +
+    '<div class="gantt-bar-label">' + escapeHtml(nhanText) + "</div>" +
+    '<div class="gantt-progress" style="width: ' + Math.max(0, Math.min(100, Number(pct) || 0)) + '%"></div></div>';
+}
+
+
+/** Khoá node → id DOM an toàn ('group:PH01' → 'group-PH01'). */
+const ganttDomKey = (key) => String(key).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+/** Nút bấm thu gọn/mở của một node — mũi tên xoay theo trạng thái đã lưu. */
+function createGanttToggleHtml(key) {
+  const biThuGon = ganttThuGon.has(key),
+    icon = biThuGon ? "fa-chevron-right" : "fa-chevron-down";
+  return '<button type="button" class="gantt-node-toggle mr-2" data-node="' + escapeHtml(key) +
+    '" title="Thu gọn / mở"><i class="fas ' + escapeHtml(icon) + '"></i></button>';
+}
+
+/** Hàng TIÊU ĐỀ NHÓM (mức 1: Phòng / Phó GĐ / Người thực hiện). */
+function createGanttGroupRowHtml(group) {
+  const key = "group:" + group.key,
+    domId = escapeHtml("gantt-body-" + ganttDomKey(key)),
+    an = escapeHtml(ganttThuGon.has(key) ? " hidden" : "");
+  return '\n<div class="gantt-project-group" data-project-id="' + escapeHtml(group.key) + '">' +
+    '\n<div class="gantt-item" data-type="group">' +
+    '<div class="gantt-item-label font-semibold text-gray-800">' + createGanttToggleHtml(key) +
+    '<i class="fas fa-layer-group text-purple-500 mr-2"></i>' + escapeHtml(group.name) +
+    '<span class="gantt-task-count ml-2">' + escapeHtml(group.works.length) + '</span></div>' +
+    '<div class="gantt-item-timeline"></div></div>' +
+    '\n<div id="' + domId + '" class="pl-4' + an + '">' +
+    group.works.map((w) => createGanttWorkRowHtml(w)).join("") + "</div></div>";
+}
+
+/** Hàng CÔNG VIỆC (mức 2) — thanh luôn vẽ vì máy chủ đã lọc theo khoảng; thân chứa mức 3/4. */
+function createGanttWorkRowHtml(work) {
+  const rangeStart = ganttStartDate,
+    rangeEnd = ganttEndDate,
+    totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
+    key = "work:" + work.code,
+    bodyId = escapeHtml("gantt-tasks-" + ganttDomKey(work.code)),
+    an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
+    nhan = formatDateForGantt(work.startDate) + " - " + formatDateForGantt(work.endDate) + ": " +
+      (work.name || ""),
+    thanh = buildGanttCellHtml(work.startDate, work.endDate, rangeStart, rangeEnd, totalDays,
+      "gantt-bar-project", nhan, work.progress);
+  return '\n<div class="gantt-work-block">' +
+    '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '">' +
+    '<div class="gantt-item-label">' + createGanttToggleHtml(key) +
+    '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(work.status)) + ' mr-2"></i>' +
+    '<span class="truncate">' + escapeHtml(work.name || "") + '</span>' +
+    '<span class="gantt-task-count">' + escapeHtml(work.taskCount) + "</span>" +
+    '<div class="gantt-item-actions"></div></div>' +
+    '<div class="gantt-item-timeline">' + thanh + "</div></div>" +
+    '\n<div id="' + bodyId + '"' + an + ">" +
+    work.subs.map((s) => createGanttSubRowHtml(s)).join("") +
+    (work.tasks || []).map((t) => createGanttTaskRowHtml(t)).join("") +
+    "</div></div>";
+}
+
+/** Hàng ngày của dải header — tách khỏi render để bản mới dùng lại đúng hình dạng cũ. */
+function renderGanttDaysHtml(totalDays) {
+  let html = "",
+    date = new Date(ganttStartDate);
+  for (let i = 0; i < totalDays; i++) {
+    const weekend = date.getDay() === 0 || date.getDay() === 6,
+      homNay = isSameDate(date, new Date()),
+      thu = date.toLocaleString("vi-VN", { weekday: "short" }),
+        ngay = date.getDate(),
+        dauThang = ngay === 1,
+        thang = dauThang ? date.toLocaleString("vi-VN", { month: "short" }) : "";
+    html += '\n<div class="gantt-day ' + escapeHtml(weekend ? "weekend" : "") + " " + escapeHtml(homNay ? "today" : "") + " " +
+      escapeHtml(dauThang ? "first-of-month" : "") + '"><div class="gantt-day-number">' + escapeHtml(ngay) +
+      '</div><div class="gantt-day-label">' + escapeHtml(dauThang ? thang : thu) + "</div></div>";
+    date.setDate(date.getDate() + 1);
+  }
+  return html;
+}
+
+

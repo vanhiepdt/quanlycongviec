@@ -145,8 +145,8 @@ describe('phiên đăng nhập', () => {
     }
 
     // Đổi mật khẩu xong thì các đường kia thôi bị chặn. `/works` (Phase 3) và `/users` (việc 5.11)
-    // đều đã có route nên ra 200; `/stats/summary` vẫn chưa có nên 404 — điều cần khẳng định là
-    // không còn 403 MUST_CHANGE_PASSWORD.
+    // đều đã có route nên ra 200; `/stats/summary` đã có từ Phase 6 (việc 6.1) nên cũng 200 —
+    // điều cần khẳng định là không còn 403 MUST_CHANGE_PASSWORD.
     const changed = await c.post('/api/v1/auth/password', {
       currentPassword: TEST_PASSWORD,
       newPassword: 'MatKhauMoi@2026',
@@ -156,7 +156,7 @@ describe('phiên đăng nhập', () => {
     const works = await c.get('/api/v1/works');
     expect(works.status).toBe(200);
     expect((await c.get('/api/v1/users')).status).toBe(200);
-    expect((await c.get('/api/v1/stats/summary')).status).toBe(404);
+    expect((await c.get('/api/v1/stats/summary')).status).toBe(200);
   });
 });
 

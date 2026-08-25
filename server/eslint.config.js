@@ -46,6 +46,7 @@ export default [
       'tests/unit/pending-badge.test.js',
       'tests/unit/countable-stats-ui.test.js',
       'tests/unit/subwork-button-ui.test.js',
+      'tests/unit/gantt-ui.test.js',
     ],
     languageOptions: {
       globals: {
@@ -60,6 +61,9 @@ export default [
         String: 'readonly',
         // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.
         Proxy: 'readonly',
+        // localStorage: gantt-ui.test.js khẳng định trạng thái thu gọn Gantt được ghi vào đây
+        // (TC-STAT-15) — jsdom cung cấp sẵn, khai để eslint không bắt no-undef.
+        localStorage: 'readonly',
       },
     },
   },

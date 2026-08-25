@@ -988,8 +988,14 @@
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-2xl font-bold text-gray-900">Sơ đồ Gantt</h3>
 
-                    <!-- Phần chọn ngày (3 tháng) -->
+                    <!-- Phần chọn ngày + độ rộng xem 1/2/3 tháng (việc 6.7) -->
                     <div class="flex items-center space-x-3">
+                        <label class="text-sm text-gray-600">Xem:</label>
+                        <select id="gantt-months" class="form-select py-2 px-2 text-sm w-24">
+                            <option value="1">1 tháng</option>
+                            <option value="2">2 tháng</option>
+                            <option value="3" selected>3 tháng</option>
+                        </select>
                         <label class="text-sm text-gray-600">Từ:</label>
                         <input type="date" id="gantt-start-date" class="form-input py-1 px-2 text-sm w-36">
                         <label class="text-sm text-gray-600">Đến:</label>
@@ -997,8 +1003,13 @@
                         <div id="current-period" class="font-semibold text-gray-700 px-2 hidden"></div>
                     </div>
 
-                    <!-- Bộ lọc và tìm kiếm -->
+                    <!-- Bộ lọc nhóm (việc 6.6/6.8), nhân viên, tìm kiếm -->
                     <div class="flex items-center space-x-3">
+                        <select id="gantt-group-by" class="form-select py-2 px-3 text-sm w-44">
+                            <option value="department">Nhóm theo Phòng</option>
+                            <option value="deputy">Nhóm theo Phó Giám đốc</option>
+                            <option value="assignee">Nhóm theo Người thực hiện</option>
+                        </select>
                         <select id="gantt-staff-filter" class="form-select py-2 px-3 text-sm w-44">
                             <option value="">Tất cả nhân viên</option>
                         </select>

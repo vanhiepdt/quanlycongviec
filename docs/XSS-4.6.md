@@ -29,6 +29,16 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > là hiện thẻ ra chữ). Chín chỗ còn lại (`className`, `data-project-*`, `data-parent-id`, ô ẩn
 > `level`/`parent`) đi qua `escapeHtml`. Hành vi nút/ô ẩn do `tests/unit/subwork-button-ui.test.js`
 > canh.
+>
+> **Cập nhật Phase 6.** Gantt vẽ lại từ cây máy chủ + Tổng quan nạp 6 biểu đồ từ `/stats/charts`
+> thêm **4 chỗ ghi HTML** (`gantt-items` ×3, `.gantt-days` ×1) và **43 giá trị nội suy** ⇒
+> **74 chỗ / 541 giá trị**. Toàn bộ helper mới trả HTML đặt tên đúng quy ước BUILDER:
+> `createGanttToggleHtml`, `createGanttGroupRowHtml`, `createGanttWorkRowHtml`,
+> `createGanttSubRowHtml`, `createGanttTaskRowHtml`, `createGanttTreeHtml`,
+> `buildGanttCellHtml` (nhận VĂN BẢN thô, tự escape một lần — caller không escape trước),
+> `renderGanttDaysHtml`. Thuộc tính id/class phát sinh (`bodyId`, `domId`, `an`) và mọi số
+> đếm/ngày nội suy đều đi qua `escapeHtml`. Hành vi cắt-thanh/ngoài-khoảng/thu-gọn do
+> `tests/unit/gantt-ui.test.js` canh.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
