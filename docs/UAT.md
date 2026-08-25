@@ -209,7 +209,7 @@ Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuy�
 | T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ⏳ | cùng 3 tên trên; không có nguồn dữ liệu nào khác cho đầu trang |
 
 Cả 10 điểm bị chặn bởi **một** nguyên nhân: 3 tên nạp dữ liệu đầu trang còn `pending()`.
-Chúng thuộc việc **5.1** (`GET /api/v1/bootstrap`) của Phase 5. Đã kiểm được phần cầu nối
+Chúng thuộc việc **5.10** (`GET /api/v1/bootstrap`) của Phase 5. Đã kiểm được phần cầu nối
 làm đúng phần của nó: khi **chưa** đăng nhập, `getInitialDataWithAuth` trả
 `[200] {"requireLogin":true}` chứ **không** trả 501 — giao diện vì thế vẫn hiện modal
 đăng nhập thay vì báo lỗi máy chủ.
@@ -245,16 +245,16 @@ bằng cách thêm ô chọn cấp + cha vào biểu mẫu.
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
 | D1 | **Trưởng phòng tạo ra `Chờ duyệt`** | ❌ | tp01 (Trưởng phòng, phòng 1) tạo `CV021` → `csdl: CV021 **duyệt=Đã duyệt**`. Đối chứng: admin tạo `CV022` cũng «Đã duyệt» ⇒ trạng thái không phụ thuộc vai trò |
-| D2 | Nhãn vàng hiện | ⏳ | không có dòng `Chờ duyệt` nào để hiện |
-| D3 | Badge đếm đúng | ⏳ | như trên |
-| D4 | Phó GĐ thấy nút | ⏳ | trong 37 tên hàm cũ (§5.2) **không có** tên nào cho duyệt/từ chối |
-| D5 | Duyệt | ⏳ | như trên |
-| D6 | Từ chối | ⏳ | như trên |
-| D7 | Thông báo tới | ⏳ | như trên |
-| D8 | Thống kê không đổi khi chờ duyệt | ⏳ | phụ thuộc nhóm 2 (chưa có thẻ số) |
+| D2 | Nhãn vàng hiện | ⏳ | không có dòng `Chờ duyệt` nào để hiện (việc 5.6) |
+| D3 | Badge đếm đúng | ⏳ | như trên (việc 5.5) |
+| D4 | Phó GĐ thấy nút | ⏳ | trong 37 tên hàm cũ (§5.2) **không có** tên nào cho duyệt/từ chối (việc 5.2–5.3) |
+| D5 | Duyệt | ⏳ | như trên (việc 5.2) |
+| D6 | Từ chối | ⏳ | như trên, lý do bắt buộc ≥10 ký tự (việc 5.2) |
+| D7 | Thông báo tới | ⏳ | như trên (việc 5.7) |
+| D8 | Thống kê không đổi khi chờ duyệt | ⏳ | phụ thuộc nhóm 2 (chưa có thẻ số) · hai view `v_countable_works`/`v_countable_items` là việc 5.4 |
 
 **❌ D1**: cột `works.approval_status` có mặc định `'Đã duyệt'::text` và **không** chỗ nào trong
-Phase 3/4 đặt «Chờ duyệt» theo vai trò người tạo. Đó là việc **5.2** của Phase 5. Ghi là đỏ vì
+Phase 3/4 đặt «Chờ duyệt» theo vai trò người tạo. Đó là việc **5.1** của Phase 5. Ghi là đỏ vì
 đây là điểm §8.5 đã kiểm được và cho kết quả **sai** với nghiệp vụ, khác với D2–D8 là chưa
 chuyển. Giao diện cũ cũng không có nút nào cho duyệt công việc (đếm được **0** chỗ trong
 `app.js` nhắc tới duyệt công việc; cả 3 chuỗi «Chờ duyệt» đều thuộc phần **đề nghị**).
@@ -273,7 +273,7 @@ chuyển. Giao diện cũ cũng không có nút nào cho duyệt công việc (�
 
 Cả 7 tên hàm của nhóm này còn `pending()` (cùng với `getStaffList`). Nghiệp vụ bên dưới **đã có
 và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-department.test.js`,
-`rbac-matrix.test.js`); chỉ còn thiếu lớp ánh xạ tên cũ → `/api/v1`, là việc **5.5–5.6** của Phase 5.
+`rbac-matrix.test.js`); chỉ còn thiếu lớp ánh xạ tên cũ → `/api/v1`, là việc **5.11** của Phase 5.
 
 ### 6. Còn lại — 0/12, 11 ⏳ + 1 —
 
@@ -303,10 +303,12 @@ và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-dep
 
 ### Ba điểm phải làm gì tiếp
 
-1. **C7** — thêm ô chọn cấp + công việc cha vào `#task-form` (Phase sau, vì Phase 4 bị cấm đổi DOM).
-2. **D1** — đặt `approval_status = 'Chờ duyệt'` khi người tạo là Trưởng/Phó phòng: việc **5.2**.
-3. **38 điểm ⏳** — đều quy về việc **5.1** (`GET /api/v1/bootstrap`, mở nhóm 2 và R1–R7) và
-   **5.5–5.8** (nhân sự/phòng, đề nghị, chat, app). Không có điểm nào ⏳ vì cầu nối sai.
+1. **C7** — thêm ô chọn cấp + công việc cha vào `#task-form` (Phase sau, vì Phase 4 bị cấm đổi DOM);
+   hướng làm chờ người dùng chốt ở §13.4 mục 14.
+2. **D1** — đặt `approval_status = 'Chờ duyệt'` khi người tạo là Trưởng/Phó phòng: việc **5.1**.
+3. **38 điểm ⏳** — 17 điểm (nhóm Tổng quan + R1–R7) mở bằng việc **5.10** `GET /api/v1/bootstrap`;
+   10 điểm nhân sự/phòng mở bằng việc **5.11**; 7 điểm nhóm Duyệt bằng việc **5.2–5.7**;
+   4 điểm đề nghị/chat/app phải chờ **Phase 7**. Không có điểm nào ⏳ vì cầu nối sai.
 
 ---
 
@@ -315,6 +317,6 @@ và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-dep
 | Ngày | Mã | Hiện tượng | Đã xử lý |
 |---|---|---|---|
 | 2026-08-25 | §8.5 C7 | Biểu mẫu cũ không tạo được công việc con cấp 2: `CV019-071` vào csdl với `cấp=3 cha=NULL`; `COL.T_LEVEL`/`COL.T_PARENT` khai ở `app.js:56–57` rồi không dùng | Chưa — chờ thêm ô cấp/cha vào `#task-form` (Phase 4 bị cấm đổi DOM) |
-| 2026-08-25 | §8.5 D1 | Trưởng phòng tạo `CV021` nhưng `approval_status` ra «Đã duyệt» (mặc định cột) | Chưa — việc 5.2 của Phase 5 |
+| 2026-08-25 | §8.5 D1 | Trưởng phòng tạo `CV021` nhưng `approval_status` ra «Đã duyệt» (mặc định cột) | Chưa — việc 5.1 của Phase 5 |
 
 
