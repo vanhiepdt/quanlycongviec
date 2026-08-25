@@ -39,7 +39,11 @@ export default [
   // `document`, `fetch`. Chỉ mở cho đúng mấy file này để phần máy chủ vẫn không được phép chạm
   // vào biến toàn cục của trình duyệt.
   {
-    files: ['tests/unit/api-bridge.test.js', 'tests/unit/change-password-modal.test.js'],
+    files: [
+      'tests/unit/api-bridge.test.js',
+      'tests/unit/change-password-modal.test.js',
+      'tests/unit/xss-escape.test.js',
+    ],
     languageOptions: {
       globals: {
         window: 'readonly',
@@ -51,6 +55,8 @@ export default [
         JSON: 'readonly',
         Object: 'readonly',
         String: 'readonly',
+        // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.
+        Proxy: 'readonly',
       },
     },
   },
