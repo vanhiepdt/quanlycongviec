@@ -50,3 +50,26 @@ describe('4.7 — không còn listener treo vào id không tồn tại', () => {
     }
   });
 });
+
+describe('5.12 — nút «+ công việc con» trên cây (điểm C7)', () => {
+  it('TC-TREE-UI-01: hai id ẩn mới của #task-form đều có nơi sinh ra', () => {
+    for (const id of ['task-create-level', 'task-create-parent']) {
+      expect({ id, born: bornIds.has(id) }).toEqual({ id, born: true });
+    }
+  });
+
+  it('TC-TREE-UI-02: cây có class nút cấp 2 / cấp 3 và chữ «+ công việc con»', () => {
+    expect(APP).toContain('add-subwork-from-work-btn');
+    expect(APP).toContain('add-task-from-subwork-btn');
+    expect(APP).toContain('+ công việc con');
+    expect(FLAT).toContain('id="task-create-level"');
+    expect(FLAT).toContain('id="task-create-parent"');
+    expect(FLAT).toContain('name="level"');
+    expect(FLAT).toContain('name="parent"');
+  });
+
+  it('TC-TREE-UI-03: không thêm <select name="level"> — cấp suy ra từ chỗ bấm, không cho người dùng chọn', () => {
+    expect(FLAT).not.toMatch(/<select\b[^>]*\bname="level"/);
+    expect(FLAT).not.toMatch(/<select\b[^>]*\bname="parent"/);
+  });
+});

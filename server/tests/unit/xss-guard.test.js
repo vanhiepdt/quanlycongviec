@@ -116,12 +116,13 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
       expect(src).toContain(`function ${ten}(value)`);
   });
 
-  it('TC-SEC-17: con số đã chốt — 70 chỗ ghi HTML, 481 giá trị nội suy', () => {
+  it('TC-SEC-17: con số đã chốt — 70 chỗ ghi HTML, 498 giá trị nội suy', () => {
     // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Việc 4.6 chốt 70 chỗ ghi và 474 giá trị;
-    // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481, không thêm chỗ ghi nào.
+    // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481;
+    // việc 5.12 thêm 17 chỗ (nút cấp 2/cấp 3 + ô ẩn level/parent) ⇒ 498, không thêm chỗ ghi nào.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 70, gia_tri: 481 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 70, gia_tri: 498 });
   });
 });
 

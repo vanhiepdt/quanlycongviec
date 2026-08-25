@@ -124,11 +124,10 @@ rpc getProjects
 diem 'C6 mở chi tiết công việc — cần getTasks (N+1 lời gọi, §13.5)'
 rpc getTasks
 
-diem 'C7 tạo CÔNG VIỆC CON (cấp 2) — biểu mẫu cũ có gửi được `level`/`Mã cha` hay không?'
-echo '   -- `#task-form` không có ô nào tên level/parent; COL.T_LEVEL và COL.T_PARENT chỉ được'
-echo '      khai ở bảng COL (app.js:56–57) rồi không chỗ nào đọc/ghi. Nên lời gọi tạo bên dưới'
-echo '      KHÔNG mang cấp, và máy chủ mặc định thành cấp 3:'
-rpc addTaskWithAuth "{\"args\":[{\"projectId\":\"$CV\",\"name\":\"KHÓI 8.5 — thử tạo cấp 2\",\"status\":\"Chưa bắt đầu\",\"priority\":\"Trung bình\"}]}"
+diem 'C7 tạo CÔNG VIỆC CON (cấp 2) — nút «+ công việc con» trên cây gửi ô ẩn level=2'
+echo '   -- Việc 5.12: bấm hàng CÔNG VIỆC ⇒ FormData mang level=2, parent rỗng. Không thêm'
+	echo '      <select name="level">. «+ Thêm nhiệm vụ» vẫn không gửi cấp ⇒ REST mặc định 3.'
+rpc addTaskWithAuth "{\"args\":[{\"projectId\":\"$CV\",\"name\":\"KHÓI 8.5 — thử tạo cấp 2\",\"status\":\"Chưa bắt đầu\",\"priority\":\"Trung bình\",\"level\":\"2\",\"parent\":\"\"}]}"
 psqlq "SELECT code||' cấp='||level||' cha='||coalesce(parent_id::text,'NULL') FROM work_items
         WHERE name LIKE 'KHÓI 8.5%' ORDER BY id;" | sed 's/^/   csdl: /'
 

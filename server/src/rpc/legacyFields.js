@@ -111,6 +111,9 @@ export function projectFromLegacy(data = {}) {
  * `projectId` của form là **mã** công việc (`CV001`) vì `<option value>` lấy từ `COL.P_ID`, nên
  * nó vào `workRef` chứ không vào một khoá id nào. `resultLinks` là một `<input>` duy nhất chứa
  * nhiều link phân tách bằng dòng mới hoặc dấu phẩy → REST nhận MẢNG.
+ *
+ * Việc 5.12: `#task-form` có hai ô ẩn `level` + `parent` (không phải `<select>` cho người dùng).
+ * Cấp suy ra từ chỗ bấm trên cây — thiếu `level` thì REST vẫn mặc định 3 như form «+ Thêm» cũ.
  */
 export function taskFromLegacy(data = {}) {
   const out = dropUndefined({
@@ -129,6 +132,12 @@ export function taskFromLegacy(data = {}) {
   });
   if (Object.hasOwn(data, 'projectId') && data.projectId !== '') out.workRef = data.projectId;
   if (Object.hasOwn(data, 'resultLinks')) out.resultLinks = splitLinks(data.resultLinks);
+  const level = numberOrUndefined(pick(data, 'level'));
+  if (level === 2 || level === 3) out.level = level;
+  if (Object.hasOwn(data, 'parent') || Object.hasOwn(data, 'parentRef')) {
+    const raw = Object.hasOwn(data, 'parent') ? data.parent : data.parentRef;
+    out.parentRef = raw === '' || raw == null ? null : raw;
+  }
   return out;
 }
 
@@ -364,6 +373,7 @@ export default {
   COL,
   projectToLegacy,
   taskToLegacy,
+  taskFromLegacy,
   remindersToLegacy,
   staffToLegacy,
   staffFromLegacy,

@@ -45,6 +45,7 @@ export default [
       'tests/unit/xss-escape.test.js',
       'tests/unit/pending-badge.test.js',
       'tests/unit/countable-stats-ui.test.js',
+      'tests/unit/subwork-button-ui.test.js',
     ],
     languageOptions: {
       globals: {

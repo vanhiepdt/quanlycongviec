@@ -22,6 +22,13 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > Năm chỗ này nằm trong danh sách "cố ý không bọc" của `xss-guard.test.js`: hàm trả về HTML đã
 > thoát sẵn, bọc thêm là hiện thẻ ra dưới dạng chữ. Hành vi thoát của chính nó do
 > `tests/unit/pending-badge.test.js` canh.
+>
+> **Cập nhật Phase 5 (việc 5.12).** Nút «+ công việc con» thêm 17 giá trị nội suy ⇒ **498 giá trị**,
+> vẫn **70 chỗ ghi HTML**. Tám chỗ gọi `createSubworkFromWorkButtonHtml` /
+> `createTaskFromSubworkButtonHtml` xếp `HTML-LONG` (hàm `create*` trả HTML đã thoát sẵn; bọc thêm
+> là hiện thẻ ra chữ). Chín chỗ còn lại (`className`, `data-project-*`, `data-parent-id`, ô ẩn
+> `level`/`parent`) đi qua `escapeHtml`. Hành vi nút/ô ẩn do `tests/unit/subwork-button-ui.test.js`
+> canh.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

@@ -348,6 +348,52 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     ...over,
   });
 
+  it('TC-RPC-24b: addTaskWithAuth gửi level=2 (nút «+ công việc con») ⇒ cấp 2 không cha', async () => {
+    const data = await call('addTaskWithAuth', [
+      form({ name: 'Công việc con', level: '2', parent: '' }),
+    ]);
+    expect(data.taskId).toMatch(/^CV\d{3,}/);
+    const { rows } = await pool.query(
+      'SELECT code, level, parent_id FROM work_items WHERE code = $1',
+      [data.taskId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].level).toBe(2);
+    expect(rows[0].parent_id).toBeNull();
+  });
+
+  it('TC-RPC-24c: addTaskWithAuth gửi level=3 + parent (nút trên hàng cấp 2) ⇒ cấp 3 có cha', async () => {
+    const sub = await call('addTaskWithAuth', [form({ name: 'Nhóm con', level: '2', parent: '' })]);
+    const child = await call('addTaskWithAuth', [
+      form({ name: 'Nhiệm vụ trong nhóm', level: '3', parent: sub.taskId }),
+    ]);
+    const { rows } = await pool.query(
+      'SELECT i.code, i.level, p.code AS parent_code FROM work_items i LEFT JOIN work_items p ON p.id = i.parent_id WHERE i.code = $1',
+      [child.taskId]
+    );
+    expect(rows[0].level).toBe(3);
+    expect(rows[0].parent_code).toBe(sub.taskId);
+  });
+
+  it('TC-RPC-24d: Nhân viên gửi level=2 ⇒ 403, không tạo dòng — không nới §6', async () => {
+    const nv = await makeLoginUser({
+      code: 'NV002',
+      email: 'nv512@congty.vn',
+      role: 'Nhân viên',
+      full_name: 'Nhân viên 5.12',
+    });
+    const nvApi = client(app);
+    await nvApi.login(nv.email);
+    const res = await nvApi.post('/api/rpc/addTaskWithAuth', {
+      args: [form({ name: 'Cấp 2 lậu', level: '2', parent: '' })],
+    });
+    expect(res.status).toBe(403);
+    const { rows } = await pool.query(
+      "SELECT count(*)::int AS n FROM work_items WHERE name = 'Cấp 2 lậu'"
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
   it('TC-RPC-24: addTaskWithAuth — projectId là MÃ ⇒ vào workRef, textarea link tách theo DÒNG', async () => {
     const data = await call('addTaskWithAuth', [form()]);
     expect(data.taskId).toMatch(/^CV\d{3,}/);
