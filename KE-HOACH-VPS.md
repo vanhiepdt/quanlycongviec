@@ -15,11 +15,14 @@ code mới dùng đúng ba từ sau:
 | Cấp | Gọi là | Bảng | Mã | Ghi chú |
 |---|---|---|---|---|
 | 1 | **Công việc** | `works` | `CV0xx` | Có phòng, quản lý, ngày bắt đầu/kết thúc. **Không gọi là "dự án"** |
-| 2 | **Công việc con** | `work_items` (`level = 2`) | `CV0xx-0yy` | `parent_id` phải NULL (`lvl2_no_parent`) |
-| 3 | **Nhiệm vụ** | `work_items` (`level = 3`) | `CV0xx-0yy` | Cha là một cấp 2 cùng công việc, hoặc NULL (nhiệm vụ mồ côi) |
+| 2 | **Công việc con** | `work_items` (`level = 2`) | `CV0xx-0yy` | Có phòng (luôn bằng phòng công việc cha); `parent_id` phải NULL (`lvl2_no_parent`) |
+| 3 | **Nhiệm vụ** | `work_items` (`level = 3`) | `CV0xx-0yy` | Có phòng (luôn bằng phòng công việc cha); cha là một cấp 2 cùng công việc, hoặc NULL (nhiệm vụ mồ côi) |
 
-Kéo theo hai hệ quả bắt buộc:
+Kéo theo ba hệ quả bắt buộc:
 
+- **Cả ba cấp đều gắn phòng.** `works.department_id` và `work_items.department_id`; phòng của cấp
+  2 và cấp 3 luôn bằng phòng của công việc cấp 1 chứa nó, do CSDL giữ chứ không do tầng JS
+  (§4.1, `002_work_items_department.sql`). Đổi phòng thì đổi ở công việc cấp 1, cả cây đi theo.
 - Vai trò là **`Quản lý công việc`**, không phải `Quản lý dự án`. Đây là giá trị nằm trong ràng
   buộc `users_role_valid` của cơ sở dữ liệu, viết sai là `INSERT` bị chặn — xem §5.2 và §8.3.
 - Mọi con số thống kê chỉ đếm **cấp 3**. "Số nhiệm vụ" không bao giờ gồm cấp 2 (§2.1 C15).
@@ -92,6 +95,8 @@ chuyển. Cột "Nguồn" là hàm/vùng code hiện tại để đối chiếu 
 | B4 | Thẻ công việc + xem chi tiết dạng modal | `createProjectCard`, `showProjectDetailsModal` |
 | B5 | Tìm kiếm và lọc công việc | `filterProjects`, `getFilteredProjects`, `filterCards` |
 | B6 | Nhật ký thay đổi riêng của từng công việc | cột `Nhật ký JSON`, `logActivity` |
+| B7 | **Mới** — hiện ai lập công việc và lập theo cách nào: lãnh đạo phòng **tự đăng ký**, hay admin / Phó Giám đốc **giao**. Người giao là **người giao ĐẦU TIÊN**, giao lại về sau không ghi đè | *chưa có* |
+| B8 | **Mới** — `GET /works/:id/history`: nhật ký **từ đầu** của công việc, gồm dòng lập và mọi lần chỉnh sửa dạng `cột: từ → thành` | *chưa có* (bản cũ chỉ có nhật ký chung) |
 
 ### 2.3 Công việc con (cấp 2) & Nhiệm vụ (cấp 3) (C)
 
@@ -112,6 +117,13 @@ chuyển. Cột "Nguồn" là hàm/vùng code hiện tại để đối chiếu 
 | C13 | Cảnh báo quá hạn | `isTaskOverdue` |
 | C14 | Giới hạn ngày nhiệm vụ trong khoảng ngày của công việc cha | `updateTaskDateLimits` |
 | C15 | Chỉ **cấp 3** được tính là "nhiệm vụ" trong mọi con số thống kê | `filterLevel3Tasks` |
+| C16 | **Mới** — công việc con và nhiệm vụ cũng hiện ai lập và lập theo cách nào: nhân viên / lãnh đạo phòng **tự đăng ký**, hay admin / Phó Giám đốc / lãnh đạo phòng **giao**. Người giao là **người giao ĐẦU TIÊN** | *chưa có* |
+| C17 | **Mới** — `GET /work-items/:id/history`: nhật ký **từ đầu** của từng công việc con / nhiệm vụ, gồm cả lần chuyển sang công việc khác | *chưa có* |
+| C18 | **Mới** — công việc con và nhiệm vụ đều gắn phòng, luôn bằng phòng của công việc cha (§0.1, §4.1) | *chưa có* |
+
+**Nguồn gốc suy từ HÀNH VI, không từ vai trò** (C16, B7). Người nhận việc là chính người bấm Tạo — hoặc chưa gán ai — thì ghi `Tự đăng ký`; gán cho người khác thì ghi `Được giao` kèm người giao và thời điểm. Lấy vai trò làm căn cứ thì admin tự lập việc cho mình cũng bị ghi là "được giao", trong khi cùng một Trưởng phòng lại có cả hai kiểu lập việc. Người nhận việc là `manager_id` với cấp 1 và `assignee_id` với cấp 2/3.
+
+**Người giao đầu tiên là bất biến ở CSDL** (trigger `keep_first_origin`, 003), không phải ở tầng JS: mỗi lần sửa việc frontend gửi cả object lên, nên "ai giao việc này" là thứ dễ bị ghi đè nhất. Những lần giao lại về sau nằm trong nhật ký (B8, C17), không sửa lại quá khứ.
 
 ### 2.4 Người dùng & Phòng (D)
 
@@ -385,6 +397,12 @@ works(
   reject_reason text DEFAULT '',
   sort_order    int NOT NULL DEFAULT 0,
   created_by    bigint NULL FK users,
+  created_by_name  text NOT NULL DEFAULT '',    -- ↓ 5 cột nguồn gốc, thêm ở 003 (mục B7)
+  origin        text NOT NULL DEFAULT 'Tự đăng ký'
+                CHECK (origin IN ('Tự đăng ký','Được giao')),
+  assigned_by_id   bigint NULL,                 -- CỐ Ý không FK users: xoá người thì vẫn còn
+  assigned_by_name text NOT NULL DEFAULT '',    -- biết ai đã giao, hệt cách làm của activity_logs
+  assigned_at   timestamptz NULL,
   created_at, updated_at timestamptz)
 
 -- Công việc con (cấp 2) + Nhiệm vụ (cấp 3) — thay cột "Nhiệm vụ JSON"
@@ -396,6 +414,11 @@ work_items(
   work_id       bigint NOT NULL FK works ON DELETE CASCADE,
   parent_id     bigint NULL FK work_items ON DELETE CASCADE,
   level         smallint NOT NULL CHECK (level IN (2,3)),
+  department_id bigint NULL FK departments ON DELETE SET NULL,
+                -- Thêm ở 002_work_items_department.sql: CẢ BA CẤP đều gắn phòng. Cột này LUÔN
+                -- bằng works.department_id của công việc cha — để trống thì trigger tự điền, đặt
+                -- phòng khác thì nổ (DEPT_MISMATCH_WORK). Nhờ vậy §6 lọc "việc của phòng tôi"
+                -- đọc thẳng một cột, không JOIN works, và cấp 2/cấp 3 hiện ra trong đúng phòng.
   name          text NOT NULL,
   description   text DEFAULT '',
   assignee_id   bigint NULL FK users,
@@ -411,6 +434,12 @@ work_items(
   approver_id   bigint NULL, approved_at timestamptz NULL, reject_reason text DEFAULT '',
   sort_order    int NOT NULL DEFAULT 0,
   created_by    bigint NULL,
+  created_by_name  text NOT NULL DEFAULT '',    -- ↓ 5 cột nguồn gốc, thêm ở 003 (mục C16). Y
+  origin        text NOT NULL DEFAULT 'Tự đăng ký'   -- hệt works: cấp 2 và cấp 3 cũng phải nói
+                CHECK (origin IN ('Tự đăng ký','Được giao')),  -- được ai đăng ký / ai giao đầu tiên
+  assigned_by_id   bigint NULL,
+  assigned_by_name text NOT NULL DEFAULT '',
+  assigned_at   timestamptz NULL,
   created_at, updated_at timestamptz,
   -- Ràng buộc thay cho 6 nhánh kiểm tay của updateTask:
   CONSTRAINT lvl2_no_parent CHECK (level <> 2 OR parent_id IS NULL),
@@ -427,6 +456,33 @@ work_items(
 | `work_items_check_parent()` BEFORE INSERT/UPDATE OF `parent_id, work_id, level` | cha không tồn tại · cha không phải cấp 2 · cha khác `work_id` · cấp 2 **đang có con** đổi `work_id` hoặc đổi `level` | "Cha phải là công việc con (cấp 2)…" · "Cha và con phải thuộc cùng một công việc" · "…không thể chuyển hoặc đổi cấp" |
 | `reminders_only_level3()` BEFORE INSERT/UPDATE trên `reminders` | đặt nhắc việc cho cấp 2 (mục C10, bản cũ còn nợ) | "Chỉ nhiệm vụ (cấp 3) mới đặt được nhắc việc" |
 | `set_updated_at()` trên 6 bảng | `updated_at` không được cập nhật khi sửa | — |
+
+**Đã hiện thực trong `002_work_items_department.sql`** (2026-08-25) — gắn phòng cho cả ba cấp.
+Hai trigger dưới đây giữ đúng một bất biến: *phòng của cấp 2 và cấp 3 luôn bằng phòng của công
+việc cấp 1 chứa nó*. Vì bất biến do CSDL giữ, không đường ghi nào (API, nhập dữ liệu Phase 9, sửa
+tay lúc bảo trì) làm nó lệch được.
+
+| Trigger | Làm gì | Lời nhắn |
+|---|---|---|
+| `work_items_sync_department()` BEFORE INSERT/UPDATE OF `department_id, work_id` | để trống ⇒ điền phòng của công việc cha · chuyển sang công việc khác ⇒ phòng đi theo công việc đích · đặt phòng khác công việc cha ⇒ **chặn** | "Công việc con/nhiệm vụ phải cùng phòng với công việc cha…" → `DEPT_MISMATCH_WORK` (400) |
+| `works_cascade_department()` AFTER UPDATE OF `department_id` trên `works` | đổi phòng công việc cấp 1 ⇒ lan xuống **toàn bộ** cấp 2 + cấp 3 của nó | — |
+
+**Đã hiện thực trong `003_work_origin_and_history.sql`** (2026-08-25) — nguồn gốc đầu việc (mục
+B7/C16). Trigger dưới đây giữ bất biến: *người lập và người giao ĐẦU TIÊN không bao giờ bị ghi đè*.
+Phải đặt ở CSDL vì giao diện lưu bằng cách gửi **cả đối tượng** (§5.1): một lần bấm Lưu của người
+khác sẽ mang theo `created_by` của chính họ và xoá dấu vết người giao ban đầu.
+
+| Trigger | Làm gì | Lời nhắn |
+|---|---|---|
+| `keep_first_origin()` BEFORE UPDATE trên `works` **và** `work_items` | mọi UPDATE: `created_by`/`created_by_name` đã có thì trả về giá trị cũ · đã có `assigned_by_id` thì 4 cột `assigned_by_id, assigned_by_name, assigned_at, origin` **đều** giữ nguyên | — (âm thầm hoàn nguyên, không nổ lỗi: đây là lưới an toàn cho đường ghi cả đối tượng, không phải lỗi người dùng) |
+
+Giao lại việc cho người khác vẫn đổi được `manager_id` / `assignee_id` như thường — chỉ *lịch sử*
+là bất biến. TC-ORIGIN-04 chứng minh cả câu `UPDATE` viết tay ở psql cũng không sửa được.
+
+`origin` chỉ nhận đúng hai giá trị (`CHECK`), và **suy từ hành vi chứ không từ vai trò**: lúc tạo,
+nếu người nhận (`manager_id` ở cấp 1, `assignee_id` ở cấp 2/3) chính là người bấm Tạo thì
+"Tự đăng ký", khác người thì "Được giao". Nhờ vậy Trưởng phòng vừa tự đăng ký được, vừa giao được,
+mà không cần bảng ánh xạ vai trò → nguồn gốc.
 
 Sinh mã dùng 6 sequence + hàm `next_code(p_prefix text, p_seq regclass, p_width int DEFAULT 3)`:
 `seq_department_code`, `seq_user_code`, `seq_work_code`, `seq_work_item_code`, `seq_proposal_code`,
@@ -482,11 +538,13 @@ sessions(id uuid PK, user_id bigint FK users ON DELETE CASCADE,
 ```sql
 CREATE INDEX ON work_items (work_id, level);
 CREATE INDEX ON work_items (parent_id);
+CREATE INDEX ON work_items (department_id, level);      -- "việc của phòng tôi" (§6), cả 2 cấp
 CREATE INDEX ON work_items (assignee_id) WHERE level = 3;
 CREATE INDEX ON work_items (due_date) WHERE level = 3 AND status <> 'Hoàn thành';
 CREATE INDEX ON works (department_id, approval_status);
 CREATE INDEX ON works (start_date, end_date);          -- lọc theo tháng (L1)
 CREATE INDEX ON activity_logs (created_at DESC);
+CREATE INDEX ON activity_logs (entity_type, entity_id, id DESC);   -- nhật ký MỘT đầu việc (B8/C17)
 CREATE INDEX ON notifications (user_id, is_read);
 CREATE INDEX ON chat_messages (created_at DESC);
 CREATE INDEX ON sessions (expires_at);
@@ -586,12 +644,43 @@ cũ và chỉ dọn khi frontend được tách module (ngoài phạm vi kế ho
 | Việc | REST |
 |---|---|
 | Cây 3 tầng | `GET /api/v1/works/tree?month=&departmentId=` |
+| Nhật ký **từ đầu** của một công việc (B8) | `GET /api/v1/works/:id/history?limit=` |
+| Nhật ký **từ đầu** của một công việc con / nhiệm vụ (C17) | `GET /api/v1/work-items/:id/history?limit=` |
 | Gửi duyệt / Duyệt / Từ chối | `POST /api/v1/approvals/:entity/:id/{submit,approve,reject}` |
 | Số đếm chờ duyệt cho badge | `GET /api/v1/approvals/pending-count` |
 | Thống kê + dữ liệu 6 biểu đồ | `GET /api/v1/stats/summary`, `/stats/charts?type=` |
 | Dữ liệu Gantt đã nhóm | `GET /api/v1/gantt?from=&to=&groupBy=department\|deputy\|assignee` |
 | Xuất Excel | `GET /api/v1/export/works.xlsx?…` |
 | Sức khoẻ hệ thống | `GET /healthz` |
+
+**Hình dáng phần nguồn gốc và nhật ký** (B7/B8, C16/C17). Mọi phản hồi trả về *một* đầu việc —
+`GET /works/:id`, `POST /works`, và cả hai `/history` — đều kèm khoá `originInfo`. Cố ý **không**
+đặt tên là `origin`: dòng dữ liệu đã có sẵn cột chữ `origin` mang đúng hai giá trị, để cùng một tên
+thì giao diện dễ lẫn chuỗi với đối tượng.
+
+```json
+{ "ok": true, "data": {
+  "work": { "code": "CV003", "origin": "Được giao", "…": "…" },
+  "originInfo": { "origin": "Được giao", "selfRegistered": false,
+                  "createdById": 1, "createdByName": "Quản trị hệ thống",
+                  "assignedById": 1, "assignedByName": "Quản trị hệ thống",
+                  "assignedAt": "2026-08-25T01:00:00.000Z" },
+  "entries": [
+    { "action": "works.create", "actor_name": "Quản trị hệ thống",
+      "details": { "code": "CV003", "name": "Việc A", "origin": "Được giao" } },
+    { "action": "works.update", "actor_name": "Trần Thị Trưởng",
+      "details": { "code": "CV003",
+                   "changes": { "name": { "from": "Việc A", "to": "Việc A2" } } } }
+  ] } }
+```
+
+Dòng nhật ký giữ nguyên tên cột CSDL (`actor_name`, `entity_type`, `created_at`) như mọi dòng dữ
+liệu khác trong `data`; chỉ `originInfo` là bó camelCase vì nó là thứ tính ra, không phải một dòng.
+
+`entries` xếp **cũ trước, mới sau** — đọc nhật ký là lần lại từ lúc lập, không phải xem tin mới
+nhất. `details.changes` chỉ có những cột **thật sự đổi**, dạng `từ → thành`, và lần Lưu không đổi gì
+thì **không** có khoá `changes` (§13.3). Bộ lọc luôn gồm `entity_type`, vì `works.id = 5` và
+`work_items.id = 5` là hai dòng khác nhau (TC-ORIGIN-12).
 
 ### 5.3 Quy ước chung của mọi phản hồi
 
@@ -628,6 +717,17 @@ Cài đặt: **một hàm duy nhất** `can(user, action, entityType, row)` — 
 `checkUserPermission` hiện tại để port thẳng, và **được gọi ở cả hai nơi**: middleware chặn
 request, và service kiểm lại trước khi ghi. Frontend chỉ ẩn/hiện nút cho đẹp, **không** được
 coi là lớp bảo vệ.
+
+"Phạm vi thấy" theo phòng đọc **`department_id` của chính dòng đó**, ở cả ba cấp: `works` và
+`work_items` đều có cột này và chúng luôn khớp nhau (§4.1). Vì vậy Trưởng phòng/Phó phòng/Nhân
+viên thấy được công việc con và nhiệm vụ của phòng mình mà `can()` không phải JOIN sang `works`
+— `normalizeRow` chỉ còn dùng `work_department_id` làm đường dự phòng cho các truy vấn chỉ lấy
+phòng của công việc cha.
+
+**Nhật ký đi cùng quyền đọc dữ liệu**, không có quyền riêng: `/history` gọi đúng `can(user,'read',…)`
+trên chính đầu việc đó, nên ai không thấy được công việc thì cũng không đọc được nhật ký của nó
+(TC-ORIGIN-14). Ngược lại, ai đã thấy được thì thấy **toàn bộ** nhật ký từ đầu — kể cả những lần
+sửa của người khác — vì đó chính là điều mục B8/C17 yêu cầu.
 
 ## 7. Kế hoạch từng Phase
 
@@ -748,9 +848,14 @@ hợp bẩn ở §8.3 có **một test riêng khẳng định nó còn đó**, �
 | 3.8 | `reminders` CRUD | Chỉ cho `level = 3`; gọi trên cấp 2 trả `409 REMINDER_ON_SUBWORK` |
 | 3.9 | Sinh mã | `CV001`, `NV010` — sinh bằng chuỗi tăng dần trong CSDL (`next_code`, §0.1), **không** dựa mốc thời gian như `generateTaskIdForProject` |
 | 3.10 | Ràng buộc ngày | Ngày nhiệm vụ nằm trong khoảng ngày công việc cha; vi phạm là cảnh báo (không chặn), đúng như hiện tại |
+| 3.11 | **Mới** — gắn phòng cho **cả ba cấp** | `work_items.department_id` là cột thật, nhưng **luôn** bằng phòng của công việc cha: để trống thì trigger điền, đặt lệch thì `DEPT_MISMATCH_WORK` (400), đổi phòng cấp 1 thì lan xuống toàn cây (§4.1 bảng trigger `002`) |
+| 3.12 | **Mới** — nguồn gốc từng đầu việc | 5 cột `created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at` trên `works` **và** `work_items`; suy từ hành vi (`deriveOrigin`), người giao **đầu tiên** bất biến nhờ trigger `keep_first_origin`; phơi ra dưới khoá `originInfo` (§5.2) |
+| 3.13 | **Mới** — nhật ký từng đầu việc | `GET /works/:id/history` và `GET /work-items/:id/history` đọc `activity_logs` lọc theo `(entity_type, entity_id)`, cũ trước mới sau; mỗi lần sửa ghi `details.changes` dạng `cột: từ → thành` do `diffRows` tính giữa dòng trước và sau khi ghi |
 
 **Xong khi**: **toàn bộ 40 phép kiểm** của `tools/test-tasks-gd2.js` được port thành integration
-test chạy trên Postgres thật và xanh · thêm ≥25 test mới cho tree, reorder, cascade, đồng thời.
+test chạy trên Postgres thật và xanh · thêm ≥25 test mới cho tree, reorder, cascade, đồng thời ·
+TC-TREE-36 (phòng cả ba cấp) và TC-ORIGIN-01..14 xanh.
+
 
 **Rủi ro**: mã nhiệm vụ hiện sinh theo mốc thời gian tới millisecond. Hai người bấm cùng lúc trên
 VPS sẽ nhanh hơn Apps Script rất nhiều ⇒ **có thể trùng mã**. Bắt buộc đổi sang chuỗi tăng dần
@@ -983,6 +1088,7 @@ Số lượng thật (kiểm bằng `seed-dev.test.js`, hằng `EXPECTED` là ch
 | Nhắc việc | **7**, chỉ nằm trên nhiệm vụ cấp 3 · `CV006-022` có **3 nhắc** · 1 nhắc **nội dung rỗng** |
 | Link | `CV002-029` có **4 link kết quả**, trong đó 1 link **sai định dạng** (thiếu `http`) |
 | Ngày biên | `CV009` bắt đầu 31/12/2026 kết thúc 01/01/2027 · `CV003-028` hạn **29/02/2028** (năm nhuận) |
+| Nguồn gốc | Cả **9 công việc và 30 dòng cấp 2/cấp 3** đều có `created_by_name`, và có **cả hai** nguồn gốc ở **cả ba cấp**: 3 công việc **được giao** (`CV001`, `CV004`, `CV009`), 6 công việc **tự đăng ký** — kể cả `CV005` chưa phân ai (không có người nhận thì không thể gọi là được giao) |
 | Khác | **5 đề nghị** đủ 2 loại và đủ 4 trạng thái, 1 dòng không gắn công việc nào · **4 app**, 2 app mở cho mọi người (`allowed_roles` rỗng) · **12 tin chat** trải nhiều ngày, 1 tin của người đã nghỉ (`user_id` NULL) · **6 thông báo** (4 chưa đọc / 2 đã đọc, 1 không trỏ tới bản ghi nào) · **20 dòng nhật ký** dạng `<nhóm>.<việc>`, 1 dòng của tài khoản đã xoá |
 
 Cuối file **đẩy 6 sequence sinh mã** vượt qua dữ liệu mẫu bằng
@@ -1068,6 +1174,29 @@ Mã test đi vào tên hàm test để tra ngược được. `E2E` = phải có
 | TC-TREE-33 | Hạn chót trước ngày bắt đầu | Cảnh báo, cho lưu (giữ hành vi hiện tại) |
 | TC-TREE-34 | Ngày nhiệm vụ ngoài khoảng ngày công việc | Cảnh báo, cho lưu |
 | TC-TREE-35 | Lỗi giữa transaction (giả lập) | Rollback sạch, không còn dòng nửa vời |
+| TC-TREE-36 | Tạo cấp 2/3 với `departmentId` **khác** phòng công việc cha | 400 `DEPT_MISMATCH_WORK`, **không** tạo dòng nào |
+| TC-TREE-37 | Tạo cấp 2/3 **không** truyền phòng | Nhận phòng của công việc cha; công việc chưa có phòng thì để trống, không nổ |
+| TC-TREE-38 | Đổi phòng công việc cấp 1 (và gỡ phòng, và xoá phòng) | Toàn bộ cấp 2 + cấp 3 đổi theo / về trống theo; lần Lưu không đổi phòng thì không chạm dòng con |
+| TC-TREE-39 | Chuyển nhiệm vụ sang công việc **khác phòng** | Phòng đi theo công việc đích, không giữ phòng cũ |
+| TC-TREE-40 | Nhân bản công việc | Bản sao và cả cây con cùng phòng với bản gốc |
+
+**Nguồn gốc và nhật ký từng đầu việc** (mục B7/B8, C16/C17 — `tests/integration/work-origin-history.test.js`
+và `tests/unit/origin.test.js`):
+
+| Mã | Tình huống | Kết quả mong đợi |
+|---|---|---|
+| TC-ORIGIN-01 | Trưởng phòng tạo công việc và tự nhận quản lý | `origin = 'Tự đăng ký'`, `created_by_name` là tên họ, `assigned_by_id = NULL`, `originInfo.selfRegistered = true` |
+| TC-ORIGIN-02 | Admin tạo công việc, gán Trưởng phòng làm quản lý | `origin = 'Được giao'`, `assigned_by_id` là admin, `assigned_at` có giá trị |
+| TC-ORIGIN-03 | Trưởng phòng giao **lại** việc đó cho nhân viên | `manager_id` đổi, nhưng `assigned_by_id` **vẫn là admin** — người giao đầu tiên |
+| TC-ORIGIN-04 | `UPDATE works SET created_by=…, assigned_by_id=…, origin=…` viết tay ở psql | Trigger `keep_first_origin` âm thầm hoàn nguyên cả 5 cột |
+| TC-ORIGIN-05..08 | Bốn tình huống trên, lặp lại cho `work_items` cấp 2 **và** cấp 3, kể cả trường hợp chỉ có **tên** người thực hiện (chưa dò ra `assignee_id`) | Giống cấp 1; nhiệm vụ tự đăng ký rồi giao lại **không** đổi sang "Được giao" |
+| TC-ORIGIN-09 | Tạo rồi sửa hai lần, đọc `/history` | Đúng thứ tự `create, update, update`; `details.changes.name = { from, to }`; lần sau chỉ có khoá `status` |
+| TC-ORIGIN-10 | PATCH không đổi gì | **Không** có khoá `details.changes` |
+| TC-ORIGIN-11 | Dump `details::text` của mọi dòng nhật ký | Không chứa mật khẩu mẫu, cũng không chứa chữ `password` (§8.7) |
+| TC-ORIGIN-12 | Cắm sẵn một dòng nhật ký `entity_type = 'work'` có **cùng id số** với nhiệm vụ | `/work-items/:id/history` chỉ trả các dòng `'task'`, không trả dòng `'work'` |
+| TC-ORIGIN-13 | Chuyển nhiệm vụ sang công việc khác | `changes.work_id = { from, to }`, và **không** có `changes.code` — mã không bao giờ đổi (§13.4 mục 6) |
+| TC-ORIGIN-14 | Nhân viên đọc `/history` của công việc **phòng khác** | 403, nhật ký cũng phải qua đúng lưới phân quyền như dữ liệu |
+| TC-ORIGIN-15 | `deriveOrigin` / `diffRows` / `originOf` — 19 test đơn vị | Trong đó: `recipientId = '7'` dạng chuỗi vẫn là chính mình · số ra dạng chuỗi (`50` vs `'50'`) không bị coi là đã đổi · `Date` và chuỗi ISO cùng thời điểm là một · cột ngoài danh sách trắng (`password_hash`) bị bỏ qua · không đổi gì ⇒ `null`, không phải `{}` |
 
 #### D. Dữ liệu test tự tạo (Phase 2)
 
@@ -1206,7 +1335,7 @@ Bắt buộc, vì hệ thống chứa dữ liệu nhân sự và sẽ mở ra In
 | TC-SEC-06 | IDOR: đổi `id` trong URL sang thực thể phòng khác | 403/404 với mọi vai trò |
 | TC-SEC-07 | Leo thang quyền: nhân viên tự gửi `role: "admin"` khi sửa hồ sơ mình | Bị bỏ qua, vai trò không đổi |
 | TC-SEC-08 | Rò rỉ trong phản hồi lỗi | Không có stack trace, không có tên bảng, không có câu SQL |
-| TC-SEC-09 | Rò rỉ trong log | Không có mật khẩu, không có nội dung cookie |
+| TC-SEC-09 | Rò rỉ trong log | Không có mật khẩu, không có nội dung cookie. Áp cho **cả nhật ký nghiệp vụ**: dump `activity_logs.details::text` không được chứa mật khẩu mẫu, cũng không chứa chữ `password` — `details` do handler chọn tay từng trường, **không** bao giờ nhận cả `req.body` (TC-ORIGIN-11) |
 | TC-SEC-10 | Cổng 5432 từ Internet | Đóng (`nmap` xác nhận) |
 | TC-SEC-11 | Header bảo mật | Có HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` |
 | TC-SEC-12 | HTTP → HTTPS | Chuyển hướng 301, không phục vụ nội dung qua HTTP |
