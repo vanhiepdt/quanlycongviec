@@ -289,7 +289,9 @@ export function taskToLegacy(row, ctx = {}) {
     // Phân công ba lớp: nhiệm vụ chỉ có "Lãnh đạo phòng phụ trách" (một người); cấp 2 có cả hai.
     [COL.T_SUP]: ctx.nameById?.get(row.supervisor_id) ?? '',
     supervisorId: row.supervisor_id ?? '',
-    [COL.T_LEADERS]: (row.leader_ids ?? []).map((id) => ctx.nameById?.get(id) ?? `#${id}`).join(', '),
+    [COL.T_LEADERS]: (row.leader_ids ?? [])
+      .map((id) => ctx.nameById?.get(id) ?? `#${id}`)
+      .join(', '),
     leaderIds: [...(row.leader_ids ?? [])],
     [COL.T_ASSIGNEE_EMAIL]: ctx.emailById?.get(row.assignee_id) ?? '',
     [COL.T_STATUS]: row.status ?? '',
