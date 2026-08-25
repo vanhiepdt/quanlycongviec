@@ -729,6 +729,15 @@ trên chính đầu việc đó, nên ai không thấy được công việc th�
 (TC-ORIGIN-14). Ngược lại, ai đã thấy được thì thấy **toàn bộ** nhật ký từ đầu — kể cả những lần
 sửa của người khác — vì đó chính là điều mục B8/C17 yêu cầu.
 
+**Một ngoại lệ HẸP HƠN bảng trên: nhắc việc** (§13.4 mục 13, người dùng chốt 2026-08-25). Thêm /
+sửa / xoá nhắc việc chỉ dành cho **`admin` + `Trưởng phòng` / `Phó phòng` của phòng chứa nhiệm vụ
+đó**; `Phó Giám đốc`, `Quản lý công việc` và `Nhân viên` **không** đặt được nhắc việc dù bảng trên
+cho họ sửa nhiệm vụ. Đọc thì vẫn theo bảng (ai thấy nhiệm vụ thì thấy lời nhắc của nó). Ma trận
+không có thực thể `reminder`: chỗ siết nằm ở `assertCanManage` trong `modules/reminders/service.js`,
+gọi `can(...,'update',...)` trước để giữ nguyên mã lỗi chung và phần "đúng phòng mình", rồi mới
+lọc theo vai. Muốn nới cho `Phó Giám đốc` thì thêm vai vào `VAI_DAT_NHAC_VIEC` — 3 phép kiểm trong
+`reminders-api.test.js` sẽ đỏ và phải sửa theo.
+
 ## 7. Kế hoạch từng Phase
 
 10 phase, mỗi phase một nhánh git, kết thúc bằng một bản chạy được và test xanh. Thời lượng
@@ -1549,7 +1558,7 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 | 10 | Mã công việc **sinh mới** dùng tiền tố `CV` (`CV010`, `CV011`…), còn 28 dòng thật đang mang mã `DA0xx` in trên giấy tờ. Có chấp nhận hai dạng mã sống chung trong cùng cột `code` không? | Phase 3 | ❓ chờ — Phase 3 **đang làm theo giả định `CV`** (§0.1): dữ liệu mẫu và test đều dùng `CV`, mã cũ nhập tay giữ nguyên văn. Muốn đổi thành `DA` thì chỉ phải sửa tham số truyền vào `next_code()` + dữ liệu mẫu, không đụng lược đồ |
 | 11 | Còn giữ `tools/dump-sheets.js` và `data/snapshot-20260824.json` không, khi đã bỏ việc nhập tự động? | Không chặn | ❓ chờ — **đang giữ**: `dump-sheets.js` chỉ đọc, và snapshot là nguồn duy nhất để đối chiếu khi nhập tay 28 dòng ở Phase 9. `data/*` vẫn **không commit** (chứa mật khẩu văn bản thuần của người thật) |
 | 12 | 28 dòng thật nhập tay ở Phase 9: ai nhập, nhập qua giao diện web hay bằng câu SQL? | Phase 9 | ❓ chờ — không chặn Phase 3–8. Đề xuất: nhập **qua giao diện** để nghiệm thu luôn đường tạo mới, trừ `activity_logs` cũ thì bỏ hẳn |
-| 13 | **Ai được đặt nhắc việc?** Bản cũ chỉ `admin` ("Chỉ Admin mới có quyền thêm nhắc việc", `Code.gs.moi:2136`) nên người thực hiện không tự nhắc được việc của chính mình | Phase 3 (đã làm) | ❓ chờ — Phase 3 **đang làm theo giả định "nhắc việc là một phần của nhiệm vụ"**: ai có quyền **sửa** nhiệm vụ đó theo §6 thì thêm/sửa/xoá được nhắc việc của nó (nhân viên tự nhắc việc của mình được, người ngoài nhận 403 nhưng vẫn đọc được). Ma trận §6 **không** có thực thể `reminder`, nên không phải sửa bảng quyền. Muốn quay lại "chỉ admin" thì đổi một chỗ: `assertCan(user, 'update', item)` trong `modules/reminders/service.js` — 2 test sẽ đỏ và phải đảo lại |
+| 13 | **Ai được đặt nhắc việc?** Bản cũ chỉ `admin` ("Chỉ Admin mới có quyền thêm nhắc việc", `Code.gs.moi:2136`) nên người thực hiện không tự nhắc được việc của chính mình | Phase 3 (đã làm) | ✅ **chốt 2026-08-25: `admin` + `Trưởng phòng` / `Phó phòng` CỦA PHÒNG ĐÓ**. Hẹp hơn giả định tạm của Phase 3 ("ai sửa được nhiệm vụ thì đặt được"), nên phép kiểm "Nhân viên tự nhắc việc của mình" **đã bị đảo** thành 403 — đọc lời nhắc thì vẫn được. `Phó Giám đốc` và `Quản lý công việc` cũng **không** đặt được, dù §6 cho họ sửa nhiệm vụ: đây là chỗ siết có chủ ý, đã chốt cứng bằng test riêng để lần sau không ai tự nới. Cài ở `assertCanManage` + `VAI_DAT_NHAC_VIEC` trong `modules/reminders/service.js`; ma trận §6 vẫn không có thực thể `reminder`, chỉ thêm một đoạn ngoại lệ ở cuối §6. `reminders-api.test.js` 17 → 21 phép kiểm |
 
 Nếu một mục ở đây chặn việc đang làm: **làm hết phần không phụ thuộc**, ghi rõ giả định đang
 dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được trả lời.
