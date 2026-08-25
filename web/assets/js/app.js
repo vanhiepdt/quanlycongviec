@@ -2,8 +2,9 @@
 // Bản gốc js.clean.html ở thư mục gốc repo giữ lại làm mốc ĐỐI CHIẾU và ĐÃ ĐÓNG BĂNG:
 // từ Phase 4 trở đi chỉ sửa file này. Sửa js.clean.html là sửa vào chỗ không ai nạp.
 //
-// Hai thay đổi duy nhất Phase 4 được phép làm ở đây (§7 Phase 4): thoát ký tự chống XSS (4.6)
-// và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code — để phase sau.
+// Ba thay đổi duy nhất Phase 4 được phép làm ở đây (§7 Phase 4): modal đổi mật khẩu bắt buộc (4.5),
+// thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
+// để phase sau.
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -294,16 +295,80 @@ function handleLogout() {
     }).logout();
   }, null, "danger");
 }
-function showChangePasswordModal() {
-  const text = "\n<div id=\"change-password-modal\" class=\"modal\">\n  <div class=\"modal-content max-w-md\">\n    <div class=\"flex items-center justify-between mb-6\">\n      <h3 class=\"text-xl font-bold text-gray-900\">Đổi mật khẩu</h3>\n      <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n        <i class=\"fas fa-times\"></i>\n      </button>\n    </div>\n    \n    <form id=\"change-password-form\">\n      <div class=\"form-group\">\n        <label class=\"form-label\">Mật khẩu mới *</label>\n        <input type=\"password\" name=\"newPassword\" class=\"form-input\" required placeholder=\"Nhập mật khẩu mới\">\n      </div>\n      \n      <div class=\"form-group\">\n        <label class=\"form-label\">Nhập lại mật khẩu mới *</label>\n        <input type=\"password\" name=\"confirmPassword\" class=\"form-input\" required placeholder=\"Nhập lại mật khẩu mới\">\n      </div>\n      \n      <div class=\"flex justify-end space-x-3 mt-6\">\n        <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n        <button type=\"submit\" class=\"btn-primary\">Đổi mật khẩu</button>\n      </div>\n    </form>\n  </div>\n</div>\n";
+// Việc 4.5. Hai chế độ:
+//   - thường: người dùng tự bấm "Đổi mật khẩu" ở thanh trên (nút truyền vào MouseEvent, nên phải
+//     kiểm `forced === true`, không kiểm kiểu "có tham số hay không").
+//   - CHẶN CỬA (`{forced: true}`, do `api-bridge.js` gọi khi máy chủ trả 403 MUST_CHANGE_PASSWORD):
+//     bỏ hết đường thoát — không dấu ×, không nút Hủy — vì mật khẩu tạm vẫn còn hiệu lực thì tài
+//     khoản còn mở cho người đã cấp nó. Đổi xong, cầu tương thích tự chạy lại lời gọi bị chặn.
+//
+// Có thêm ô "Mật khẩu hiện tại": `POST /api/v1/auth/password` bắt buộc có, vì đổi mật khẩu mà không
+// cần mật khẩu cũ nghĩa là ai chiếm được phiên đang mở là chiếm luôn tài khoản. Bản cũ chỉ có 2 ô.
+function showChangePasswordModal(options) {
+  const forced = !!options && options.forced === true;
+  const text = `
+<div id="change-password-modal" class="modal">
+  <div class="modal-content max-w-md">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="text-xl font-bold text-gray-900">Đổi mật khẩu</h3>
+      ${
+        forced
+          ? ""
+          : `<button type="button" class="close-modal text-gray-400 hover:text-gray-600">
+        <i class="fas fa-times"></i>
+      </button>`
+      }
+    </div>
+    ${
+      forced
+        ? `<div class="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+      <div class="flex items-center">
+        <i class="fas fa-shield-halved text-amber-500 mr-2"></i>
+        <span class="text-sm text-amber-700">Bạn phải đổi mật khẩu trước khi vào hệ thống.</span>
+      </div>
+    </div>`
+        : ""
+    }
+    <form id="change-password-form">
+      <div class="form-group">
+        <label class="form-label">Mật khẩu hiện tại *</label>
+        <input type="password" name="currentPassword" class="form-input" required
+          autocomplete="current-password" placeholder="Nhập mật khẩu đang dùng">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Mật khẩu mới *</label>
+        <input type="password" name="newPassword" class="form-input" required
+          autocomplete="new-password" placeholder="Nhập mật khẩu mới">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Nhập lại mật khẩu mới *</label>
+        <input type="password" name="confirmPassword" class="form-input" required
+          autocomplete="new-password" placeholder="Nhập lại mật khẩu mới">
+      </div>
+
+      <div class="flex justify-end space-x-3 mt-6">
+        ${forced ? "" : `<button type="button" class="btn-secondary close-modal">Hủy</button>`}
+        <button type="submit" class="btn-primary">Đổi mật khẩu</button>
+      </div>
+    </form>
+  </div>
+</div>
+`;
   document.getElementById("modals-container").innerHTML = text;
   const changePasswordModalEl = document.getElementById("change-password-modal");
   changePasswordModalEl.classList.add("active");
   const el = changePasswordModalEl.querySelector("form");
+  el.elements.currentPassword.focus();
   el.addEventListener("submit", function (event) {
     event.preventDefault();
-    const trimmed = el.newPassword.value.trim(),
-      confirmPassword = el.confirmPassword.value.trim(),
+    // `el.elements.X` chứ không `el.X`: hai cách chạy như nhau trên trình duyệt, nhưng chỉ cách này
+    // chạy được cả dưới jsdom (jsdom không dựng thuộc tính theo tên trên <form>), nên modal này mới
+    // có test tự động. Mật khẩu hiện tại KHÔNG `.trim()` — dấu cách là một phần mật khẩu đã đặt.
+    const currentPassword = el.elements.currentPassword.value,
+      trimmed = el.elements.newPassword.value.trim(),
+      confirmPassword = el.elements.confirmPassword.value.trim(),
       el2 = el.querySelector("button[type=\"submit\"]");
     setButtonLoading(el2, true), google.script.run.withSuccessHandler(function (response) {
       setButtonLoading(el2, false);
@@ -313,7 +378,7 @@ function showChangePasswordModal() {
       }
     }).withFailureHandler(function (error) {
       setButtonLoading(el2, false), showToast("Lỗi: " + error.message, "error");
-    }).changePassword(trimmed, confirmPassword);
+    }).changePassword(currentPassword, trimmed, confirmPassword);
   });
   const closeButtons = changePasswordModalEl.querySelectorAll(".close-modal");
   closeButtons.forEach(closeButton => {

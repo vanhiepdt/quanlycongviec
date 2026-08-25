@@ -35,11 +35,11 @@ export default [
       'require-await': 'error',
     },
   },
-  // Test của cầu tương thích chạy trong jsdom (`web/assets/js/api-bridge.js` là mã TRÌNH DUYỆT),
-  // nên có thêm `window`, `document`, `fetch`. Chỉ mở cho đúng file này để phần máy chủ vẫn không
-  // được phép chạm vào biến toàn cục của trình duyệt.
+  // Test của phần TRÌNH DUYỆT chạy trong jsdom (`web/assets/js/*.js`), nên có thêm `window`,
+  // `document`, `fetch`. Chỉ mở cho đúng mấy file này để phần máy chủ vẫn không được phép chạm
+  // vào biến toàn cục của trình duyệt.
   {
-    files: ['tests/unit/api-bridge.test.js'],
+    files: ['tests/unit/api-bridge.test.js', 'tests/unit/change-password-modal.test.js'],
     languageOptions: {
       globals: {
         window: 'readonly',
@@ -47,6 +47,10 @@ export default [
         globalThis: 'readonly',
         fetch: 'readonly',
         Promise: 'readonly',
+        Function: 'readonly',
+        JSON: 'readonly',
+        Object: 'readonly',
+        String: 'readonly',
       },
     },
   },

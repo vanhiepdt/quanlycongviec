@@ -182,7 +182,8 @@
   function openPasswordGate(message) {
     callApp('hideLoading');
     callApp('showToast', message, 'error');
-    if (!callApp('showChangePasswordModal')) {
+    // `{forced: true}`: modal bỏ dấu × và nút Hủy — mật khẩu tạm còn hiệu lực thì tài khoản còn mở.
+    if (!callApp('showChangePasswordModal', { forced: true })) {
       if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(message);
     }
   }
