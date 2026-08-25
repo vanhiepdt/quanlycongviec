@@ -66,3 +66,36 @@ export function boCotKhoaDuyet(input = {}) {
     Object.entries(input).filter(([column]) => !COT_KHOA_DUYET.includes(column))
   );
 }
+
+/** Vai được sửa mục đang chờ duyệt dù không phải người lập: họ chính là người sẽ duyệt nó (§6). */
+const VAI_SUA_MUC_CHO_DUYET = Object.freeze(['admin', 'Phó Giám đốc']);
+
+/**
+ * Mục đang 'Chờ duyệt' thì CHỈ người lập (và người có quyền duyệt) sửa được — §7 việc 5.6.
+ *
+ * Cả phòng vẫn **xem** được và vẫn thấy nhãn vàng; chỗ này chỉ chặn đường GHI. Lý do: mục chờ
+ * duyệt là bản thảo đang trên bàn người duyệt. Để đồng nghiệp cùng phòng sửa được thì nội dung
+ * người duyệt đọc lúc bấm nút có thể đã khác nội dung lúc gửi, mà không ai biết đã khác.
+ *
+ * Đây là lớp HẸP HƠN ma trận §6 chứ không nới thêm cho ai: người không qua được `can(update)` thì
+ * đã bị chặn từ trước, hàm này chỉ chặn tiếp trong số những người đã qua.
+ *
+ * Trả về `{ok:true}` / `{ok:false, message}` thay vì tự ném lỗi, để nó vẫn là hàm thuần — cùng lý
+ * do `can()` của rbac.js là hàm thuần.
+ *
+ * @param {object|null} user người đang sửa
+ * @param {object} row dòng hiện tại trong CSDL (cần `approval_status`, `created_by`)
+ */
+export function coSuaDuocKhiChoDuyet(user, row) {
+  if (!row || row.approval_status !== CHO_DUYET) return { ok: true };
+  if (!user) return { ok: false, message: 'Bạn chưa đăng nhập' };
+  if (VAI_SUA_MUC_CHO_DUYET.includes(user.role)) return { ok: true };
+  // `created_by` rỗng ở dữ liệu nhập từ bản cũ (§13.8) — không có người lập thì không khoá được
+  // theo người lập, để nguyên cho ma trận §6 quyết định.
+  if (row.created_by == null) return { ok: true };
+  if (Number(row.created_by) === Number(user.id)) return { ok: true };
+  return {
+    ok: false,
+    message: 'Mục này đang chờ duyệt, chỉ người lập mới sửa được',
+  };
+}

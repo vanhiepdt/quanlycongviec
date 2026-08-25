@@ -13,7 +13,7 @@ import { warnDueBeforeStart } from '../../utils/dateChecks.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
-import { boCotKhoaDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
+import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
 
@@ -24,6 +24,15 @@ const LEVEL_WORK = 1;
 function assertCan(user, action, row) {
   const verdict = can(user, action, 'work', row);
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+}
+
+/**
+ * Cổng ghi thứ hai, HẸP HƠN §6: mục đang chờ duyệt chỉ người lập (hoặc người duyệt được) mới sửa
+ * và xoá được (§7 việc 5.6). Gọi SAU `assertCan` để mã lỗi chung của §6 ra trước.
+ */
+function assertSuaDuoc(user, row) {
+  const verdict = coSuaDuocKhiChoDuyet(user, row);
+  if (!verdict.ok) throw new AppError('FORBIDDEN', verdict.message);
 }
 
 /** Dòng công việc theo id/mã, không có thì 404. */
@@ -70,6 +79,7 @@ export async function create(user, input) {
 export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
+  assertSuaDuoc(user, current);
   // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
   const work = await withPgErrors(() => repo.update(current.id, boCotKhoaDuyet(patch)));
   return {
@@ -88,6 +98,7 @@ export function remove(user, ref) {
   return withTransaction(async (client) => {
     const current = await mustFind(ref, client);
     assertCan(user, 'delete', current);
+    assertSuaDuoc(user, current);
     const items = await itemsRepo.listByWork(current.id, {}, client);
     await repo.remove(current.id, client);
     return {

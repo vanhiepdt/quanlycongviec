@@ -15,7 +15,7 @@ import { AppError, notFound } from '../../utils/errors.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
-import { boCotKhoaDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
+import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import * as worksRepo from '../works/repo.js';
@@ -28,6 +28,15 @@ function assertCan(user, action, row, level = null) {
   const entity = entityOf(level ?? row?.level ?? repo.LEVEL_TASK);
   const verdict = can(user, action, entity, row);
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+}
+
+/**
+ * Cổng ghi thứ hai, HẸP HƠN §6: mục đang chờ duyệt chỉ người lập (hoặc người duyệt được) mới sửa
+ * và xoá được (§7 việc 5.6). Gọi SAU `assertCan` để mã lỗi chung của §6 ra trước.
+ */
+function assertSuaDuoc(user, row) {
+  const verdict = coSuaDuocKhiChoDuyet(user, row);
+  if (!verdict.ok) throw new AppError('FORBIDDEN', verdict.message);
 }
 
 const err = (code, message) => new AppError(code, message);
@@ -271,6 +280,7 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
     const current = await mustFindItem(ref, client);
     await repo.lockById(current.id, client);
     assertCan(user, 'update', current);
+    assertSuaDuoc(user, current);
 
     if (patch.level != null && Number(patch.level) !== current.level) {
       throw err(
@@ -359,6 +369,7 @@ export function remove(user, ref) {
   return withTransaction(async (client) => {
     const current = await mustFindItem(ref, client);
     assertCan(user, 'delete', current);
+    assertSuaDuoc(user, current);
     const children = await repo.listDescendants(current.id, client);
     await repo.remove(current.id, client);
     return {
