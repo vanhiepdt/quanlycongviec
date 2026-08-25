@@ -377,20 +377,32 @@ describe('GET /api/v1/stats/activities — hoạt động gần đây CÓ PHÂN 
     }
   }
 
-  /** Lời ĐĂNG NHẬP cũng ghi audit log — xoá sạch sau khi vào phiên để số đo không nhiễu. */
-  const donLog = () => pool.query('DELETE FROM activity_logs');
+  /** Audit ghi ở `res.on('finish')`, SAU khi supertest trả về (bẫy §13.5): xoá xong phải CHỜ
+   *  các INSERT còn nằm trong hàng đợi pool đổ hết, rồi lấy MỐC ĐỘNG làm kỳ vọng. */
+  const donLogRoiCho = async () => {
+    await pool.query('DELETE FROM activity_logs');
+    await new Promise((r) => setTimeout(r, 200));
+  };
+  const demLog = async (where = '', params = []) => {
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM activity_logs ${where}`,
+      params
+    );
+    return rows[0].n;
+  };
 
   it('trả đúng trang, tổng số và tổng số trang', async () => {
-    await donLog();
+    await donLogRoiCho();
+    const moc = await demLog();
     await ghiLog(7, admin);
     const p1 = await apiAdmin.get('/api/v1/stats/activities?page=1&limit=5');
     expect(p1.status).toBe(200);
     expect(p1.body.data.activities).toHaveLength(5);
-    expect(p1.body.data.total).toBe(7);
-    expect(p1.body.data.totalPages).toBe(2);
+    expect(p1.body.data.total).toBe(moc + 7);
+    expect(p1.body.data.totalPages).toBe(Math.ceil((moc + 7) / 5));
 
     const p2 = await apiAdmin.get('/api/v1/stats/activities?page=2&limit=5');
-    expect(p2.body.data.activities).toHaveLength(2);
+    expect(p2.body.data.activities.length).toBe(Math.min(5, moc + 2));
 
     // Mới nhất trước (ORDER BY id DESC).
     const ids = p1.body.data.activities.map((r) => r.id);
@@ -406,16 +418,17 @@ describe('GET /api/v1/stats/activities — hoạt động gần đây CÓ PHÂN 
       department_id: phongA.id,
     });
     const apiNv = await dangNhap(nv);
-    await donLog(); // xoá luôn dòng audit của hai lần đăng nhập
+    await donLogRoiCho(); // xoá cả dòng audit của hai lần đăng nhập + chờ flush
     await ghiLog(3, admin);
     await ghiLog(2, nv);
 
     const res = await apiNv.get('/api/v1/stats/activities');
-    expect(res.body.data.total).toBe(2);
+    const mongNv = await demLog('WHERE actor_id = $1', [nv.id]);
+    expect(res.body.data.total).toBe(mongNv);
     expect(res.body.data.activities.every((r) => r.actor_id === nv.id)).toBe(true);
 
     const adminRes = await apiAdmin.get('/api/v1/stats/activities?limit=100');
-    expect(adminRes.body.data.total).toBe(5); // admin thấy tất cả
+    expect(adminRes.body.data.total).toBe(await demLog()); // admin thấy tất cả
   });
 });
 

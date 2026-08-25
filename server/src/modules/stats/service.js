@@ -26,6 +26,9 @@ function ngayCua(value) {
   return ngaySo(d);
 }
 
+/** EXPORT cho Gantt (6.6). */
+export { ngayCua };
+
 const laHoanThanh = (status) =>
   String(status ?? '')
     .toLowerCase()
@@ -48,6 +51,9 @@ function giaoNhau(start, end, from, to) {
   if (!start || !end) return true; // thiếu một trong hai ngày của dòng ⇒ luôn giữ (TC-STAT-09)
   return start <= to && end >= from;
 }
+
+/** EXPORT cho Gantt (6.6): cùng một luật khoảng ngày với thống kê. */
+export { giaoNhau };
 
 const startCua = (row) => ngayCua(row.start_date);
 /** Khoảng kết thúc: công việc dùng `end_date`, đầu việc dùng `due_date`. */
@@ -89,8 +95,8 @@ export async function boLocPhong(user, rawIds = []) {
   return user.department_id == null ? [] : [String(user.department_id)];
 }
 
-/** Dòng có thuộc bộ phòng được lọc không? `null` = mọi phòng. */
-function dungPhong(row, phongIds) {
+/** Dòng có thuộc bộ phòng được lọc không? `null` = mọi phòng. EXPORT cho Gantt (6.6). */
+export function dungPhong(row, phongIds) {
   if (phongIds === null) return true;
   return phongIds.includes(String(row.department_id));
 }
@@ -99,8 +105,11 @@ function dungPhong(row, phongIds) {
  * Nạp công việc + nhiệm vụ ĐƯỢC ĐẾM cho một người: qua view (loại Chờ duyệt), lọc quyền đọc
  * từng dòng bằng `can()` — cùng cách bootstrap làm, vì phạm vi «Quản lý công việc» xét theo
  * dòng chứ không theo phòng.
+ *
+ * EXPORT để module Gantt (6.6) dùng chung: cùng một nguồn dữ liệu đã lọc duyệt + quyền, hai
+ * đường đọc chênh nhau một chữ là đối chiếu số liệu (6.9) vô nghĩa.
  */
-async function taiDuLieuDem(user) {
+export async function taiDuLieuDem(user) {
   const [works, items] = await Promise.all([repo.listCountableWorks(), repo.listCountableItems()]);
   return {
     works: works.filter((row) => can(user, 'read', 'work', row).ok),
