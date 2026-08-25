@@ -108,7 +108,34 @@ export const RPC_TABLE = Object.freeze({
   // module chưa tồn tại. Làm nửa vời ở đây thì giao diện dựng ra bảng rỗng và người dùng tưởng
   // dữ liệu đã mất, nên để thất bại rõ ràng cho tới khi có đủ module.
   getDataForUser: pending('Nạp dữ liệu người dùng', 'GET /bootstrap'),
-  getInitialDataWithAuth: pending('Nạp dữ liệu đầu trang', 'GET /bootstrap'),
+
+  /**
+   * Ngoại lệ CÓ LÝ DO của nhóm `pending` (việc 4.4).
+   *
+   * Đây là lời gọi ĐẦU TIÊN của trang (`checkAuthenticationAndInitialize`, dòng 131 `app.js`), nên
+   * nó quyết định người chưa đăng nhập thấy gì. Nếu trả 501 như các tên chưa làm khác thì khách
+   * vào trang nhận ngay một toast đỏ "Chức năng … chưa được chuyển sang máy chủ mới" rồi mới thấy
+   * modal — đúng kỹ thuật nhưng sai nghiệp vụ: người ta chưa đăng nhập thì việc cần làm là ĐĂNG
+   * NHẬP, không phải đọc lỗi hệ thống.
+   *
+   * Bản cũ đã có sẵn đường đi đúng cho việc này: `{requireLogin: true}` ⇒ `showLoginModal()` (dòng
+   * 133 `app.js`), không kèm lỗi. Nên: chưa có phiên ⇒ trả đúng cờ đó; ĐÃ có phiên ⇒ vẫn 501, vì
+   * lúc đó dữ liệu đầu trang là thứ thật sự còn thiếu và phải thấy rõ (chờ `GET /bootstrap`,
+   * Phase 5). Vẫn giữ `notImplemented: true` để `GET /api/rpc` không khai khống là đã làm xong.
+   */
+  getInitialDataWithAuth: {
+    rest: 'GET /bootstrap',
+    public: true,
+    notImplemented: true,
+    handler(args, ctx) {
+      if (!ctx.req.user) return { requireLogin: true };
+      throw new AppError(
+        'NOT_IMPLEMENTED',
+        'Chức năng «Nạp dữ liệu đầu trang» chưa được chuyển sang máy chủ mới. Vui lòng liên hệ quản trị.'
+      );
+    },
+  },
+
   getDepartmentContext: pending('Ngữ cảnh phòng ban', 'GET /departments/context'),
 
   // --- Công việc cấp 1 (giao diện cũ gọi là "dự án", §0.1) ------------------------------------

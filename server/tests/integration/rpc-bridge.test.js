@@ -184,6 +184,31 @@ describe('đăng nhập / đăng xuất / đổi mật khẩu qua cầu RPC', ()
   });
 });
 
+// Việc 4.4: lời gọi ĐẦU TIÊN của trang quyết định người chưa đăng nhập thấy gì.
+describe('mở trang khi chưa đăng nhập — phải ra modal, không ra lỗi hệ thống', () => {
+  it('TC-RPC-36: khách mở trang ⇒ {requireLogin:true} 200, KHÔNG phải 501 kèm toast đỏ', async () => {
+    const fresh = client(app);
+    const res = await fresh.post('/api/rpc/getInitialDataWithAuth', { args: [] });
+    expect(res.status).toBe(200);
+    // Đúng cờ mà dòng 133 `app.js` đang chờ: `if (response.requireLogin) showLoginModal()`.
+    expect(res.body.data).toEqual({ requireLogin: true });
+    expect(res.body.data.success).toBeUndefined();
+  });
+
+  it('TC-RPC-37: ĐÃ đăng nhập ⇒ vẫn 501, vì dữ liệu đầu trang mới là thứ còn thiếu thật', async () => {
+    const res = await rpc('getInitialDataWithAuth');
+    expect(res.status).toBe(501);
+    expect(res.body.error.message).toContain('Nạp dữ liệu đầu trang');
+  });
+
+  it('TC-RPC-38: đăng xuất rồi mở lại trang ⇒ lại về cờ đăng nhập, không kẹt ở lỗi', async () => {
+    expect((await call('logout')).success).toBe(true);
+    const res = await rpc('getInitialDataWithAuth');
+    expect(res.status).toBe(200);
+    expect(res.body.data.requireLogin).toBe(true);
+  });
+});
+
 describe('công việc cấp 1 — đúng hình dạng "dự án" của giao diện cũ', () => {
   // Payload y như `new FormData(#project-form)` sinh ra: khoá tiếng Anh, ngày dạng chuỗi, không có
   // phòng và không có duyệt.
