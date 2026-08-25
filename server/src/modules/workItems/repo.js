@@ -202,6 +202,10 @@ export async function countChildren(parentId, client = null) {
  * quy trần sẽ chạy vô tận. Với CYCLE, Postgres tự dừng nhánh lặp lại và đánh dấu `is_cycle`
  * (TC-TREE-11: phải lỗi/trả kết quả trong dưới 1 giây, không treo). `depth < 50` là chốt thứ
  * hai, rẻ và không bao giờ chạm tới trong cây 3 tầng hợp lệ.
+ *
+ * `id <> $1` loại chính dòng gốc: trong dữ liệu trỏ vòng (A cha B, B cha A) thì A là con cháu của
+ * chính nó, và nếu để lọt thì `remove` báo "đã xoá 3 dòng" trong khi chỉ có 2, còn `copy` sao bản
+ * gốc thêm một lần nữa.
  */
 export async function listDescendants(id, client = null) {
   const { rows } = await db(client).query(
@@ -214,7 +218,7 @@ export async function listDescendants(id, client = null) {
         WHERE s.depth < 50
      ) CYCLE id SET is_cycle USING path
      SELECT id, code, level, parent_id, sort_order, depth FROM sub
-      WHERE NOT is_cycle
+      WHERE NOT is_cycle AND id <> $1
       ORDER BY depth, sort_order, id`,
     [id]
   );
