@@ -20,9 +20,10 @@ BEGIN
 END;
 $$;
 
--- Sinh mã: PH01, NV001, DA001, DN001, APP001.
+-- Sinh mã: PH01, NV001, CV001, DN001, APP001.
 -- Sequence là nguồn duy nhất, nên hai người bấm cùng lúc không thể ra cùng một mã.
--- Sau khi nhập dữ liệu cũ (Phase 2) phải `setval` các sequence này vượt qua mã lớn nhất.
+-- Mọi lần chèn bằng mã viết cứng (dữ liệu mẫu §8.3, 28 dòng nhập tay ở Phase 9) đều KHÔNG làm
+-- sequence nhích — sau đó phải `setval(seq, GREATEST(last_value, n))` (bẫy §13.5).
 CREATE SEQUENCE seq_department_code AS bigint START 1;
 CREATE SEQUENCE seq_user_code       AS bigint START 1;
 CREATE SEQUENCE seq_work_code       AS bigint START 1;
@@ -88,11 +89,12 @@ CREATE TABLE department_managers (
 
 -- ======================= Công việc cấp 1 (sheet "Dự án/Nhiệm vụ") =======================
 -- Tên sheet giữ nguyên văn vì đó là tên THẬT trong Google Sheets, không đổi được. Từ vựng của
--- hệ mới là "công việc"; tiền tố mã vẫn là `DA` để đối chiếu được với dữ liệu đang chạy (§0).
+-- hệ mới là "công việc"; mã sinh mới dùng tiền tố `CV`, mã cũ `DA0xx` nhập tay thì giữ nguyên
+-- văn để còn đối chiếu được với giấy tờ đang lưu (§0.1).
 
 CREATE TABLE works (
   id              bigserial PRIMARY KEY,
-  code            text NOT NULL UNIQUE,        -- DA001
+  code            text NOT NULL UNIQUE,        -- CV001 (mã cũ 'DA001' nhập tay giữ nguyên)
   name            text NOT NULL,
   description     text NOT NULL DEFAULT '',
   manager_id      bigint REFERENCES users(id) ON DELETE SET NULL,
@@ -120,8 +122,8 @@ CREATE TABLE works (
 CREATE TABLE work_items (
   id            bigserial PRIMARY KEY,
   -- Dữ liệu cũ có 2 dạng mã: 'DA001-01' (nhân bản công việc) và 'ID250824093012345'
-  -- (generateTaskIdForProject, sinh theo millisecond). Cả hai đều nhập nguyên văn ở Phase 2;
-  -- mã MỚI sinh bằng seq_work_item_code nên không thể trùng.
+  -- (generateTaskIdForProject, sinh theo millisecond). Cả hai đều nhập nguyên văn ở Phase 9;
+  -- mã MỚI dạng '<mã công việc>-NNN' sinh bằng seq_work_item_code nên không thể trùng.
   code          text NOT NULL UNIQUE,
   work_id       bigint NOT NULL REFERENCES works(id) ON DELETE CASCADE,
   parent_id     bigint REFERENCES work_items(id) ON DELETE CASCADE,

@@ -6,9 +6,11 @@ mã tính năng trong §2 của `KE-HOACH-VPS.md`. Bản VPS chỉ được cắ
 
 Cách dùng:
 
-1. Chạy trên môi trường staging có dữ liệu đã nhập thật (Phase 2 chạy xong), không dùng dữ liệu bịa.
+1. Chạy trên môi trường staging đã seed **dữ liệu test tự tạo** (`npm run seed:dev`, §8.3 của
+   `KE-HOACH-VPS.md`). Không dùng bản sao dữ liệu thật: nó chứa email và mật khẩu của người thật.
 2. Đăng nhập lần lượt bằng **6 vai trò** rồi mới tích: `admin`, `Phó Giám đốc`, `Trưởng phòng`,
-   `Phó phòng`, `Quản lý dự án`, `Nhân viên`. Nhiều lỗi phân quyền chỉ hiện ra ở vai trò thấp.
+   `Phó phòng`, `Quản lý công việc`, `Nhân viên`. Nhiều lỗi phân quyền chỉ hiện ra ở vai trò thấp.
+   Dữ liệu mẫu có sẵn một tài khoản cho mỗi vai trò, mật khẩu chung `Test@12345`.
 3. Tích `[x]` khi tự tay thấy đúng. Không tích theo lời người khác, không tích vì "code có viết".
 4. Mục nào sai: ghi vào cột **Ghi chú** ngay dưới dòng đó theo mẫu `→ LỖI: <thấy gì>` rồi mở
    một dòng mới ở §13.4 của `KE-HOACH-VPS.md`.
@@ -162,7 +164,9 @@ Tổng: **88 mã** / 13 nhóm.
 
 - [ ] **M1** Xuất Excel: danh sách công việc 3 tầng, nhiệm vụ theo người, thống kê theo phòng.
       Mở file bằng Excel thật, kiểm tiếng Việt không lỗi phông.
-- [ ] **M2** Nhập dữ liệu từ Google Sheets; **chạy lại lần 2 không nhân đôi, không hỏng** dữ liệu.
+- [ ] **M2** `npm run seed:dev` nạp dữ liệu mẫu; **chạy lại lần 2 không nhân đôi** bất kỳ bảng nào
+      (đếm lại 12 bảng trước và sau). Thử đặt `NODE_ENV=production` ⇒ phải **từ chối và thoát**,
+      không ghi một dòng nào.
 - [ ] **M3** Sao lưu tự động hằng ngày **và** đã thử phục hồi thành công một lần từ bản sao lưu.
 - [ ] **M4** `/healthz` trả 200 cho Nginx; `/readyz` trả 503 khi tắt cơ sở dữ liệu.
 

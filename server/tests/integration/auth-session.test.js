@@ -144,14 +144,17 @@ describe('phiên đăng nhập', () => {
       expect(res.body.error.code).toBe('MUST_CHANGE_PASSWORD');
     }
 
-    // Đổi mật khẩu xong thì các đường kia thôi bị chặn (404 vì Phase 1 chưa có route đó).
+    // Đổi mật khẩu xong thì các đường kia thôi bị chặn. `/works` đã có route từ Phase 3 nên ra
+    // 200; `/users` thì chưa có nên vẫn 404 — điều cần khẳng định là không còn 403.
     const changed = await c.post('/api/v1/auth/password', {
       currentPassword: TEST_PASSWORD,
       newPassword: 'MatKhauMoi@2026',
     });
     expect(changed.status).toBe(200);
     expect(changed.body.data.user.must_change_password).toBe(false);
-    expect((await c.get('/api/v1/works')).status).toBe(404);
+    const works = await c.get('/api/v1/works');
+    expect(works.status).toBe(200);
+    expect((await c.get('/api/v1/users')).status).toBe(404);
   });
 });
 

@@ -1,6 +1,6 @@
-// TC-DB-01..16 — kiểm chính migration 001_init.sql: đủ bảng, đủ index, và các ràng buộc
-// thật sự CHẶN được dữ liệu sai. Không kiểm "bảng có tồn tại" là không đủ: bẫy của bản cũ
-// nằm ở chỗ dữ liệu sai vẫn lọt vào (§13.5).
+// TC-DB-01..16 — kiểm chính migration 001_init.sql (kèm index của 002/003): đủ bảng, đủ index, và
+// các ràng buộc thật sự CHẶN được dữ liệu sai. Không kiểm "bảng có tồn tại" là không đủ: bẫy của
+// bản cũ nằm ở chỗ dữ liệu sai vẫn lọt vào (§13.5).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool } from '../../src/db/pool.js';
 import {
@@ -24,6 +24,10 @@ const EXPECTED_INDEXES = [
   'idx_notifications_user_read',
   'idx_chat_messages_created',
   'idx_sessions_expires',
+  // 002: lọc dòng theo phòng + cấp (cả ba cấp đều gắn phòng, §0.1).
+  'idx_work_items_dept_level',
+  // 003: đọc nhật ký TỪ ĐẦU của một đầu việc mà không quét cả bảng (§2.3).
+  'idx_activity_logs_entity',
 ];
 
 /** Chạy một câu SQL và trả về mã lỗi + lời nhắn, thay vì để test đỏ vì ném lỗi. */

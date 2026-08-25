@@ -1,10 +1,16 @@
 # Hướng dẫn bảo trì & phát triển
 
-Cập nhật: 2026-08-23. Đọc file này trước khi sửa bất cứ thứ gì.
+Cập nhật: 2026-08-24. Đọc file này trước khi sửa bất cứ thứ gì.
 
-## 1. Dự án là gì
+> **Từ vựng**: thực thể cấp 1 gọi là **công việc**, cấp 2 là **công việc con**, cấp 3 là **nhiệm
+> vụ**. Không gọi cấp 1 là "dự án" nữa. Nhưng **tên sheet, tên cột và tên hàm của bản cũ giữ
+> nguyên chữ cũ** (`Dự án/Nhiệm vụ`, `Mã dự án`, `Quản lý dự án`, `extractTasksFromProjectValues`)
+> — đổi chúng là ghi vào sai cột và app đứng. Trong file này, chữ "dự án" chỉ còn xuất hiện đúng
+> ở những tên như vậy.
 
-Web app quản lý dự án / nhiệm vụ chạy trên **Google Apps Script**, dữ liệu lưu trong
+## 1. Hệ thống này là gì
+
+Web app quản lý công việc / nhiệm vụ chạy trên **Google Apps Script**, dữ liệu lưu trong
 Google Sheets. Backend là một file `.gs`; frontend là HTML + JS nhúng, phục vụ qua
 `HtmlService`. Bản gốc nhận được đã bị **obfuscate** (javascript-obfuscator, biến thể
 string-array + rotation); toàn bộ công việc tới nay là dịch ngược nó về dạng đọc được
@@ -101,15 +107,15 @@ phía — và **phải khớp nhau tuyệt đối**:
 | Backend `Code.gs.moi` | hằng rời | `TASK_DUE_DATE_COLUMN_NAME = "Hạn chót"` |
 | Frontend `js.clean.html` | object `COL` (dòng 27) | `COL.T_DUE: "Hạn chót"` |
 
-Tiền tố trong `COL`: `P_` dự án, `T_` nhiệm vụ, `S_` người dùng, `PR_` đề nghị,
-`A_` app/activity. Tổng 55 khoá.
+Tiền tố trong `COL`: `P_` công việc (cấp 1, sheet `Dự án/Nhiệm vụ`), `T_` nhiệm vụ,
+`S_` người dùng, `PR_` đề nghị, `A_` app/activity. Tổng 55 khoá.
 
 Đổi tên cột trong sheet ⇒ phải sửa **cả hai** chỗ. Backend đọc sheet bằng
 `headers.indexOf(TÊN_CỘT)` nên sai tên là ra `-1` và ghi vào cột sai, âm thầm.
 
 Một số nhiệm vụ có cột JSON lồng: `COL.T_REMINDERS` (mảng nhắc việc),
 `COL.T_RESULT_LINKS` (danh sách link, xem `parseLinks` / `renderLinksButton`), và bảng
-dự án lưu nhiệm vụ dạng JSON (`extractTasksFromProjectValues`, `formatJSONCompact`).
+công việc cấp 1 lưu nhiệm vụ dạng JSON (`extractTasksFromProjectValues`, `formatJSONCompact`).
 
 ## 6. Bộ tool trong `tools/`
 
@@ -123,6 +129,7 @@ Cài một lần: `cd tools && npm install && cd ..`. Mọi lệnh chạy **từ
 | `verify-license.js` | Chạy song song khối license bản gốc và bản dịch, so kết quả. |
 | `cmp-gs.js` | So hai bản `.gs` ở mức ngữ nghĩa: hàm, số tham số, chuỗi, property, biến tự do. |
 | `peek.js` | In các lần dùng một biến kèm ngữ cảnh ngắn — tra cứu mà không phải mở cả file. |
+| `test-tasks-gd2.js` | **Test GĐ2** (24/08/2026): chạy `addTask`/`updateTask`/`deleteTask`/`getTasks` trên sheet giả bằng `vm`, 40 phép kiểm cây 3 tầng. Chạy `node tools/test-tasks-gd2.js` sau mỗi lần sửa 4 hàm đó. |
 | `names.backend.json`, `names.frontend.json` | Map tên tay, khoá theo `tênHàm._0x...`, có scope `"*"` cho phạm vi ngoài hàm. |
 
 Lệnh hay dùng:
@@ -209,7 +216,7 @@ Script), **0 tham chiếu treo**.
 
 ## 9. Quy trình chuẩn khi sửa code
 
-1. Sao lưu file sẽ sửa (`cp X X.bak`) — chưa có git trong dự án này.
+1. Sao lưu file sẽ sửa (`cp X X.bak`) — hoặc dựa vào git, dự án đã `git init` (23/08/2026).
 2. Sửa.
 3. Nếu sửa backend: `node tools/cmp-gs.js Code.clean.gs Code.gs.moi` để thấy **chính xác**
    mình đã thay đổi những gì (hàm nào, chuỗi nào, biến toàn cục nào).
@@ -218,8 +225,8 @@ Script), **0 tham chiếu treo**.
 6. Nếu có thêm biến `_0x` mới (dán code từ bản gốc): chạy lại `rename.js` kèm `--map`.
 7. Deploy và thử tay — Apps Script không có test tự động ở đây.
 
-Việc **nên làm sớm**: `git init` rồi commit toàn bộ. Hiện tại mọi thứ dựa vào file `.bak`,
-rất dễ mất bản đúng.
+Việc **đã làm** (23/08/2026): `git init` + commit toàn bộ. Nhánh chính `main`. File `.bak`
+giờ chỉ là lưới an toàn phụ, mốc đối chiếu thật là git.
 
 ## 10. Bẫy cần biết
 

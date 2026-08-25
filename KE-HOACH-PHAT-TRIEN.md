@@ -6,7 +6,7 @@ Chốt ngày 23/08/2026. Đọc [HUONG-DAN-BAO-TRI.md](HUONG-DAN-BAO-TRI.md) tr�
 
 | # | Vấn đề | Chốt |
 |---|---|---|
-| 1 | Đổi "Dự án" → "Công việc" | **Chỉ nhãn giao diện.** Tên sheet và tên cột trong Google Sheets giữ nguyên |
+| 1 | Đổi "Dự án" → "Công việc" | **Trên bản Apps Script: chỉ nhãn giao diện** — tên sheet và tên cột trong Google Sheets giữ nguyên. Trên **bản VPS** thì đổi thật: bảng `works`, vai trò `Quản lý công việc`, và mọi tài liệu (§0 Từ vựng của `KE-HOACH-VPS.md`) |
 | 2 | Cấu trúc 3 tầng | Thêm cột **`Mã cha`** + **`Cấp`** vào sheet `Nhiệm vụ` |
 | 3 | 4 phòng | Sheet mới **`Phòng`**, admin sửa được trên giao diện |
 | 4 | Khoá phân quyền | Chuyển từ **Họ tên → Email** |
@@ -114,7 +114,7 @@ Sau đó bạn tự điền cột `Phòng` và `Vai trò phòng` cho từng ngư
 | `admin` | Toàn đơn vị | Có, `Đã duyệt` ngay | Có | Có, mọi phòng |
 | `Phó Giám đốc` | Các phòng mình phụ trách | Có, `Đã duyệt` ngay | Có | **Có, trong phòng phụ trách** |
 | `Trưởng phòng` / `Phó phòng` | Cả phòng mình | Có → **`Chờ duyệt`** | Có | Không |
-| `Quản lý dự án` (cũ) | Công việc mình quản lý | Giữ nguyên như hiện tại | Có | Không |
+| `Quản lý dự án` (giá trị cũ trong sheet; bản VPS đổi thành **`Quản lý công việc`**) | Công việc mình quản lý | Giữ nguyên như hiện tại | Có | Không |
 | `Nhân viên` | Cả phòng mình (chỉ đọc), nhiệm vụ của mình (sửa được) | Không | Chỉ trong công việc được giao | Không |
 
 Chỗ cài đặt: `checkUserPermission(action, entityType, row)` trong [Code.gs.moi](Code.gs.moi)
@@ -204,7 +204,7 @@ khi được duyệt hoặc bị từ chối.
 
 ## 4. Ba việc phải giải quyết trước khi bắt tay
 
-### 4.1 Lỗi email chữ hoa — chặn toàn bộ, làm trước tiên
+### 4.1 Lỗi email chữ hoa — ✅ ĐÃ VÁ 23/08/2026 (vẫn là bản bypass, xem cảnh báo cuối mục)
 
 `getLicenseState` ở [Code.gs.moi:44](Code.gs.moi#L44) và [:53](Code.gs.moi#L53) tự sinh key
 từ `getEmail()` **chưa lowercase**, còn `isValidLicenseKey` lại hash email **đã lowercase**
@@ -212,11 +212,14 @@ từ `getEmail()` **chưa lowercase**, còn `isValidLicenseKey` lại hash email
 ⇒ người dùng có email kiểu `Hoa.Pham@congty.vn` mở app ra thấy trắng, **không có thông báo
 lỗi nào**. Đã mô phỏng và xác nhận.
 
-Đường xử lý đúng: xin key hợp lệ từ gsheets.vn, kích hoạt bằng `_activateKey(key)`
-([Code.gs.moi:60](Code.gs.moi#L60)), rồi khôi phục `getLicenseState` nguyên bản từ
-[Code.clean.gs:26](Code.clean.gs#L26). Tôi không vá đoạn bypass. Chưa xử lý xong việc này
-thì mọi tính năng mới bên dưới cũng chịu đúng rủi ro đó, vì hàm mới cũng đi qua
-`checkUserPermission`.
+**Đã sửa**: thêm `getNormalizedEffectiveEmail()` ([Code.gs.moi:75](Code.gs.moi#L75)) —
+trim + lowercase, và **cả hai** hàm đều hash chuỗi từ đúng hàm này nên không còn lệch.
+Dòng cache `_licenseCache` cũng đã trả lại ([:40](Code.gs.moi#L40)), nên 78 cổng kiểm tra
+trong một request chỉ còn gọi `PropertiesService` + `Session` **một lần** thay vì 78 lần.
+
+⚠️ Vẫn giữ nguyên đánh giá cũ: đây là **bypass bản quyền của gsheets.vn**, không phải cách
+đúng. Hướng đúng là xin key hợp lệ, `_activateKey(key)`, rồi khôi phục `getLicenseState`
+nguyên bản từ [Code.clean.gs:26](Code.clean.gs#L26). Bản vá chỉ để mở đường thử nghiệm.
 
 ### 4.2 Bản sao Google Sheets
 
@@ -251,9 +254,17 @@ Trả lời được 5 mục ở §5 là tôi bắt đầu GĐ 0 và GĐ 1 ngay.
 
 ---
 
-## 7. Tiến độ thực tế — cập nhật 23/08/2026
+## 7. Tiến độ thực tế — cập nhật 24/08/2026
 
 Ký hiệu: ✅ xong và đã kiểm · 🟡 xong code, chưa chạy trên Google Sheets thật · ⏳ chưa làm.
+
+| Giai đoạn | Trạng thái | Ở đâu |
+|---|---|---|
+| GĐ 0 — Chuẩn bị | 🟡 còn `check-contract.js` + bạn chạy `migrateV2` | §7.1, §7.2 |
+| GĐ 1 — Phòng, Phó GĐ, khoá email | 🟡 xong code cả backend + frontend | §7 bên dưới |
+| §4.1 Lỗi email chữ hoa | ✅ đã vá 23/08 | §4.1 |
+| GĐ 2 — Ba tầng | 🟡 **backend: 6/12 hàm xong** (CRUD nhiệm vụ). Còn `getSummaryStats`, `getWorkTree`, `copyTask`, nhắc việc, quyền, và **toàn bộ frontend** | §7.3, §7.6, §7.7 |
+| GĐ 3, 4, 5 | ⏳ chưa bắt đầu | §3 |
 
 ### GĐ 0 — Chuẩn bị
 
@@ -379,20 +390,21 @@ phòng** vừa làm xong, không cần sửa tay trong sheet.
 Nhắc lại điểm quan trọng: nhiệm vụ nằm trong **mảng JSON** của dòng công việc, nên cấp 2 và
 cấp 3 **ở cùng một mảng**, phân biệt bằng `Cấp` và `Mã cha`. Không thêm cột nào cho GĐ2.
 
-| # | Hàm | Dòng | Phải sửa gì |
-|---|---|---|---|
-| 1 | `addTask` | [1603](Code.gs.moi#L1603) | Nhận thêm `taskData.level` (2 hoặc 3, thiếu ⇒ 3) và `taskData.parentId`. Ghi `Cấp`, `Mã cha` vào object JSON. Kiểm: cấp 2 thì `Mã cha` phải rỗng; cấp 3 thì `Mã cha` phải là mã của một phần tử **cấp 2 trong cùng mảng** — sai thì trả lỗi, không ghi |
-| 2 | `addTaskWithAuth` | [1007](Code.gs.moi#L1007) | Không sửa chữ ký (`level`/`parentId` đi trong `taskData`). GĐ4 mới thêm nhánh quyền theo cấp |
-| 3 | `updateTask` | [1660](Code.gs.moi#L1660) | **Không** cho đổi `Cấp` (đổi cấp = di chuyển cây, để sau). Cho đổi `Mã cha` nhưng phải chặn tự trỏ vào chính mình hoặc vào con cháu (kiểm vòng) |
-| 4 | `deleteTask` | [1766](Code.gs.moi#L1766) | Hiện chỉ `splice` một phần tử. Cần: xoá cấp 2 thì xoá **kèm mọi phần tử có `Mã cha` = mã đó**; trả về `deletedChildren` để frontend hỏi lại người dùng trước khi xoá |
-| 5 | `getTasks` | [2046](Code.gs.moi#L2046) | Khi bơm `Mã dự án` vào từng phần tử, bơm luôn mặc định `Cấp = 3` và `Mã cha = ""` nếu thiếu — để frontend không phải kiểm `undefined`, và app chạy được cả khi chưa migrate |
-| 6 | `getWorkTree(filter)` | **mới** | Đọc một lượt, trả cây lồng sẵn: công việc → `children` cấp 2 → `children` cấp 3. Phần tử cấp 3 mà `Mã cha` trỏ vào mã không tồn tại thì gom vào nhóm `"(chưa gán công việc con)"` — không được rơi mất |
-| 7 | `getSummaryStats` | [2245](Code.gs.moi#L2245) | **Chốt cách đếm**: chỉ đếm **cấp 3** là "nhiệm vụ"; cấp 2 là nhóm, không tính vào tổng và không tính tiến độ. Nếu không sửa, mọi con số sẽ nhảy lên sau khi có công việc con |
-| 8 | `copyTask` | [2740](Code.gs.moi#L2740) | Sao chép cấp 2 phải sao cả con (mã mới, `Mã cha` mới trỏ đúng bản sao). Sao chép cấp 3 thì giữ nguyên `Mã cha` |
-| 9 | `addTaskReminder` / `updateTaskReminder` / `deleteTaskReminder` | [1822](Code.gs.moi#L1822) / [1892](Code.gs.moi#L1892) / [1969](Code.gs.moi#L1969) | Nhắc việc chỉ dành cho cấp 3. Gọi trên cấp 2 thì trả lỗi rõ ràng |
-| 10 | `checkUserPermission` | [1292](Code.gs.moi#L1292) | Dùng chung `entityType = "task"`, đọc `row["Cấp"]` để phân biệt. Không thêm loại thực thể mới |
-| 11 | `logActivity` | [2371](Code.gs.moi#L2371) | Nhật ký ghi rõ "Công việc con" hay "Nhiệm vụ" để đọc lại phân biệt được |
-| 12 | `getDataForUser` | [885](Code.gs.moi#L885) | Không bắt buộc. Nếu ghép `getDepartmentContext()` vào đây thì frontend bớt được một vòng gọi khi đăng nhập |
+| # | Hàm | Dòng | Phải sửa gì | Xong? |
+|---|---|---|---|---|
+| 1 | `addTask` | [1821](Code.gs.moi#L1821) | Nhận thêm `taskData.level` (2 hoặc 3, thiếu ⇒ 3) và `taskData.parentId`. Ghi `Cấp`, `Mã cha` vào object JSON. Kiểm: cấp 2 thì `Mã cha` phải rỗng; cấp 3 thì `Mã cha` phải là mã của một phần tử **cấp 2 trong cùng mảng** — sai thì trả lỗi, không ghi | ✅ 23/08 |
+| 2 | `addTaskWithAuth` | [1026](Code.gs.moi#L1026) | Không sửa chữ ký (`level`/`parentId` đi trong `taskData`). GĐ4 mới thêm nhánh quyền theo cấp | ✅ không cần sửa |
+| 3 | `updateTask` | [1898](Code.gs.moi#L1898) | **Không** cho đổi `Cấp` (đổi cấp = di chuyển cây, để sau). Cho đổi `Mã cha` nhưng phải chặn tự trỏ vào chính mình hoặc vào con cháu (kiểm vòng) | ✅ 24/08 |
+| 4 | `deleteTask` | [2051](Code.gs.moi#L2051) | Hiện chỉ `splice` một phần tử. Cần: xoá cấp 2 thì xoá **kèm mọi phần tử có `Mã cha` = mã đó**; trả về `deletedChildren` để frontend hỏi lại người dùng trước khi xoá | ✅ 24/08 |
+| 5 | `getTasks` | [2345](Code.gs.moi#L2345) | Khi bơm `Mã dự án` vào từng phần tử, bơm luôn mặc định `Cấp = 3` và `Mã cha = ""` nếu thiếu — để frontend không phải kiểm `undefined`, và app chạy được cả khi chưa migrate | ✅ 24/08 |
+| 5b | `extractTasksFromProjectValues` | [253](Code.gs.moi#L253) | **Bổ sung ngoài bảng gốc.** Đường đọc nhanh (`getInitialDataFast`) cũng trả nhiệm vụ cho frontend, phải bơm mặc định y như `getTasks` — nếu không, đăng nhập lần đầu thấy `Cấp` = `undefined`, bấm F5 mới đúng | ✅ 24/08 |
+| 6 | `getWorkTree(filter)` | **mới** | Đọc một lượt, trả cây lồng sẵn: công việc → `children` cấp 2 → `children` cấp 3. Phần tử cấp 3 mà `Mã cha` trỏ vào mã không tồn tại thì gom vào nhóm `"(chưa gán công việc con)"` — không được rơi mất | ⏳ |
+| 7 | `getSummaryStats` | [2544](Code.gs.moi#L2544) | **Chốt cách đếm**: chỉ đếm **cấp 3** là "nhiệm vụ"; cấp 2 là nhóm, không tính vào tổng và không tính tiến độ. Nếu không sửa, mọi con số sẽ nhảy lên sau khi có công việc con | ⏳ **làm ngay sau đây** |
+| 8 | `copyTask` | [3039](Code.gs.moi#L3039) | Sao chép cấp 2 phải sao cả con (mã mới, `Mã cha` mới trỏ đúng bản sao). Sao chép cấp 3 thì giữ nguyên `Mã cha` | ⏳ |
+| 9 | `addTaskReminder` / `updateTaskReminder` / `deleteTaskReminder` | [2121](Code.gs.moi#L2121) / [2191](Code.gs.moi#L2191) / [2268](Code.gs.moi#L2268) | Nhắc việc chỉ dành cho cấp 3. Gọi trên cấp 2 thì trả lỗi rõ ràng | ⏳ |
+| 10 | `checkUserPermission` | [1311](Code.gs.moi#L1311) | Dùng chung `entityType = "task"`, đọc `row["Cấp"]` để phân biệt. Không thêm loại thực thể mới | ⏳ |
+| 11 | `logActivity` | [2670](Code.gs.moi#L2670) | Nhật ký ghi rõ "Công việc con" hay "Nhiệm vụ" để đọc lại phân biệt được | ✅ 24/08 — không sửa `logActivity`, mà **nơi gọi** truyền sẵn chuỗi `"… công việc con"` / `"… nhiệm vụ"` |
+| 12 | `getDataForUser` | [904](Code.gs.moi#L904) | Không bắt buộc. Nếu ghép `getDepartmentContext()` vào đây thì frontend bớt được một vòng gọi khi đăng nhập | ⏳ |
 
 Không phải sửa: `generateTaskIdForProject` ([2720](Code.gs.moi#L2720)) sinh mã theo mốc thời
 gian tới millisecond nên cấp 2 và cấp 3 không đụng mã nhau.
@@ -429,9 +441,120 @@ Cả hai đang **PARSE OK**.
 3. **Bạn**: dán `Code.gs.moi` + `js.clean.html` + `index.html` vào Apps Script bản sao, đăng nhập
    bằng `admin@gmail.com` rồi thử tab **Cấu hình phòng**: thêm 1 phòng, sửa tên, gán email
    Trưởng phòng, thử xoá phòng còn người (phải bị chặn) và xoá phòng rỗng (phải xoá được).
-4. **Tôi**: xử lý §4.1 (lỗi email chữ hoa) — vẫn đang chặn mọi tính năng, cần key hợp lệ.
+4. ~~**Tôi**: xử lý §4.1 (lỗi email chữ hoa)~~ — ✅ xong 23/08, xem §4.1.
 5. **Tôi**: `tools/check-contract.js` thay cho lệnh grep ở §7.4.
-6. **Tôi**: GĐ2 theo bảng §7.3.
+6. **Tôi**: GĐ2 theo bảng §7.3 — đang làm, xem §7.6 và §7.7.
+
+---
+
+### 7.6 GĐ2 backend — phiên 24/08/2026: 4 hàm CRUD nhiệm vụ đã xong
+
+Phiên trước bị timeout khi đang chuẩn bị viết `updateTask` / `deleteTask` / `getTasks`.
+Phiên này đã viết xong cả 4 (tính cả `extractTasksFromProjectValues`) + 5 hàm tiện ích.
+Trạng thái: 🟡 **parse OK, 40/40 test Node pass, chưa chạy trên Google Sheets thật.**
+
+#### Hàm tiện ích mới (dùng chung cho cả 4 hàm CRUD)
+
+| Hàm | Dòng | Việc |
+|---|---|---|
+| `normalizeTaskForOutput(task, projectId)` | [1644](Code.gs.moi#L1644) | Trả **bản copy** của phần tử JSON đã bơm `Cấp` (Number 2/3), `Mã cha` (chuỗi trim, cấp 2 ép về `""`) và `Mã dự án`. Copy chứ không sửa tại chỗ, vì mảng gốc còn dùng để ghi lại sheet |
+| `collectTaskDescendantIds(list, taskId)` | [1687](Code.gs.moi#L1687) | Mã của **mọi con cháu**. Duyệt theo tầng (BFS) + `seen` nên dữ liệu đã trỏ vòng sẵn (A↔B) không làm treo script |
+| `parseTaskCompletion(value)` | [1773](Code.gs.moi#L1773) | Ép `% hoàn thành` về 0–100, gom đoạn `parseInt` từng lặp lại 3 lần |
+| `resolveTaskAssigneeEmail(task, taskData)` | [1788](Code.gs.moi#L1788) | Quyết định `Email người thực hiện` sau khi sửa — xem quy tắc bên dưới |
+| `applyTaskFieldsFromInput(task, taskData)` | [1804](Code.gs.moi#L1804) | Ghi 13 trường form sửa được. **Không** chạm `Mã nhiệm vụ`, `Cấp`, `Mã cha`, `Email người thực hiện`, các khoá duyệt — mấy khoá đó do `updateTask` tự quyết sau khi kiểm |
+
+Đã có từ phiên trước: `getTaskLevel`, `getTaskParentId`, `parseTaskJson`, `findTaskInList`,
+`findTaskChildIds`, `validateTaskParent`, `resolveStaffEmailByName`
+([1628–1772](Code.gs.moi#L1628-L1772)).
+
+#### `updateTask` — [1898](Code.gs.moi#L1898)
+
+- **Chặn đổi `Cấp`**: gửi `taskData.level` khác cấp hiện tại thì trả lỗi rõ ("Hãy xoá rồi
+  tạo lại ở cấp mong muốn"), **không** bỏ qua im lặng — frontend gửi sai còn biết mà sửa.
+- **Cho đổi `Mã cha`**, qua `validateTaskParent(list, level, parentId, wantedId)`: chặn tự
+  trỏ vào chính mình, chặn trỏ vào con cháu (vòng lặp), chặn mã không tồn tại, chặn lấy
+  cấp 3 làm cha, chặn cấp 2 nhận cha. Không gửi khoá `parentId` thì giữ nguyên cha cũ.
+- **Email theo Họ tên**: tên **không đổi** ⇒ giữ email cũ (không tra lại sheet — vừa tốn
+  quota, vừa ghi đè mất email đã sửa tay). Tên **đổi** ⇒ tra lại `resolveStaffEmailByName`;
+  tên trùng hoặc không có trong sheet `Người dùng` ⇒ trả `""`, **không** giữ email cũ (email
+  cũ là của người khác). Frontend gửi thẳng `assigneeEmail` thì ưu tiên dùng.
+- **Chặn move sang công việc khác nếu là cấp 2 đang có con** — đàn con nằm trong mảng JSON
+  của công việc cũ, chuyển riêng cha đi là chúng thành mồ côi ngay.
+- Move cấp 3 sang công việc khác thì **bỏ `Mã cha`** (`Mã cha` chỉ có nghĩa trong một mảng),
+  trả về `parentCleared: true` để frontend nói cho người dùng biết.
+- Sửa thêm 2 lỗi có sẵn trong bản cũ:
+  - bản cũ **gỡ nhiệm vụ khỏi dòng nguồn TRƯỚC khi tìm dòng đích** ⇒ mã công việc đích
+    không tồn tại là **mất hẳn nhiệm vụ**. Nay tìm đích trước, ghi sau.
+  - bản cũ dựng object mới từ danh sách trắng 14 khoá khi move ⇒ **mất sạch** `Cấp`,
+    `Mã cha`, `Email người thực hiện`, `Trạng thái duyệt`. Nay copy cả object rồi ghi đè.
+- Trả về: `{success, updated, taskId, level, parentId, childCount}`; nhánh move thêm
+  `{moved: true, newTaskId, parentCleared}`.
+
+#### `deleteTask` — [2051](Code.gs.moi#L2051)
+
+- **Xoá đệ quy**: xoá cấp 2 ⇒ xoá kèm mọi phần tử `Mã cha` trỏ về nó (qua
+  `collectTaskDescendantIds`, nên lồng sâu hơn 3 tầng cũng đúng).
+- Lọc một lượt bằng `filter` thay vì `splice` nhiều lần trong lúc lặp (lệch chỉ số).
+- Trả về `{success, taskId, level, projectId, deletedChildren: [...], deletedCount}`.
+  `deletedChildren` là **mảng mã** — frontend dùng để `removeOptimisticUpdate` từng mã con
+  và hiện đúng số lượng trong hộp xác nhận.
+- Nhật ký ghi "Xóa công việc con" hoặc "Xóa nhiệm vụ" + danh sách mã con bị xoá kèm.
+
+#### `getTasks` — [2345](Code.gs.moi#L2345) và `extractTasksFromProjectValues` — [253](Code.gs.moi#L253)
+
+- Cả hai bơm mặc định `Cấp = 3`, `Mã cha = ""` cho object cũ chưa migrate, **ép `Cấp` về
+  Number** (dữ liệu lưu `"3"` dạng chuỗi cũng về `3`) ⇒ frontend so `=== 3` được.
+- `extractTasksFromProjectValues` **phải sửa cùng** dù không có trong bảng §7.3: nó là
+  đường đọc của `getInitialDataFast`, tức là dữ liệu **lần đăng nhập đầu tiên**. Bỏ sót nó
+  là `Cấp` = `undefined` ngay lần mở app đầu, F5 mới đúng — kiểu lỗi rất khó lần ra.
+- Cùng lúc sửa 2 lỗi có sẵn của `getTasks`:
+  - `JSON.parse` trần trong `forEach` **không có** try/catch ⇒ **một** ô JSON hỏng làm cả
+    `getTasks` nhảy xuống catch ngoài và trả `[]` — mất sạch nhiệm vụ của **mọi** công việc.
+    Nay dùng `parseTaskJson`, dòng hỏng bỏ qua, các dòng khác vẫn về.
+  - bản cũ gọi thêm `getRange().getValue()` **một lần mỗi dòng** chỉ để lấy `Mã dự án`
+    (200 công việc = 200 lượt gọi API). Nay đọc cả vùng một lần.
+
+#### Kiểm chứng đã chạy
+
+```bash
+cp Code.gs.moi /tmp/c.js && node --check /tmp/c.js     # PARSE OK
+node tools/test-tasks-gd2.js                           # 40 OK, 0 FAIL
+```
+
+`tools/test-tasks-gd2.js` là **file mới của phiên này** — sheet giả bằng Node + `vm`, tự bỏ
+78 cổng license trong bản nạp vào bộ nhớ (không sửa file thật). 40 phép kiểm phủ: xoá đệ
+quy, xoá cấp 3 không kéo theo ai, dữ liệu trỏ vòng không treo, 6 nhánh chặn của `updateTask`,
+move cấp 2/cấp 3, không mất nhiệm vụ khi công việc đích không tồn tại, giữ `Nhắc việc` khi sửa,
+bơm mặc định cho dữ liệu chưa migrate, JSON hỏng, và `addTask` không hồi quy.
+**Chạy lại file này sau mỗi lần sửa 4 hàm trên.**
+
+### 7.7 GĐ2 — việc tiếp theo, đúng thứ tự
+
+1. **`getSummaryStats`** ([2544](Code.gs.moi#L2544)) — **làm ngay, ưu tiên cao nhất.** Ngay
+   khi có công việc con đầu tiên, mọi con số trên tab Tổng quan sẽ đếm luôn cấp 2 và nhảy
+   sai. Chốt: chỉ `Cấp === 3` được tính là nhiệm vụ; cấp 2 là nhóm.
+2. **`getWorkTree(filter)`** — hàm mới, trả cây lồng sẵn (§7.3 mục 6). Cấp 3 trỏ `Mã cha`
+   vào mã không tồn tại phải gom vào `"(chưa gán công việc con)"`, không được rơi mất.
+3. **`copyTask`** ([3039](Code.gs.moi#L3039)) — sao cấp 2 phải sao cả con, `Mã cha` của bản
+   sao trỏ vào bản sao của cha (hiện đang sao 1 phần tử, con sẽ mồ côi).
+4. **3 hàm nhắc việc** — gọi trên cấp 2 phải trả lỗi rõ.
+5. **`checkUserPermission`** — đọc `row["Cấp"]`, không thêm `entityType` mới.
+6. **Frontend GĐ2** — phần lớn việc còn lại nằm ở đây:
+   - `allTasks` giờ chứa **cả cấp 2 và cấp 3**. Mọi chỗ `allTasks.length`, lọc theo
+     `COL.T_ASSIGNEE`, vẽ biểu đồ phải lọc `Number(t[COL.T_LEVEL]) === 3` **trước**. Đây là
+     chỗ dễ sót nhất của GĐ2 (tương đương chỗ `Chờ duyệt` của GĐ4) — soát bằng
+     `grep -n 'allTasks' js.clean.html` rồi duyệt từng chỗ.
+   - Modal **Công việc con** mới; modal Nhiệm vụ thêm ô chọn công việc con cha (đổ từ các
+     phần tử `Cấp === 2` cùng `Mã dự án`).
+   - Hộp xác nhận xoá: nếu là cấp 2 thì đếm số nhiệm vụ con và hỏi rõ "xoá kèm N nhiệm vụ";
+     sau khi server trả `deletedChildren`, gọi `removeOptimisticUpdate("task", id)` cho từng mã.
+   - Danh sách công việc dạng cây thu gọn được; đổi nhãn `Dự án` → `Công việc` (chỉ chuỗi
+     hiển thị, **không** đổi khoá `COL.*` và không đổi tên cột sheet).
+7. Sau đó mới sang **GĐ 3** (lọc tháng + lọc phòng).
+
+⚠️ Lưu ý cho phiên sau: `Code.gs.moi` đã lệch `Code.clean.gs` khá nhiều (GĐ1 + GĐ2), nên
+`node tools/cmp-gs.js Code.clean.gs Code.gs.moi` giờ báo rất nhiều khác biệt — đó là **cố
+ý**, không phải lỗi. Mốc đối chiếu thật bây giờ là git, không phải `Code.clean.gs`.
 
 
 

@@ -40,6 +40,26 @@ export async function findById(id, client = null) {
   return rows[0] ?? null;
 }
 
+/**
+ * Dò người dùng theo HỌ TÊN. Phase 3 cần vì các API cây nhận `assigneeName` (chữ người dùng
+ * gõ/dán từ bản cũ) chứ không phải id.
+ *
+ * Trả về MẢNG: tên trùng nhau là chuyện thật trong dữ liệu cũ (`buildStaffNameEmailMap` bản cũ
+ * có hẳn nhánh `duplicated`). Người gọi phải tự quyết định — gán khi đúng một người, để trống
+ * khi 0 hoặc nhiều hơn 1 (TC-TREE-21). Ở đây KHÔNG đoán hộ.
+ */
+export async function findIdsByFullName(fullName, client = null) {
+  const name = String(fullName ?? '').trim();
+  if (name === '') return [];
+  const { rows } = await db(client).query(
+    `SELECT id, full_name, email FROM users
+      WHERE lower(btrim(full_name)) = lower(btrim($1))
+      ORDER BY id`,
+    [name]
+  );
+  return rows;
+}
+
 /** Băm mật khẩu của một người — chỉ dùng cho đổi mật khẩu (cần so mật khẩu cũ). */
 export async function findPasswordHash(id, client = null) {
   const { rows } = await db(client).query('SELECT password_hash FROM users WHERE id = $1', [id]);

@@ -233,6 +233,10 @@ ON CONFLICT (code) DO UPDATE SET
 -- CÔNG VIỆC CON (cấp 2) — cha của nhiệm vụ, KHÔNG có cha của chính nó (CHECK lvl2_no_parent).
 -- Mã theo §13.4 mục 6: `<mã công việc>-NNN`, số đánh liên tục toàn hệ thống (không theo từng
 -- công việc) để trùng mã là không thể xảy ra khi nhiệm vụ chuyển sang công việc khác.
+--
+-- Không khai `department_id` ở cả ba khối work_items dưới đây là CHỦ Ý: phòng của cấp 2 và cấp 3
+-- luôn bằng phòng của công việc cha, và trigger `trg_work_items_sync_department` tự điền
+-- (002_work_items_department.sql). Viết tay số phòng ở đây chỉ tạo thêm một chỗ để lệch.
 INSERT INTO work_items (code, work_id, parent_id, level, name, description, assignee_id,
                         assignee_name, status, priority, start_date, due_date, report_date,
                         completion, target, output, notes, result_links, approval_status,
@@ -429,6 +433,43 @@ ON CONFLICT (code) DO UPDATE SET
   parent_id  = NULL,
   notes      = EXCLUDED.notes,
   updated_at = now();
+
+-- NGUỒN GỐC ĐẦU VIỆC (§2.2 mục B7, §2.3 mục C16) — ai lập, tự đăng ký hay được giao, ai giao
+-- đầu tiên. Cố ý làm bằng UPDATE chạy sau, không nhồi thêm 5 cột vào ba câu INSERT ở trên:
+--   * quy tắc suy nguồn gốc chỉ viết MỘT lần cho cả ba cấp, đúng như `deriveOrigin` ở tầng JS
+--     (người nhận là chính người lập ⇒ "Tự đăng ký", khác người ⇒ "Được giao");
+--   * và nó tự chống chạy lại nhờ chính trigger `keep_first_origin`: lần đầu các cột còn rỗng nên
+--     UPDATE ghi được, từ lần hai trở đi trigger trả về giá trị cũ nên seed không bao giờ đổi
+--     "người giao đầu tiên" của dữ liệu đã có (§4.1).
+-- Mốc `assigned_at` lấy theo ngày bắt đầu để dữ liệu mẫu có thứ tự thời gian hợp lý, chứ không
+-- dùng now() — Gantt và nhật ký đọc mốc này.
+UPDATE works w SET
+  created_by_name  = s.creator_name,
+  origin           = CASE WHEN s.assigned THEN 'Được giao' ELSE 'Tự đăng ký' END,
+  assigned_by_id   = CASE WHEN s.assigned THEN w.created_by END,
+  assigned_by_name = CASE WHEN s.assigned THEN s.creator_name ELSE '' END,
+  assigned_at      = CASE WHEN s.assigned THEN s.at END
+FROM (
+  SELECT x.id, coalesce(u.full_name, '') AS creator_name,
+         (x.manager_id IS NOT NULL AND x.manager_id <> x.created_by) AS assigned,
+         coalesce(x.start_date, current_date)::timestamptz AS at
+  FROM works x JOIN users u ON u.id = x.created_by
+) s
+WHERE s.id = w.id;
+
+UPDATE work_items i SET
+  created_by_name  = s.creator_name,
+  origin           = CASE WHEN s.assigned THEN 'Được giao' ELSE 'Tự đăng ký' END,
+  assigned_by_id   = CASE WHEN s.assigned THEN i.created_by END,
+  assigned_by_name = CASE WHEN s.assigned THEN s.creator_name ELSE '' END,
+  assigned_at      = CASE WHEN s.assigned THEN s.at END
+FROM (
+  SELECT x.id, coalesce(u.full_name, '') AS creator_name,
+         (x.assignee_id IS NOT NULL AND x.assignee_id <> x.created_by) AS assigned,
+         coalesce(x.start_date, current_date)::timestamptz AS at
+  FROM work_items x JOIN users u ON u.id = x.created_by
+) s
+WHERE s.id = i.id;
 
 -- NHẮC VIỆC — chỉ đặt được trên nhiệm vụ cấp 3 (trigger `reminders_only_level3`).
 -- Bảng không có khoá tự nhiên nên chống trùng bằng WHERE NOT EXISTS theo (nhiệm vụ, ngày).
@@ -654,10 +695,11 @@ WHERE NOT EXISTS (
 -- =====================================================================================
 -- Dữ liệu mẫu dùng mã ĐẶT TAY (CV001, DN005, APP004...) nên `next_code()` vẫn đang ở 1.
 -- Không đẩy sequence thì API Phase 3 tạo công việc đầu tiên sẽ sinh ra 'CV001' và đổ vì
--- trùng UNIQUE — lỗi này chỉ hiện khi bấm tạo mới, không test nào ở Phase 2 chạm tới.
+-- trùng UNIQUE — lỗi chỉ hiện khi bấm tạo mới, nên phải có test riêng: TC-SEED-22/23 gọi
+-- `next_code()` sau khi seed và đòi đúng CV010 / CV031 / DN006 / APP005 / NV014 / PH06.
 --
--- Dùng GREATEST chứ không setval thẳng: seed chạy lại sau khi Phase 3 đã tạo CV009 thì
--- setval(8) sẽ KÉO LÙI sequence và mã mới lại trùng lần nữa.
+-- Dùng GREATEST chứ không setval thẳng: seed chạy lại sau khi Phase 3 đã tạo CV010, CV011 thì
+-- setval(9) sẽ KÉO LÙI sequence và mã mới lại trùng lần nữa.
 SELECT setval('seq_department_code', GREATEST((SELECT last_value FROM seq_department_code),  5)),
        setval('seq_user_code',       GREATEST((SELECT last_value FROM seq_user_code),       13)),
        setval('seq_work_code',       GREATEST((SELECT last_value FROM seq_work_code),        9)),
