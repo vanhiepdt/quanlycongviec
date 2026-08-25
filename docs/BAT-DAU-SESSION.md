@@ -11,18 +11,18 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 
 | | |
 |---|---|
-| Nhánh đang làm | `vps/phase-5-approval` (tách từ `vps/phase-4-frontend`, HEAD `57cfa89`) — **toàn bộ Phase 5 nằm ở nhánh này**. `vps/phase-4-frontend` dừng ở `d99759f`, `vps/phase-3-works` ở `0e74738`, `vps/phase-2-import` ở `49f42b2`, `vps/phase-1-auth` ở `8aed2a8` |
-| Phase đã xong | **0**, **1**, **2**, **3**, **4** và **5** — Phase 5: 11/11 việc (5.1 khoá duyệt khi tạo · 5.2/5.3/5.5/5.7 REST duyệt · 5.4 hai view `v_countable_*` · 5.6 nhãn vàng · 5.8 cron 07:00 · 5.10 bootstrap · 5.11 nhân sự/phòng · 5.12 nút «+ công việc con»; **5.9 email bỏ**). RPC **27 chạy / 10 còn 501**. Điểm đỏ §8.5 **C7** và **D1** hết đỏ |
-| Test đang xanh | **835** trong 44 file, lint + `format:check` sạch |
-| Phase kế tiếp | **6 — thống kê, lọc, Gantt** (§7 Phase 6 việc 6.1–6.9; §8.4 nhóm F TC-STAT-01..16; T5–T10/R1–R7 phần *vẽ* của checklist khói §8.5) |
-| Còn treo | **D3–D8 UI**: máy chủ REST `/approvals/.../{submit,approve,reject}` + `pending-count` đã có; `app.js` **không** có nút Duyệt/Từ chối trên cây, `#*-pending-count` đếm trạng thái công việc chứ không đọc `pendingCount` bootstrap — **không** tự làm trong Phase 6 trừ khi người dùng yêu cầu. **R8–R12** đề nghị/chat/app/Excel + `addNotificationWithAuth` = Phase 7 (10 tên RPC còn 501). Nợ hiệu năng: `getTasks` N+1 (§13.5) — gộp ở Phase 6 |
-| Đang chờ người dùng | **KHÔNG còn câu nào.** Mục 1–7, 10–15 đã trả lời; mục 8, 9 hết hiệu lực |
+| Nhánh đang làm | `vps/phase-6-stats` (tách từ `vps/phase-5-approval`, HEAD `3df2e44`) — **toàn bộ Phase 6 nằm ở nhánh này**. Nhánh trước: `vps/phase-5-approval` dừng ở `5e89293`, `vps/phase-4-frontend` ở `d99759f` |
+| Phase đã xong | **0**, **1**, **2**, **3**, **4**, **5** và **6** — Phase 6: 9/9 việc (6.1 summary · 6.2 charts ×6 · 6.3 activities phân trang · 6.4 lọc tháng giao nhau · 6.5 ép phòng ở server · 6.6 gantt nhóm 3 kiểu · 6.7 chọn 1/2/3 tháng · 6.8 thu gọn localStorage · 6.9 đối chiếu chênh 0) **+ trả nợ N+1 của `getTasks`**. RPC vẫn **27 chạy / 10 còn 501** |
+| Test đang xanh | **879** trong 49 file, lint + `format:check` sạch. Pin XSS mới: **74 chỗ / 541 giá trị** (`docs/XSS-4.6.md`) |
+| Phase kế tiếp | **7 — đề nghị, quản lý app, chat, xuất Excel** (§7 việc 7.1–7.6; §8.4 nhóm G TC-MISC-01..13; khói R8–R12). Prompt dán sẵn ở mục 3 |
+| Còn treo | **D3–D8 UI**: máy chủ REST `/approvals/.../{submit,approve,reject}` + `pending-count` có từ Phase 5; `app.js` chưa có nút trên cây — **không** tự làm trừ khi người dùng yêu cầu. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt** trên mảng đã do server chạm phạm vi (muốn server-side thì thêm `GET /stats/items`); Gantt nhóm `assignee` đưa công việc vào nhóm MỖI người có nhiệm vụ trong đó và hiện toàn cây con (sửa `nhomTheoAssignee` nếu muốn chỉ hiện nhánh). **R8–R12** đề nghị/chat/app/Excel + `addNotificationWithAuth` = Phase 7 |
+| Đang chờ người dùng | **KHÔNG còn câu nào.** |
 | Dữ liệu để làm việc | `npm run seed:dev` → **dữ liệu mẫu §8.3**: 5 phòng (`PH05` rỗng hoàn toàn), 13 người, 9 công việc, 13 công việc con, 17 nhiệm vụ, 7 nhắc việc, 5 đề nghị, 4 app, 12 tin nhắn, 6 thông báo, 20 dòng nhật ký. **Cố ý có dữ liệu bẩn** (email chữ hoa, trùng họ tên, nhiệm vụ mồ côi, link thiếu `http`, ngày 29/02) — đừng "sửa cho sạch" |
 | ⚠ CSDL dev đang bị chặn seed | CSDL `quanlycongviec` (dev) còn **5 dòng tay** từ lúc thử tay (`CV001` "Việc gốc"…) trùng `code` nhưng khác `level` ⇒ `npm run seed:dev` nổ `PARENT_NOT_SUBWORK` ở đó. Cách chữa: xoá 5 dòng đó rồi seed lại, hoặc seed sang CSDL khác (`DATABASE_URL=…/quanlycongviec_uat npm run seed:dev` — `loadEnvFile()` không ghi đè biến dòng lệnh) |
-| ⚠ CSDL khói UAT dễ thiếu migration | `quanlycongviec_uat` **không** tự `migrate:up` khi dev có migration mới. Thiếu `004_countable_views` ⇒ bootstrap 500. Mỗi lần thêm migration: `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` |
+| ⚠ CSDL khói UAT dễ thiếu migration | `quanlycongviec_uat` **không** tự `migrate:up` khi dev có migration mới. Mỗi lần thêm migration: `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` |
 | Tài khoản thử tay | `TEST001..TEST013` (§13.7), mật khẩu chung `Test@12345`, tất cả bị bắt đổi ở lần đăng nhập đầu. Có đủ **6 vai trò** |
-| Tự tay test giao diện | `docs/HUONG-DAN-TEST-GIAO-DIEN.md` — toast «Nạp dữ liệu người dùng chưa được chuyển» **không còn đúng** (5.10 đã nối). Còn 501: đề nghị / chat / app |
-| Chạy lại lượt khói | `bash tools/smoke-8.5.sh` — cần một Nginx trỏ về máy chủ (xem mục 4) hoặc đặt `BASE=http://127.0.0.1:3000`. Script tự dọn dòng nó tạo và in số dòng còn lại để đối chiếu với seed (9 / 30) |
+| Tự tay test giao diện | `docs/HUONG-DAN-TEST-GIAO-DIEN.md`. Tổng quan/Gantt giờ uống REST mới (`/stats/*`, `/gantt`) — mở mục Tổng quan là thấy 6 biểu đồ có số thật |
+| Chạy lại lượt khói | `"C:\Program Files\Git\bin\bash.exe" tools/smoke-8.5.sh` (`bash` trần trùng WSL!). Cần một Nginx trỏ về máy chủ (xem mục 4) hoặc đặt `BASE=http://127.0.0.1:3000` — lượt Phase 6 chạy bằng cách này. Script tự dọn dòng nó tạo và in số dòng còn lại để đối chiếu với seed (9 / 30). Bộ khói đã có sẵn điểm REST mới (T5–T10 `/stats/*`, R1–R7 `/gantt`) |
 | Dữ liệu thật (chỉ để đối chiếu) | Số liệu ở §13.8 (snapshot JSON **đã bỏ** — §13.4 mục 11). 28 dòng thật **nhập tay qua giao diện web** ở **Phase 9** (§13.4 mục 12) |
 
 Nếu bảng này khác `KE-HOACH-VPS.md` §13.2 thì **§13.2 đúng** — sửa lại bảng này.
@@ -57,7 +57,7 @@ VIỆC CỦA SESSION NÀY: <PHASE>
 
 ---
 
-## 3. Prompt cho session tiếp theo — Phase 6 (thống kê, lọc, Gantt), dán nguyên khối
+## 3. Prompt cho session tiếp theo — Phase 7 (đề nghị, quản lý app, chat, xuất Excel), dán nguyên khối
 
 ```text
 Dự án e:\quanlycongviec — chuyển hệ quản lý công việc từ Google Apps Script + Google Sheets
@@ -67,89 +67,85 @@ TRƯỚC KHI LÀM BẤT CỨ VIỆC GÌ:
 1. Đọc §13 của KE-HOACH-VPS.md — nguồn sự thật về việc đang làm đến đâu. Đọc thêm §0.1
    (TỪ VỰNG: cấp 1 = công việc, cấp 2 = công việc con, cấp 3 = nhiệm vụ; KHÔNG gọi cấp 1 là
    "dự án"). Mọi con số thống kê chỉ đếm cấp 3; cấp 2 là nhóm, không cộng vào.
-2. Làm theo §13.1. Đọc §13.5 — đủ khối bẫy Phase 0–5 (XSS / cầu RPC / Nginx / công cụ /
-   duyệt-bootstrap-khói). Đừng phát hiện lại. Bẫy riêng Phase 6 đã ghi sẵn: thống kê backend
-   (`getSummaryStats`) và frontend (`renderStats`) bản cũ có thể lệch nhau — việc ĐẦU TIÊN
-   của Phase 6 là xác định con số nào đang hiện thật trên giao diện rồi lấy đó làm chuẩn.
-3. Đọc §7 Phase 6 — 9 việc 6.1–6.9. Đọc §8.4 nhóm F (TC-STAT-01..16), §5.2 (REST thống kê /
-   Gantt đã chốt đường, CHƯA có module), §5.3. Không đọc cả §7, không đọc cả §8.
-4. Đọc docs/UAT.md phần "Checklist khói §8.5" — lượt Phase 5 (2026-08-25, HEAD 57cfa89):
-   36 ✅ · 0 ❌ · 23 ⏳ · 1 —. Phase 6 phải đưa T5–T10 (vẽ đủ 6 biểu đồ + hoạt động gần đây)
-   và R1–R7 (Gantt 1/2/3 tháng, nhóm 3 kiểu, thu gọn) từ «có nguồn» sang «vẽ đúng». Đừng tô
-   xanh D3–D8 hay R8–R12 — không thuộc phase này.
+2. Làm theo §13.1. Đọc §13.5 — đủ khối bẫy Phase 0–6 (XSS / cầu RPC / Nginx / công cụ /
+   duyệt-bootstrap-khói / thống kê-Gantt-đối chiếu). Đừng phát hiện lại. Bẫy hay tái diễn:
+   test chèn tay mã viết cứng không nhích sequence ⇒ API tạo mới 409 IM LẶNG nếu không assert
+   status; audit ghi SAU phản hồi nên test đếm activity_logs phải chờ + lấy mốc động; PowerShell
+   Get-Content|Set-Content hỏng UTF-8 không BOM (node --check vẫn xanh!); helper trả HTML phải
+   tên create*/build*/render* với pin TC-SEC-17 = 74 chỗ / 541 giá trị.
+3. Đọc §7 Phase 7 — 6 việc 7.1–7.6. Đọc §8.4 nhóm G (TC-MISC-01..13), §5.2 (10 tên pending),
+   §2.7/§2.8/§2.9/§2.13 khi cần. Không đọc cả §7, không đọc cả §8.
+4. Đọc docs/UAT.md phần "Checklist khói §8.5" — lượt Phase 6 (2026-08-25, HEAD 3df2e44):
+   49 ✅ · 0 ❌ · 10 ⏳ · 1 —. Phase 7 phải đưa R8–R11 (+R12 xuất Excel) sang xanh. Đừng tô
+   xanh D3–D8 — nút Duyệt trên cây là UI riêng, chưa ai yêu cầu.
 5. Đọc docs/BAT-DAU-SESSION.md mục 4 và 5 (lệnh chạy + bẫy máy + quy ước code).
 
-KHÔNG đọc tràn Code.gs.moi (3645 dòng) và web/assets/js/app.js (~3653 dòng / 305 KB) — đây là
+KHÔNG đọc tràn Code.gs.moi (3645 dòng) và web/assets/js/app.js (~4000 dòng) — đây là
 nguyên nhân cháy ngữ cảnh phổ biến nhất của dự án này. Cần biết giao diện gọi gì thì Grep:
-"renderStats", "chartData", "summaryStats", "calculateGanttBarStyle", "groupBy", "getSummaryStats".
-Việc quét rộng thì giao subagent và chỉ nhận danh sách kết luận.
+"getProposals", "addProposalWithAuth", "addApp", "getChatMessages", "sendChatMessage",
+"renderProposals", "renderApps", "proposal", "chat". Việc quét rộng thì giao subagent và
+chỉ nhận danh sách kết luận.
 
-TRẠNG THÁI: Phase 0–5 đã xong. 835 test xanh trong 44 file, lint + format:check sạch.
-Nhánh vps/phase-5-approval (HEAD 57cfa89) — Phase 6 tách nhánh mới vps/phase-6-stats TỪ
-vps/phase-5-approval (không tách từ nhánh khác).
+TRẠNG THÁI: Phase 0–6 đã xong. 879 test xanh trong 49 file, lint + format:check sạch.
+Nhánh vps/phase-6-stats (HEAD 3df2e44) — Phase 7 tách nhánh mới vps/phase-7-misc TỪ
+vps/phase-6-stats (không tách từ nhánh khác).
 
 ĐÃ CÓ SẴN, ĐỪNG LÀM LẠI:
-- Hai view v_countable_works / v_countable_items (việc 5.4). MỌI truy vấn thống kê / biểu đồ
-  / Gantt đếm phải đọc qua view. Test EXPLAIN đã có — đừng thêm AND approval_status rải rác.
-- GET /api/v1/bootstrap (việc 5.10) đã trả summaryStats + MỘT chartData theo trạng thái +
-  activities. Đó là nguồn đầu trang, KHÔNG thay cho GET /stats/summary và /stats/charts?type=
-  (6 loại). Đừng nhét 6 loại vào bootstrap.
-- Cầu RPC 37 tên: 27 chạy / 10 pending (đề nghị/chat/app/addNotificationWithAuth → Phase 7).
-  Phase 6 KHÔNG nối thêm tên RPC nào. Thống kê + Gantt là REST mới, không có tên cũ.
+- Hai view v_countable_works / v_countable_items (việc 5.4) — thống kê xuất Excel (mẫu c,
+  7.5) cũng phải đọc qua view.
+- REST Phase 6 đã chạy: /stats/summary, /stats/charts?type= (6 loại), /stats/activities
+  phân trang, /gantt nhóm 3 kiểu. Xuất Excel (7.5) PHẢI tái dùng đúng hàm lọc phạm vi của
+  các API danh sách — đừng viết truy vấn riêng (7.6 dễ thành lỗ rò, TC-MISC-11).
+- Cầu RPC 37 tên: 27 chạy / **10 pending là VIỆC CỦA PHASE 7**: getProposals,
+  addProposalWithAuth, updateProposalWithAuth, deleteProposalWithAuth, addApp, updateApp,
+  deleteApp, getChatMessages, sendChatMessage, addNotificationWithAuth. Giữ nguyên hình dạng
+  {success:true,…} mà giao diện cũ đọc; đừng bỏ/tên nào trong 37 tên.
+- Bảng proposals/apps/chat_messages/notifications + seed đã có từ Phase 2 (5 đề nghị, 4 app,
+  12 tin nhắn, 6 thông báo); chat dùng BẢNG THẬT thay cột JSON theo ngày (§4.1).
 - publicUser() đã gán name = full_name. getInitialDataWithAuth lúc chưa đăng nhập vẫn
   {requireLogin:true}.
-- XSS: pin TC-SEC-17 = 498 giá trị / 70 chỗ. HTML mới phải escapeHtml / textContent; helper
-  trả HTML phải tên create*/build*/render* (BUILDER), không add*Html. Đổi pin thì sửa cả
-  docs/XSS-4.6.md.
+- XSS: pin TC-SEC-17 = 541 giá trị / 74 chỗ (docs/XSS-4.6.md). HTML mới phải escapeHtml /
+  textContent; helper trả HTML phải tên create*/build*/render* (BUILDER), không add*Html.
+  Đổi pin thì sửa cả docs/XSS-4.6.md.
 - Vitest: LUÔN `cd server && npm test`. Không npx vitest từ gốc repo. Helper HTTP là `del`
-  không phải `delete`. POST/PATCH/DELETE cần X-CSRF-Token.
+  không phải `delete`. POST/PATCH/DELETE cần X-CSRF-Token. Chạy bash = Git Bash đường dẫn rõ.
 
-VIỆC CỦA SESSION NÀY: làm trọn Phase 6 trên nhánh mới vps/phase-6-stats (tách từ
-vps/phase-5-approval). Theo đúng §7 Phase 6, 9 việc:
-- 6.1 GET /api/v1/stats/summary — 4 thẻ số + tỷ lệ; chỉ đếm level = 3; loại Chờ duyệt qua
-  view. Tỷ lệ 0 nhiệm vụ = 0%, không NaN.
-- 6.2 GET /api/v1/stats/charts?type= — ĐỦ 6 loại, trả đúng hình dạng {labels, data} mà
-  Chart.js / renderStats đang nhận. Không dữ liệu ⇒ {labels:[], data:[]} + thông báo, không
-  lỗi. Việc ĐẦU: Grep renderStats / chart type ở app.js để chốt 6 type, đừng đoán.
-- 6.3 Hoạt động gần đây — đọc activity_logs có phân trang (bootstrap đang lấy 22 dòng không
-  trang; đường này là trang được).
-- 6.4 Lọc theo tháng — GIAO NHAU khoảng ngày: daterange(start,end) && daterange(:from,:to).
-  Việc kéo 3 tháng hiện ở cả 3 tháng. Việc kết thúc đúng ngày 01 của tháng lọc VẪN có. Thiếu
-  ngày bắt đầu hoặc kết thúc: không làm mất dòng, không lỗi.
-- 6.5 Lọc theo phòng — admin/Phó GĐ chọn được nhiều phòng; vai khác bị ÉP về phòng mình
-  Ở SERVER (TC-STAT-10). Không tin query string.
-- 6.6 GET /api/v1/gantt?from=&to=&groupBy=department|deputy|assignee — trả cây đã nhóm sẵn,
-  thứ tự phòng theo sort_order. Một Phó GĐ phụ trách 2 phòng ⇒ gộp cả 2 vào nhóm người đó.
-- 6.7 Chọn 1 / 2 / 3 tháng — GIỮ calculateGanttBarStyle (1 tháng) và
-  calculateGanttBarStyleRange (2–3 tháng) đang có trong app.js. Việc dài hơn khoảng: thanh
-  bị cắt hai đầu, KHÔNG mất. Việc nằm ngoài hẳn khoảng: không hiện thanh.
-- 6.8 Cây 4 mức thu gọn — Nhóm → Công việc → Công việc con → Nhiệm vụ; trạng thái thu gọn
-  lưu localStorage, tải lại trang vẫn giữ.
-- 6.9 Đối chiếu số liệu — chạy song song bản Apps Script và bản VPS trên CÙNG dữ liệu, so
-  từng con số. Xong khi 4 thẻ + 6 biểu đồ chênh 0. Nếu hai bên bản cũ đang lệch nhau thì
-  lấy số ĐANG HIỆN trên giao diện làm chuẩn (rủi ro §7 Phase 6), ghi rõ vào §13.5.
-Nợ Phase 4 (bắt buộc làm trong phase này, không để tiếp): getTasks của cầu RPC đang N+1
-(mỗi công việc một GET /work-items, đã đo ở §8.5 C6). Gộp một truy vấn (listForWorks đã có
-ở bootstrap — dùng lại, đừng viết SQL mới).
+VIỆC CỦA SESSION NÀY: làm trọn Phase 7 trên nhánh mới vps/phase-7-misc (tách từ
+vps/phase-6-stats). Theo đúng §7 Phase 7, 6 việc:
+- 7.1 proposals CRUD: 11 trường, 4 trạng thái + số đếm, 2 loại, tìm kiếm, chọn nhiệm vụ theo
+  công việc. Nối 4 tên RPC đề nghị vào nghiệp vụ.
+- 7.2 apps CRUD: chỉ admin thêm/sửa/xoá; allowed_roles[] quyết định ai thấy app nào
+  (TC-MISC-05/06). Nối 3 tên RPC app.
+- 7.3 Chat: GET /chat?since= (REST mới) + hỏi lại mỗi 10 giây; giữ 3 ngày gần nhất, 50 tin
+  cuối như hiện tại. Nối getChatMessages/sendChatMessage.
+- 7.4 Cron dọn tin chat cũ hơn 90 ngày hằng tuần (mẫu services/cron.js của việc 5.8, có cờ
+  CRON_ENABLED để staging tắt).
+- 7.5 Xuất Excel 3 mẫu: (a) công việc 3 tầng có thụt lề, (b) nhiệm vụ theo người thực hiện,
+  (c) thống kê theo phòng. Tiêu đề, khoá dòng đầu, ngày dd/mm/yyyy mà Excel nhận LÀ NGÀY
+  (TC-MISC-10/13). Thư viện đề nghị: exceljs — thêm dependency thì cập nhật §3.3 «thư viện
+  chốt trước, không đổi giữa đường».
+- 7.6 Quyền khi xuất: CHỈ trong phạm vi được thấy của người bấm — tái dùng ĐÚNG hàm lọc phạm
+  vi của API danh sách, không viết truy vấn riêng (TC-MISC-11; §7 cảnh báo đây là chỗ dễ thành
+  lỗ rò).
 
 KHÔNG LÀM:
 - Email / nodemailer / services/mailer.js (5.9 đã bỏ).
-- Đề nghị / chat / app / xuất Excel / addNotificationWithAuth (Phase 7, 10 tên còn 501).
-- Nút Duyệt/Từ chối trên cây (D3–D8 UI) — máy chủ REST đã có, không có tên RPC. Trừ khi
-  người dùng yêu cầu trong session.
+- Nút Duyệt/Từ chối trên cây (D3–D8 UI) — máy chủ REST đã có từ Phase 5, không có tên RPC.
+  Trừ khi người dùng yêu cầu trong session.
+- Đổi hình dạng phản hồi của cầu RPC hay bỏ/bớt tên nào trong 37 tên.
 - Nới quyền §6. Không git add . Không commit deploy/.env hay data/*.
 - Không đọc tràn hai file nguồn lớn.
 
-RỦI RO LỚN NHẤT CỦA PHASE 6 LÀ ĐẾM SAI (cấp 2 lẫn cấp 3, hoặc lọt Chờ duyệt), KHÔNG PHẢI
-VẼ ĐƯỢC BIỂU ĐỒ. Mọi SQL đếm đi qua v_countable_*. Test chốt TC-STAT-01 (cấp 2 không cộng)
-+ TC-APR-06 (thêm 1 mục Chờ duyệt ⇒ 4 thẻ và 6 biểu đồ không đổi một đơn vị) vẫn xanh.
+RỦI RO LỚN NHẤT CỦA PHASE 7 LÀ LỖ RÒ KHI XUẤT (7.6): ai bấm xuất cũng chỉ được ra đúng phạm
+vi mình thấy, kể cả admin-list-all path. Test chốt TC-MISC-11 (Nhân viên xuất ⇒ chỉ phòng
+mình) phải có ngay khi làm 7.5, đừng để cuối phase.
 
-XONG KHI: 835 test cũ vẫn xanh · TC-STAT-01..16 xanh · bảng đối chiếu 4 thẻ + 6 biểu đồ
-chênh 0 (hoặc ghi rõ chuẩn lấy từ UI nếu bản cũ lệch) · Gantt 3 tháng cắt thanh đúng hai
-đầu · nhân viên gọi ?departmentId= phòng khác bị ép về phòng mình · getTasks không còn N+1
-· lint + format:check sạch · CHẠY LẠI bash tools/smoke-8.5.sh (nhớ migrate UAT nếu có
-migration mới) và cập nhật docs/UAT.md: T5–T10 và R1–R7 phải từ «có nguồn» sang xanh vẽ.
-Đừng báo "xong" khi còn điểm đỏ — ghi rõ điểm nào chưa đạt và vì sao.
+XONG KHI: 879 test cũ vẫn xanh · TC-MISC-01..13 xanh · RPC 37/37 chạy thật (hết pending)
+· chat mở 2 tab thấy tin của nhau ≤10 giây (kiểm tay) · cron dọn chat có test · 3 file .xlsx
+mở bằng Excel không cảnh báo, số dòng bằng số mục thấy được · Nhân viên xuất chỉ thấy phòng
+mình · lint + format:check sạch · CHẠY LẠI bộ khói (Git Bash đường dẫn rõ; nhớ migrate UAT
+nếu có migration mới — chat cần bảng thật đã có sẵn từ Phase 0 nên thường không phải migrate)
+và cập nhật docs/UAT.md: R8–R11 (+R12) từ ⏳ sang xanh. Đừng báo "xong" khi còn điểm đỏ.
 
 Viết test song song với code, chạy ngay sau mỗi việc (`cd server && npm test`), không dồn
 đến cuối phase.
@@ -157,10 +153,10 @@ Viết test song song với code, chạy ngay sau mỗi việc (`cd server && np
 CUỐI SESSION, bắt buộc trước khi tổng kết: cập nhật §13.2, thêm 1 dòng vào §13.3 (không sửa
 dòng cũ), bổ sung §13.4 nếu có câu cần tôi trả lời, bổ sung §13.5 nếu phát hiện bẫy mới.
 Nếu thiết kế đổi thì sửa luôn mục gốc (§4/§5/§6/§7), không chỉ ghi ở §13. Cập nhật mục 1 và
-mục 3 của docs/BAT-DAU-SESSION.md — mục 3 lần sau là prompt cho Phase 7 (đề nghị, quản lý
-app, chat, xuất Excel: §7 việc 7.1–7.6; 10 tên RPC còn 501; quyền xuất chỉ trong phạm vi
-được thấy — 7.6 dễ thành lỗ rò).
-Commit theo từng việc nhỏ, thông điệp có mã phase (phase-6: ...). Không dùng git add .
+mục 3 của docs/BAT-DAU-SESSION.md — mục 3 lần sau là prompt cho Phase 8 (hạ tầng VPS, bảo
+mật, sao lưu: §7 Phase 8; chờ §11 mục 1–4 — VPS thật chưa có thì làm những việc chạy local
+được và ghi rõ phần chờ). Commit theo từng việc nhỏ, thông điệp có mã phase (phase-7: ...).
+Không dùng git add .
 
 Trả lời tiếng Việt.
 ```

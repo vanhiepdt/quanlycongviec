@@ -174,17 +174,20 @@ Tổng: **88 mã** / 13 nhóm.
 
 ## Checklist khói §8.5 — 6 nhóm / 60 điểm
 
-**Lượt chạy lại: 2026-08-25 · Phase 5 · nhánh `vps/phase-5-approval` · HEAD `57cfa89`.**
+**Lượt chạy lại: 2026-08-25 · Phase 6 · nhánh `vps/phase-6-stats` · HEAD `3df2e44`.**
+(Lượt trước: Phase 5 · `57cfa89` · 36 ✅ · 23 ⏳.)
 
-Môi trường: Nginx (cổng 8099) phục vụ tệp tĩnh trong `web/` và chuyển `/api/*` sang Express 5
-(Node trên máy thật cổng 3000, cầu `alpine/socat` tên `app`), PostgreSQL 16 với cơ sở dữ liệu
-**riêng** `quanlycongviec_uat`. Lần chạy đầu của session này 500 ở T1–T10 vì UAT **đứng ở
-migration 003** — thiếu view `v_countable_*` của việc 5.4; `node-pg-migrate` mặc định đọc
-`DATABASE_URL` của **dev**. Đã `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` áp
-`004_countable_views`, chạy lại sạch. `process.loadEnvFile()` **không** ghi đè biến dòng lệnh.
+Môi trường lượt này: Node trên máy thật cổng 3000 với `DATABASE_URL=…/quanlycongviec_uat`
+(`BASE=http://127.0.0.1:3000`, không cần Nginx cho phần API; migration đã đứng ở 004 từ
+Phase 5 nên không phải migrate thêm). Bộ khói **đã mở rộng** theo đúng ghi nợ §13.5: thêm
+helper `rest` (GET `/api/v1/*` bằng cookie phiên) và các điểm mới — T5–T10 gọi thẳng
+`/stats/charts?type=` ×6 + `/stats/summary` + `/stats/activities`; R1–R7 gọi
+`/gantt?groupBy=department|deputy|assignee` + cửa sổ from/to. Chữ lạc hậu «cả 7 còn 501» (N1)
+và «getTasks N+1» (C6) cũng đã sửa.
 
 Mọi điểm đi đúng đường thật của người dùng: `google.script.run.<tên cũ>` →
 `web/assets/js/api-bridge.js` → `POST /api/rpc/<tên>` (kèm `X-CSRF-Token`) → `/api/v1` → CSDL.
+Từ Phase 6, Tổng quan/Gantt còn đi đường REST MỚI: `GET /api/v1/stats|gantt`.
 
 Chạy lại: `bash tools/smoke-8.5.sh` — in mã HTTP từng điểm, tự dọn các dòng nó tạo ra và
 kết thúc bằng số dòng còn lại để đối chiếu với seed (**9 công việc / 30 đầu việc**).
@@ -192,15 +195,19 @@ kết thúc bằng số dòng còn lại để đối chiếu với seed (**9 c�
 Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuyển / chưa kiểm hết trên đường khói
 · — bản cũ không có điểm này.
 
-**Tổng: 36 ✅ · 0 ❌ · 23 ⏳ · 1 —** (đếm theo 60 ô checklist, không đếm hai lần)
+**Tổng: 49 ✅ · 0 ❌ · 10 ⏳ · 1 —** (đếm theo 60 ô checklist, không đếm hai lần)
 
-- 36 ✅ = Đ1–Đ6 (6) + T1–T4 nguồn 4 thẻ (4) + C1–C14 (14, **C7 hết đỏ**) + D1–D2 (2) + N1–N10 RPC đã nối (10).
-- 0 ❌ — hai điểm đỏ Phase 4 (**C7**, **D1**) đã xanh.
-- 23 ⏳ = T5–T10 vẽ đủ 6 biểu đồ (6, Phase 6) + D3–D8 nút/badge UI (6) + R1–R7 Gantt vẽ/nhóm/thu gọn (7, Phase 6) + R8–R11 đề nghị/chat/app (4, Phase 7).
+- 49 ✅ = Đ1–Đ6 (6) + T1–T10 (**đủ 4 thẻ có số thật + 6 biểu đồ vẽ từ server + hoạt động có phân trang**, 10) + C1–C14 (14) + D1–D2 (2) + N1–N10 (10) + R1–R7 (**Gantt cây 4 mức nhóm 3 kiểu + cửa sổ ngày**, 7).
+- 0 ❌ — không phát hiện hồi quy mới trong phase này.
+- 10 ⏳ = D3–D8 nút/badge UI duyệt trên cây (6) + R8–R11 đề nghị/chat/app (4) — cả hai nhóm là Phase 7/UI sau.
 - 1 — = R12 xuất Excel (Phase 7, bản cũ không có).
 
-Nguồn bootstrap **đã mở** T5–T10 và R1–R7 (không còn 501) nhưng khói không chứng minh 6 loại biểu
-đồ hay Gantt 1/2/3 tháng đã vẽ đúng — để ⏳ cho Phase 6. Chi tiết từng ô dưới đây.
+Đối chiếu số liệu Apps Script ↔ VPS (việc **6.9**, TC-STAT-16): hai thuật toán cũ được port 1:1
+(`getSummaryStats` của Code.clean.gs và `renderStats`/`render*Chart` của app.js — **UI tự tính
+lại, bỏ qua tham số summaryStats, allTasks gồm cả cấp 2**) chạy trên cùng gói legacy rồi so với
+REST mới ở tầng CẤP 3: **chênh 0 từng con số** ở 4 thẻ + 6 biểu đồ. Dòng chênh duy nhất có chủ ý:
+«Tổng nhiệm vụ» UI cũ đếm thêm cấp 2 (bộ dữ liệu đối chiếu: chênh đúng 2 đơn vị) — chuẩn §0.1.
+Chi tiết: `server/tests/integration/stats-parity.test.js`.
 
 ### 1. Đăng nhập — 6/6 ✅
 
@@ -213,12 +220,12 @@ Nguồn bootstrap **đã mở** T5–T10 và R1–R7 (không còn 501) nhưng kh
 | Đ5 | Vào lại | ✅ | Mật khẩu **cũ** `401`, mật khẩu **mới** `200` |
 | Đ6 | Hết phiên | ✅ | `UPDATE sessions SET expires_at = now() - interval '1 hour'` ⇒ `[401]`, không đi tiếp bằng phiên cũ |
 
-### 2. Tổng quan — nguồn ✅ (việc 5.10); vẽ đầy đủ ⏳ Phase 6
+### 2. Tổng quan — 10/10 ✅ (Phase 6: vẽ từ server)
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
 | T1–T4 | 4 thẻ số có **nguồn** (kèm bấm vào số mở đúng danh sách) | ✅ nguồn | `[200] getDataForUser`, `[200] getInitialDataWithAuth`, `[200] getDepartmentContext`. Gói `GET /api/v1/bootstrap` trả `summaryStats` + `chartData` + `pendingCount` + `activities` đọc qua `v_countable_*` (việc 5.4). |
-| T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ⏳ Phase 6 | Nguồn hết 501 (cùng 3 tên T1–T4). `chartFrom()` của bootstrap mới trả **một** chuỗi `{labels, data}` theo trạng thái — **không** đủ 6 loại `?type=` của việc 6.2. Bấm số mở danh sách lọc tháng/phòng là việc **6.4/6.5**. Không tô xanh chỉ vì hết 501. |
+| T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ✅ Phase 6 | Bộ khói gọi thẳng REST mới, đủ 6 loại đều `[200]` với `{labels,data}` đúng hình dạng Chart.js: `status` / `project-progress` / `staff-performance` / `task-priority` / `timeline-progress` / `project-comparison`; kèm `[200] GET stats/summary` (7 công việc · 16 nhiệm vụ · 8 hoàn thành · 8 đang · 2 quá hạn trên dữ liệu khói) và `[200] GET stats/activities?page=1&limit=22` (phân trang, nút «Xem thêm»). app.js nạp bằng `napTongQuanTuServer()` khi vào Tổng quan; đếm qua `v_countable_*` — thêm mục Chờ duyệt không làm lệch một đơn vị (TC-STAT-05, TC-APR-06 ở `stats-api.test.js`). |
 
 Khi **chưa** đăng nhập, `getInitialDataWithAuth` vẫn trả `[200] {"requireLogin":true}` chứ **không**
 401/501 — giữ nguyên ngoại lệ Phase 4. Lần khói đầu session này 500 `INTERNAL` vì UAT thiếu
@@ -283,13 +290,13 @@ phải trạng thái thật. Happy-path (thêm nhân sự đủ trường, xoá 
 `smoke-8.5.sh`; đã kiểm tay `addStaffWithAuth` thiếu tên → 400 đúng. Đừng báo N* «xong UAT tay»
 chỉ vì hết 501.
 
-### 6. Còn lại — R1–R7 ⏳ Phase 6 (đã có nguồn); R8–R11 ⏳ Phase 7; R12 —
+### 6. Còn lại — R1–R7 ✅ Phase 6; R8–R11 ⏳ Phase 7; R12 —
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
-| R1–R3 | Gantt 1 / 2 / 3 tháng | ⏳ Phase 6 | Nguồn `allTasks`/`allProjects` đã có nhờ bootstrap (hết 501). `GET /api/v1/gantt` + chọn 1/2/3 tháng + cắt thanh hai đầu là việc **6.6/6.7**. Không tô xanh chỉ vì hết 501. |
-| R4–R6 | Nhóm theo 3 kiểu | ⏳ Phase 6 | Việc **6.6** `groupBy = department \| deputy \| assignee`. |
-| R7 | Thu gọn | ⏳ Phase 6 | Việc **6.8**, trạng thái `localStorage`. |
+| R1–R3 | Gantt 1 / 2 / 3 tháng | ✅ Phase 6 | `GET /api/v1/gantt?from=&to=` — bộ khói gọi cửa sổ 30→90 ngày `[200]` trả cây đúng khoảng (việc ngoài hẳn biến mất, việc vắt qua còn). Ô «Xem: 1/2/3 tháng» đặt `ganttEndDate = start + n×30 − 1` (n=3 đúng 90 ngày như mặc định cũ); thanh **cắt hai đầu** / **ẩn khi ngoài khoảng** do `tests/unit/gantt-ui.test.js` canh (TC-STAT-13/14). |
+| R4–R6 | Nhóm theo 3 kiểu | ✅ Phase 6 | Ba lượt khói `[200] GET gantt?groupBy=department / deputy / assignee`. Thứ tự phòng theo `sort_order` (TC-STAT-11); Phó GĐ phụ trách 2 phòng gộp MỘT nhóm (TC-STAT-12) — cả hai có test riêng trong `gantt-api.test.js`. |
+| R7 | Thu gọn | ✅ Phase 6 | Việc **6.8**: nút thu gọn ở cả 3 mức Nhóm/Công việc/Công việc con, khoá lưu `localStorage` (`qlcv_gantt_collapsed`), tải lại trang vẫn giữ — TC-STAT-15 trong `gantt-ui.test.js`. |
 | R8 | Đề nghị — tạo | ⏳ | `[501] getProposals`, `[501] addProposalWithAuth` — Phase 7 |
 | R9 | Đề nghị — sửa | ⏳ | `[501] updateProposalWithAuth` — Phase 7 |
 | R10 | Chat gửi / nhận | ⏳ | `[501] getChatMessages`, `[501] sendChatMessage` — Phase 7 |
@@ -309,13 +316,15 @@ RPC còn `pending()` **đúng 10 tên**: `getProposals`, `addProposalWithAuth`, 
 
 ### Việc tiếp theo (không còn điểm đỏ)
 
-1. **Phase 6** — thống kê / lọc / Gantt: 6.1–6.9. T1–T10 và R1–R7 đã có nguồn; còn vẽ đủ 6 loại
-   biểu đồ, lọc tháng **giao nhau**, Gantt nhóm + 1/2/3 tháng, đối chiếu chênh 0 với Apps Script.
-   Nợ Phase 4: `getTasks` N+1 — gộp một truy vấn.
-2. **D3–D8 UI** — nút Duyệt/Từ chối trên cây + badge đọc `pendingCount`. Máy chủ xong, không có
-   tên RPC. **Không** tự làm trong Phase 6 trừ khi người dùng yêu cầu.
-3. **R8–R12** — đề nghị / chat / app / Excel: **Phase 7**. `addNotificationWithAuth` cũng để đó.
-4. **Bộ khói** — comment N* «còn 501» và `grep` D3–D8 quá hẹp: sửa khi đụng `tools/smoke-8.5.sh`.
+1. **Phase 7** — đề nghị / quản lý app / chat / xuất Excel: §7 việc 7.1–7.6; 10 tên RPC còn 501;
+   quyền xuất chỉ trong phạm vi được thấy (**7.6** dễ thành lỗ rò). `addNotificationWithAuth` cũng để đó.
+2. **D3–D8 UI** — nút Duyệt/Từ chối trên cây + badge đọc `pendingCount`. Máy chủ REST xong từ
+   Phase 5, không có tên RPC; vẫn chưa ai yêu cầu làm.
+3. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt**
+   trên mảng đã do máy chủ chạm phạm vi (không có đường rò); nếu muốn lọc qua server thì thêm
+   `GET /stats/items` ở một session sau. Gantt nhóm `assignee` hiện đưa công việc vào nhóm của
+   MỖI người có nhiệm vụ trong đó và hiện toàn cây con — nếu muốn chỉ hiện nhánh của người đó
+   thì sửa `nhomTheoAssignee`.
 
 ---
 
