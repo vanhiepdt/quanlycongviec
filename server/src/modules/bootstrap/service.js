@@ -176,17 +176,7 @@ export async function getBundle(user) {
   const stats = summaryFrom(countable.works, countable.items);
   const chartData = chartFrom(countable.items);
 
-  const rawItems = await itemsRepo.listForWorks(works.map((w) => w.id));
-  const workById = new Map(works.map((w) => [w.id, w]));
-  const visibleItems = rawItems.filter((row) => {
-    const work = workById.get(row.work_id);
-    return can(user, 'read', entityOf(row.level), {
-      ...row,
-      work_department_id: work?.department_id,
-      work_manager_id: work?.manager_id,
-    }).ok;
-  });
-  const items = await attachReminders(visibleItems);
+  const { items } = await cayChoUser(user, works);
   const managerEmailsByDeptId = groupManagerEmails(managers);
 
   return {
@@ -200,6 +190,28 @@ export async function getBundle(user) {
     items,
     activities,
   };
+}
+
+/**
+ * Cây (works + items kèm nhắc việc) mà người này được thấy — MỘT bộ truy vấn, không N+1.
+ *
+ * EXPORT cho cầu RPC `getTasks`: trước đây handler đó quét từng công việc một lời gọi
+ * `/work-items` (§13.5, đã đo ở §8.5 C6). Nay bootstrap và RPC uống chung hàm này — sửa luật
+ * hiển thị chỉ có thể diễn ra ở MỘT chỗ.
+ */
+export async function cayChoUser(user, works = null) {
+  const danhSach = works ?? (await worksService.list(user));
+  const rawItems = await itemsRepo.listForWorks(danhSach.map((w) => w.id));
+  const workById = new Map(danhSach.map((w) => [w.id, w]));
+  const visibleItems = rawItems.filter(
+    (row) =>
+      can(user, 'read', entityOf(row.level), {
+        ...row,
+        work_department_id: workById.get(row.work_id)?.department_id,
+        work_manager_id: workById.get(row.work_id)?.manager_id,
+      }).ok
+  );
+  return { works: danhSach, items: await attachReminders(visibleItems) };
 }
 
 export default { getBundle, departmentContext, STATS_QUERIES };

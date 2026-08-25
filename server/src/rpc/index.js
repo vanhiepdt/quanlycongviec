@@ -12,6 +12,7 @@
 //  3. Thân phản hồi giữ hình dạng CŨ (`{success:true, …}`) bọc trong `data` của §5.3 — giao diện
 //     cũ đọc `response.success`, đổi hình dạng là vỡ 28 chỗ gọi.
 import { Router } from 'express';
+import * as bootstrapService from '../modules/bootstrap/service.js';
 import * as departmentsRepo from '../modules/departments/repo.js';
 import * as remindersRepo from '../modules/reminders/repo.js';
 import { ok } from '../middleware/errorHandler.js';
@@ -49,6 +50,13 @@ function makeContext(v1Router, req, res) {
 
     /** Nhắc việc của nhiều dòng trong MỘT truy vấn. */
     remindersByItemIds: (ids) => remindersRepo.mapByItemIds(ids),
+
+    /**
+     * Cây (works + items kèm nhắc việc) mà người đang gọi được thấy — MỘT bộ truy vấn
+     * (`cayChoUser` của bootstrap). Dành riêng cho `getTasks` để hết nợ N+1: trước đây handler
+     * quét từng công việc một lời gọi `/work-items` (§13.5 · §8.5 C6).
+     */
+    visibleTree: () => bootstrapService.cayChoUser(req.user),
 
     /**
      * Đổi SỐ THỨ TỰ nhắc việc của bản cũ thành `reminderId` thật.

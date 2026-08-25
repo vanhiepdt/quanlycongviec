@@ -256,30 +256,19 @@ export const RPC_TABLE = Object.freeze({
 
   // --- Nhiệm vụ (cấp 3) và công việc con (cấp 2) ----------------------------------------------
   //
-  // `getTasks()` của bản cũ không có tham số và trả VỀ TẤT CẢ nhiệm vụ, còn
-  // `GET /api/v1/work-items` bắt buộc có `workRef` (một dòng không tồn tại ngoài công việc nào).
-  // Nên ở đây phải quét từng công việc — N+1 lời gọi, chấp nhận tạm vì đây là lớp có thời hạn;
-  // bản thay thế là `GET /api/v1/bootstrap` gộp một câu SQL (§13.5).
+  // `getTasks()` của bản cũ không có tham số và trả VỀ TẤT CẢ nhiệm vụ. Nợ Phase 4 đã trả ở
+  // đây: handler KHÔNG còn quét từng công việc một lời gọi `/work-items` (N+1, đo ở §8.5 C6)
+  // mà dùng `ctx.visibleTree()` — cùng gói `cayChoUser` của bootstrap, MỘT bộ truy vấn bất kể
+  // số công việc. Hình dạng phản hồi giữ nguyên 100%.
   getTasks: {
     rest: 'GET /work-items?workRef=',
     async handler(args, ctx) {
-      const { works = [] } = await ctx.call('GET', '/works');
-      const rows = [];
-      const workCodeById = new Map();
-      const itemCodeById = new Map();
-      for (const work of works) {
-        workCodeById.set(work.id, work.code);
-        const { items = [] } = await ctx.call('GET', '/work-items', {}, { workRef: work.code });
-        for (const item of items) {
-          itemCodeById.set(item.id, item.code);
-          rows.push(item);
-        }
-      }
-      // Nhắc việc lấy MỘT lần cho mọi dòng (`mapByItemIds`), không phải mỗi dòng một lời gọi:
-      // giao diện cũ đọc `task[COL.T_REMINDERS]` như mảng có sẵn (dòng 621).
-      const remindersByItemId = await ctx.remindersByItemIds(rows.map((r) => r.id));
+      const { works, items } = await ctx.visibleTree();
+      const workCodeById = new Map(works.map((w) => [w.id, w.code]));
+      const itemCodeById = new Map(items.map((i) => [i.id, i.code]));
+      const remindersByItemId = new Map(items.map((i) => [i.id, i.reminders ?? []]));
       const context = { workCodeById, itemCodeById, remindersByItemId };
-      return rows.map((row) => taskToLegacy(row, context));
+      return items.map((row) => taskToLegacy(row, context));
     },
   },
 
