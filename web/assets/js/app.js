@@ -226,12 +226,11 @@ function updateUIForUser(user) {
       hideAdminButtons();
     }
   }
-  const addNotificationBtn = document.getElementById("add-notification-btn");
-  if (isAdmin2) {
-    if (addNotificationBtn) addNotificationBtn.classList.remove("hidden");
-  } else {
-    if (addNotificationBtn) addNotificationBtn.classList.add("hidden");
-  }
+  // Việc 4.7 — đã bỏ chỗ ẩn/hiện `#add-notification-btn`: `index.html` KHÔNG có nút đó, nên hai
+  // nhánh if này chưa bao giờ chạm được vào gì. Listener "click" của cùng id cũng đã bỏ (dòng 470
+  // cũ). Hệ quả phải nói rõ: modal tạo thông báo (`createNotificationModal`) hiện KHÔNG có đường
+  // vào — bản Apps Script cũng vậy, không phải Phase 4 làm mất. Muốn có thì thêm nút ở Phase 7
+  // cùng module thông báo, chứ Phase 4 chỉ được cắt chuyển, không thêm tính năng.
   updatePageTitle();
 }
 function hideAdminButtons() {
@@ -241,12 +240,12 @@ function hideAdminButtons() {
     el && (el.style.display = "none");
   });
   const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === currentUser.name),
-    values2 = ["add-project-btn", "add-project-standalone", "quick-add-project"];
+    values2 = ["add-project-standalone", "quick-add-project"];
   values2.forEach(values22 => {
     const el = document.getElementById(values22);
     el && (isAdmin() || isManager() ? el.style.display = "" : el.style.display = "none");
   });
-  const values3 = ["add-task-btn", "add-task-standalone", "quick-add-task"];
+  const values3 = ["add-task-standalone", "quick-add-task"];
   values3.forEach(values32 => {
     const el = document.getElementById(values32);
     el && (canUserCreateTask() ? el.style.display = "" : el.style.display = "none");
@@ -255,7 +254,9 @@ function hideAdminButtons() {
   });
 }
 function showAdminButtons() {
-  const values = ["add-project-btn", "add-project-standalone", "add-task-btn", "add-task-standalone", "add-staff-btn", "quick-add-project", "quick-add-task", "quick-add-staff", "quick-add-app", "add-app-btn"];
+  // Việc 4.7: bỏ hai id add-project-btn và add-task-btn khỏi danh sách — chúng không có trong
+  // `index.html` (listener của chúng cũng đã bỏ), giữ lại chỉ làm người đọc tưởng có nút.
+  const values = ["add-project-standalone", "add-task-standalone", "add-staff-btn", "quick-add-project", "quick-add-task", "quick-add-staff", "quick-add-app", "add-app-btn"];
   values.forEach(value => {
     const el = document.getElementById(value);
     el && (el.style.display = "");
@@ -457,18 +458,12 @@ function setupEventListeners() {
     if (isAuthenticated) openModal("proposal");
   }), document.getElementById("quick-add-app")?.addEventListener("click", () => {
     if (isAuthenticated && isAdmin()) openModal("app");
-  }), document.getElementById("add-project-btn")?.addEventListener("click", () => {
-    if (isAuthenticated && (isAdmin() || isManager())) openModal("project");
   }), document.getElementById("add-project-standalone")?.addEventListener("click", () => {
     if (isAuthenticated && (isAdmin() || isManager())) openModal("project");
-  }), document.getElementById("add-task-btn")?.addEventListener("click", () => {
-    if (isAuthenticated && canUserCreateTask()) openModal("task");
   }), document.getElementById("add-task-standalone")?.addEventListener("click", () => {
     if (isAuthenticated && canUserCreateTask()) openModal("task");
   }), document.getElementById("quick-add-task")?.addEventListener("click", () => {
     if (isAuthenticated && canUserCreateTask()) openModal("task");
-  }), document.getElementById("add-notification-btn")?.addEventListener("click", () => {
-    if (isAuthenticated && isAdmin()) openModal("notification");
   }), document.getElementById("projects-search")?.addEventListener("input", event => {
     filterCards(".project-card", event.target.value.toLowerCase());
   }), document.getElementById("tasks-search")?.addEventListener("input", event => {
