@@ -80,6 +80,14 @@ describe('người phụ trách phòng', () => {
     expect(typeof (await repo.listDepartmentIdsManagedBy(nguoi.id))[0]).toBe('number');
   });
 
+  it('listAllManagers trả mọi phòng một lần, không N+1', async () => {
+    await repo.addManager(ph01.id, nguoi.id, 'deputy_director');
+    await repo.addManager(ph02.id, nguoi.id, 'head');
+    const ds = await repo.listAllManagers();
+    expect(ds).toHaveLength(2);
+    expect(ds.map((m) => m.role).sort()).toEqual(['deputy_director', 'head']);
+  });
+
   it('removeManager xoá đúng một vai, trả về số dòng đã xoá', async () => {
     await repo.addManager(ph01.id, nguoi.id, 'deputy_director');
     await repo.addManager(ph01.id, nguoi.id, 'head');

@@ -72,7 +72,7 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
 
   it('TC-RPC-03: mỗi tên đã làm được đều khai đúng method + route REST', () => {
     const implemented = Object.entries(RPC_TABLE).filter(([, e]) => !e.notImplemented);
-    expect(implemented).toHaveLength(17);
+    expect(implemented).toHaveLength(20);
     for (const [name, entry] of implemented) {
       expect(entry.rest, name).toMatch(/^(GET|POST|PATCH|DELETE) \//);
       expect(typeof entry.handler, name).toBe('function');
@@ -84,8 +84,11 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(37);
     const pending = res.body.data.functions.filter((f) => !f.implemented);
-    expect(pending).toHaveLength(20);
+    expect(pending).toHaveLength(17);
     expect(pending.map((f) => f.name)).toContain('getStaffList');
+    expect(pending.map((f) => f.name)).not.toContain('getDataForUser');
+    expect(pending.map((f) => f.name)).not.toContain('getInitialDataWithAuth');
+    expect(pending.map((f) => f.name)).not.toContain('getDepartmentContext');
   });
 });
 
@@ -112,7 +115,7 @@ describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
     expect(res.body.error.message).toContain('Danh sách nhân sự');
   });
 
-  it('TC-RPC-08: cả 20 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
+  it('TC-RPC-08: cả 17 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
     const pendingNames = Object.entries(RPC_TABLE)
       .filter(([, e]) => e.notImplemented)
       .map(([name]) => name);
@@ -195,10 +198,13 @@ describe('mở trang khi chưa đăng nhập — phải ra modal, không ra lỗ
     expect(res.body.data.success).toBeUndefined();
   });
 
-  it('TC-RPC-37: ĐÃ đăng nhập ⇒ vẫn 501, vì dữ liệu đầu trang mới là thứ còn thiếu thật', async () => {
+  it('TC-RPC-37: ĐÃ đăng nhập ⇒ gói đầu trang (success + user.name), không còn 501', async () => {
     const res = await rpc('getInitialDataWithAuth');
-    expect(res.status).toBe(501);
-    expect(res.body.error.message).toContain('Nạp dữ liệu đầu trang');
+    expect(res.status).toBe(200);
+    expect(res.body.data.success).toBe(true);
+    expect(res.body.data.user.name).toBe(admin.full_name);
+    expect(res.body.data.user.full_name).toBe(admin.full_name);
+    expect(res.body.data.requireLogin).toBeUndefined();
   });
 
   it('TC-RPC-38: đăng xuất rồi mở lại trang ⇒ lại về cờ đăng nhập, không kẹt ở lỗi', async () => {

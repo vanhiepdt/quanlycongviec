@@ -41,6 +41,17 @@ export async function findById(id, client = null) {
 }
 
 /**
+ * Toàn bộ người dùng, không có `password_hash`. Dùng cho gói đầu trang (việc 5.10) và danh sách
+ * nhân sự (việc 5.11): ai cũng được *đọc* người dùng (§6), nên không lọc theo phòng ở đây.
+ */
+export async function listAll(client = null) {
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users ORDER BY full_name, id`
+  );
+  return rows;
+}
+
+/**
  * Dò người dùng theo HỌ TÊN. Phase 3 cần vì các API cây nhận `assigneeName` (chữ người dùng
  * gõ/dán từ bản cũ) chứ không phải id.
  *

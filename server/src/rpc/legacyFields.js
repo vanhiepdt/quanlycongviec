@@ -58,6 +58,20 @@ export const COL = Object.freeze({
   D_VICE: 'Email Phó phòng',
   D_ORDER: 'Thứ tự',
   D_NOTES: 'Ghi chú',
+  S_ID: 'Mã NV',
+  S_NAME: 'Họ tên',
+  S_EMAIL: 'Email',
+  S_POS: 'Chức vụ',
+  S_ROLE: 'Phân quyền',
+  S_PASSWORD: 'Mật khẩu',
+  S_DEPT: 'Phòng',
+  S_DEPT_ROLE: 'Vai trò phòng',
+  S_OBJECT_TYPE: 'Đối tượng',
+  S_NOTES: 'Ghi chú',
+  A_TIME: 'Thời gian',
+  A_ACTION: 'Hành động',
+  A_USER: 'Người thực hiện',
+  A_DETAILS: 'Chi tiết',
 });
 
 /** Trả về `undefined` (không phải `null`) để khoá không xuất hiện trong payload gửi cho route. */
@@ -250,4 +264,87 @@ export function remindersToLegacy(rows) {
   }));
 }
 
-export default { COL, projectToLegacy, taskToLegacy, remindersToLegacy };
+/**
+ * Dòng `users` → khoá `COL.S_*` mà `app.js` đọc (`staff[COL.S_NAME]`).
+ *
+ * `COL.S_PASSWORD` LUÔN chuỗi rỗng: giao diện cũ có cột đó vì Sheets lưu mật khẩu gần như
+ * thuần; máy chủ mới không được đưa băm ra ngoài dù chỉ một lần (cùng luật với `publicUser`).
+ */
+export function staffToLegacy(row, ctx = {}) {
+  const deptNameById = ctx.deptNameById ?? new Map();
+  return {
+    [COL.S_ID]: row.code,
+    [COL.S_NAME]: row.full_name ?? '',
+    [COL.S_EMAIL]: row.email ?? '',
+    [COL.S_POS]: row.position ?? '',
+    [COL.S_ROLE]: row.role ?? '',
+    [COL.S_PASSWORD]: '',
+    [COL.S_DEPT]: deptNameById.get(row.department_id) ?? '',
+    [COL.S_DEPT_ROLE]: row.dept_role ?? '',
+    [COL.S_OBJECT_TYPE]: row.object_type ?? '',
+    [COL.S_NOTES]: row.notes ?? '',
+  };
+}
+
+/**
+ * Dòng phòng → khoá `COL.D_*`.
+ *
+ * Nhận cả dòng CSDL (`sort_order`, email lấy từ `ctx.managerEmailsByDeptId`) lẫn hình REST
+ * (`sortOrder`, `directorEmails` / `headEmails` / `viceEmails`) để RPC và bootstrap dùng chung.
+ */
+export function departmentToLegacy(row, ctx = {}) {
+  const grouped = ctx.managerEmailsByDeptId?.get(row.id);
+  return {
+    [COL.D_ID]: row.code,
+    [COL.D_NAME]: row.name ?? '',
+    [COL.D_DIRECTOR]: joinEmails(row.directorEmails ?? grouped?.deputy_director),
+    [COL.D_HEAD]: joinEmails(row.headEmails ?? grouped?.head),
+    [COL.D_VICE]: joinEmails(row.viceEmails ?? grouped?.vice),
+    [COL.D_ORDER]: row.sortOrder ?? row.sort_order ?? 0,
+    [COL.D_NOTES]: row.notes ?? '',
+  };
+}
+
+function joinEmails(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(';');
+  if (value == null || value === '') return '';
+  return String(value);
+}
+
+/**
+ * Dòng `activity_logs` → khoá `COL.A_*` mà `renderActivity` đọc.
+ *
+ * `details` là jsonb tự do: hiện `code` nếu có (nhật ký cây/duyệt luôn ghi mã), không thì
+ * chuỗi JSON — `renderActivity` thoát HTML nên không phải lỗ XSS.
+ */
+export function activityToLegacy(row) {
+  return {
+    [COL.A_TIME]: row.created_at ?? '',
+    [COL.A_ACTION]: row.action ?? '',
+    [COL.A_USER]: row.actor_name ?? '',
+    [COL.A_DETAILS]: moTaNhatKy(row.details),
+  };
+}
+
+function moTaNhatKy(details) {
+  if (details == null || details === '') return '';
+  if (typeof details === 'string') return details;
+  if (typeof details === 'object' && details.code) {
+    return details.name ? `${details.code} — ${details.name}` : String(details.code);
+  }
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return '';
+  }
+}
+
+export default {
+  COL,
+  projectToLegacy,
+  taskToLegacy,
+  remindersToLegacy,
+  staffToLegacy,
+  departmentToLegacy,
+  activityToLegacy,
+};

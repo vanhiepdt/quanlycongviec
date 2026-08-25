@@ -30,6 +30,10 @@ function publicUser(row) {
     id: row.id,
     code: row.code,
     full_name: row.full_name,
+    // Việc 5.10: `app.js` đọc `currentUser.name` (57 chỗ, `updateUIForUser` gọi `.split`).
+    // Giữ cả `full_name` (tên cột CSDL) lẫn `name` (tên giao diện cũ) — chọn một phía cầu nối,
+    // không sửa 57 chỗ ở file 3653 dòng.
+    name: row.full_name,
     email: row.email,
     position: row.position,
     role: row.role,

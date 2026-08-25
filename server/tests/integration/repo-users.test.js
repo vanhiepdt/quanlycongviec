@@ -39,6 +39,21 @@ describe('findAuthByEmail', () => {
   });
 });
 
+describe('listAll — gói đầu trang / danh sách nhân sự', () => {
+  it('trả mọi người, sắp theo tên, KHÔNG có password_hash', async () => {
+    await makeUser({
+      code: 'NV002',
+      email: 'b@congty.vn',
+      full_name: 'Trần Thị B',
+    });
+    const rows = await repo.listAll();
+    expect(rows.map((r) => r.full_name)).toEqual(['Nguyễn Văn A', 'Trần Thị B']);
+    for (const row of rows) {
+      expect(Object.keys(row)).not.toContain('password_hash');
+    }
+  });
+});
+
 describe('findById / findPasswordHash', () => {
   it('findById KHÔNG trả về password_hash', async () => {
     const row = await repo.findById(user.id);

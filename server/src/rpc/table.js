@@ -12,10 +12,13 @@
 // thật do `handler` làm, qua `ctx.call` — xem `subrequest.js`.
 import { AppError } from '../utils/errors.js';
 import {
+  activityToLegacy,
   departmentFromLegacy,
+  departmentToLegacy,
   projectFromLegacy,
   projectToLegacy,
   remindersToLegacy,
+  staffToLegacy,
   taskFromLegacy,
   taskToLegacy,
 } from './legacyFields.js';
@@ -40,6 +43,41 @@ function required(value, name) {
     throw new AppError('VALIDATION_ERROR', `Thiếu tham số «${name}»`, { field: name });
   }
   return value;
+}
+
+/**
+ * Gói REST của việc 5.10 → hình dạng mà `handleSuccessfulLogin` đọc
+ * (`data.user`, `data.projects`, `data.tasks`, `data.staff`, …).
+ *
+ * `proposals` / `apps` cố ý mảng rỗng: module còn Phase 7, nhưng thiếu khoá thì UI gán `[]`
+ * im lặng còn 501 thì toast đỏ chặn cả trang.
+ */
+function legacyBundleFromRest(data) {
+  const deptNameById = new Map((data.departments ?? []).map((d) => [d.id, d.name]));
+  const emailById = new Map((data.people ?? []).map((p) => [p.id, p.email]));
+  const nameById = new Map((data.people ?? []).map((p) => [p.id, p.full_name ?? p.name]));
+  const workCodeById = new Map((data.works ?? []).map((w) => [w.id, w.code]));
+  const itemCodeById = new Map((data.items ?? []).map((i) => [i.id, i.code]));
+  const remindersByItemId = new Map((data.items ?? []).map((i) => [i.id, i.reminders ?? []]));
+  const projectCtx = { deptNameById, emailById, nameById };
+  const taskCtx = { workCodeById, itemCodeById, remindersByItemId, emailById, nameById };
+
+  return {
+    success: true,
+    user: data.user,
+    projects: (data.works ?? []).map((row) => projectToLegacy(row, projectCtx)),
+    tasks: (data.items ?? []).map((row) => taskToLegacy(row, taskCtx)),
+    staff: (data.people ?? []).map((row) => staffToLegacy(row, { deptNameById })),
+    adminNames: (data.people ?? [])
+      .filter((p) => p.role === 'admin')
+      .map((p) => p.full_name ?? p.name),
+    chartData: data.chartData ?? { labels: [], data: [] },
+    recentActivities: (data.activities ?? []).map((row) => activityToLegacy(row)),
+    summaryStats: data.summaryStats ?? {},
+    pendingCount: data.pendingCount ?? { works: 0, items: 0, total: 0 },
+    proposals: [],
+    apps: [],
+  };
 }
 
 export const RPC_TABLE = Object.freeze({
@@ -103,40 +141,52 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
-  // --- Nạp dữ liệu đầu trang -----------------------------------------------------------------
-  // `GET /api/v1/bootstrap` (§5.2) cần cả nhân sự, đề nghị, app, thống kê và biểu đồ — những
-  // module chưa tồn tại. Làm nửa vời ở đây thì giao diện dựng ra bảng rỗng và người dùng tưởng
-  // dữ liệu đã mất, nên để thất bại rõ ràng cho tới khi có đủ module.
-  getDataForUser: pending('Nạp dữ liệu người dùng', 'GET /bootstrap'),
+  // --- Nạp dữ liệu đầu trang (việc 5.10) ------------------------------------------------------
+  //
+  // Ba tên này cùng uống `GET /bootstrap` (và `GET /departments/context`). Đề nghị / app vẫn
+  // trả mảng rỗng: module chưa có (Phase 7), nhưng `handleSuccessfulLogin` gán thẳng
+  // `allProposals = data.proposals || []` — thiếu khoá thì không sao, còn 501 thì toast đỏ
+  // chặn cả trang Tổng quan.
+  getDataForUser: {
+    rest: 'GET /bootstrap',
+    async handler(args, ctx) {
+      return legacyBundleFromRest(await ctx.call('GET', '/bootstrap'));
+    },
+  },
 
   /**
-   * Ngoại lệ CÓ LÝ DO của nhóm `pending` (việc 4.4).
+   * Ngoại lệ CÓ LÝ DO vẫn giữ sau việc 5.10 (việc 4.4 / TC-RPC-36).
    *
-   * Đây là lời gọi ĐẦU TIÊN của trang (`checkAuthenticationAndInitialize`, dòng 131 `app.js`), nên
-   * nó quyết định người chưa đăng nhập thấy gì. Nếu trả 501 như các tên chưa làm khác thì khách
-   * vào trang nhận ngay một toast đỏ "Chức năng … chưa được chuyển sang máy chủ mới" rồi mới thấy
-   * modal — đúng kỹ thuật nhưng sai nghiệp vụ: người ta chưa đăng nhập thì việc cần làm là ĐĂNG
-   * NHẬP, không phải đọc lỗi hệ thống.
-   *
-   * Bản cũ đã có sẵn đường đi đúng cho việc này: `{requireLogin: true}` ⇒ `showLoginModal()` (dòng
-   * 133 `app.js`), không kèm lỗi. Nên: chưa có phiên ⇒ trả đúng cờ đó; ĐÃ có phiên ⇒ vẫn 501, vì
-   * lúc đó dữ liệu đầu trang là thứ thật sự còn thiếu và phải thấy rõ (chờ `GET /bootstrap`,
-   * Phase 5). Vẫn giữ `notImplemented: true` để `GET /api/rpc` không khai khống là đã làm xong.
+   * Đây là lời gọi ĐẦU TIÊN của trang (`checkAuthenticationAndInitialize`, dòng 131 `app.js`).
+   * Khách chưa đăng nhập: `{requireLogin: true}` ⇒ `showLoginModal()`, không toast lỗi. Đã có
+   * phiên: cùng gói với `getDataForUser`. Không trả 401 — `app.js` không đi nhánh modal nếu
+   * failure handler chạy.
    */
   getInitialDataWithAuth: {
     rest: 'GET /bootstrap',
     public: true,
-    notImplemented: true,
-    handler(args, ctx) {
+    async handler(args, ctx) {
       if (!ctx.req.user) return { requireLogin: true };
-      throw new AppError(
-        'NOT_IMPLEMENTED',
-        'Chức năng «Nạp dữ liệu đầu trang» chưa được chuyển sang máy chủ mới. Vui lòng liên hệ quản trị.'
-      );
+      return legacyBundleFromRest(await ctx.call('GET', '/bootstrap'));
     },
   },
 
-  getDepartmentContext: pending('Ngữ cảnh phòng ban', 'GET /departments/context'),
+  getDepartmentContext: {
+    rest: 'GET /departments/context',
+    async handler(args, ctx) {
+      const data = await ctx.call('GET', '/departments/context');
+      return {
+        success: true,
+        departments: (data.departments ?? []).map((row) => departmentToLegacy(row)),
+        departmentNames: data.departmentNames ?? [],
+        visibleDepartments: data.visibleDepartments ?? [],
+        myDepartment: data.myDepartment ?? '',
+        myDeptRole: data.myDeptRole ?? '',
+        isDeputyDirector: data.isDeputyDirector === true,
+        isDepartmentHead: data.isDepartmentHead === true,
+      };
+    },
+  },
 
   // --- Công việc cấp 1 (giao diện cũ gọi là "dự án", §0.1) ------------------------------------
   //

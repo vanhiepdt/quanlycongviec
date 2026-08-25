@@ -595,13 +595,30 @@ function setupOverviewProjectFilter() {
     overviewProjectFilterEl.value = "", currentOverviewProjectFilter = null, clearBtn.classList.add("hidden"), projectFilterErrorEl.classList.add("hidden"), overviewProjectFilterEl.classList.remove("border-red-500"), applyOverviewFilter();
   });
 }
+/**
+ * Việc 5.4 nửa giao diện: thẻ số và 6 biểu đồ không được đếm mục 'Chờ duyệt'
+ * (kể cả dòng nằm dưới một mục đang chờ). Danh sách / cây vẫn hiện đủ — chỉ
+ * `getFiltered*` (dùng cho thống kê) và `renderStats` đi qua cửa này.
+ * Khớp `v_countable_works` / `v_countable_items`.
+ */
+function isCountableRow(row) {
+  if (!row || isPendingApproval(row)) return false;
+  const work = allProjects.find(project => project[COL.P_ID] === row[COL.T_PID]);
+  if (work && isPendingApproval(work)) return false;
+  const parentCode = row[COL.T_PARENT];
+  if (parentCode) {
+    const parent = allTasks.find(task => task[COL.T_ID] === parentCode);
+    if (parent && isPendingApproval(parent)) return false;
+  }
+  return true;
+}
 function getFilteredProjects() {
-  if (currentOverviewProjectFilter) return allProjects.filter(project => project[COL.P_ID] === currentOverviewProjectFilter);
-  return allProjects;
+  const list = currentOverviewProjectFilter ? allProjects.filter(project => project[COL.P_ID] === currentOverviewProjectFilter) : allProjects;
+  return list.filter(isCountableRow);
 }
 function getFilteredTasks() {
-  if (currentOverviewProjectFilter) return allTasks.filter(task => task[COL.T_PID] === currentOverviewProjectFilter);
-  return allTasks;
+  const list = currentOverviewProjectFilter ? allTasks.filter(task => task[COL.T_PID] === currentOverviewProjectFilter) : allTasks;
+  return list.filter(isCountableRow);
 }
 function applyOverviewFilter() {
   renderStats(), renderPriorityTasksMini(), renderChart(), renderProjectProgressChart(), renderTaskPriorityChart(), renderTimelineProgressChart(), renderProjectComparisonChart(), renderStaffPerformanceChart();
@@ -797,9 +814,8 @@ function closeMobileMenu() {
   sidebarEl.classList.remove("open"), mobileOverlayEl.classList.add("opacity-0"), setTimeout(() => mobileOverlayEl.classList.add("hidden"), 300);
 }
 function renderStats(summaryStats) {
-  let allProjects2 = allProjects,
-    allTasks2 = allTasks;
-  currentOverviewProjectFilter && (allProjects2 = allProjects.filter(project => project[COL.P_ID] === currentOverviewProjectFilter), allTasks2 = allTasks.filter(task => task[COL.T_PID] === currentOverviewProjectFilter));
+  const allProjects2 = getFilteredProjects(),
+    allTasks2 = getFilteredTasks();
   const projects2Length = allProjects2.length,
     count = allProjects2.filter(projects2 => (projects2[COL.P_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
     projects2Total = allProjects2.reduce((acc, projects2) => {
@@ -3150,12 +3166,12 @@ function showStaffValidationError(validation) {
   validation.length > 0 ? (staffValidationErrorEl.innerHTML = validation.map(validation2 => "<div class=\"text-red-600 text-sm\">" + escapeHtml(validation2) + "</div>").join(""), staffValidationErrorEl.classList.remove("hidden")) : staffValidationErrorEl.classList.add("hidden");
 }
 function renderTaskStats() {
-  const allTasks2 = isAdmin() ? allTasks : allTasks.filter(task => {
+  const allTasks2 = (isAdmin() ? allTasks : allTasks.filter(task => {
       if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
       const taskPid = task[COL.T_PID],
         project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
       return project && project[COL.P_MANAGER] === currentUser.name;
-    }),
+    })).filter(isCountableRow),
     filteredTasks2 = allTasks2.filter(taskMatchesDateFilter),
     data = {
       pending: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
@@ -3166,7 +3182,7 @@ function renderTaskStats() {
   document.getElementById("tasks-pending-count").innerHTML = "<i class=\"fas fa-pause-circle text-sm\"></i>" + escapeHtml(data.pending), document.getElementById("tasks-active-count").innerHTML = "<i class=\"fas fa-play-circle text-sm\"></i>" + escapeHtml(data.active), document.getElementById("tasks-completed-count").innerHTML = "<i class=\"fas fa-check-circle text-sm\"></i>" + escapeHtml(data.completed), document.getElementById("tasks-paused-count").innerHTML = "<i class=\"fas fa-pause text-sm\"></i>" + escapeHtml(data.paused);
 }
 function renderProjectStats() {
-  const userAllowedProjects = getUserAllowedProjects(),
+  const userAllowedProjects = getUserAllowedProjects().filter(isCountableRow),
     data = {
       pending: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("chưa")).length,
       active: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("đang")).length,

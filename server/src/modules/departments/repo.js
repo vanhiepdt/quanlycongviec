@@ -50,6 +50,20 @@ export async function listManagers(departmentId, client = null) {
   return rows;
 }
 
+/**
+ * Mọi dòng phụ trách của mọi phòng — một truy vấn cho gói đầu trang / ngữ cảnh phòng
+ * (việc 5.10), thay vì `listManagers` trong vòng lặp.
+ */
+export async function listAllManagers(client = null) {
+  const { rows } = await db(client).query(
+    `SELECT dm.department_id, dm.user_id, dm.role, u.full_name, u.email
+       FROM department_managers dm
+       JOIN users u ON u.id = dm.user_id
+      ORDER BY dm.department_id, dm.role, u.full_name`
+  );
+  return rows;
+}
+
 /** Các phòng một người phụ trách với một vai cụ thể. Mặc định: vai Phó Giám đốc (§6). */
 export async function listDepartmentIdsManagedBy(userId, role = 'deputy_director', client = null) {
   const { rows } = await db(client).query(

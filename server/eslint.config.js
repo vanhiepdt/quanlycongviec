@@ -44,6 +44,7 @@ export default [
       'tests/unit/change-password-modal.test.js',
       'tests/unit/xss-escape.test.js',
       'tests/unit/pending-badge.test.js',
+      'tests/unit/countable-stats-ui.test.js',
     ],
     languageOptions: {
       globals: {
