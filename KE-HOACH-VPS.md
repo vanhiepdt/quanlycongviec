@@ -275,7 +275,7 @@ quanlycongviec/
 │  │  │  ├─ workItems/            # cấp 2 + cấp 3 (một bảng, phân biệt bằng level)
 │  │  │  ├─ reminders/  approvals/  proposals/  apps/  chat/
 │  │  │  ├─ notifications/  stats/  gantt/  activity/  export/
-│  │  ├─ rpc/index.js             # cầu tương thích: 36 tên hàm cũ → service
+│  │  ├─ rpc/index.js             # cầu tương thích: 37 tên hàm cũ → service
 │  │  ├─ services/ cron.js  excel.js       # KHÔNG có mailer.js — §13.4 mục 4
 │  │  ├─ utils/
 │  │  │  ├─ logger.js             # [đã có] pino, che cookie/authorization/mật khẩu
@@ -581,14 +581,15 @@ Nhiệm vụ mồ côi vẫn nhập nhưng `parent_id = NULL`, hiện ở nhóm 
 ### 5.1 Cầu tương thích — cách để không phải sửa 3653 dòng frontend
 
 Frontend hiện gọi backend qua **28 chỗ** `google.script.run.withSuccessHandler(...).tênHàm(...)`,
-tổng **36 tên hàm**. Thay vì sửa từng chỗ, thêm một file duy nhất `web/assets/js/api-bridge.js`
+tổng **37 tên hàm** (kế hoạch viết 36 là **đếm sai**: đếm lại từng dòng §5.2 và đối chiếu với
+`web/assets/js/app.js` lúc làm việc 4.2 thì ra 37 — xem bẫy ở §13.5). Thay vì sửa từng chỗ, thêm một file duy nhất `web/assets/js/api-bridge.js`
 định nghĩa lại `window.google.script.run` với đúng giao diện cũ:
 
 ```js
 // api-bridge.js — nạp TRƯỚC app.js
 const RPC = ['authenticateUser','logout','getDataForUser','getInitialDataWithAuth',
   'getProjects','getTasks','getStaffList','getProposals','getChatMessages',
-  'getDepartmentContext','addProjectWithAuth','updateProjectWithAuth', /* … 36 tên … */];
+  'getDepartmentContext','addProjectWithAuth','updateProjectWithAuth', /* … 37 tên … */];
 
 function makeRunner(onOk, onErr) {
   const api = {
@@ -618,7 +619,7 @@ Kết quả: `js.clean.html` **không đổi một dòng logic nào** ở Phase 
 Từ Phase 6 mọi tính năng **mới** dùng `/api/v1/*` chuẩn REST; `/api/rpc/*` giữ nguyên cho phần
 cũ và chỉ dọn khi frontend được tách module (ngoài phạm vi kế hoạch này).
 
-### 5.2 Bảng 36 hàm cũ → service mới
+### 5.2 Bảng 37 hàm cũ → service mới
 
 | Tên cũ (frontend gọi) | Service mới | REST tương đương (Phase 6+) |
 |---|---|---|
@@ -633,12 +634,38 @@ cũ và chỉ dọn khi frontend được tách module (ngoài phạm vi kế ho
 | `addTaskWithAuth` / `updateTaskWithAuth` / `deleteTaskWithAuth` / `copyTaskWithAuth` | `workItems.create/update/remove/copy` | `POST/PATCH/DELETE /api/v1/work-items/:id` |
 | `reorderTasks` | `workItems.reorder` | `POST /api/v1/works/:id/reorder` |
 | `addTaskReminder` / `updateTaskReminder` / `deleteTaskReminder` | `reminders.create/update/remove` | `POST/PATCH/DELETE /api/v1/work-items/:id/reminders` |
-| `getStaffList`, `add/update/deleteStaffWithAuth` | `users.*` | `GET/POST/PATCH/DELETE /api/v1/users` |
-| `add/update/deleteDepartmentWithAuth` | `departments.*` | `/api/v1/departments` |
-| `getProposals`, `add/update/deleteProposalWithAuth` | `proposals.*` | `/api/v1/proposals` |
+| `getStaffList`, `addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth` | `users.*` | `GET/POST/PATCH/DELETE /api/v1/users` |
+| `addDepartmentWithAuth`, `updateDepartmentWithAuth`, `deleteDepartmentWithAuth` | `departments.*` | `/api/v1/departments` |
+| `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`, `deleteProposalWithAuth` | `proposals.*` | `/api/v1/proposals` |
 | `addApp`, `updateApp`, `deleteApp` | `apps.*` | `/api/v1/apps` |
 | `getChatMessages`, `sendChatMessage` | `chat.list/send` | `/api/v1/chat` |
 | `addNotificationWithAuth` | `notifications.create` | `POST /api/v1/notifications` |
+
+Viết đủ từng tên chứ không gộp `add/update/delete…` — chính cách viết gộp làm kế hoạch đếm thành
+36. Đếm theo dòng bảng trên: **3** (ba dòng đăng nhập/phiên) + 2 + 1 + 1 + 4 + 1 + 4 + 1 + 3 + 4 +
+3 + 4 + 3 + 2 + 1 = **37**.
+
+**Tình trạng sau Phase 4** (`server/src/rpc/table.js` là nguồn sự thật, `api-bridge.test.js` chốt
+cứng cả 37 tên): **19 tên đã chạy thật**, **18 tên trả `501 NOT_IMPLEMENTED`** kèm câu tiếng Việt
+nói rõ chức năng nào chưa có — cố ý thất bại rõ ràng, vì tên thiếu hẳn khỏi bảng thì lời gọi im
+lặng trả `undefined` và giao diện hỏng ở chỗ không ai đoán được.
+
+| | Tên |
+|---|---|
+| Đã chạy (19) | `authenticateUser`, `logout`, `changePassword`, `getProjects`, `addProjectWithAuth`, `updateProjectWithAuth`, `deleteProjectWithAuth`, `copyProjectWithAuth`, `getTasks`, `addTaskWithAuth`, `updateTaskWithAuth`, `deleteTaskWithAuth`, `copyTaskWithAuth`, `reorderTasks`, `addTaskReminder`, `updateTaskReminder`, `deleteTaskReminder`, `addDepartmentWithAuth`, `updateDepartmentWithAuth` |
+| 501 (18) | `getDataForUser`, `getInitialDataWithAuth`, `getDepartmentContext`, `getStaffList`, `addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth`, `deleteDepartmentWithAuth`, `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`, `deleteProposalWithAuth`, `addApp`, `updateApp`, `deleteApp`, `getChatMessages`, `sendChatMessage`, `addNotificationWithAuth` |
+
+Ba tên đầu của nhóm 501 là **điểm đỏ đã biết** của việc nghiệm thu §8.5: bảng tổng quan không có
+dữ liệu để vẽ cho tới khi Phase 5 làm `GET /api/v1/bootstrap`. Một ngoại lệ hẹp:
+`getInitialDataWithAuth` khi **chưa** có phiên vẫn trả đúng cờ "chưa đăng nhập" thay vì 501, nếu
+không thì khách vào trang chỉ thấy lỗi thay vì ô đăng nhập.
+
+**`GET /api/v1/bootstrap` — chốt là CÓ, làm ở Phase 5** (việc 5.1). Một lời gọi trả về gói dữ liệu
+đầu trang: người đăng nhập, danh sách phòng, danh sách người, số đếm chờ duyệt, thống kê tổng quan.
+Lý do gộp thay vì để giao diện gọi 5 đường REST: bản cũ mở trang là một lần `getDataForUser`, và
+`app.js` **không được sửa logic** ở Phase 4 — muốn giữ đúng một lần gọi thì máy chủ phải có đúng
+một đường. `getDataForUser` và `getInitialDataWithAuth` cùng ánh xạ vào nó, khác nhau ở chỗ bản
+"WithAuth" trả thêm phần phiên.
 
 **Bổ sung mới, không có tên cũ:**
 
@@ -696,11 +723,17 @@ trace ra trình duyệt.
 
 Mã HTTP: `200` thành công · `400` dữ liệu sai · `401` chưa đăng nhập / hết phiên · `403` không
 đủ quyền · `404` không tìm thấy · `409` xung đột (trùng mã, xoá phòng còn người) · `429` bị chặn
-vì gọi quá nhiều · `500` lỗi hệ thống.
+vì gọi quá nhiều · **`501` tên hàm cũ có thật nhưng nghiệp vụ chưa chuyển sang máy chủ mới** ·
+`500` lỗi hệ thống.
+
+`501 NOT_IMPLEMENTED` thêm vào từ Phase 4 và **chỉ dùng cho `/api/rpc/*`**: cầu tương thích phải
+có đủ 37 tên ngay từ đầu (thiếu tên là lời gọi im lặng trả `undefined`), nên 18 tên chưa có nghiệp
+vụ vẫn có dòng trong bảng và trả 501 kèm câu tiếng Việt chỉ đúng chức năng còn thiếu. Đường
+`/api/v1/*` **không bao giờ** trả 501: đường nào chưa có thì chưa khai báo, và Express trả 404.
 
 Cầu tương thích ở §5.1 trả `res.data` cho `withSuccessHandler`, nên các hàm cũ vẫn nhận đúng
 hình dạng `{success: true, …}` mà chúng đang mong đợi — service mới giữ nguyên hình dạng đó
-trong `data` cho 36 hàm cũ.
+trong `data` cho **37** hàm cũ.
 
 ## 6. Ma trận phân quyền — port sang `middleware/rbac.js`
 
@@ -883,7 +916,7 @@ trong CSDL + `UNIQUE` trên `code`, và có test 20 request đồng thời.
 | # | Việc | Chi tiết |
 |---|---|---|
 | 4.1 | Tách file | `index.html` bỏ `<?!= include('js') ?>` / `include('CSS')`, thay bằng `<script src>` và `<link>`; `js.clean.html` → `web/assets/js/app.js` (bỏ 2 thẻ `<script>` bọc ngoài); `CSS.html` → `web/assets/css/app.css` |
-| 4.2 | `api-bridge.js` | Theo §5.1, đủ 36 tên hàm; nạp **trước** `app.js` |
+| 4.2 | `api-bridge.js` | Theo §5.1, đủ **37** tên hàm (kế hoạch viết 36 là đếm sai — §13.5); nạp **trước** `app.js` |
 | 4.3 | Tự chứa thư viện ngoài | Tải Tailwind (bản build sẵn, không dùng `cdn.tailwindcss.com` trên production), Chart.js, Font Awesome, font Inter về `web/assets/vendor/` |
 | 4.4 | Đăng nhập | Trang đăng nhập dùng cookie phiên; hết phiên (401) ⇒ hiện lại modal đăng nhập, không đứng im |
 | 4.5 | Bắt buộc đổi mật khẩu | Nhận `403 MUST_CHANGE_PASSWORD` ⇒ mở thẳng modal đổi mật khẩu, không cho vào app |
@@ -1582,7 +1615,7 @@ dùng, rồi hỏi. Không dừng cả phase chỉ vì một câu chưa được
 | `String(role).toLowerCase().includes('admin')` | `"Trợ lý admin"` được quyền admin | so khớp chính xác · TC-RBAC-07/08 |
 | **53 chỗ** `innerHTML` ở frontend | XSS | soát ở Phase 4 · TC-SEC-02/03 |
 | Tên cột khai **hai nơi** (`*_COLUMN_NAME` backend, `COL` 79 khoá frontend) | Sửa một bên, vỡ bên kia, không có cảnh báo | §4.3 bảng đối chiếu |
-| **28 chỗ gọi** `google.script.run.<tên>` bằng chuỗi | Đổi tên hàm là vỡ im lặng | cầu tương thích §5.1 — giữ nguyên 36 tên |
+| **28 chỗ gọi** `google.script.run.<tên>` bằng chuỗi | Đổi tên hàm là vỡ im lặng | cầu tương thích §5.1 — giữ nguyên cả **37** tên |
 | Thống kê backend (`getSummaryStats`) và frontend (`renderStats`) có thể **lệch nhau** | Không biết lấy số nào làm mốc so sánh | việc đầu tiên của Phase 6: xác định số đang hiện thật |
 | Không có build step, 16 `onclick` viết trong chuỗi | Sửa tên hàm frontend là vỡ nút bấm | Phase 4 chỉ làm 4 việc đã liệt kê |
 | `tools/test-tasks-gd2.js` — 40 test đang xanh | Là mốc hành vi cây 3 tầng của bản cũ | port sang vitest ở Phase 3 |
