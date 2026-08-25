@@ -403,6 +403,14 @@ works(
   assigned_by_id   bigint NULL,                 -- CỐ Ý không FK users: xoá người thì vẫn còn
   assigned_by_name text NOT NULL DEFAULT '',    -- biết ai đã giao, hệt cách làm của activity_logs
   assigned_at   timestamptz NULL,
+  supervisor_id bigint NULL FK users,           -- ↓ 2 cột phân công, thêm ở 005_phan_cong.sql:
+  leader_ids    bigint[] NOT NULL DEFAULT '{}', --   Ban lãnh đạo kiểm soát (admin hoặc Phó GĐ phụ
+                                                --   trách phòng) và Lãnh đạo phòng phụ trách
+                                                --   (mảng Trưởng/Phó phòng của phòng đã chọn).
+                                                --   Nguồn hợp lệ kiểm ở modules/assignments —
+                                                --   KHÔNG tin danh sách client. Backfill: Phó GĐ
+                                                --   phụ trách phòng (việc chung ⇒ admin); leaders =
+                                                --   mọi head/vice của phòng; việc chung ⇒ rỗng.
   created_at, updated_at timestamptz)
 
 -- Công việc con (cấp 2) + Nhiệm vụ (cấp 3) — thay cột "Nhiệm vụ JSON"
@@ -419,6 +427,12 @@ work_items(
                 -- bằng works.department_id của công việc cha — để trống thì trigger tự điền, đặt
                 -- phòng khác thì nổ (DEPT_MISMATCH_WORK). Nhờ vậy §6 lọc "việc của phòng tôi"
                 -- đọc thẳng một cột, không JOIN works, và cấp 2/cấp 3 hiện ra trong đúng phòng.
+  supervisor_id bigint NULL FK users,           -- ↓ phân công, thêm ở 005_phan_cong.sql: Ban lãnh
+  leader_ids    bigint[] NOT NULL DEFAULT '{}', --   đạo kiểm soát chỉ dùng ở cấp 2 (cấp 3 gửi
+                 --   khác rỗng ⇒ service chặn); leader_ids cấp 2 là mảng nhiều người thừa hưởng
+                 --   cha, cấp 3 tối đa MỘT người — CHECK task_leader_single chặn; nguồn hợp lệ
+                 --   kiểm ở modules/assignments (trong CV con ⇒ thuộc leader_ids của CV con
+                 --   đó; dưới cha trực tiếp ⇒ thuộc Phó GĐ phụ trách phòng của công việc).
   name          text NOT NULL,
   description   text DEFAULT '',
   assignee_id   bigint NULL FK users,
@@ -677,6 +691,8 @@ một đường. `getDataForUser` và `getInitialDataWithAuth` cùng ánh xạ v
 | Số đếm chờ duyệt cho badge | `GET /api/v1/approvals/pending-count` |
 | Thống kê + dữ liệu 6 biểu đồ | `GET /api/v1/stats/summary`, `/stats/charts?type=` |
 | Dữ liệu Gantt đã nhóm | `GET /api/v1/gantt?from=&to=&groupBy=department\|deputy\|assignee` |
+| Ứng viên phân công (Ban kiểm soát / Lãnh đạo phòng) — thêm 2026-08-26 | `GET /api/v1/departments/assignment-options?departmentId=&parentRef=` |
+| Hoạt động gần đây có phân trang | `GET /api/v1/stats/activities?page=` |
 | Xuất Excel | `GET /api/v1/export/works.xlsx?…` |
 | Sức khoẻ hệ thống | `GET /healthz` |
 

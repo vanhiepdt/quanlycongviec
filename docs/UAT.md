@@ -15,7 +15,7 @@ Cách dùng:
 4. Mục nào sai: ghi vào cột **Ghi chú** ngay dưới dòng đó theo mẫu `→ LỖI: <thấy gì>` rồi mở
    một dòng mới ở §13.4 của `KE-HOACH-VPS.md`.
 
-Tổng: **88 mã** / 13 nhóm.
+Tổng: **88 mã** / 13 nhóm (+ **8 mã PA** nhóm N bổ sung 2026-08-26).
 
 | Nhóm | Số mã | Nhóm | Số mã |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Tổng: **88 mã** / 13 nhóm.
 | D. Người dùng & Phòng | 10 | K. Luồng duyệt (mới) | 8 |
 | E. Tổng quan & thống kê | 11 | L. Lọc (mới) | 2 |
 | F. Sơ đồ Gantt | 9 | M. Tiện ích mới trên VPS | 4 |
-| G. Đề nghị | 6 | | |
+| G. Đề nghị | 6 | N. Phân công ba lớp (2026-08-26) | 8 |
 
 ---
 
@@ -170,6 +170,36 @@ Tổng: **88 mã** / 13 nhóm.
 - [ ] **M3** Sao lưu tự động hằng ngày **và** đã thử phục hồi thành công một lần từ bản sao lưu.
 - [ ] **M4** `/healthz` trả 200 cho Nginx; `/readyz` trả 503 khi tắt cơ sở dữ liệu.
 
+## N. Phân công ba lớp — bổ sung 2026-08-26
+
+Ba lớp phân công trên cây công việc: **Ban lãnh đạo kiểm soát** (1 người — admin hoặc Phó GĐ
+phụ trách phòng; công việc "Công việc chung" thì mọi Phó GĐ + admin), **Lãnh đạo phòng phụ
+trách** (nhiều người — Trưởng/Phó phòng của phòng đã chọn; công việc chung ⇒ rỗng), **Cán bộ làm
+trực tiếp** (1 người — chính là cột Người thực hiện đổi tên hiển thị). Nhiệm vụ (cấp 3) KHÔNG có
+ô Ban kiểm soát và chỉ chọn TỐI ĐA MỘT lãnh đạo phòng phụ trách, nguồn bị ép ở máy chủ:
+nằm trong công việc con ⇒ phải thuộc danh sách lãnh đạo của chính CV con đó; thuộc công việc cha
+trực tiếp ⇒ phải thuộc các Phó GĐ phụ trách phòng. Dữ liệu cũ tự điền theo luật mặc định khi chạy
+migration `005_phan_cong.sql`.
+
+- [ ] **PA1** Form tạo/sửa Công việc có đủ ô: Phòng (có lựa chọn «Công việc chung»), Ban lãnh đạo
+      kiểm soát, Lãnh đạo phòng phụ trách (đa chọn). Đổi phòng là danh sách ứng viên nạp lại.
+- [ ] **PA2** Chọn phòng cụ thể ⇒ Ban lãnh đạo kiểm soát **được điền sẵn** Phó GĐ phụ trách phòng
+      đó (không có thì admin); chọn «Công việc chung» ⇒ mặc định admin, lãnh đạo phòng rỗng.
+- [ ] **PA3** Gửi phân công SAI nguồn bị máy chủ chặn 400: supervisor là Trưởng phòng; leader là
+      cán bộ thường; công việc chung mà có leader.
+- [ ] **PA4** Công việc con kế thừa Ban kiểm soát + Lãnh đạo phòng của cha lúc tạo, và **được
+      phép** chọn lại danh sách khác cha («không bắt buộc trùng»).
+- [ ] **PA5** Nhiệm vụ trong công việc con: chỉ được chọn leader thuộc danh sách của CV con đó;
+      chọn người ngoài (kể cả Phó GĐ) ⇒ 400 `LEADER_NOT_IN_SOURCE`.
+- [ ] **PA6** Nhiệm vụ thuộc công việc cha trực tiếp: leader phải là một trong các Phó GĐ phụ
+      trách phòng; chọn lãnh đạo phòng thường ⇒ 400.
+- [ ] **PA7** Nhiệm vụ KHÔNG có ô Ban lãnh đạo kiểm soát — gửi khác rỗng lên API ⇒ 400; chọn hai
+      leader ⇒ 400 (CHECK `task_leader_single` chặn cả SQL trực tiếp).
+- [ ] **PA8** Modal chi tiết công việc (bấm vào tên công việc): rộng ~1500px, hiện đầy đủ Ban giám
+      đốc kiểm soát, «Phụ trách chung», cán bộ được giao gom từ cả công việc con lẫn nhiệm vụ;
+      Công việc con là khối xanh có hàng phân công riêng, bấm vào mới xòe Nhiệm vụ bên trong —
+      nhiệm vụ và công việc con không bao giờ hiện lẫn kiểu.
+
 ---
 
 ## Checklist khói §8.5 — 6 nhóm / 60 điểm
@@ -310,9 +340,25 @@ RPC còn `pending()` **đúng 10 tên**: `getProposals`, `addProposalWithAuth`, 
 ### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8) — giữ từ Phase 4
 
 - `/` và `/index.html` → `200 text/html; charset=utf-8`, **không** có `Cache-Control` dài.
-- `assets/js/app.js?v=20260825-512` (tăng tay sau việc 5.12).
+- `assets/js/app.js?v=20260826-62` + **file mới** `assets/js/project-details.js?v=20260826-1`
+  (nạp SAU app.js, ghi đè modal chi tiết — bump cả hai khi đổi app.js).
 - 5 gói tự chứa `200` kèm `cache-control: public, max-age=2592000`.
 - Đủ đầu bảo vệ; 404 **không** cache 30 ngày; 0 CDN.
+
+### Lượt khói sau tính năng phân công ba lớp (2026-08-26, nhánh `vps/tinh-nang-phan-cong`)
+
+Chạy trọn bộ trên CSDL UAT (`quanlycongviec_uat`) **đã migrate 005**: phân bố mã
+`48×200 · 4×400 · 4×401 · 1×403 · 5×404 · 6×501` — không một `500`. Các điểm âm đều là điểm kiểm
+chủ đích (thiếu tham số, chưa đăng nhập, mã lạ); R8–R11 vẫn `501` đúng nhóm Phase 7. Bộ tự dọn về
+đúng dữ liệu seed.
+
+Điểm mới của tính năng này được canh bằng **19 phép kiểm** trong
+`server/tests/integration/assignments.test.js` (đăng nhập thật + Postgres thật): ứng viên theo
+phòng/chung; lưu đúng supervisor + leaders; chặn sai nguồn ở công việc / cấp 2 / nhiệm vụ;
+nhiệm vụ dưới CV con chỉ chọn leader trong danh sách của CV con đó; nhiệm vụ dưới cha chỉ chọn
+Phó GĐ phụ trách phòng; CHECK `task_leader_single` chặn cả SQL trực tiếp (23514). Backfill dữ liệu
+cũ đã xác minh trên UAT: công việc có phòng nhận Phó GĐ phụ trách + `{head,vice}`, việc chung
+nhận admin.
 
 ### Việc tiếp theo (không còn điểm đỏ)
 
