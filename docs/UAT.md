@@ -172,10 +172,149 @@ Tổng: **88 mã** / 13 nhóm.
 
 ---
 
+## Checklist khói §8.5 — 6 nhóm / 60 điểm
+
+**Lượt chạy: 2026-08-25 · Phase 4 · nhánh `vps/phase-4-frontend`.**
+
+Môi trường: Nginx (cổng 8099) phục vụ tệp tĩnh trong `web/` và chuyển `/api/*` sang Express 5,
+PostgreSQL 16 với cơ sở dữ liệu **riêng** `quanlycongviec_uat` nạp bằng `npm run seed:dev`
+(không chạm vào dữ liệu dev). Mọi điểm đi đúng đường thật của người dùng:
+`google.script.run.<tên cũ>` → `web/assets/js/api-bridge.js` → `POST /api/rpc/<tên>`
+(kèm `X-CSRF-Token`) → `/api/v1` → cơ sở dữ liệu.
+
+Chạy lại: `bash tools/smoke-8.5.sh` — in mã HTTP từng điểm, tự dọn các dòng nó tạo ra và
+kết thúc bằng số dòng còn lại để đối chiếu với seed (9 công việc / 30 đầu việc).
+
+Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuyển, chờ Phase sau (không tính đỏ)
+· — bản cũ không có điểm này.
+
+**Tổng: 19 ✅ · 2 ❌ · 38 ⏳ · 1 —**
+
+### 1. Đăng nhập — 6/6 ✅
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| Đ1 | Đăng nhập admin | ✅ | `[200] authenticateUser`; nhập email **VIẾT HOA** vẫn vào được (bản cũ trượt ở đây — UAT **A1**) |
+| Đ2 | Sai mật khẩu | ✅ | `[401] INVALID_CREDENTIALS` — «Email hoặc mật khẩu không đúng», không lộ email có tồn tại hay không |
+| Đ3 | Đổi mật khẩu | ✅ | Trước khi đổi mọi lời gọi nghiệp vụ bị `403 MUST_CHANGE_PASSWORD` (việc 4.5); chữ ký 2 tham số của bản cũ → `400` «Thiếu tham số «Mật khẩu hiện tại»»; nhập lại không khớp → `400`; đủ 3 tham số → `200`, thu hồi 4 phiên; sau đó `getProjects` `200` |
+| Đ4 | Đăng xuất | ✅ | `[200] logout` rồi `getProjects` `[401] UNAUTHENTICATED` ⇒ giao diện bật lại modal đăng nhập |
+| Đ5 | Vào lại | ✅ | Mật khẩu **cũ** `401`, mật khẩu **mới** `200` |
+| Đ6 | Hết phiên | ✅ | `UPDATE sessions SET expires_at = now() - interval '1 hour'` ⇒ `[401]`, không đi tiếp bằng phiên cũ |
+
+### 2. Tổng quan — 0/10, cả nhóm ⏳ (chưa chuyển)
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| T1–T4 | 4 thẻ số có số (kèm bấm vào số mở đúng danh sách) | ⏳ | `[501] getDataForUser`, `[501] getInitialDataWithAuth`, `[501] getDepartmentContext` |
+| T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ⏳ | cùng 3 tên trên; không có nguồn dữ liệu nào khác cho đầu trang |
+
+Cả 10 điểm bị chặn bởi **một** nguyên nhân: 3 tên nạp dữ liệu đầu trang còn `pending()`.
+Chúng thuộc việc **5.1** (`GET /api/v1/bootstrap`) của Phase 5. Đã kiểm được phần cầu nối
+làm đúng phần của nó: khi **chưa** đăng nhập, `getInitialDataWithAuth` trả
+`[200] {"requireLogin":true}` chứ **không** trả 501 — giao diện vì thế vẫn hiện modal
+đăng nhập thay vì báo lỗi máy chủ.
+
+### 3. Công việc — 13/14 ✅, 1 ❌
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| C1 | Tạo công việc | ✅ | `[200] addProjectWithAuth` → `CV019` |
+| C2 | Sửa | ✅ | `[200] updateProjectWithAuth` → `CV019` |
+| C3 | Xoá | ✅ | `[200] deleteProjectWithAuth` → xoá cả cây con: `deletedItems:["CV019-071","CV019-072"], deletedCount:3` |
+| C4 | Nhân bản | ✅ | `[200] copyProjectWithAuth` → «Đã nhân bản thành **CV020** (kèm 9 dòng con)» |
+| C5 | Tìm kiếm | ✅ | Lọc chạy ở giao diện, dữ liệu do `[200] getProjects` cấp (đủ 13 cột tên tiếng Việt bản cũ) |
+| C6 | Mở chi tiết | ✅ | `[200] getTasks` (đây là chỗ N+1 lời gọi đã ghi ở §13.5) |
+| C7 | **Tạo công việc con (cấp 2)** | ❌ | `[200] addTaskWithAuth` → `CV019-071`, nhưng `csdl: CV019-071 **cấp=3 cha=NULL**` |
+| C8 | Tạo nhiệm vụ (cấp 3) | ✅ | `[200] addTaskWithAuth` → `CV019-072` |
+| C9 | Kéo–thả | ✅ | `[200] reorderTasks` đổi đúng thứ tự 9 mã; mã lạ bị `skipped:["MÃ-KHÔNG-CÓ"]` chứ không làm đổ cả lệnh |
+| C10 | Nhắc việc — thêm | ✅ | `[200] addTaskReminder` ×2 → `id:10`, `id:11` |
+| C11 | Nhắc việc — sửa | ✅ | `[200] updateTaskReminder` sửa **theo số thứ tự** của bản cũ, đổi đúng dòng `id:11` (bẫy index→id, §13.5); số thứ tự ngoài danh sách → `[404]` «Không tìm thấy nhắc việc cần sửa (danh sách đã đổi)» |
+| C12 | Nhắc việc — xoá | ✅ | `[200] deleteTaskReminder` → còn đúng 1 dòng |
+| C13 | Link kết quả | ✅ | `[200] updateTaskWithAuth`; `csdl: 3 link: ["[Báo cáo] https://vd.local/bc.pdf", "https://vd.local/anh.png", "không-phải-link"]` — mỗi dòng một link, giữ nguyên phần `[Tên]`, dòng rác vẫn lưu chứ không chặn người dùng |
+| C14 | Hoàn thành nhanh | ✅ | `[200] updateTaskWithAuth` — một cú bấm đặt trạng thái + 100% + ngày báo cáo |
+
+**❌ C7** không phải lỗi cầu nối mà là **khoảng trống của giao diện cũ**: `#task-form` không có ô
+nào tên `level` hay `Mã cha`; `COL.T_LEVEL` và `COL.T_PARENT` chỉ được khai ở bảng `COL`
+([app.js:56-57](../web/assets/js/app.js#L56-L57)) rồi không chỗ nào đọc/ghi. Vì thế mọi đầu việc
+do bản cũ tạo đều là **cấp 3 không cha**. Cầu nối không được phép tự thêm ô mới (điều lệ đầu
+`app.js`: cấm đổi tên hàm / đổi id DOM ở Phase 4), nên điểm này ở lại đỏ và phải xử ở Phase sau
+bằng cách thêm ô chọn cấp + cha vào biểu mẫu.
+
+### 4. Duyệt — 0/8, 1 ❌ + 7 ⏳
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| D1 | **Trưởng phòng tạo ra `Chờ duyệt`** | ❌ | tp01 (Trưởng phòng, phòng 1) tạo `CV021` → `csdl: CV021 **duyệt=Đã duyệt**`. Đối chứng: admin tạo `CV022` cũng «Đã duyệt» ⇒ trạng thái không phụ thuộc vai trò |
+| D2 | Nhãn vàng hiện | ⏳ | không có dòng `Chờ duyệt` nào để hiện |
+| D3 | Badge đếm đúng | ⏳ | như trên |
+| D4 | Phó GĐ thấy nút | ⏳ | trong 37 tên hàm cũ (§5.2) **không có** tên nào cho duyệt/từ chối |
+| D5 | Duyệt | ⏳ | như trên |
+| D6 | Từ chối | ⏳ | như trên |
+| D7 | Thông báo tới | ⏳ | như trên |
+| D8 | Thống kê không đổi khi chờ duyệt | ⏳ | phụ thuộc nhóm 2 (chưa có thẻ số) |
+
+**❌ D1**: cột `works.approval_status` có mặc định `'Đã duyệt'::text` và **không** chỗ nào trong
+Phase 3/4 đặt «Chờ duyệt» theo vai trò người tạo. Đó là việc **5.2** của Phase 5. Ghi là đỏ vì
+đây là điểm §8.5 đã kiểm được và cho kết quả **sai** với nghiệp vụ, khác với D2–D8 là chưa
+chuyển. Giao diện cũ cũng không có nút nào cho duyệt công việc (đếm được **0** chỗ trong
+`app.js` nhắc tới duyệt công việc; cả 3 chuỗi «Chờ duyệt» đều thuộc phần **đề nghị**).
+
+### 5. Người dùng & Phòng — 0/10, cả nhóm ⏳
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| N1–N3 | Thêm / sửa / xoá người dùng | ⏳ | `[501] addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth` |
+| N4 | Gán phòng | ⏳ | `[501] updateStaffWithAuth` |
+| N5 | Gán vai trò phòng | ⏳ | như trên |
+| N6–N7 | Thêm / sửa phòng | ⏳ | `[501] addDepartmentWithAuth`, `updateDepartmentWithAuth` |
+| N8 | Gán Phó Giám đốc | ⏳ | `[501] updateDepartmentWithAuth` |
+| N9 | Xoá phòng còn người ⇒ bị chặn | ⏳ | `[501] deleteDepartmentWithAuth` |
+| N10 | Xoá phòng rỗng ⇒ được | ⏳ | như trên |
+
+Cả 7 tên hàm của nhóm này còn `pending()` (cùng với `getStaffList`). Nghiệp vụ bên dưới **đã có
+và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-department.test.js`,
+`rbac-matrix.test.js`); chỉ còn thiếu lớp ánh xạ tên cũ → `/api/v1`, là việc **5.5–5.6** của Phase 5.
+
+### 6. Còn lại — 0/12, 11 ⏳ + 1 —
+
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| R1–R3 | Gantt 1 / 2 / 3 tháng | ⏳ | Gantt **không** có lời gọi máy chủ riêng, vẽ từ `allTasks`/`allProjects` ⇒ chặn theo nhóm 2 |
+| R4–R6 | Nhóm theo 3 kiểu | ⏳ | như trên |
+| R7 | Thu gọn | ⏳ | như trên |
+| R8 | Đề nghị — tạo | ⏳ | `[501] getProposals`, `[501] addProposalWithAuth` |
+| R9 | Đề nghị — sửa | ⏳ | `[501] updateProposalWithAuth` |
+| R10 | Chat gửi / nhận | ⏳ | `[501] getChatMessages`, `[501] sendChatMessage` |
+| R11 | App mở được | ⏳ | `[501] addApp` |
+| R12 | Xuất 3 file Excel | — | `app.js` **không có** hàm xuất nào (không `XLSX`, không `export*`): đây là tính năng **mới** của bản VPS (§2.13, mã UAT **M1**), lịch Phase 7 |
+
+### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8)
+
+- `/` và `/index.html` → `200 text/html; charset=utf-8`, 70 272 B, **không** có `Cache-Control` dài.
+- `assets/css/app.css?v=20260825` 80 443 B · `assets/js/api-bridge.js?v=20260825` 16 933 B ·
+  `assets/js/app.js?v=20260825` 304 952 B — tất cả `200`.
+- 5 gói tự chứa đều `200` kèm `cache-control: public, max-age=2592000`:
+  `assets/vendor/tailwind/tailwind.min.css` 39 780 B · `chartjs/chart.umd.min.js` 208 522 B ·
+  `alpinejs/alpine.min.js` 54 447 B · `fontawesome/css/all.min.css` 102 025 B · `inter/inter.css` 7 263 B.
+- Đủ đầu bảo vệ trên mọi phản hồi: `nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`,
+  COOP, `Permissions-Policy` và CSP.
+- Tệp không tồn tại → `404` **có** đầu bảo vệ nhưng **không** có cache 30 ngày (bẫy `always`, §13.5).
+- Tìm `cdn.tailwindcss.com|cdnjs|googleapis` trong HTML được phục vụ: **0 chỗ**.
+
+### Ba điểm phải làm gì tiếp
+
+1. **C7** — thêm ô chọn cấp + công việc cha vào `#task-form` (Phase sau, vì Phase 4 bị cấm đổi DOM).
+2. **D1** — đặt `approval_status = 'Chờ duyệt'` khi người tạo là Trưởng/Phó phòng: việc **5.2**.
+3. **38 điểm ⏳** — đều quy về việc **5.1** (`GET /api/v1/bootstrap`, mở nhóm 2 và R1–R7) và
+   **5.5–5.8** (nhân sự/phòng, đề nghị, chat, app). Không có điểm nào ⏳ vì cầu nối sai.
+
+---
+
 ## Ghi chú nghiệm thu
 
 | Ngày | Mã | Hiện tượng | Đã xử lý |
 |---|---|---|---|
-| | | | |
+| 2026-08-25 | §8.5 C7 | Biểu mẫu cũ không tạo được công việc con cấp 2: `CV019-071` vào csdl với `cấp=3 cha=NULL`; `COL.T_LEVEL`/`COL.T_PARENT` khai ở `app.js:56–57` rồi không dùng | Chưa — chờ thêm ô cấp/cha vào `#task-form` (Phase 4 bị cấm đổi DOM) |
+| 2026-08-25 | §8.5 D1 | Trưởng phòng tạo `CV021` nhưng `approval_status` ra «Đã duyệt» (mặc định cột) | Chưa — việc 5.2 của Phase 5 |
 
 
