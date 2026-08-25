@@ -60,15 +60,22 @@ export async function makeUser(over = {}) {
 
 /** Một công việc cấp 1. */
 export async function makeWork(over = {}) {
-  const w = { code: 'DA001', name: 'Công việc thử', ...over };
+  const w = { code: 'DA001', name: 'Công việc thử', department_id: null, ...over };
   const { rows } = await pool.query(
-    'INSERT INTO works (code, name, start_date, end_date) VALUES ($1,$2,$3,$4) RETURNING *',
-    [w.code, w.name, w.start_date ?? null, w.end_date ?? null]
+    `INSERT INTO works (code, name, start_date, end_date, department_id)
+     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [w.code, w.name, w.start_date ?? null, w.end_date ?? null, w.department_id]
   );
   return rows[0];
 }
 
-/** Một dòng work_items; level 2 là công việc con, level 3 là nhiệm vụ. */
+/**
+ * Một dòng work_items; level 2 là công việc con, level 3 là nhiệm vụ.
+ *
+ * `department_id` để trống là bình thường: trigger `trg_work_items_sync_department` tự lấy phòng
+ * của công việc cha (§4.1). Truyền phòng KHÁC công việc cha thì CSDL nổ — đó là điều TC-TREE-36
+ * canh, không phải lỗi của helper này.
+ */
 export async function makeItem(over = {}) {
   const i = {
     code: 'DA001-01',
@@ -76,12 +83,13 @@ export async function makeItem(over = {}) {
     parent_id: null,
     level: 2,
     name: 'Việc con',
+    department_id: null,
     ...over,
   };
   const { rows } = await pool.query(
-    `INSERT INTO work_items (code, work_id, parent_id, level, name)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [i.code, i.work_id, i.parent_id, i.level, i.name]
+    `INSERT INTO work_items (code, work_id, parent_id, level, name, department_id)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [i.code, i.work_id, i.parent_id, i.level, i.name, i.department_id]
   );
   return rows[0];
 }

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
+import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
 import * as service from './service.js';
 
@@ -36,6 +37,12 @@ const querySchema = z.object({
 });
 
 const copySchema = z.object({ name: text(500).optional() });
+
+// Nhật ký có thể dài (một công việc sống cả năm): cho gọi số dòng, chặn trên ở 1000 để một request
+// không kéo cả bảng về.
+const historySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
 
 /** camelCase của giao diện → tên cột CSDL. Chỉ những khoá người dùng thực sự gửi được ghi. */
 function toRow(body) {
@@ -80,7 +87,20 @@ worksRouter.get('/', validate(querySchema, 'query'), async (req, res, next) => {
 
 worksRouter.get('/:id', async (req, res, next) => {
   try {
-    return ok(res, { work: await service.getOne(req.user, req.params.id) });
+    const work = await service.getOne(req.user, req.params.id);
+    // `originInfo` để giao diện hiện ngay "ai đăng ký / ai giao đầu tiên" mà không cần gọi thêm
+    // /history (§2.3).
+    return ok(res, { work, originInfo: originOf(work) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/** Nhật ký từ đầu của một công việc: dòng tạo + mọi lần chỉnh sửa (§2.3, §5.2). */
+worksRouter.get('/:id/history', validate(historySchema, 'query'), async (req, res, next) => {
+  try {
+    const limit = req.validatedQuery?.limit;
+    return ok(res, await service.history(req.user, req.params.id, { limit }));
   } catch (err) {
     return next(err);
   }
@@ -89,8 +109,22 @@ worksRouter.get('/:id', async (req, res, next) => {
 worksRouter.post('/', validate(createSchema), async (req, res, next) => {
   try {
     const { work, warnings } = await service.create(req.user, toRow(req.body));
-    res.locals.audit = { action: 'works.create', entityType: 'work', entityId: work.id };
-    return ok(res, { work, warnings });
+    res.locals.audit = {
+      action: 'works.create',
+      entityType: 'work',
+      entityId: work.id,
+      workId: work.id,
+      // Dòng đầu của nhật ký: lập lúc nào, ai lập, tự đăng ký hay được giao (§2.3). KHÔNG đưa cả
+      // req.body vào — nhật ký chỉ nhận những trường đã chọn tay.
+      details: {
+        code: work.code,
+        name: work.name,
+        origin: work.origin,
+        createdByName: work.created_by_name,
+        assignedByName: work.assigned_by_name,
+      },
+    };
+    return ok(res, { work, warnings, originInfo: originOf(work) });
   } catch (err) {
     return next(err);
   }
@@ -98,8 +132,20 @@ worksRouter.post('/', validate(createSchema), async (req, res, next) => {
 
 worksRouter.patch('/:id', validate(updateSchema), async (req, res, next) => {
   try {
-    const { work, warnings } = await service.update(req.user, req.params.id, toRow(req.body));
-    res.locals.audit = { action: 'works.update', entityType: 'work', entityId: work.id };
+    const { work, warnings, changes } = await service.update(
+      req.user,
+      req.params.id,
+      toRow(req.body)
+    );
+    res.locals.audit = {
+      action: 'works.update',
+      entityType: 'work',
+      entityId: work.id,
+      workId: work.id,
+      // `changes` do service tính từ dòng TRƯỚC và SAU khi ghi, dạng { cột: { from, to } } — đây là
+      // thứ làm nên mục "các lần chỉnh sửa". Không đổi gì thì không ghi khoá nào.
+      details: changes ? { code: work.code, changes } : { code: work.code },
+    };
     return ok(res, { work, warnings });
   } catch (err) {
     return next(err);

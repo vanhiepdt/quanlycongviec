@@ -10,7 +10,9 @@ import { withTransaction } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { AppError, notFound } from '../../utils/errors.js';
 import { warnDueBeforeStart } from '../../utils/dateChecks.js';
+import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
+import * as logsRepo from '../activityLogs/repo.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
 
@@ -41,7 +43,14 @@ export async function getOne(user, ref) {
 
 export async function create(user, input) {
   assertCan(user, 'create', null);
-  const work = await withPgErrors(() => repo.insert({ ...input, created_by: user?.id ?? null }));
+  // Người nhận việc của cấp 1 là người quản lý công việc: tự đứng tên ⇒ "Tự đăng ký", giao cho
+  // người khác ⇒ "Được giao" + ghi lại ai giao (§2.3).
+  const origin = deriveOrigin({
+    actor: user,
+    recipientId: input.manager_id ?? null,
+    recipientName: input.manager_name ?? null,
+  });
+  const work = await withPgErrors(() => repo.insert({ ...input, ...origin }));
   return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
 }
 
@@ -49,14 +58,19 @@ export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
   const work = await withPgErrors(() => repo.update(current.id, patch));
-  return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
+  return {
+    work,
+    // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
+    changes: diffRows(current, work, repo.WRITABLE),
+    warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate'),
+  };
 }
 
 /**
  * Xoá công việc. Trả về DANH SÁCH MÃ đã mất để giao diện nói rõ "xoá công việc này sẽ xoá luôn N
  * dòng bên dưới" — CASCADE của CSDL lo phần xoá, service chỉ chịu trách nhiệm báo cáo (§7 việc 3.5).
  */
-export async function remove(user, ref) {
+export function remove(user, ref) {
   return withTransaction(async (client) => {
     const current = await mustFind(ref, client);
     assertCan(user, 'delete', current);
@@ -71,6 +85,27 @@ export async function remove(user, ref) {
 }
 
 /**
+ * Nhật ký TỪ ĐẦU của một công việc: dòng tạo, mọi lần sửa (kèm from→to), nhân bản, và các dòng
+ * nhật ký khác trỏ vào nó (§2.3).
+ *
+ * Trả kèm `origin` để giao diện hiện được một chỗ "việc này từ đâu ra" mà không phải gọi thêm API:
+ * ai lập, tự đăng ký hay được giao, và ai giao ĐẦU TIÊN (`assigned_by_*` là bất biến do trigger
+ * `keep_first_origin` giữ, nên đây luôn là người giao lần đầu chứ không phải người giao gần nhất).
+ */
+export async function history(user, ref, { limit = 200 } = {}) {
+  const work = await mustFind(ref);
+  assertCan(user, 'read', work);
+  const entries = await logsRepo.listByEntity({
+    entityTypes: ['work'],
+    entityId: work.id,
+    limit,
+  });
+  // Khoá `originInfo`, không phải `origin`: bản thân dòng đã có CỘT `origin` kiểu chuỗi
+  // ('Tự đăng ký' / 'Được giao'), trùng tên là frontend đọc lẫn hai thứ khác kiểu.
+  return { work, originInfo: originOf(work), entries };
+}
+
+/**
  * Nhân bản công việc kèm toàn bộ cây bên dưới (TC-TREE-27).
  *
  * Làm hai lượt vì cha phải tồn tại trước con: lượt 1 sao các dòng cấp 2 và ghi lại bảng tra
@@ -79,15 +114,22 @@ export async function remove(user, ref) {
  *
  * Cả hai lượt nằm trong MỘT giao dịch: nhân bản nửa cây rồi lỗi là dữ liệu rác không ai dọn.
  */
-export async function copy(user, ref, { name = null } = {}) {
+export function copy(user, ref, { name = null } = {}) {
   return withTransaction(async (client) => {
     const source = await mustFind(ref, client);
     assertCan(user, 'read', source);
     assertCan(user, 'create', null);
 
     const code = await repo.nextWorkCode(client);
+    // Bản sao là đầu việc MỚI: người lập là người bấm Nhân bản, không phải người đã lập bản gốc.
+    // Người nhận việc thì giữ theo bản gốc (`copyRow` sao `manager_id`), nên nguồn gốc suy từ đó.
+    const workOrigin = deriveOrigin({
+      actor: user,
+      recipientId: source.manager_id ?? null,
+      recipientName: source.manager_name ?? null,
+    });
     const work = await withPgErrors(() =>
-      repo.copyRow(source.id, { code, name, createdBy: user?.id ?? null }, client)
+      repo.copyRow(source.id, { code, name, ...workOrigin }, client)
     );
 
     const items = await itemsRepo.listByWork(source.id, {}, client);
@@ -98,7 +140,16 @@ export async function copy(user, ref, { name = null } = {}) {
       const itemCode = await itemsRepo.nextItemCode(work.code, client);
       const copied = await itemsRepo.copyRow(
         item.id,
-        { code: itemCode, workId: work.id, parentId: null, createdBy: user?.id ?? null },
+        {
+          code: itemCode,
+          workId: work.id,
+          parentId: null,
+          ...deriveOrigin({
+            actor: user,
+            recipientId: item.assignee_id ?? null,
+            recipientName: item.assignee_name ?? null,
+          }),
+        },
         client
       );
       idMap.set(item.id, copied.id);
@@ -114,7 +165,11 @@ export async function copy(user, ref, { name = null } = {}) {
           workId: work.id,
           // Cha đã bị xoá khỏi dữ liệu gốc hoặc nhiệm vụ mồ côi ⇒ bản sao cũng mồ côi.
           parentId: item.parent_id == null ? null : (idMap.get(item.parent_id) ?? null),
-          createdBy: user?.id ?? null,
+          ...deriveOrigin({
+            actor: user,
+            recipientId: item.assignee_id ?? null,
+            recipientName: item.assignee_name ?? null,
+          }),
         },
         client
       );

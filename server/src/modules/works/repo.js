@@ -11,7 +11,9 @@ const db = (client) => client ?? pool;
 
 const COLUMNS = `id, code, name, description, manager_id, manager_name, department_id,
                  start_date, end_date, status, approval_status, approver_id, approved_at,
-                 reject_reason, sort_order, created_by, created_at, updated_at`;
+                 reject_reason, sort_order, created_by, created_by_name,
+                 origin, assigned_by_id, assigned_by_name, assigned_at,
+                 created_at, updated_at`;
 
 /** Cột được phép ghi khi tạo/sửa. Tên cột chỉ đến từ đây, không bao giờ từ req.body. */
 export const WRITABLE = Object.freeze([
@@ -28,6 +30,20 @@ export const WRITABLE = Object.freeze([
   'approved_at',
   'reject_reason',
   'sort_order',
+]);
+
+/**
+ * Nguồn gốc việc (003_work_origin_and_history.sql): ai lập, tự đăng ký hay được giao, ai giao
+ * lần đầu. Chỉ ghi được lúc TẠO — trigger `keep_first_origin` giữ nguyên khi UPDATE, nên các cột
+ * này cố ý KHÔNG nằm trong `WRITABLE`.
+ */
+export const ORIGIN_COLUMNS = Object.freeze([
+  'created_by',
+  'created_by_name',
+  'origin',
+  'assigned_by_id',
+  'assigned_by_name',
+  'assigned_at',
 ]);
 
 /** Mã công việc kế tiếp: `CV001`, `CV002`... Xem §13.4 mục 10 nếu cần đổi tiền tố. */
@@ -59,10 +75,9 @@ export async function findByRef(ref, client = null) {
 
 /** Khoá dòng công việc để hai request cùng sửa/nhân bản không chen nhau (chỉ dùng trong giao dịch). */
 export async function lockById(id, client) {
-  const { rows } = await db(client).query(
-    `SELECT ${COLUMNS} FROM works WHERE id = $1 FOR UPDATE`,
-    [id]
-  );
+  const { rows } = await db(client).query(`SELECT ${COLUMNS} FROM works WHERE id = $1 FOR UPDATE`, [
+    id,
+  ]);
   return rows[0] ?? null;
 }
 
@@ -107,7 +122,7 @@ export async function list(filter = {}, client = null) {
 /** Tạo công việc. `code` để trống thì tự sinh. */
 export async function insert(data, client = null) {
   const code = data.code ?? (await nextWorkCode(client));
-  const { columns, values, params } = buildInsert([...WRITABLE, 'created_by'], data, { code });
+  const { columns, values, params } = buildInsert([...WRITABLE, ...ORIGIN_COLUMNS], data, { code });
   const { rows } = await db(client).query(
     `INSERT INTO works (${columns.join(', ')}) VALUES (${params.join(', ')})
      RETURNING ${COLUMNS}`,
@@ -138,17 +153,42 @@ export async function remove(id, client = null) {
  *
  * Bản sao là việc chưa làm: `status` về "Chưa bắt đầu", khoá duyệt về mặc định `Đã duyệt` và
  * không mang theo người duyệt / thời điểm duyệt / lý do từ chối của bản gốc (§13.3).
+ *
+ * Nguồn gốc thì KHÔNG copy: bản sao là một đầu việc mới, người lập nó là người bấm Nhân bản, chứ
+ * không phải người đã lập bản gốc từ năm ngoái. Vì vậy `origin` nhận từ tham số (do
+ * `deriveOrigin` tính), mặc định "Tự đăng ký" cho đường gọi chưa truyền.
  */
-export async function copyRow(sourceId, { code, name, createdBy = null }, client = null) {
+export async function copyRow(sourceId, { code, name, ...origin }, client = null) {
+  const o = {
+    created_by: null,
+    created_by_name: '',
+    origin: 'Tự đăng ký',
+    assigned_by_id: null,
+    assigned_by_name: '',
+    assigned_at: null,
+    ...origin,
+  };
   const { rows } = await db(client).query(
     `INSERT INTO works (
        code, name, description, manager_id, manager_name, department_id,
-       start_date, end_date, status, sort_order, created_by)
+       start_date, end_date, status, sort_order,
+       created_by, created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at)
      SELECT $1, coalesce($2, name), description, manager_id, manager_name, department_id,
-            start_date, end_date, 'Chưa bắt đầu', sort_order, $3
-       FROM works WHERE id = $4
+            start_date, end_date, 'Chưa bắt đầu', sort_order,
+            $3, $4, $5, $6, $7, $8
+       FROM works WHERE id = $9
      RETURNING ${COLUMNS}`,
-    [code, name, createdBy, sourceId]
+    [
+      code,
+      name,
+      o.created_by,
+      o.created_by_name,
+      o.origin,
+      o.assigned_by_id,
+      o.assigned_by_name,
+      o.assigned_at,
+      sourceId,
+    ]
   );
   return rows[0] ?? null;
 }

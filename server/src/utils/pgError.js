@@ -18,6 +18,7 @@ const TRIGGER_SIGNS = [
   ['cùng một công việc', 'PARENT_OTHER_WORK'],
   ['nhiệm vụ bên dưới', 'MOVE_PARENT_HAS_CHILDREN'],
   ['mới đặt được nhắc việc', 'REMINDER_ON_SUBWORK'],
+  ['cùng phòng với công việc cha', 'DEPT_MISMATCH_WORK'], // 002_work_items_department.sql
 ];
 
 /** Tên ràng buộc CHECK/UNIQUE thật (pg trả ở `err.constraint`) → mã lỗi. */
@@ -38,6 +39,8 @@ const MESSAGES = Object.freeze({
   MOVE_PARENT_HAS_CHILDREN:
     'Công việc con đang có nhiệm vụ bên dưới, hãy chuyển hoặc xoá các nhiệm vụ đó trước',
   REMINDER_ON_SUBWORK: 'Chỉ nhiệm vụ (cấp 3) mới đặt được nhắc việc',
+  DEPT_MISMATCH_WORK:
+    'Công việc con và nhiệm vụ luôn thuộc phòng của công việc cha, không đặt phòng khác được',
   CONFLICT: 'Mã đã tồn tại, vui lòng thử lại',
 });
 

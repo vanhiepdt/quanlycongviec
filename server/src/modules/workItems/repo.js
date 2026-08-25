@@ -11,17 +11,23 @@ const db = (client) => client ?? pool;
 export const LEVEL_SUBWORK = 2;
 export const LEVEL_TASK = 3;
 
-const COLUMNS = `id, code, work_id, parent_id, level, name, description,
+const COLUMNS = `id, code, work_id, parent_id, level, department_id, name, description,
                  assignee_id, assignee_name, status, priority,
                  start_date, due_date, report_date, completion,
                  target, output, notes, result_links,
                  approval_status, approver_id, approved_at, reject_reason,
-                 sort_order, created_by, created_at, updated_at`;
+                 sort_order, created_by, created_by_name,
+                 origin, assigned_by_id, assigned_by_name, assigned_at,
+                 created_at, updated_at`;
 
 /**
  * Cột nghiệp vụ được phép ghi tự do. KHÔNG có `work_id`, `parent_id`, `level`, `code`: ba cột đầu
  * là cấu trúc cây (đổi chúng phải đi qua đúng một đường có kiểm tra ở service), còn `code` do
  * máy chủ sinh và không bao giờ đổi (§13.4 mục 6 — chuyển công việc thì GIỮ NGUYÊN mã).
+ *
+ * `department_id` cũng KHÔNG có ở đây: phòng của cấp 2/cấp 3 luôn khớp phòng của công việc cha
+ * (§4.1, 002_work_items_department.sql). Đổi phòng thì đổi ở công việc cấp 1 rồi trigger lan
+ * xuống; cho ghi trực tiếp ở đây chỉ mở đường cho dữ liệu lệch.
  */
 export const WRITABLE = Object.freeze([
   'name',
@@ -47,6 +53,21 @@ export const WRITABLE = Object.freeze([
 
 /** Cột cấu trúc — chỉ service cây được truyền, và luôn kèm kiểm tra trước đó. */
 const STRUCTURAL = Object.freeze(['work_id', 'parent_id']);
+
+/**
+ * Nguồn gốc việc (003_work_origin_and_history.sql): ai lập dòng này, tự đăng ký hay được giao, và
+ * ai giao LẦN ĐẦU. Chỉ ghi được lúc TẠO — trigger `keep_first_origin` trả lại giá trị cũ khi
+ * UPDATE, nên cố ý KHÔNG nằm trong `WRITABLE` lẫn `STRUCTURAL`: giao lại việc cho người khác thì
+ * `assignee_id` đổi, còn "ai giao đầu tiên" thì không.
+ */
+export const ORIGIN_COLUMNS = Object.freeze([
+  'created_by',
+  'created_by_name',
+  'origin',
+  'assigned_by_id',
+  'assigned_by_name',
+  'assigned_at',
+]);
 
 /**
  * Mã dòng mới: `<mã công việc>-NNN`, số lấy từ sequence TOÀN HỆ THỐNG `seq_work_item_code`
@@ -89,6 +110,42 @@ export async function lockById(id, client) {
     [id]
   );
   return rows[0] ?? null;
+}
+
+/**
+ * Dòng kèm thông tin công việc cha trong MỘT truy vấn: phòng và người quản lý để `can()` xét
+ * phạm vi (§6), khoảng ngày để cảnh báo ngày ngoài khoảng (TC-TREE-34), mã công việc để sinh mã
+ * dòng mới. Nếu tách thành hai lần đọc thì mỗi request ghi mất thêm một vòng CSDL.
+ */
+export async function findByRefWithWork(ref, client = null) {
+  const { column, value } = refToColumn(ref);
+  const { rows } = await db(client).query(
+    `SELECT ${COLUMNS.split(',')
+      .map((c) => `i.${c.trim()}`)
+      .join(', ')},
+            w.code AS work_code, w.department_id AS work_department_id,
+            w.manager_id AS work_manager_id,
+            w.start_date AS work_start_date, w.end_date AS work_end_date
+       FROM work_items i JOIN works w ON w.id = i.work_id
+      WHERE i.${column} = $1`,
+    [value]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Người này đã có dòng nào trong công việc đó chưa. Cờ `assigned_in_work` của `can()` cần nó để
+ * quyết định Nhân viên có được tạo nhiệm vụ trong công việc này hay không (§6).
+ */
+export async function isAssignedInWork(workId, userId, client = null) {
+  if (workId == null || userId == null) return false;
+  const { rows } = await db(client).query(
+    `SELECT EXISTS (
+       SELECT 1 FROM work_items WHERE work_id = $1 AND assignee_id = $2
+     ) AS yes`,
+    [workId, userId]
+  );
+  return rows[0].yes === true;
 }
 
 /**
@@ -169,13 +226,19 @@ export async function maxSortOrder(workId, client = null) {
   return rows[0].n;
 }
 
-/** Tạo dòng mới. `code`, `work_id`, `level` là bắt buộc; `parent_id` tuỳ cấp. */
+/**
+ * Tạo dòng mới. `code`, `work_id`, `level` là bắt buộc; `parent_id` tuỳ cấp.
+ *
+ * `department_id` truyền vào chỉ để CSDL đối chiếu: để trống thì trigger tự lấy phòng của công
+ * việc cha, gửi phòng khác thì nổ 23514 → `DEPT_MISMATCH_WORK`.
+ */
 export async function insert(data, client = null) {
-  const { columns, values, params } = buildInsert([...WRITABLE, 'created_by'], data, {
+  const { columns, values, params } = buildInsert([...WRITABLE, ...ORIGIN_COLUMNS], data, {
     code: data.code,
     work_id: data.work_id,
     level: data.level,
     parent_id: data.parent_id ?? null,
+    department_id: data.department_id ?? null,
   });
   const { rows } = await db(client).query(
     `INSERT INTO work_items (${columns.join(', ')}) VALUES (${params.join(', ')})
@@ -232,27 +295,54 @@ export async function remove(id, client = null) {
  *
  * Nhắc việc KHÔNG được nhân bản: nhắc việc gắn với một mốc ngày cụ thể của bản gốc, sao chép
  * sang bản sao chỉ tạo ra thông báo sai ngày.
+ *
+ * Nguồn gốc cũng KHÔNG copy — bản sao là đầu việc mới của người bấm Nhân bản (§2.3). Truyền qua
+ * `origin` (do `deriveOrigin` tính); không truyền thì mặc định "Tự đăng ký".
  */
 export async function copyRow(
   sourceId,
-  { code, workId, parentId, name = null, sortOrder = null, createdBy = null },
+  { code, workId, parentId, name = null, sortOrder = null, ...origin },
   client = null
 ) {
+  const o = {
+    created_by: null,
+    created_by_name: '',
+    origin: 'Tự đăng ký',
+    assigned_by_id: null,
+    assigned_by_name: '',
+    assigned_at: null,
+    ...origin,
+  };
   const { rows } = await db(client).query(
     `INSERT INTO work_items (
        code, work_id, parent_id, level, name, description,
        assignee_id, assignee_name, status, priority,
        start_date, due_date, report_date, completion,
        target, output, notes, result_links,
-       sort_order, created_by)
+       sort_order,
+       created_by, created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at)
      SELECT $1, $2, $3, level, coalesce($4, name), description,
             assignee_id, assignee_name, 'Chưa bắt đầu', priority,
             start_date, due_date, NULL, 0,
             target, output, notes, result_links,
-            coalesce($5, sort_order), $6
-       FROM work_items WHERE id = $7
+            coalesce($5, sort_order),
+            $6, $7, $8, $9, $10, $11
+       FROM work_items WHERE id = $12
      RETURNING ${COLUMNS}`,
-    [code, workId, parentId, name, sortOrder, createdBy, sourceId]
+    [
+      code,
+      workId,
+      parentId,
+      name,
+      sortOrder,
+      o.created_by,
+      o.created_by_name,
+      o.origin,
+      o.assigned_by_id,
+      o.assigned_by_name,
+      o.assigned_at,
+      sourceId,
+    ]
   );
   return rows[0] ?? null;
 }

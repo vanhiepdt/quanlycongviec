@@ -21,7 +21,10 @@ export default [
     },
     rules: {
       // Ba lỗi im lặng đã gặp ở bản Apps Script, nay là lỗi cứng:
-      eqeqeq: ['error', 'always'], // so sánh lỏng làm '0' == false
+      // `null: 'ignore'` cho phép đúng một ngoại lệ: `x != null` — cách gọn nhất để hỏi "có giá trị
+      // không" mà vẫn coi 0 và '' là có. Điều rule này thật sự cần chặn là `'0' == false`, và
+      // trường hợp đó vẫn bị chặn.
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-implicit-coercion': 'error',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_|^next$|^req$|^res$' }],
 

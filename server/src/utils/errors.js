@@ -35,6 +35,7 @@ export const ERROR_STATUS = Object.freeze({
   MOVE_PARENT_HAS_CHILDREN: 400, // TC-TREE-16 — chuyển công việc con đang có nhiệm vụ
   TARGET_WORK_NOT_FOUND: 400, // TC-TREE-19 — công việc đích không tồn tại
   REMINDER_ON_SUBWORK: 409, // TC-TREE-28 — nhắc việc chỉ dành cho cấp 3
+  DEPT_MISMATCH_WORK: 400, // TC-TREE-36 — đặt phòng khác phòng của công việc cha
 });
 
 export class AppError extends Error {

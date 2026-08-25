@@ -233,6 +233,10 @@ ON CONFLICT (code) DO UPDATE SET
 -- CÔNG VIỆC CON (cấp 2) — cha của nhiệm vụ, KHÔNG có cha của chính nó (CHECK lvl2_no_parent).
 -- Mã theo §13.4 mục 6: `<mã công việc>-NNN`, số đánh liên tục toàn hệ thống (không theo từng
 -- công việc) để trùng mã là không thể xảy ra khi nhiệm vụ chuyển sang công việc khác.
+--
+-- Không khai `department_id` ở cả ba khối work_items dưới đây là CHỦ Ý: phòng của cấp 2 và cấp 3
+-- luôn bằng phòng của công việc cha, và trigger `trg_work_items_sync_department` tự điền
+-- (002_work_items_department.sql). Viết tay số phòng ở đây chỉ tạo thêm một chỗ để lệch.
 INSERT INTO work_items (code, work_id, parent_id, level, name, description, assignee_id,
                         assignee_name, status, priority, start_date, due_date, report_date,
                         completion, target, output, notes, result_links, approval_status,

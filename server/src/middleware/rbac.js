@@ -125,6 +125,10 @@ function sameId(a, b) {
  * `assigned_in_work`: người này có nhiệm vụ nào khác trong cùng công việc hay không. Chỉ dùng
  * cho Nhân viên tạo nhiệm vụ mới (§6 "Chỉ trong công việc được giao") — service phải tự tra CSDL
  * rồi đặt cờ, vì `can()` không được truy vấn.
+ *
+ * Phòng: cả `works` và `work_items` đều có `department_id` riêng và luôn khớp nhau (§4.1,
+ * 002_work_items_department.sql), nên cột của chính dòng là nguồn chính. `work_department_id` chỉ
+ * còn là đường dự phòng cho những chỗ chỉ JOIN lấy phòng của công việc cha.
  */
 export function normalizeRow(row) {
   if (!row || typeof row !== 'object') return null;
