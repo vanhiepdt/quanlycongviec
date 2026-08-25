@@ -15,6 +15,7 @@ import { AppError, notFound } from '../../utils/errors.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import { boCotKhoaDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import * as worksRepo from '../works/repo.js';
@@ -222,12 +223,16 @@ export function create(user, input) {
     const row = await withPgErrors(() =>
       repo.insert(
         {
-          ...input,
+          // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo và theo CẤP (§7 việc 5.1): cấp 2 do
+          // Trưởng/Phó phòng lập ⇒ `Chờ duyệt`; cấp 3 luôn `Đã duyệt`. Gỡ giá trị người dùng gửi
+          // lên trước, nếu không thì thêm `approvalStatus` vào thân request là tự duyệt xong.
+          ...boCotKhoaDuyet(input),
           ...assignee.fields,
           code,
           work_id: work.id,
           parent_id: parent?.id ?? null,
           level,
+          approval_status: trangThaiDuyetKhiTao(user, level),
           sort_order: sortOrder,
           ...origin,
         },
@@ -315,7 +320,13 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
 
     const assignee = await resolveAssignee(patch, current, client);
     const row = await withPgErrors(() =>
-      repo.updateStructure(current.id, { ...patch, ...assignee.fields, ...structural }, client)
+      repo.updateStructure(
+        current.id,
+        // Sửa dòng KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động submit/approve/reject
+        // của `approvals/service.js`, nơi có kiểm quyền duyệt và ghi lại ai duyệt (§7 việc 5.2).
+        { ...boCotKhoaDuyet(patch), ...assignee.fields, ...structural },
+        client
+      )
     );
 
     return {
@@ -406,6 +417,9 @@ export function copy(user, ref, { name = null } = {}) {
           parentId: source.parent_id,
           name,
           sortOrder,
+          // Bản sao đi qua đúng cửa duyệt của người bấm Nhân bản, không thừa hưởng khoá duyệt của
+          // bản gốc (§7 việc 5.1). Cấp 3 vẫn luôn `Đã duyệt` — `trangThaiDuyetKhiTao` lo phần đó.
+          approvalStatus: trangThaiDuyetKhiTao(user, source.level),
           ...originFor(source),
         },
         client
@@ -426,6 +440,7 @@ export function copy(user, ref, { name = null } = {}) {
           workId: source.work_id,
           parentId: child.parent_id == null ? null : (idMap.get(child.parent_id) ?? null),
           sortOrder: child.sort_order,
+          approvalStatus: trangThaiDuyetKhiTao(user, childRow.level),
           ...originFor(childRow),
         },
         client

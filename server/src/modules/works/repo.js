@@ -151,14 +151,21 @@ export async function remove(id, client = null) {
 /**
  * Nhân bản dòng công việc (chưa gồm cây bên dưới — phần đó ở `service.copyWork`).
  *
- * Bản sao là việc chưa làm: `status` về "Chưa bắt đầu", khoá duyệt về mặc định `Đã duyệt` và
- * không mang theo người duyệt / thời điểm duyệt / lý do từ chối của bản gốc (§13.3).
+ * Bản sao là việc chưa làm: `status` về "Chưa bắt đầu", và KHÔNG mang theo người duyệt / thời
+ * điểm duyệt / lý do từ chối của bản gốc (§13.3). Khoá duyệt của bản sao do người gọi truyền vào
+ * (`approvalStatus`) chứ không copy từ bản gốc: bản sao là một đầu việc MỚI, nên nó phải qua đúng
+ * cửa duyệt của người bấm Nhân bản (§7 việc 5.1) — Trưởng phòng nhân bản một việc đã duyệt mà
+ * bản sao cũng "Đã duyệt" là một đường vòng qua luồng duyệt.
  *
- * Nguồn gốc thì KHÔNG copy: bản sao là một đầu việc mới, người lập nó là người bấm Nhân bản, chứ
- * không phải người đã lập bản gốc từ năm ngoái. Vì vậy `origin` nhận từ tham số (do
- * `deriveOrigin` tính), mặc định "Tự đăng ký" cho đường gọi chưa truyền.
+ * Nguồn gốc cũng KHÔNG copy: người lập bản sao là người bấm Nhân bản, chứ không phải người đã lập
+ * bản gốc từ năm ngoái. Vì vậy `origin` nhận từ tham số (do `deriveOrigin` tính), mặc định
+ * "Tự đăng ký" cho đường gọi chưa truyền.
  */
-export async function copyRow(sourceId, { code, name, ...origin }, client = null) {
+export async function copyRow(
+  sourceId,
+  { code, name, approvalStatus = 'Đã duyệt', ...origin },
+  client = null
+) {
   const o = {
     created_by: null,
     created_by_name: '',
@@ -171,16 +178,17 @@ export async function copyRow(sourceId, { code, name, ...origin }, client = null
   const { rows } = await db(client).query(
     `INSERT INTO works (
        code, name, description, manager_id, manager_name, department_id,
-       start_date, end_date, status, sort_order,
+       start_date, end_date, status, approval_status, sort_order,
        created_by, created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at)
      SELECT $1, coalesce($2, name), description, manager_id, manager_name, department_id,
-            start_date, end_date, 'Chưa bắt đầu', sort_order,
-            $3, $4, $5, $6, $7, $8
-       FROM works WHERE id = $9
+            start_date, end_date, 'Chưa bắt đầu', $3, sort_order,
+            $4, $5, $6, $7, $8, $9
+       FROM works WHERE id = $10
      RETURNING ${COLUMNS}`,
     [
       code,
       name,
+      approvalStatus,
       o.created_by,
       o.created_by_name,
       o.origin,

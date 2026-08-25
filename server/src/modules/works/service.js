@@ -13,8 +13,12 @@ import { warnDueBeforeStart } from '../../utils/dateChecks.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import { boCotKhoaDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
+
+/** Công việc là cấp 1 của cây 3 tầng — hằng số để luật duyệt đọc được ý nghĩa con số. */
+const LEVEL_WORK = 1;
 
 /** Chặn theo quyền + phạm vi trên MỘT dòng cụ thể (§6: kiểm ở cả middleware và service). */
 function assertCan(user, action, row) {
@@ -50,14 +54,24 @@ export async function create(user, input) {
     recipientId: input.manager_id ?? null,
     recipientName: input.manager_name ?? null,
   });
-  const work = await withPgErrors(() => repo.insert({ ...input, ...origin }));
+  // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo (§7 việc 5.1), không nhận từ thân request:
+  // `boCotKhoaDuyet` gỡ giá trị người dùng gửi lên trước, nếu không thì Trưởng phòng chỉ cần
+  // thêm `approvalStatus: 'Đã duyệt'` là tự duyệt xong việc của mình.
+  const work = await withPgErrors(() =>
+    repo.insert({
+      ...boCotKhoaDuyet(input),
+      approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK),
+      ...origin,
+    })
+  );
   return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
 }
 
 export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
-  const work = await withPgErrors(() => repo.update(current.id, patch));
+  // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
+  const work = await withPgErrors(() => repo.update(current.id, boCotKhoaDuyet(patch)));
   return {
     work,
     // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
@@ -129,7 +143,18 @@ export function copy(user, ref, { name = null } = {}) {
       recipientName: source.manager_name ?? null,
     });
     const work = await withPgErrors(() =>
-      repo.copyRow(source.id, { code, name, ...workOrigin }, client)
+      repo.copyRow(
+        source.id,
+        {
+          code,
+          name,
+          // Bản sao đi qua đúng cửa duyệt của người bấm Nhân bản, không thừa hưởng khoá duyệt của
+          // bản gốc (§7 việc 5.1).
+          approvalStatus: trangThaiDuyetKhiTao(user, LEVEL_WORK),
+          ...workOrigin,
+        },
+        client
+      )
     );
 
     const items = await itemsRepo.listByWork(source.id, {}, client);
@@ -144,6 +169,7 @@ export function copy(user, ref, { name = null } = {}) {
           code: itemCode,
           workId: work.id,
           parentId: null,
+          approvalStatus: trangThaiDuyetKhiTao(user, itemsRepo.LEVEL_SUBWORK),
           ...deriveOrigin({
             actor: user,
             recipientId: item.assignee_id ?? null,
@@ -165,6 +191,7 @@ export function copy(user, ref, { name = null } = {}) {
           workId: work.id,
           // Cha đã bị xoá khỏi dữ liệu gốc hoặc nhiệm vụ mồ côi ⇒ bản sao cũng mồ côi.
           parentId: item.parent_id == null ? null : (idMap.get(item.parent_id) ?? null),
+          approvalStatus: trangThaiDuyetKhiTao(user, itemsRepo.LEVEL_TASK),
           ...deriveOrigin({
             actor: user,
             recipientId: item.assignee_id ?? null,
