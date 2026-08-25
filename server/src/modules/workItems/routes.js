@@ -8,6 +8,7 @@ import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
+import { remindersRouter } from '../reminders/routes.js';
 import * as service from './service.js';
 
 // `workRef` là mã (`CV001`) hoặc id số của công việc cấp 1 — bắt buộc khi tạo, vì một dòng không
@@ -86,6 +87,13 @@ const entityOf = (level) => (Number(level) === 2 ? 'subwork' : 'task');
 export const workItemsRouter = Router();
 
 workItemsRouter.use(requireAuth);
+
+/**
+ * Nhắc việc treo dưới từng dòng: `/api/v1/work-items/:id/reminders` (§5.2). Gắn ở đây chứ không
+ * làm route gốc riêng vì một nhắc việc không tồn tại ngoài nhiệm vụ nào — đường dẫn nói luôn điều
+ * đó, và `requireAuth` phía trên phủ sang cả nhánh con.
+ */
+workItemsRouter.use('/:id/reminders', remindersRouter);
 
 workItemsRouter.get('/', validate(listSchema, 'query'), async (req, res, next) => {
   try {
