@@ -434,6 +434,43 @@ ON CONFLICT (code) DO UPDATE SET
   notes      = EXCLUDED.notes,
   updated_at = now();
 
+-- NGUỒN GỐC ĐẦU VIỆC (§2.2 mục B7, §2.3 mục C16) — ai lập, tự đăng ký hay được giao, ai giao
+-- đầu tiên. Cố ý làm bằng UPDATE chạy sau, không nhồi thêm 5 cột vào ba câu INSERT ở trên:
+--   * quy tắc suy nguồn gốc chỉ viết MỘT lần cho cả ba cấp, đúng như `deriveOrigin` ở tầng JS
+--     (người nhận là chính người lập ⇒ "Tự đăng ký", khác người ⇒ "Được giao");
+--   * và nó tự chống chạy lại nhờ chính trigger `keep_first_origin`: lần đầu các cột còn rỗng nên
+--     UPDATE ghi được, từ lần hai trở đi trigger trả về giá trị cũ nên seed không bao giờ đổi
+--     "người giao đầu tiên" của dữ liệu đã có (§4.1).
+-- Mốc `assigned_at` lấy theo ngày bắt đầu để dữ liệu mẫu có thứ tự thời gian hợp lý, chứ không
+-- dùng now() — Gantt và nhật ký đọc mốc này.
+UPDATE works w SET
+  created_by_name  = s.creator_name,
+  origin           = CASE WHEN s.assigned THEN 'Được giao' ELSE 'Tự đăng ký' END,
+  assigned_by_id   = CASE WHEN s.assigned THEN w.created_by END,
+  assigned_by_name = CASE WHEN s.assigned THEN s.creator_name ELSE '' END,
+  assigned_at      = CASE WHEN s.assigned THEN s.at END
+FROM (
+  SELECT x.id, coalesce(u.full_name, '') AS creator_name,
+         (x.manager_id IS NOT NULL AND x.manager_id <> x.created_by) AS assigned,
+         coalesce(x.start_date, current_date)::timestamptz AS at
+  FROM works x JOIN users u ON u.id = x.created_by
+) s
+WHERE s.id = w.id;
+
+UPDATE work_items i SET
+  created_by_name  = s.creator_name,
+  origin           = CASE WHEN s.assigned THEN 'Được giao' ELSE 'Tự đăng ký' END,
+  assigned_by_id   = CASE WHEN s.assigned THEN i.created_by END,
+  assigned_by_name = CASE WHEN s.assigned THEN s.creator_name ELSE '' END,
+  assigned_at      = CASE WHEN s.assigned THEN s.at END
+FROM (
+  SELECT x.id, coalesce(u.full_name, '') AS creator_name,
+         (x.assignee_id IS NOT NULL AND x.assignee_id <> x.created_by) AS assigned,
+         coalesce(x.start_date, current_date)::timestamptz AS at
+  FROM work_items x JOIN users u ON u.id = x.created_by
+) s
+WHERE s.id = i.id;
+
 -- NHẮC VIỆC — chỉ đặt được trên nhiệm vụ cấp 3 (trigger `reminders_only_level3`).
 -- Bảng không có khoá tự nhiên nên chống trùng bằng WHERE NOT EXISTS theo (nhiệm vụ, ngày).
 INSERT INTO reminders (work_item_id, remind_date, content, created_by)

@@ -281,6 +281,39 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
     for (const r of rows) expect(r.assignee_name, r.code).not.toBe('');
   });
 
+  it('mọi đầu việc đều nói được ai lập, và việc giao cho người khác thì ghi ai giao', async () => {
+    // Nguồn gốc trong dữ liệu mẫu do một cặp UPDATE ở cuối dev.sql suy ra, theo đúng luật của
+    // `deriveOrigin`: người nhận là chính người lập ⇒ "Tự đăng ký", khác người ⇒ "Được giao".
+    for (const table of ['works', 'work_items']) {
+      const nameless = await list(
+        `SELECT code FROM ${table} WHERE created_by IS NOT NULL AND created_by_name = ''`
+      );
+      expect(nameless, table).toEqual([]);
+
+      // Hai cột phải kể cùng một câu chuyện: đã "Được giao" thì phải có người giao và mốc giao;
+      // "Tự đăng ký" thì không được vu cho ai là người giao.
+      const lech = await list(
+        `SELECT code, origin FROM ${table}
+          WHERE origin = 'Được giao' AND (assigned_by_id IS NULL OR assigned_at IS NULL)
+             OR origin = 'Tự đăng ký' AND assigned_by_id IS NOT NULL`
+      );
+      expect(lech, table).toEqual([]);
+    }
+
+    // Đúng 3 công việc được giao cho người khác; 6 việc còn lại người lập tự phụ trách, kể cả
+    // CV005 chưa phân ai (không có người nhận thì không thể gọi là được giao).
+    const giao = await list(`SELECT code FROM works WHERE origin = 'Được giao' ORDER BY code`);
+    expect(giao.map((r) => r.code)).toEqual(['CV001', 'CV004', 'CV009']);
+
+    // Cả hai nguồn gốc phải có mặt ở cấp 2 và cấp 3, để màn hình Phase 4 hiện được cả hai kiểu.
+    const theoCap = await list(
+      `SELECT level, origin, count(*)::int AS n FROM work_items
+        GROUP BY level, origin ORDER BY level, origin`
+    );
+    expect(theoCap).toHaveLength(4);
+    for (const r of theoCap) expect(r.n, `cấp ${r.level} ${r.origin}`).toBeGreaterThan(0);
+  });
+
   it('nhắc việc CHỈ nằm trên nhiệm vụ cấp 3, và một nhiệm vụ có thể có nhiều nhắc', async () => {
     const wrongLevel = await list(
       `SELECT r.id FROM reminders r JOIN work_items wi ON wi.id = r.work_item_id
