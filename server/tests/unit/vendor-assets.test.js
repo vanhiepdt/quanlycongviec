@@ -45,7 +45,11 @@ describe('4.3 — trang không còn phụ thuộc CDN', () => {
   });
 
   it('mọi tệp mà index.html nạp đều CÓ trên đĩa và không rỗng', () => {
-    const local = [...INDEX.matchAll(/(?:src|href)\s*=\s*"(assets\/[^"]+)"/g)].map((m) => m[1]);
+    // Bỏ `?v=...` (dấu vết phiên bản của việc 4.8) trước khi tìm trên đĩa: nó là chuyện của cache,
+    // không phải phần tên tệp.
+    const local = [...INDEX.matchAll(/(?:src|href)\s*=\s*"(assets\/[^"]+)"/g)].map((m) =>
+      m[1].replace(/\?.*$/, '')
+    );
     expect(local.length).toBeGreaterThanOrEqual(7);
     for (const rel of local) expect({ rel, size: sizeOf(rel) > 1000 }).toEqual({ rel, size: true });
   });
