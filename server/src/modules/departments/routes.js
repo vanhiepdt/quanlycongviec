@@ -4,10 +4,12 @@
 // chữ `context` bị bắt làm mã phòng và người dùng nhận 404.
 import { Router } from 'express';
 import { z } from 'zod';
+import { AppError } from '../../utils/errors.js';
 import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { requiredText, text } from '../../utils/zodTypes.js';
+import * as assignments from '../assignments/service.js';
 import * as bootstrap from '../bootstrap/service.js';
 import * as service from './service.js';
 
@@ -64,6 +66,26 @@ departmentsRouter.get('/', async (req, res, next) => {
   try {
     const departments = await service.list(req.user);
     return ok(res, { departments, total: departments.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Ứng viên phân công cho form (005_phan_cong.sql). `?departmentId=` để trống = "Công việc chung":
+ * supervisors = mọi Phó GĐ + admin, leaders = []. Có phòng ⇒ supervisors = Phó GĐ phụ trách
+ * phòng đó ∪ admin, leaders = Trưởng/Phó phòng của phòng. Nguồn đọc thẳng
+ * department_managers + users, KHÔNG tin danh sách nào gửi lên.
+ */
+departmentsRouter.get('/assignment-options', async (req, res, next) => {
+  try {
+    const raw = req.query.departmentId;
+    const departmentId =
+      raw === undefined || raw === null || String(raw).trim() === '' ? null : Number(raw);
+    if (departmentId !== null && !Number.isInteger(departmentId)) {
+      throw new AppError('VALIDATION_ERROR', 'Mã phòng không hợp lệ', { field: 'departmentId' });
+    }
+    return ok(res, await assignments.listCandidates(departmentId));
   } catch (err) {
     return next(err);
   }

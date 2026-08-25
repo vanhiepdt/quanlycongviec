@@ -11,7 +11,9 @@ const db = (client) => client ?? pool;
 export const LEVEL_SUBWORK = 2;
 export const LEVEL_TASK = 3;
 
-const COLUMNS = `id, code, work_id, parent_id, level, department_id, name, description,
+const COLUMNS = `id, code, work_id, parent_id, level, department_id,
+                 supervisor_id, leader_ids,
+                 name, description,
                  assignee_id, assignee_name, status, priority,
                  start_date, due_date, report_date, completion,
                  target, output, notes, result_links,
@@ -44,6 +46,11 @@ export const WRITABLE = Object.freeze([
   'description',
   'assignee_id',
   'assignee_name',
+  // Phân công ba lớp (005_phan_cong.sql): Ban lãnh đạo kiểm soát chỉ ở cấp 2; "Lãnh đạo phòng
+  // phụ trách" ở cấp 2 là mảng nhiều người, cấp 3 tối đa một người (CHECK `task_leader_single`).
+  // Nguồn hợp lệ kiểm ở service — cấp 3 gửi supervisor khác rỗng sẽ bị chặn ngay tại đó.
+  'supervisor_id',
+  'leader_ids',
   'status',
   'priority',
   'start_date',

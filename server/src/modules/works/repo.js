@@ -10,6 +10,7 @@ import { buildInsert, buildUpdateSet, refToColumn } from '../../utils/sql.js';
 const db = (client) => client ?? pool;
 
 const COLUMNS = `id, code, name, description, manager_id, manager_name, department_id,
+                 supervisor_id, leader_ids,
                  start_date, end_date, status, approval_status, approver_id, approved_at,
                  reject_reason, sort_order, created_by, created_by_name,
                  origin, assigned_by_id, assigned_by_name, assigned_at,
@@ -22,6 +23,8 @@ export const WRITABLE = Object.freeze([
   'manager_id',
   'manager_name',
   'department_id',
+  'supervisor_id',
+  'leader_ids',
   'start_date',
   'end_date',
   'status',
@@ -178,9 +181,11 @@ export async function copyRow(
   const { rows } = await db(client).query(
     `INSERT INTO works (
        code, name, description, manager_id, manager_name, department_id,
+       supervisor_id, leader_ids,
        start_date, end_date, status, approval_status, sort_order,
        created_by, created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at)
      SELECT $1, coalesce($2, name), description, manager_id, manager_name, department_id,
+            supervisor_id, leader_ids,
             start_date, end_date, 'Chưa bắt đầu', $3, sort_order,
             $4, $5, $6, $7, $8, $9
        FROM works WHERE id = $10

@@ -13,6 +13,7 @@ import { warnDueBeforeStart } from '../../utils/dateChecks.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import * as assignments from '../assignments/service.js';
 import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
@@ -54,6 +55,12 @@ export async function getOne(user, ref) {
   return work;
 }
 
+/** Kiểm Ban lãnh đạo kiểm soát + Lãnh đạo phòng phụ trách theo phòng CUỐI CÙNG của dòng. */
+async function assertPhanCong(patch, departmentId, client) {
+  await assignments.assertSupervisor(patch.supervisor_id ?? null, departmentId, client);
+  await assignments.assertLeaders(patch.leader_ids ?? [], departmentId, client);
+}
+
 export async function create(user, input) {
   assertCan(user, 'create', null);
   // Người nhận việc của cấp 1 là người quản lý công việc: tự đứng tên ⇒ "Tự đăng ký", giao cho
@@ -62,6 +69,12 @@ export async function create(user, input) {
     actor: user,
     recipientId: input.manager_id ?? null,
     recipientName: input.manager_name ?? null,
+  });
+  // Phân công kiểm NGUỒN ở server: supervisor phải là admin/Phó GĐ phụ trách phòng; leaders phải
+  // là Trưởng/Phó phòng của phòng. Công việc chung (không phòng) ⇒ leaders phải rỗng.
+  await withTransaction(async (client) => {
+    await assertPhanCong(input, input.department_id ?? null, client);
+    return null;
   });
   // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo (§7 việc 5.1), không nhận từ thân request:
   // `boCotKhoaDuyet` gỡ giá trị người dùng gửi lên trước, nếu không thì Trưởng phòng chỉ cần
@@ -80,6 +93,14 @@ export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
   assertSuaDuoc(user, current);
+  // Đổi phòng cùng lúc với đổi phân công ⇒ kiểm theo phòng MỚI (phòng đích), không theo phòng cũ.
+  const phongMoi = Object.hasOwn(patch, 'department_id')
+    ? patch.department_id
+    : current.department_id;
+  await withTransaction(async (client) => {
+    await assertPhanCong(patch, phongMoi ?? null, client);
+    return null;
+  });
   // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
   const work = await withPgErrors(() => repo.update(current.id, boCotKhoaDuyet(patch)));
   return {

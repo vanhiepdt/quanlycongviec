@@ -109,6 +109,20 @@ export async function listAll(client = null) {
 }
 
 /**
+ * Toàn bộ người dùng thuộc MỘT TRONG CÁC vai cho trước — so khớp CHÍNH XÁC (bẫy `includes`
+ * 'admin', §13.5). Dùng để dựng danh sách ứng viên phân công (assignments/service.js).
+ */
+export async function listByRoles(roles, client = null) {
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users
+      WHERE role = ANY($1::text[])
+      ORDER BY full_name, id`,
+    [roles]
+  );
+  return rows;
+}
+
+/**
  * Dò người dùng theo HỌ TÊN. Phase 3 cần vì các API cây nhận `assigneeName` (chữ người dùng
  * gõ/dán từ bản cũ) chứ không phải id.
  *

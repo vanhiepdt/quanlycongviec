@@ -15,6 +15,7 @@ import { AppError, notFound } from '../../utils/errors.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import * as assignments from '../assignments/service.js';
 import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
@@ -193,6 +194,43 @@ export async function history(user, ref, { limit = 200 } = {}) {
  * Mã dòng do sequence sinh trong CÙNG giao dịch, nên 20 request đồng thời ra 20 mã khác nhau
  * (TC-TREE-31) — `nextval` không bị ảnh hưởng bởi giao dịch nào cả.
  */
+/**
+ * Phân công ba lớp lúc TẠO (005_phan_cong.sql):
+ *   • Cấp 2: để trống ⇒ thừa hưởng Ban kiểm soát + Lãnh đạo phòng của công việc cha (form điền
+ *     sẵn đúng giá trị này, người dùng vẫn sửa được — "không bắt buộc trùng" chỉ là không bị ép).
+ *   • Cấp 3: KHÔNG có Ban kiểm soát (gửi khác rỗng ⇒ lỗi); leader tối đa 1 người thuộc nguồn hợp
+ *     lệ (`assignments.validTaskLeaders`). Không gửi ⇒ trống.
+ *
+ * Trả về object cột để trải vào `repo.insert`.
+ */
+async function resolvePhanCongKhiTao(input, { work, parent, level }, client) {
+  if (level === repo.LEVEL_TASK) {
+    if (input.supervisor_id != null) {
+      throw new AppError('VALIDATION_ERROR', 'Nhiệm vụ không có ô Ban lãnh đạo kiểm soát', {
+        field: 'supervisorId',
+      });
+    }
+    const leaders = Array.isArray(input.leader_ids) ? input.leader_ids : [];
+    if (leaders.length > 1) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Nhiệm vụ chỉ được chọn MỘT lãnh đạo phòng phụ trách',
+        {
+          field: 'leaderIds',
+        }
+      );
+    }
+    await assignments.assertTaskLeader(leaders, { parentRow: parent, workRow: work }, client);
+    return { leader_ids: leaders };
+  }
+  const supervisor =
+    input.supervisor_id === undefined ? (work.supervisor_id ?? null) : input.supervisor_id;
+  const leaders = input.leader_ids === undefined ? (work.leader_ids ?? []) : input.leader_ids;
+  await assignments.assertSupervisor(supervisor, work.department_id, client);
+  await assignments.assertLeaders(leaders, work.department_id, client);
+  return { supervisor_id: supervisor, leader_ids: leaders };
+}
+
 export function create(user, input) {
   const level =
     input.level === undefined || input.level === null ? repo.LEVEL_TASK : Number(input.level);
@@ -216,6 +254,7 @@ export function create(user, input) {
 
     const parent = await resolveParent(input.parentRef, { itemId: null }, client);
     const assignee = await resolveAssignee(input, null, client);
+    const phanCong = await resolvePhanCongKhiTao(input, { work, parent, level }, client);
     const code = await repo.nextItemCode(work.code, client);
     const sortOrder = input.sort_order ?? (await repo.maxSortOrder(work.id, client)) + 1;
 
@@ -237,6 +276,7 @@ export function create(user, input) {
           // lên trước, nếu không thì thêm `approvalStatus` vào thân request là tự duyệt xong.
           ...boCotKhoaDuyet(input),
           ...assignee.fields,
+          ...phanCong,
           code,
           work_id: work.id,
           parent_id: parent?.id ?? null,
@@ -275,6 +315,55 @@ export function create(user, input) {
  * KHÔNG truyền `parentRef` ⇒ giữ nguyên cha cũ (TC-TREE-12). Truyền `null`/`''` ⇒ bỏ cha.
  * Mã dòng KHÔNG BAO GIỜ đổi, kể cả khi chuyển sang công việc khác (§13.4 mục 6).
  */
+/**
+ * Kiểm phân công lúc SỬA (005_phan_cong.sql). Không gửi gì liên quan và không đổi cha ⇒ bỏ qua,
+ * dữ liệu cũ giữ nguyên. Nhiệm vụ có leader (vừa gửi hoặc đang có sẵn) mà cha / công việc đổi
+ * nguồn ⇒ kiểm lại tập leader CUỐI CÙNG với nguồn mới.
+ */
+async function kiemPhanCongKhiSua({ current, work, parentRow, doiParent, patch }, client) {
+  const coGuiSupervisor = Object.hasOwn(patch, 'supervisor_id');
+  const coGuiLeaders = Object.hasOwn(patch, 'leader_ids');
+  if (!coGuiSupervisor && !coGuiLeaders && !doiParent) return;
+
+  if (Number(current.level) === repo.LEVEL_TASK) {
+    if (coGuiSupervisor && patch.supervisor_id != null) {
+      throw new AppError('VALIDATION_ERROR', 'Nhiệm vụ không có ô Ban lãnh đạo kiểm soát', {
+        field: 'supervisorId',
+      });
+    }
+    if (!coGuiLeaders && !doiParent) return;
+    const leaders = coGuiLeaders ? (patch.leader_ids ?? []) : (current.leader_ids ?? []);
+    if (leaders.length > 1) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Nhiệm vụ chỉ được chọn MỘT lãnh đạo phòng phụ trách',
+        { field: 'leaderIds' }
+      );
+    }
+    const chaHienTai =
+      parentRow !== undefined
+        ? parentRow
+        : current.parent_id != null
+          ? await repo.findById(current.parent_id, client)
+          : null;
+    await assignments.assertTaskLeader(leaders, { parentRow: chaHienTai, workRow: work }, client);
+    return;
+  }
+  // Cấp 2: chỉ trường được GỬI mới kiểm (không gửi ⇒ giữ nguyên giá trị cũ).
+  if (coGuiSupervisor || coGuiLeaders) {
+    const phong =
+      Object.hasOwn(patch, 'department_id') && patch.department_id != null
+        ? patch.department_id
+        : work.department_id;
+    if (coGuiSupervisor) {
+      await assignments.assertSupervisor(patch.supervisor_id ?? null, phong, client);
+    }
+    if (coGuiLeaders) {
+      await assignments.assertLeaders(patch.leader_ids ?? [], phong, client);
+    }
+  }
+}
+
 export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}) {
   return withTransaction(async (client) => {
     const current = await mustFindItem(ref, client);
@@ -323,12 +412,19 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
       }
     }
 
+    let parentMoi; // undefined = không đổi cha; null = bỏ cha
     if (Object.hasOwn(patch, 'parentRef')) {
       const parent = await resolveParent(patch.parentRef, { itemId: current.id }, client);
       structural.parent_id = parent?.id ?? null;
+      parentMoi = parent ?? null;
     }
 
     const assignee = await resolveAssignee(patch, current, client);
+    // Phân công ba lớp: kiểm nguồn khi leader/cha/công việc liên quan thay đổi (005_phan_cong.sql).
+    await kiemPhanCongKhiSua(
+      { current, work, parentRow: parentMoi, doiParent: parentMoi !== undefined || moved, patch },
+      client
+    );
     const row = await withPgErrors(() =>
       repo.updateStructure(
         current.id,
