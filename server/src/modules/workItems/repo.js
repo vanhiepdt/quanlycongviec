@@ -21,6 +21,16 @@ const COLUMNS = `id, code, work_id, parent_id, level, department_id, name, descr
                  created_at, updated_at`;
 
 /**
+ * Cùng danh sách cột nhưng gắn tiền tố bảng (`c.id, c.code, …`). Chỉ dùng cho nhánh đệ quy của
+ * truy vấn cây, nơi bắt buộc phải nói rõ cột thuộc bảng nào. Sinh từ `COLUMNS` chứ không viết lại
+ * bằng tay: thêm cột mà quên sửa bản sao là lỗi im lặng — nhánh đệ quy trả thiếu cột.
+ */
+const prefix = (alias) =>
+  COLUMNS.split(',')
+    .map((c) => `${alias}.${c.trim()}`)
+    .join(', ');
+
+/**
  * Cột nghiệp vụ được phép ghi tự do. KHÔNG có `work_id`, `parent_id`, `level`, `code`: ba cột đầu
  * là cấu trúc cây (đổi chúng phải đi qua đúng một đường có kiểm tra ở service), còn `code` do
  * máy chủ sinh và không bao giờ đổi (§13.4 mục 6 — chuyển công việc thì GIỮ NGUYÊN mã).
@@ -215,6 +225,47 @@ export async function listDescendants(id, client = null) {
 export async function isDescendant(id, candidateId, client = null) {
   const rows = await listDescendants(id, client);
   return rows.some((r) => r.id === candidateId);
+}
+
+/**
+ * Toàn bộ dòng của NHIỀU công việc, đi từ gốc xuống, dùng cho `GET /works/tree` (§7 việc 3.6).
+ *
+ * Gốc KHÔNG chỉ là `parent_id IS NULL`, mà là mọi dòng **không có cha dùng được**: cha để trống, cha
+ * đã biến mất, cha không phải cấp 2, hoặc cha ở công việc khác. Nhờ vậy dòng có `parent_id` bẩn vẫn
+ * đi vào cây (rồi `tree.js` gom vào nhóm `(chưa gán công việc con)`) thay vì không đường nào tới
+ * được và mất hẳn khỏi giao diện — đúng lỗi của `getWorkTree` bản cũ (TC-TREE-24).
+ *
+ * Điều đó cũng cứu được dữ liệu trỏ VÒNG (A là cha B, B là cha A): cả hai đều "không có cha dùng
+ * được" nên cả hai vào danh sách gốc. Chúng sẽ xuất hiện lần thứ hai ở nhánh đệ quy — `tree.js` bỏ
+ * qua bản trùng bằng cách nhớ id đã xếp, và vì thứ tự là `depth` tăng dần, bản được giữ là bản gốc.
+ *
+ * Một truy vấn cho CẢ trang thay vì một truy vấn mỗi công việc: 200 công việc × 5 × 5 là 5.000 dòng
+ * trong một lượt đi, không phải 201 lượt (TC-PERF-02, ngưỡng 600 ms).
+ *
+ * `CYCLE` và `depth < 50` cùng lý do như `listDescendants`: truy vấn đệ quy trần gặp vòng thì treo.
+ */
+export async function listForWorks(workIds, client = null) {
+  if (!Array.isArray(workIds) || workIds.length === 0) return [];
+  const { rows } = await db(client).query(
+    `WITH RECURSIVE tree AS (
+       SELECT ${COLUMNS}, 1 AS depth
+         FROM work_items w
+        WHERE w.work_id = ANY($1)
+          AND (w.parent_id IS NULL
+               OR NOT EXISTS (SELECT 1 FROM work_items p
+                               WHERE p.id = w.parent_id
+                                 AND p.level = ${LEVEL_SUBWORK}
+                                 AND p.work_id = w.work_id))
+       UNION ALL
+       SELECT ${prefix('c')}, t.depth + 1
+         FROM work_items c JOIN tree t ON c.parent_id = t.id
+        WHERE t.depth < 50
+     ) CYCLE id SET is_cycle USING path
+     SELECT ${COLUMNS}, depth FROM tree WHERE NOT is_cycle
+      ORDER BY depth, sort_order, code`,
+    [workIds]
+  );
+  return rows;
 }
 
 /** Số thứ tự lớn nhất đang dùng trong một công việc — để dòng mới xếp cuối. */

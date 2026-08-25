@@ -9,6 +9,7 @@ import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
 import * as itemsService from '../workItems/service.js';
 import * as service from './service.js';
+import { getTree } from './tree.js';
 
 const createSchema = z.object({
   name: text(500).min(1, 'Vui lòng nhập tên công việc'),
@@ -87,6 +88,19 @@ worksRouter.get('/', validate(querySchema, 'query'), async (req, res, next) => {
       approvalStatus: q.approvalStatus,
     });
     return ok(res, { works: rows, total: rows.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Cây 3 tầng (§5.2). PHẢI khai báo TRƯỚC `/:id`: Express xét theo thứ tự, đặt sau thì `tree` bị
+ * bắt làm `:id` và người dùng nhận 404 "Không tìm thấy công việc tree".
+ */
+worksRouter.get('/tree', validate(querySchema, 'query'), async (req, res, next) => {
+  try {
+    const q = req.validatedQuery ?? {};
+    return ok(res, await getTree(req.user, { month: q.month, departmentId: q.departmentId }));
   } catch (err) {
     return next(err);
   }
