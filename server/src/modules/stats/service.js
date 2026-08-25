@@ -33,10 +33,16 @@ const laHoanThanh = (status) =>
   String(status ?? '')
     .toLowerCase()
     .includes('hoàn thành');
-const laDangLam = (status) =>
-  String(status ?? '')
-    .toLowerCase()
-    .includes('đang');
+/**
+ * Thẻ «Đang làm» của UI GỘP BA trạng thái: đang thực hiện + chưa bắt đầu + tạm dừng
+ * (`renderStats`: active-tasks = count4 + count3 + count5). Chuẩn đối chiếu là số ĐANG HIỆN
+ * trên giao diện (§7 Phase 6 · TC-STAT-16), nên REST đếm giống hệt — khác với `getSummaryStats`
+ * của backend cũ vốn chỉ đếm 'đang'.
+ */
+const theDangLam = (status) => {
+  const st = String(status ?? '').toLowerCase();
+  return st.includes('đang') || st.includes('chưa') || st.includes('tạm dừng');
+};
 
 /**
  * Giao nhau giữa khoảng của dòng và khoảng lọc (việc 6.4).
@@ -154,7 +160,7 @@ export function summaryFrom(works, tasks) {
   for (const row of tasks) {
     const hoanThanh = laHoanThanh(row.status);
     if (hoanThanh) completedTasks += 1;
-    else if (laDangLam(row.status)) ongoingTasks += 1;
+    else if (theDangLam(row.status)) ongoingTasks += 1;
     const han = ngayCua(row.due_date);
     if (han && han < homNay && !hoanThanh) overdueTasks += 1;
   }
