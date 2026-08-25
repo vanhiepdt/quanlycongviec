@@ -6,13 +6,13 @@ import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
-import { approvalInput, dateInput, idInput, text } from '../../utils/zodTypes.js';
+import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
 import * as itemsService from '../workItems/service.js';
 import * as service from './service.js';
 import { getTree } from './tree.js';
 
 const createSchema = z.object({
-  name: text(500).min(1, 'Vui lòng nhập tên công việc'),
+  name: requiredText('Vui lòng nhập tên công việc', 500),
   description: text(5000).optional(),
   managerId: idInput,
   managerName: text(200).optional(),

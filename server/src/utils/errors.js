@@ -21,6 +21,10 @@ export const ERROR_STATUS = Object.freeze({
   ACCOUNT_LOCKED: 423,
   RATE_LIMITED: 429,
   INTERNAL: 500,
+  // Cầu tương thích RPC (Phase 4): tên hàm cũ có thật nhưng phần nghiệp vụ chưa chuyển sang máy
+  // chủ mới. Phải là 501 chứ không phải 404: 404 nghĩa là "không có đường dẫn này" và làm giao
+  // diện tưởng gọi sai tên, còn 400 nghĩa là "người dùng nhập sai" — cả hai đều nói dối.
+  NOT_IMPLEMENTED: 501,
 
   // --- Cây 3 tầng (Phase 3, §8.4 nhóm C) ---------------------------------------------------
   // Tất cả là 400 "dữ liệu vào sai", trừ REMINDER_ON_SUBWORK: đặt nhắc việc cho công việc con

@@ -13,6 +13,7 @@ import { attachSession, requirePasswordChanged } from './middleware/session.js';
 import { authRouter } from './modules/auth/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
+import { createRpcRouter } from './rpc/index.js';
 import { logger } from './utils/logger.js';
 
 export function createApp() {
@@ -60,18 +61,15 @@ export function createApp() {
   // Trình duyệt lấy token CSRF ở đây trước khi gọi bất kỳ API ghi nào (kể cả đăng nhập).
   api.get('/csrf', (req, res) => ok(res, { csrfToken: res.locals.csrfToken }));
 
-  api.use('/v1/auth', authRouter);
+  // MỘT bản thứ tự middleware cho cả `/api/v1/*` và cầu RPC: cầu RPC gọi LẠI router này (xem
+  // `rpc/subrequest.js`) nên nó không thể có bản dựng riêng — hai bản là hai bộ luật quyền.
+  const v1 = createV1Router();
+  api.use('/v1', v1);
 
-  // ĐẶT SAU route auth và TRƯỚC mọi route nghiệp vụ: Express xét theo thứ tự khai báo, nên
-  // `/api/v1/auth/*` không bao giờ chạm tới đây — người bị bắt đổi mật khẩu vẫn gọi được
-  // `/v1/auth/password` để tự thoát, còn phần còn lại của hệ thống thì bị chặn (§7 việc 1.8).
-  api.use(requirePasswordChanged);
-
-  // Route nghiệp vụ (Phase 2+) và cầu RPC `/api/rpc/*` (Phase 4) mắc vào từ đây.
-  // Cầu RPC phải tự gắn `loginRateLimiter` cho `authenticateUser` vì nó không đi qua
-  // `/v1/auth/login` — xem §7 việc 1.10.
-  api.use('/v1/works', worksRouter);
-  api.use('/v1/work-items', workItemsRouter);
+  // Cầu tương thích cho giao diện cũ (§5.1). Đặt SAU `/v1` cho dễ đọc; thứ tự không quan trọng vì
+  // hai tiền tố đường dẫn khác nhau. `loginRateLimiter` cho `authenticateUser` gắn bên trong
+  // `createRpcRouter` — nếu thiếu, cầu RPC thành đường vòng thoát khỏi chặn dò mật khẩu (§7 1.10).
+  api.use('/rpc', createRpcRouter(v1));
 
   app.use('/api', api);
 
@@ -79,6 +77,23 @@ export function createApp() {
   app.use(errorHandler);
 
   return app;
+}
+
+/**
+ * Router `/api/v1`. Tách thành hàm riêng vì cầu RPC phải chạy đúng chuỗi middleware này.
+ *
+ * `requirePasswordChanged` ĐẶT SAU route auth và TRƯỚC mọi route nghiệp vụ: Express xét theo thứ
+ * tự khai báo, nên `/api/v1/auth/*` không bao giờ chạm tới đây — người bị bắt đổi mật khẩu vẫn gọi
+ * được `/v1/auth/password` để tự thoát, còn phần còn lại của hệ thống thì bị chặn (§7 việc 1.8,
+ * TC-AUTH-10).
+ */
+export function createV1Router() {
+  const v1 = express.Router();
+  v1.use('/auth', authRouter);
+  v1.use(requirePasswordChanged);
+  v1.use('/works', worksRouter);
+  v1.use('/work-items', workItemsRouter);
+  return v1;
 }
 
 export default createApp;

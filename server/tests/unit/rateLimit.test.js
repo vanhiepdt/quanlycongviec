@@ -50,4 +50,23 @@ describe('giới hạn tần suất', () => {
       expect((await request(app).get('/khong-gioi-han')).status).toBe(200);
     }
   });
+
+  // Cầu RPC gọi lại route thật trong cùng một request HTTP (`rpc/subrequest.js`). Nếu chặng con
+  // cũng bị đếm thì một lần bấm "Đăng nhập" trừ hai lượt và người dùng giao diện cũ bị chặn sớm
+  // gấp đôi — đúng cái đã xảy ra khi chạy TC-RPC-36 lần đầu.
+  it('KHÔNG đếm lời gọi con của cầu RPC (req.rpcSubRequest)', async () => {
+    const app = express();
+    app.use(express.json());
+    const limiter = makeRateLimiter({ max: 1, windowMinutes: 15 });
+    app.post('/rpc', limiter, (req, res) => {
+      // Chặng con: cùng một bộ đếm, nhưng có cờ đánh dấu là lời gọi trong tiến trình.
+      req.rpcSubRequest = true;
+      limiter(req, res, () => res.json({ ok: true, data: 'qua' }));
+    });
+
+    const first = await request(app).post('/rpc');
+    expect(first.status).toBe(200); // không bị chặng con "ăn" mất lượt thứ hai
+    expect(first.headers['ratelimit-remaining']).toBe('0');
+    expect((await request(app).post('/rpc')).status).toBe(429);
+  });
 });

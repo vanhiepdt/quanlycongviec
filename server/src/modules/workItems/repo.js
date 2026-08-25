@@ -287,7 +287,28 @@ export async function maxSortOrder(workId, client = null) {
  * `department_id` truyền vào chỉ để CSDL đối chiếu: để trống thì trigger tự lấy phòng của công
  * việc cha, gửi phòng khác thì nổ 23514 → `DEPT_MISMATCH_WORK`.
  */
-export async function insert(data, client = null) {
+/**
+ * `result_links` là cột **jsonb**, không phải `text[]`. Trình điều khiển `pg` biến mảng JS thành
+ * chuỗi mảng Postgres (`{"a","b"}`) — jsonb không đọc được dạng đó và trả 22P02 «invalid input
+ * syntax for type json», tới người dùng thành "Giá trị không đúng định dạng" mà không nói cột nào.
+ * Vì vậy MỌI đường ghi phải đổi mảng thành chuỗi JSON trước khi truyền tham số.
+ *
+ * Bẫy này lọt qua cả Phase 3 vì không test nào gửi `resultLinks`; cầu RPC là chỗ đầu tiên gửi thật
+ * (ô "Link kết quả" của giao diện cũ) nên nó nổ ở đây (§13.5).
+ */
+function toJsonbParams(row) {
+  if (!Object.hasOwn(row, 'result_links') || row.result_links === undefined) return row;
+  const links = row.result_links;
+  // Chuỗi thì giữ nguyên (đã là JSON); mọi thứ khác đổi thành JSON — `null` thành mảng rỗng vì
+  // cột là NOT NULL và CHECK `links_is_array` đòi mảng.
+  return {
+    ...row,
+    result_links: typeof links === 'string' ? links : JSON.stringify(links ?? []),
+  };
+}
+
+export async function insert(input, client = null) {
+  const data = toJsonbParams(input);
   const { columns, values, params } = buildInsert([...WRITABLE, ...ORIGIN_COLUMNS], data, {
     code: data.code,
     work_id: data.work_id,
@@ -305,7 +326,7 @@ export async function insert(data, client = null) {
 
 /** Sửa cột nghiệp vụ. Cấu trúc cây (`work_id`, `parent_id`) chỉ đổi được qua `updateStructure`. */
 export async function update(id, patch, client = null) {
-  const { sets, values } = buildUpdateSet(WRITABLE, patch, 2);
+  const { sets, values } = buildUpdateSet(WRITABLE, toJsonbParams(patch), 2);
   if (sets.length === 0) return findById(id, client);
   const { rows } = await db(client).query(
     `UPDATE work_items SET ${sets.join(', ')} WHERE id = $1 RETURNING ${COLUMNS}`,
@@ -320,7 +341,7 @@ export async function update(id, patch, client = null) {
  * rào cuối cùng, không phải là thứ tình cờ chạy.
  */
 export async function updateStructure(id, patch, client = null) {
-  const { sets, values } = buildUpdateSet([...STRUCTURAL, ...WRITABLE], patch, 2);
+  const { sets, values } = buildUpdateSet([...STRUCTURAL, ...WRITABLE], toJsonbParams(patch), 2);
   if (sets.length === 0) return findById(id, client);
   const { rows } = await db(client).query(
     `UPDATE work_items SET ${sets.join(', ')} WHERE id = $1 RETURNING ${COLUMNS}`,

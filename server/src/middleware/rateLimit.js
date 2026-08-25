@@ -20,6 +20,13 @@ export function makeRateLimiter(opts = {}) {
     legacyHeaders: false,
     // Đếm cả lần thành công: kẻ dò có thể vào được một tài khoản rồi tiếp tục dò tài khoản khác.
     skipSuccessfulRequests: false,
+    /**
+     * KHÔNG đếm lời gọi con của cầu RPC (`rpc/subrequest.js`). Một lần bấm "Đăng nhập" ở giao diện
+     * cũ là MỘT request HTTP: `POST /api/rpc/authenticateUser` đã bị đếm ở cửa, rồi cầu gọi lại
+     * `POST /api/v1/auth/login` trong cùng tiến trình. Không loại trừ thì mỗi lần thử trừ hai lượt,
+     * tức ngưỡng thật của người dùng giao diện cũ chỉ còn một nửa (§13.5).
+     */
+    skip: (req) => req.rpcSubRequest === true,
     handler: (req, res) =>
       fail(
         res,
