@@ -14,6 +14,7 @@ import { approvalsRouter } from './modules/approvals/routes.js';
 import { authRouter } from './modules/auth/routes.js';
 import { bootstrapRouter } from './modules/bootstrap/routes.js';
 import { departmentsRouter } from './modules/departments/routes.js';
+import { statsRouter } from './modules/stats/routes.js';
 import { usersRouter } from './modules/users/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
@@ -101,6 +102,8 @@ export function createV1Router() {
   v1.use('/works', worksRouter);
   v1.use('/work-items', workItemsRouter);
   v1.use('/approvals', approvalsRouter);
+  // Thống kê + Gantt — REST MỚI của Phase 6 (§5.1: từ Phase 6 tính năng mới dùng /api/v1/*).
+  v1.use('/stats', statsRouter);
   return v1;
 }
 
