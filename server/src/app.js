@@ -10,6 +10,7 @@ import { audit } from './middleware/audit.js';
 import { issueCsrfCookie, verifyCsrf } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler, ok } from './middleware/errorHandler.js';
 import { attachSession, requirePasswordChanged } from './middleware/session.js';
+import { approvalsRouter } from './modules/approvals/routes.js';
 import { authRouter } from './modules/auth/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
@@ -93,6 +94,7 @@ export function createV1Router() {
   v1.use(requirePasswordChanged);
   v1.use('/works', worksRouter);
   v1.use('/work-items', workItemsRouter);
+  v1.use('/approvals', approvalsRouter);
   return v1;
 }
 
