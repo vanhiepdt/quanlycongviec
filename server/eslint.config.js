@@ -35,5 +35,20 @@ export default [
       'require-await': 'error',
     },
   },
+  // Test của cầu tương thích chạy trong jsdom (`web/assets/js/api-bridge.js` là mã TRÌNH DUYỆT),
+  // nên có thêm `window`, `document`, `fetch`. Chỉ mở cho đúng file này để phần máy chủ vẫn không
+  // được phép chạm vào biến toàn cục của trình duyệt.
+  {
+    files: ['tests/unit/api-bridge.test.js'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        globalThis: 'readonly',
+        fetch: 'readonly',
+        Promise: 'readonly',
+      },
+    },
+  },
   prettier,
 ];
