@@ -51,6 +51,9 @@ export default [
       'tests/unit/dept-select.test.js',
       // project-form-phan-cong.test.js: simulation form tạo công việc với fetch giả — jsdom.
       'tests/unit/project-form-phan-cong.test.js',
+      // task-form-candidate.test.js: nhãn «Cán bộ trực tiếp» + ứng viên chỉ Nhân viên của form
+      // nhiệm vụ — chạy app.js thật trong jsdom, DOMParser để bóc form dựng bằng chuỗi.
+      'tests/unit/task-form-candidate.test.js',
     ],
     languageOptions: {
       globals: {

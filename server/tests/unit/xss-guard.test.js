@@ -117,7 +117,7 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
       expect(src).toContain(`function ${ten}(value)`);
   });
 
-  it('TC-SEC-17: con số đã chốt — 78 chỗ ghi HTML, 551 giá trị nội suy', () => {
+  it('TC-SEC-17: con số đã chốt — 78 chỗ ghi HTML, 550 giá trị nội suy', () => {
     // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Việc 4.6 chốt 70 chỗ ghi và 474 giá trị;
     // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481;
     // việc 5.12 thêm 17 chỗ (nút cấp 2/cấp 3 + ô ẩn level/parent) ⇒ 498, không thêm chỗ ghi nào.
@@ -129,9 +129,11 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // `escapeHtml(thangDangXem)`; dòng «Phòng:» trên thẻ thêm `escapeHtml(project[COL.P_DEPT] …)`;
     // khối «Thuộc dự án» dựng bằng .map(...).join("") với escapeHtml đầy đủ; ô Người thực hiện
     // ẩn/hiện theo cấp là giá trị hằng do mã sinh. Ròng rã +1 giá trị ⇒ 551, chỗ ghi giữ 78.
+    // 2026-08-26 (vòng lần 3): option ứng viên «Cán bộ trực tiếp» bỏ phần hiển thị email —
+    // xoá nội suy `escapeHtml(text4)` −1 giá trị ⇒ 550, chỗ ghi giữ nguyên 78.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 78, gia_tri: 551 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 78, gia_tri: 550 });
   });
 });
 

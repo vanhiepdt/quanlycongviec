@@ -69,6 +69,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > (select dựng bằng `.map(...).join("")`, mọi giá trị đi qua `escapeHtml`) và ô Người thực hiện
 > ẩn/hiện theo cấp (giá trị hằng do mã sinh). Ô chọn phòng dựng lại bằng builder COL-an-toàn.
 > Ròng rã **+1 giá trị nội suy**, số chỗ ghi giữ 78 ⇒ **78 chỗ / 551 giá trị** (TC-SEC-17).
+>
+> **Cập nhật 2026-08-26 (vòng lần 3 — «Cán bộ trực tiếp»).** Option ứng viên của ô gán người
+> trong `createTaskModal` bỏ phần hiển thị email («Tên (email)» → «Tên»): xoá biến trung gian
+> `text4` cùng một nội suy `escapeHtml(text4)` ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17, −1 giá trị).
+> Nhãn ô đổi thành «Cán bộ trực tiếp», danh sách ứng viên lọc chỉ role `Nhân viên` — không thêm
+> HTML mới nào, mọi chuỗi tiếng Việt trong nhãn là hằng số chương trình.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
