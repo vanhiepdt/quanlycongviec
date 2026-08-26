@@ -997,18 +997,12 @@
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-2xl font-bold text-gray-900">Sơ đồ Gantt</h3>
 
-                    <!-- Phần chọn ngày + độ rộng xem 1/2/3 tháng (việc 6.7) -->
+                    <!-- Chọn THÁNG + NĂM xem (2026-08-26: thay «1/2/3 tháng» và «từ ngày – đến ngày»).
+                         Option nạp sẵn bằng JS (dongBoOThangNamGantt). -->
                     <div class="flex items-center space-x-3">
                         <label class="text-sm text-gray-600">Xem:</label>
-                        <select id="gantt-months" class="form-select py-2 px-2 text-sm w-24">
-                            <option value="1">1 tháng</option>
-                            <option value="2">2 tháng</option>
-                            <option value="3" selected>3 tháng</option>
-                        </select>
-                        <label class="text-sm text-gray-600">Từ:</label>
-                        <input type="date" id="gantt-start-date" class="form-input py-1 px-2 text-sm w-36">
-                        <label class="text-sm text-gray-600">Đến:</label>
-                        <input type="date" id="gantt-end-date" class="form-input py-1 px-2 text-sm w-36" readonly>
+                        <select id="gantt-month-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn tháng xem"></select>
+                        <select id="gantt-year-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn năm xem"></select>
                         <div id="current-period" class="font-semibold text-gray-700 px-2 hidden"></div>
                     </div>
 
@@ -1158,7 +1152,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260826-69"></script>
+    <script src="assets/js/app.js?v=20260826-70"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260826-4"></script>
 

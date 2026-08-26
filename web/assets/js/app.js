@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260826-69");
+console.info("[QLCV] app.js 20260826-70");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2442,10 +2442,6 @@ function renderGanttChartLegacy() {
   if (!ganttContainerEl || !ganttHeaderEl || !ganttItemsEl) return;
   (!ganttStartDate || isNaN(ganttStartDate.getTime())) && (ganttStartDate = new Date(), ganttStartDate.setHours(0, 0, 0, 0));
   ganttEndDate = new Date(ganttStartDate), ganttEndDate.setDate(ganttEndDate.getDate() + 89);
-  const ganttStartDateEl = document.getElementById("gantt-start-date"),
-    ganttEndDateEl = document.getElementById("gantt-end-date");
-  if (ganttStartDateEl) ganttStartDateEl.value = formatDateForInput(ganttStartDate);
-  if (ganttEndDateEl) ganttEndDateEl.value = formatDateForInput(ganttEndDate);
   const text = Math.ceil((ganttEndDate - ganttStartDate) / 86400000) + 1,
     el = document.querySelector(".gantt-days");
   el.style.display = "flex", el.style.flexDirection = "row";
@@ -2750,8 +2746,7 @@ function searchGantt(searchTerm) {
   });
 }
 function setupGanttEventListeners() {
-  const ganttStartDateEl = document.getElementById("gantt-start-date");
-  ganttStartDateEl && (ganttStartDateEl.removeEventListener("change", handleGanttDateChange), ganttStartDateEl.addEventListener("change", handleGanttDateChange));
+  // Ô «từ ngày» đã bỏ (2026-08-26) — khoảng xem do Tháng/Năm quyết định qua setupGanttPhase6Controls.
   const searchInput = document.getElementById("gantt-search");
   searchInput && (searchInput.removeEventListener("input", handleGanttSearch), searchInput.addEventListener("input", handleGanttSearch));
   const ganttStaffFilterEl = document.getElementById("gantt-staff-filter");
@@ -2785,10 +2780,6 @@ function filterGanttByStaff(staffName) {
       if (!staffName) item.style.display = "block", el.style.display = "flex";else flag ? (item.style.display = "block", el.style.display = "flex") : item.style.display = "none";
     }
   });
-}
-function handleGanttDateChange(event) {
-  const date = new Date(event.target.value);
-  !isNaN(date.getTime()) && (ganttStartDate = date, ganttStartDate.setHours(0, 0, 0, 0), renderGanttChart(), setTimeout(() => setupGanttEventListeners(), 50));
 }
 function handleGanttSearch(event) {
   searchGantt(event.target.value);
@@ -4034,6 +4025,15 @@ function createAppModal(isEdit, app) {
 window.renderApps = renderApps, window.handleAppRedirect = handleAppRedirect, window.createAppModal = createAppModal;
 
 /** Hàng CÔNG VIỆC CON (mức 3) — chứa nhiệm vụ con của nó (mức 4). */
+/** Cột mũi tên RIÊNG bên trái khối icon+tên: cùng cấp luôn thẳng hàng từ icon (yêu cầu 2026-08-26). */
+function createGanttToggleSlotHtml(key, coNut) {
+  return (
+    '<span class="gantt-toggle-slot">' +
+    (coNut ? createGanttToggleHtml(key) : "") +
+    "</span>"
+  );
+}
+
 function createGanttSubRowHtml(sub) {
   const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
     totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
@@ -4043,28 +4043,35 @@ function createGanttSubRowHtml(sub) {
     nhan = formatDateForGantt(sub.startDate) + " - " + formatDateForGantt(sub.dueDate) + ": " + (sub.name || ""),
     thanh = buildGanttCellHtml(sub.startDate, sub.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-subwork", nhan, Number(sub.completion) || 0),
-    soCon = (sub.children || []).length;
-  return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '">' +
-    '<div class="gantt-item-label" style="padding-left: 24px;">' + (soCon > 0 ? createGanttToggleHtml(key) : '<span class="mr-2 inline-block w-[14px]"></span>') +
-    '<i class="fas fa-code-branch text-blue-400 mr-2"></i>' + escapeHtml(sub.name || "") +
+    soCon = (sub.children || []).length,
+    // JSON tooltip đã qua escapeHtmlAttr MỘT lần trước khi đặt vào thuộc tính.
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(sub)));
+  return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '" style="padding-left: 36px;">' +
+    '<div class="gantt-item-label">' +
+    createGanttToggleSlotHtml(key, soCon > 0) +
+    // Icon CV con = GIỐNG icon công việc cha nhưng MÀU ĐỎ (yêu cầu 2026-08-26).
+    '<i class="fas fa-folder text-red-500 mr-2"></i>' +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(sub.name || "") + "</span>" +
     '<span class="gantt-task-count">' + escapeHtml(soCon) + "</span></div>" +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>" +
     '\n<div id="' + bodyId + '"' + an + ">" +
     (sub.children || []).map((t) => createGanttTaskRowHtml(t)).join("") + "</div>";
 }
 
-/** Hàng NHIỆM VỤ (mức 4) — thanh bị cắt hai đầu hoặc ẩn hẳn theo khoảng (TC-STAT-13/14). */
+/** Hàng NHIỆM VỤ (mức 4) — thanh bị cắt hai đầu hoặc ẩn hẳn theo khoảng (TC-STAT-13/14).
+ *  Chữ cán bộ thực hiện KHÔNG còn nằm cạnh tên: thông tin đó chuyển vào thẻ tooltip. */
 function createGanttTaskRowHtml(task) {
   const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
     totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
     quaHan = isTaskOverdue(task.dueDate) && !(task.status || "").toLowerCase().includes("hoàn thành"),
-    nhan = formatDateForGantt(task.startDate) + " - " + formatDateForGantt(task.dueDate) + ": " + (task.name || "") +
-      (task.assigneeName ? " — " + task.assigneeName : ""),
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(task))),
+    nhan = formatDateForGantt(task.startDate) + " - " + formatDateForGantt(task.dueDate) + ": " + (task.name || ""),
     thanh = buildGanttCellHtml(task.startDate, task.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-task" + (quaHan ? " gantt-bar-overdue" : ""), nhan, Number(task.completion) || 0);
-  return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '" style="padding-left: 48px;">' +
-    '<div class="gantt-item-label text-sm">' + escapeHtml(task.name || "") +
-    '<span class="text-xs text-gray-400 ml-2">' + escapeHtml(task.assigneeName || "Chưa gán") + "</span></div>" +
+  return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '" style="padding-left: 60px;">' +
+    '<div class="gantt-item-label text-sm">' +
+    createGanttToggleSlotHtml("", false) +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(task.name || "") + "</span></div>" +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>";
 }
 
@@ -4088,13 +4095,9 @@ async function renderGanttChart() {
   const ganttItemsEl = document.getElementById("gantt-items"),
     ganttHeaderEl = document.getElementById("gantt-header");
   if (!ganttItemsEl || !ganttHeaderEl) return;
-  (!ganttStartDate || isNaN(ganttStartDate.getTime())) &&
-    ((ganttStartDate = new Date()), ganttStartDate.setHours(0, 0, 0, 0));
-  datKhoangThangGantt(ganttMonths); // ngày kết thúc luôn bám theo độ rộng đã chọn
-  const startEl = document.getElementById("gantt-start-date"),
-    endEl = document.getElementById("gantt-end-date");
-  startEl && (startEl.value = formatDateForInput(ganttStartDate));
-  endEl && (endEl.value = formatDateForInput(ganttEndDate));
+  // Khoảng xem bám THÁNG/NĂM đang chọn (đầu → cuối tháng); hai ô Tháng/Năm phản chiếu lại.
+  datKhoangGanttTheoThang(ganttXemThang, ganttXemNam);
+  dongBoOThangNamGantt();
   const totalDays = Math.ceil((ganttEndDate - ganttStartDate) / 86400000) + 1,
     daysEl = document.querySelector(".gantt-days");
   daysEl && ((daysEl.style.display = "flex"), (daysEl.style.flexDirection = "row"), (daysEl.innerHTML = renderGanttDaysHtml(totalDays)));
@@ -4111,29 +4114,231 @@ async function renderGanttChart() {
     item.removeEventListener("click", xuBatThuGonGantt);
     item.addEventListener("click", xuBatThuGonGantt);
   });
+  goiNutHoverGantt(); // tooltip thẻ tự vẽ — gắn MỘT lần lên vùng cây
 }
 function xuBatThuGonGantt() {
   doiTrangThaiThuGon(this.dataset.node);
 }
 
-/** Ô chọn «Xem: 1/2/3 tháng» và «Nhóm theo» — nối vào bộ lắng nghe Gantt hiện có. */
-function setupGanttPhase6Controls() {
-  const monthsEl = document.getElementById("gantt-months");
-  if (monthsEl) {
-    monthsEl.removeEventListener("change", handleGanttMonthsChange);
-    monthsEl.addEventListener("change", handleGanttMonthsChange);
+/** ======================================================================
+ * GANTT XEM THEO THÁNG (2026-08-26): bỏ «1/2/3 tháng» và «từ ngày – đến ngày»,
+ * thay bằng dropdown THÁNG + NĂM. Khoảng xem = đầu → cuối tháng đã chọn; mọi
+ * thanh màu tính bằng % nên tự cắt đúng ranh giới tháng (TC-STAT-13 giữ nguyên).
+ * ==================================================================== */
+let ganttXemThang = new Date().getMonth() + 1, // 1..12 — mặc định tháng hiện tại
+  ganttXemNam = new Date().getFullYear(); // mặc định năm hiện tại
+
+/** Đặt khoảng xem theo THÁNG được chọn: ngày 1 → ngày cuối tháng (năm nhuận tự đúng). */
+function datKhoangGanttTheoThang(thang, nam) {
+  const t = Math.round(Number(thang)),
+    n = Math.round(Number(nam));
+  if (!(t >= 1 && t <= 12) || !(n >= 1900 && n <= 2200)) return false;
+  ganttXemThang = t;
+  ganttXemNam = n;
+  ganttStartDate = new Date(n, t - 1, 1);
+  ganttStartDate.setHours(0, 0, 0, 0);
+  ganttEndDate = new Date(n, t, 0); // ngày cuối cùng của tháng
+  ganttEndDate.setHours(0, 0, 0, 0);
+  return true;
+}
+
+/** Nạp option cho hai ô chọn Tháng / Năm và phản chiếu giá trị đang có (idempotent). */
+function dongBoOThangNamGantt() {
+  const oThang = document.getElementById("gantt-month-select"),
+    oNam = document.getElementById("gantt-year-select");
+  if (!oThang || !oNam) return;
+  if (oThang.options.length === 0)
+    for (let i = 1; i <= 12; i++) {
+      const op = document.createElement("option");
+      op.value = String(i);
+      op.textContent = "Tháng " + i;
+      oThang.appendChild(op);
+    }
+  const namHienTai = new Date().getFullYear(),
+    cacNam = [];
+  for (let y = namHienTai - 2; y <= namHienTai + 3; y++) cacNam.push(y);
+  if (cacNam.indexOf(ganttXemNam) < 0) cacNam.push(ganttXemNam);
+  cacNam.sort((a, b) => a - b);
+  if (
+    oNam.options.length !== cacNam.length ||
+    String(oNam.options[oNam.options.length - 1]?.value) !== String(cacNam[cacNam.length - 1])
+  ) {
+    oNam.innerHTML = "";
+    cacNam.forEach(y => {
+      const op = document.createElement("option");
+      op.value = String(y);
+      op.textContent = "Năm " + y;
+      oNam.appendChild(op);
+    });
   }
+  oThang.value = String(ganttXemThang);
+  oNam.value = String(ganttXemNam);
+}
+function handleGanttMonthChange(event) {
+  datKhoangGanttTheoThang(event.target.value, ganttXemNam) && renderGanttChart();
+}
+function handleGanttYearChange(event) {
+  datKhoangGanttTheoThang(ganttXemThang, event.target.value) && renderGanttChart();
+}
+
+
+/** Ô «Nhóm theo» + hai ô Tháng/Năm — nối vào bộ lắng nghe Gantt (idempotent). */
+function setupGanttPhase6Controls() {
   const groupEl = document.getElementById("gantt-group-by");
-  if (groupEl) {
-    groupEl.removeEventListener("change", handleGanttGroupChange);
+  if (groupEl && !groupEl.dataset.daNoi) {
+    groupEl.dataset.daNoi = "1";
     groupEl.addEventListener("change", handleGanttGroupChange);
   }
-}
-function handleGanttMonthsChange(event) {
-  datKhoangThangGantt(event.target.value), renderGanttChart();
+  const oThang = document.getElementById("gantt-month-select"),
+    oNam = document.getElementById("gantt-year-select");
+  oThang &&
+    !oThang.dataset.daNoi &&
+    ((oThang.dataset.daNoi = "1"), oThang.addEventListener("change", handleGanttMonthChange));
+  oNam &&
+    !oNam.dataset.daNoi &&
+    ((oNam.dataset.daNoi = "1"), oNam.addEventListener("change", handleGanttYearChange));
 }
 function handleGanttGroupChange(event) {
   ganttGroupBy = event.target.value || "department", renderGanttChart();
+}
+
+/* ===================== TOOLTIP THẺ TỰ VẼ cho TÊN công việc / nhiệm vụ =====================
+ * Rê chuột lên tên (chứ KHÔNG phải thanh màu) ⇒ thẻ trắng viền đổ bóng hiện cạnh con trỏ:
+ *   • Công việc: tên đầy đủ · Ban lãnh đạo kiểm soát · Lãnh đạo phòng phụ trách ·
+ *     Cán bộ thực hiện (gom từ nhiệm vụ trong cây) · Tiến độ.
+ *   • Nhiệm vụ: tên đầy đủ · Lãnh đạo phòng phụ trách · Cán bộ thực hiện · Tiến độ ·
+ *     Kết quả đầu ra. (Chữ cán bộ cạnh tên đã BỎ khỏi hàng — xem createGanttTaskRowHtml.)
+ * Toàn bộ dựng bằng BUILDER thoát ký tự đầy đủ — dữ liệu người nhập không thể thành HTML.
+ */
+const GANTT_HOVER_ID = "tooltip-gantt";
+
+/** Gom danh sách cán bộ thực hiện DUY NHẤT của một công việc từ cây con của nó. */
+function gomCanBoThucHienGantt(work) {
+  const tap = [];
+  const them = ten => {
+    if (ten && ten !== "Chưa gán" && tap.indexOf(ten) < 0) tap.push(ten);
+  };
+  (work.tasks || []).forEach(t => them(t.assigneeName));
+  (work.subs || []).forEach(s => (s.children || []).forEach(t => them(t.assigneeName)));
+  return tap.join(", ");
+}
+
+/** Chuẩn bị dữ liệu hiển thị cho một dòng bất kỳ của cây Gantt. */
+function duLieuHoverGantt(dong) {
+  if (!dong) return null;
+  if (dong.progress != null || dong.endDate)
+    return {
+      loai: "Công việc",
+      ten: dong.name || "",
+      banKiemSoat: dong.supervisorName || "",
+      lanhDaoPhong: (dong.leaderNames || []).join(", "),
+      canBo: gomCanBoThucHienGantt(dong),
+      tienDo: Number(dong.progress || 0) + "%"
+    };
+  return {
+    loai: Number(dong.level) === 2 ? "Công việc con" : "Nhiệm vụ",
+    ten: dong.name || "",
+    lanhDaoPhong: (dong.leaderNames || []).join(", "),
+    canBo: dong.assigneeName || "",
+    tienDo: Number(dong.completion || 0) + "%",
+    ketQuaDauRa: Number(dong.level) === 3 ? dong.output || "" : ""
+  };
+}
+
+/** BUILDER thẻ tooltip: MỖI giá trị/ghi chú đều escape TRỰC TIẾP bằng escapeHtml. */
+function buildGanttHoverCardHtml(d) {
+  if (!d) return "";
+  let html =
+    '<div class="tieu-de">' + escapeHtml(d.loai) + ": " + escapeHtml(d.ten || "") + "</div>";
+  if ("banKiemSoat" in d)
+    html +=
+      '<div class="dong"><b>' +
+      escapeHtml("Ban lãnh đạo kiểm soát") +
+      ": </b>" +
+      escapeHtml(d.banKiemSoat || "—") +
+      "</div>";
+  html +=
+    '<div class="dong"><b>' +
+    escapeHtml("Lãnh đạo phòng phụ trách") +
+    ": </b>" +
+    escapeHtml(d.lanhDaoPhong || "—") +
+    "</div>";
+  html +=
+    '<div class="dong"><b>' +
+    escapeHtml("Cán bộ thực hiện") +
+    ": </b>" +
+    escapeHtml(d.canBo || "—") +
+    "</div>";
+  html +=
+    '<div class="dong"><b>' +
+    escapeHtml("Tiến độ") +
+    ": </b>" +
+    escapeHtml(d.tienDo || "—") +
+    "</div>";
+  if ("ketQuaDauRa" in d)
+    html +=
+      '<div class="dong"><b>' +
+      escapeHtml("Kết quả đầu ra") +
+      ": </b>" +
+      escapeHtml(d.ketQuaDauRa || "—") +
+      "</div>";
+  return html;
+}
+
+/** Gắn MỘT lần các listener kéo-thả tooltip lên vùng cây (#gantt-items sống lại sau mỗi render). */
+function goiNutHoverGantt() {
+  const vung = document.getElementById("gantt-items");
+  if (!vung || vung.dataset.hoverBound === "1") return;
+  vung.dataset.hoverBound = "1";
+  vung.addEventListener("mouseover", hienTooltipGantt);
+  vung.addEventListener("mousemove", duaTooltipGantt);
+  vung.addEventListener("mouseout", anTooltipGantt);
+}
+
+function theTooltipGantt() {
+  let el = document.getElementById(GANTT_HOVER_ID);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = GANTT_HOVER_ID;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function hienTooltipGantt(event) {
+  const tenEl = event.target.closest(".gantt-hover-name");
+  if (!tenEl) return;
+  let duLieu = null;
+  try {
+    duLieu = JSON.parse(tenEl.getAttribute("data-hover-json"));
+  } catch (err) {
+    duLieu = null;
+  }
+  const el = theTooltipGantt();
+  el.innerHTML = buildGanttHoverCardHtml(duLieu);
+  el.style.display = "block";
+  duaTooltipGantt(event);
+}
+
+function duaTooltipGantt(event) {
+  const el = document.getElementById(GANTT_HOVER_ID);
+  if (!el || el.style.display !== "block") return;
+  const rong = el.offsetWidth,
+    cao = el.offsetHeight,
+    le = 14;
+  let x = event.clientX + le,
+    y = event.clientY + le;
+  if (x + rong > window.innerWidth - 8) x = event.clientX - rong - le;
+  if (y + cao > window.innerHeight - 8) y = event.clientY - cao - le;
+  el.style.left = Math.max(8, x) + "px";
+  el.style.top = Math.max(8, y) + "px";
+}
+
+function anTooltipGantt(event) {
+  const el = document.getElementById(GANTT_HOVER_ID);
+  if (!el) return;
+  if (!event || !event.relatedTarget || !event.relatedTarget.closest(".gantt-hover-name"))
+    el.style.display = "none";
 }
 
 // ============================================================================
@@ -4141,6 +4346,7 @@ function handleGanttGroupChange(event) {
 // và «hoạt động gần đây» có phân trang qua /stats/activities (việc 6.2/6.3).
 // Các hàm render*Chart bản cũ giữ nguyên làm đường dự phòng khi fetch lỗi.
 // ============================================================================
+
 
 let hoatDongTrang = 1,
   hoatDongTongTrang = 1,
@@ -4382,19 +4588,11 @@ async function restGet(path) {
   }
 }
 
-let ganttMonths = 3; // độ rộng xem 1/2/3 tháng (việc 6.7)
 let ganttGroupBy = "department"; // department | deputy | assignee (việc 6.6)
 let ganttTreeData = null; // cây đã nhóm sẵn do máy chủ trả
 
 const GANTT_THU_GON_KEY = "qlcv_gantt_collapsed";
 let ganttThuGon = docTrangThaiThuGon();
-
-/** Độ rộng cửa sổ theo số tháng: n×30 ngày − 1; n=3 đúng 90 ngày như mặc định của bản cũ. */
-function datKhoangThangGantt(n) {
-  ganttMonths = Math.min(3, Math.max(1, Number(n) || 3));
-  ganttEndDate = new Date(ganttStartDate);
-  ganttEndDate.setDate(ganttEndDate.getDate() + ganttMonths * 30 - 1);
-}
 
 /** TC-STAT-15 — trạng thái thu gọn SỐNG TRONG localStorage, tải lại trang vẫn giữ. */
 function docTrangThaiThuGon() {
@@ -4482,7 +4680,7 @@ function createGanttGroupRowHtml(group) {
     an = escapeHtml(ganttThuGon.has(key) ? " hidden" : "");
   return '\n<div class="gantt-project-group" data-project-id="' + escapeHtml(group.key) + '">' +
     '\n<div class="gantt-item" data-type="group">' +
-    '<div class="gantt-item-label font-semibold text-gray-800">' + createGanttToggleHtml(key) +
+    '<div class="gantt-item-label font-semibold text-gray-800">' + createGanttToggleSlotHtml(key, true) +
     '<i class="fas fa-layer-group text-purple-500 mr-2"></i>' + escapeHtml(group.name) +
     '<span class="gantt-task-count ml-2">' + escapeHtml(group.works.length) + '</span></div>' +
     '<div class="gantt-item-timeline"></div></div>' +
@@ -4501,12 +4699,13 @@ function createGanttWorkRowHtml(work) {
     nhan = formatDateForGantt(work.startDate) + " - " + formatDateForGantt(work.endDate) + ": " +
       (work.name || ""),
     thanh = buildGanttCellHtml(work.startDate, work.endDate, rangeStart, rangeEnd, totalDays,
-      "gantt-bar-project", nhan, work.progress);
+      "gantt-bar-project", nhan, work.progress),
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(work)));
   return '\n<div class="gantt-work-block">' +
-    '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '">' +
-    '<div class="gantt-item-label">' + createGanttToggleHtml(key) +
+    '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '" style="padding-left: 12px;">' +
+    '<div class="gantt-item-label">' + createGanttToggleSlotHtml(key, true) +
     '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(work.status)) + ' mr-2"></i>' +
-    '<span class="truncate">' + escapeHtml(work.name || "") + '</span>' +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(work.name || "") + "</span>" +
     '<span class="gantt-task-count">' + escapeHtml(work.taskCount) + "</span>" +
     '<div class="gantt-item-actions"></div></div>' +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>" +

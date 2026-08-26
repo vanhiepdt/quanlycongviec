@@ -83,6 +83,13 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `app.js`) nên pin giữ nguyên **78 chỗ / 550 giá trị**; mọi giá trị nội suy mới đều qua
 > `escapeHtml` / `escapeForInlineHandler`, sự kiện gắn bằng `addEventListener` (không dùng
 > onclick kèm dữ liệu), id dòng trong thuộc tính data-* đã escape.
+>
+> **Cập nhật 2026-08-26 (Gantt xem theo tháng).** Giao diện Gantt thêm thẻ tooltip tự vẽ cho TÊN
+> dòng (`#tooltip-gantt`.innerHTML = `buildGanttHoverCardHtml` — builder escape trực tiếp từng
+> trường bằng `escapeHtml`) và ô Năm xoá option trước khi nạp lại; tên công việc/CV con/nhiệm vụ
+> nhúng JSON tooltip đã qua `escapeHtmlAttr` một lần (bộ soát ghi 3 giá trị cờ "trong-the" như
+> cờ selected) ⇒ **80 chỗ / 566 giá trị** (TC-SEC-17). Bộ Legacy còn lại của Gantt không còn đọc
+> hai ô ngày đã bỏ — dom-contract TC-DEAD-02 về trạng thái sạch.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

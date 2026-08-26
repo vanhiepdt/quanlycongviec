@@ -3406,3 +3406,114 @@
         opacity: 1;
         visibility: visible;
     }
+
+/* ============================================================================
+   GANTT XEM THEO THÁNG (2026-08-26) — ghi đè CỐ Ý nằm CUỐI file để thắng mọi
+   luật cũ: cột ngày giãn full màn hình, thanh thời gian dày hơn, cột mũi tên
+   riêng ngoài khối icon+tên, thẻ tooltip tự vẽ cho tên công việc/nhiệm vụ.
+   ============================================================================ */
+
+/* Ngày/thứ to ra và chiếm đều bề ngang (tháng 28–31 ngày vẫn full màn hình). */
+.gantt-day {
+    flex: 1 1 0 !important;
+    min-width: 30px !important;
+    max-width: none !important;
+    padding-top: 2px;
+}
+
+.gantt-day-number {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    line-height: 1.15;
+}
+
+.gantt-day-label {
+    font-size: 12px !important;
+    color: #4b5563 !important;
+}
+
+.gantt-days,
+.gantt-item-timeline {
+    min-width: 0 !important; /* bỏ khoá 2160px của bản 90 ngày — tự co dãn theo bề rộng */
+}
+
+.gantt-item {
+    min-width: 0 !important;
+}
+
+/* Thanh thời gian DÀY hơn, căn giữa theo chiều cao dòng. */
+.gantt-bar {
+    height: 26px !important;
+    top: 50% !important;
+    transform: translateY(-50%);
+    border-radius: 6px !important;
+    display: flex;
+    align-items: center;
+}
+
+.gantt-bar .gantt-bar-label,
+.gantt-bar-label {
+    position: static !important;
+    transform: none !important;
+    font-size: 11px !important;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 8px !important;
+}
+
+/* Cột mũi tên riêng — mũi tên NẰM NGOÀI khối icon+tên nên mọi cấp thẳng hàng từ icon. */
+.gantt-toggle-slot {
+    display: inline-flex;
+    width: 20px;
+    min-width: 20px;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.gantt-toggle-slot .gantt-node-toggle {
+    margin-right: 0 !important;
+}
+
+/* Vùng đứng tên đã bỏ các padding-lệch cũ của mức nhiệm vụ/CV con. */
+.gantt-item[data-type="task"] .gantt-item-label,
+.gantt-item-subwork .gantt-item-label {
+    padding-left: 0 !important;
+}
+
+/* Tên hover được gạch chấm nhạt gợi ý có thông tin thêm. */
+.gantt-hover-name {
+    cursor: help;
+    border-bottom: 1px dashed rgba(59, 130, 246, 0.45);
+}
+
+/* Thẻ tooltip tự vẽ — hiện cạnh con trỏ khi rê lên TÊN. */
+#tooltip-gantt {
+    position: fixed;
+    z-index: 90;
+    pointer-events: none;
+    display: none;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.14);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #374151;
+    max-width: 360px;
+}
+
+#tooltip-gantt .tieu-de {
+    font-weight: 700;
+    color: #111827;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+#tooltip-gantt .dong b {
+    color: #6b7280;
+    font-weight: 600;
+}

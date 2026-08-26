@@ -52,7 +52,12 @@ const CO_Y_KHONG_BOC = [
 
 /** Chỗ ghi HTML mà vế phải không phải HTML dựng sẵn — đã soát tay từng chỗ. */
 const SINK_DA_SOAT_TAY = [
-  { ma: '""', so: 5, ly_do: 'xoá rỗng vùng chứa, không có dữ liệu nào đi vào' },
+  {
+    ma: '""',
+    so: 6,
+    ly_do:
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại)',
+  },
   {
     ma: 'el.dataset.originalContent',
     so: 1,
@@ -117,7 +122,7 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
       expect(src).toContain(`function ${ten}(value)`);
   });
 
-  it('TC-SEC-17: con số đã chốt — 78 chỗ ghi HTML, 550 giá trị nội suy', () => {
+  it('TC-SEC-17: con số đã chốt — 80 chỗ ghi HTML, 566 giá trị nội suy', () => {
     // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Việc 4.6 chốt 70 chỗ ghi và 474 giá trị;
     // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481;
     // việc 5.12 thêm 17 chỗ (nút cấp 2/cấp 3 + ô ẩn level/parent) ⇒ 498, không thêm chỗ ghi nào.
@@ -131,9 +136,13 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // ẩn/hiện theo cấp là giá trị hằng do mã sinh. Ròng rã +1 giá trị ⇒ 551, chỗ ghi giữ 78.
     // 2026-08-26 (vòng lần 3): option ứng viên «Cán bộ trực tiếp» bỏ phần hiển thị email —
     // xoá nội suy `escapeHtml(text4)` −1 giá trị ⇒ 550, chỗ ghi giữ nguyên 78.
+    // 2026-08-26 (Gantt xem theo tháng): tooltip thẻ tự vẽ — +1 sink `#tooltip-gantt`.innerHTML
+    // (builder thoát đủ) và +1 sink xoá rỗng option Năm; hàng Gantt thêm JSON tooltip đã qua
+    // escapeHtmlAttr ×3 (giá trị "trong-the" như cờ selected) cùng các nhãn thẻ escape trực tiếp
+    // ⇒ 80 chỗ / 566 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 78, gia_tri: 550 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 80, gia_tri: 566 });
   });
 });
 

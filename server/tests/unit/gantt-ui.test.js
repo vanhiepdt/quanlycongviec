@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 //
-// Phase 6 phía GIAO DIỆN — ba phép kiểm chốt của nhóm F không chạy được trên máy chủ:
+// Phase 6 phía GIAO DIỆN — cập nhật vòng «Gantt xem theo THÁNG» (2026-08-26):
 //   TC-STAT-13: thanh dài hơn khoảng bị CẮT HAI ĐẦU, không mất.
 //   TC-STAT-14: việc nằm ngoài hẳn khoảng KHÔNG có thanh (chỉ ghi chú mờ).
 //   TC-STAT-15: trạng thái thu gọn sống trong localStorage, tải lại trang vẫn giữ.
+//   MỚI — khoảng xem = đầu → cuối THÁNG chọn; icon CV con là thư mục ĐỎ giống cha;
+//         chữ cán bộ RỜI KHỎI cạnh tên nhiệm vụ; tooltip thẻ tự vẽ cho tên dòng.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -11,7 +13,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   calculateGanttBarStyleRange, buildGanttCellHtml,
-  docTrangThaiThuGon, luuTrangThaiThuGon, doiTrangThaiThuGon, datKhoangThangGantt,
+  docTrangThaiThuGon, luuTrangThaiThuGon, doiTrangThaiThuGon,
+  datKhoangGanttTheoThang, dongBoOThangNamGantt,
+  duLieuHoverGantt, buildGanttHoverCardHtml,
+  createGanttSubRowHtml, createGanttTaskRowHtml,
   __ganttDoc: () => ({ start: ganttStartDate, end: ganttEndDate }),
   __gantt: (ten, giaTri) => { ({ startDate: () => { ganttStartDate = giaTri; },
     endDate: () => { ganttEndDate = giaTri; },
@@ -29,6 +34,7 @@ const TU = new Date(2026, 2, 1),
 
 beforeEach(() => {
   localStorage.clear();
+  document.body.innerHTML = '';
   khoiDong();
   window.__gantt('startDate', TU);
   window.__gantt('endDate', DEN);
@@ -52,7 +58,7 @@ describe('TC-STAT-13 — thanh bị cắt hai đầu, không mất', () => {
     expect(html).not.toContain('width: 100%');
   });
 
-  it('việc bắt đầu trong khoảng, kết thúc SAU khoảng ⇒ cắt đầu phải', () => {
+  it('việc bắt đầu trong khoảng, kết thúc SAU khoảng ⇒ cắt đầu phải (mẫu tháng dài hơn)', () => {
     const html = o('2026-03-20', '2026-04-20');
     expect(html).toContain('gantt-bar');
     expect(html).not.toContain('left: 0;');
@@ -103,16 +109,188 @@ describe('TC-STAT-15 — thu gọn lưu localStorage, tải lại trang vẫn gi
     window.doiTrangThaiThuGon('group:dept_1');
     expect(window.docTrangThaiThuGon().has('group:dept_1')).toBe(false);
   });
+});
 
-  it('độ rộng 1/2/3 tháng: kết thúc = bắt đầu + n×30 − 1; ngoài miền thì kẹp biên', () => {
-    window.__gantt('startDate', new Date(2026, 7, 25));
-    window.datKhoangThangGantt(3);
-    expect(window.__ganttDoc().end - window.__ganttDoc().start).toBe(89 * 86400000);
-    window.datKhoangThangGantt(2);
-    expect(window.__ganttDoc().end - window.__ganttDoc().start).toBe(59 * 86400000);
-    window.datKhoangThangGantt(1);
-    expect(window.__ganttDoc().end - window.__ganttDoc().start).toBe(29 * 86400000);
-    window.datKhoangThangGantt(99);
-    expect(window.__ganttDoc().end - window.__ganttDoc().start).toBe(89 * 86400000);
+describe('Gantt xem theo THÁNG — khoảng xem là đầu → cuối tháng đã chọn', () => {
+  it('đúng ranh giới tháng thường và NĂM NHUẬN (02/2028 có 29/02)', () => {
+    window.datKhoangGanttTheoThang(2, 2028);
+    const doc = window.__ganttDoc();
+    expect(doc.start.getFullYear()).toBe(2028);
+    expect(doc.start.getMonth()).toBe(1);
+    expect(doc.start.getDate()).toBe(1);
+    expect(doc.end.getDate()).toBe(29);
+  });
+
+  it('tháng 31 ngày khớp tới ngày cuối cùng', () => {
+    window.datKhoangGanttTheoThang(1, 2026);
+    expect(window.__ganttDoc().end.getDate()).toBe(31);
+  });
+
+  it('tháng/năm sai (13, 0) ⇒ KHÔNG đổi khoảng đang có', () => {
+    window.datKhoangGanttTheoThang(2, 2028);
+    const truoc = window.__ganttDoc();
+    expect(window.datKhoangGanttTheoThang(13, 2028)).toBe(false);
+    expect(window.datKhoangGanttTheoThang(6, 1500)).toBe(false);
+    expect(window.__ganttDoc().start).toBe(truoc.start);
+    expect(window.__ganttDoc().end).toBe(truoc.end);
+  });
+
+  it('hai ô Tháng/Năm được nạp option và phản chiếu đúng lựa chọn', () => {
+    document.body.innerHTML =
+      '<select id="gantt-month-select"></select><select id="gantt-year-select"></select>';
+    window.datKhoangGanttTheoThang(9, new Date().getFullYear());
+    window.dongBoOThangNamGantt();
+    const oThang = document.getElementById('gantt-month-select');
+    expect(oThang.options.length).toBe(12);
+    expect(String(oThang.value)).toBe('9');
+    const oNam = document.getElementById('gantt-year-select');
+    const cacNam = Array.from(oNam.options).map((o) => Number(o.value));
+    expect(cacNam).toContain(new Date().getFullYear() - 2);
+    expect(cacNam).toContain(new Date().getFullYear() + 3);
+    expect(Number(oNam.value)).toBe(new Date().getFullYear());
+  });
+});
+
+/** Dữ liệu mẫu dùng chung: một CV con (2/2026 → 3/2026) chứa MỘT nhiệm vụ trong tháng 3. */
+function subMau() {
+  const nhiemVu = {
+    id: '21',
+    code: 'CV001-001',
+    level: '3',
+    name: 'Vẽ sơ đồ <b>màu</b>',
+    startDate: '2026-03-01',
+    dueDate: '2026-03-20',
+    completion: '70',
+    status: 'Đang thực hiện',
+    priority: '',
+    assigneeName: 'Nguyễn Văn An',
+    leaderNames: ['Phó phòng A'],
+    output: 'Bản thiết kế PDF',
+    children: [],
+  };
+  return {
+    id: '11',
+    code: 'CV001-01',
+    level: '2',
+    name: 'Thiết kế hệ thống',
+    startDate: '2026-02-10',
+    dueDate: '2026-03-15',
+    completion: '40',
+    status: 'Đang thực hiện',
+    priority: '',
+    assigneeName: '',
+    leaderNames: ['Trưởng phòng A'],
+    output: '',
+    children: [nhiemVu],
+  };
+}
+
+describe('hàng CV con / nhiệm vụ — icon đỏ, mũi tên ngoài cột, bỏ chữ cán bộ cạnh tên', () => {
+  it('icon CV con là THƯ MỤC ĐỎ giống công việc cha — hết icon nhánh xanh cũ', () => {
+    const html = window.createGanttSubRowHtml(subMau());
+    expect(html).toContain('fas fa-folder text-red-500');
+    expect(html).not.toContain('fa-code-branch');
+  });
+
+  it('mũi tên CV con nằm NGOÀI khối icon+tên (slot trước icon); CV con không con thì slot rỗng', () => {
+    const coCon = window.createGanttSubRowHtml(subMau());
+    expect(coCon.indexOf('gantt-toggle-slot')).toBeGreaterThan(-1);
+    expect(coCon.indexOf('gantt-toggle-slot')).toBeLessThan(coCon.indexOf('fa-folder'));
+    expect(coCon).toContain('gantt-node-toggle');
+    const khongCon = window.createGanttSubRowHtml({ ...subMau(), children: [] });
+    expect(khongCon).toContain('gantt-toggle-slot');
+    expect(khongCon).not.toContain('gantt-node-toggle'); // vẫn giữ slot ⇒ các cấp thẳng hàng
+  });
+
+  it('CHỮ cán bộ thực hiện rời khỏi cạnh tên nhiệm vụ — chỉ còn trong dữ liệu tooltip', () => {
+    const html = window.createGanttTaskRowHtml(subMau().children[0]);
+    // Hết span phụ «— Nguyễn Văn An» đứng cạnh tên.
+    expect(html).not.toContain('<span class="text-xs text-gray-400 ml-2">');
+    // Tên nhiệm vụ mang dữ liệu tooltip (JSON trong thuộc tính, KHÔNG hiển thị ra text).
+    expect(html).toContain('gantt-hover-name');
+    const json = JSON.parse(
+      html
+        .match(/data-hover-json="([^"]*)"/)[1]
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+    );
+    expect(json.canBo).toBe('Nguyễn Văn An');
+    expect(json.ketQuaDauRa).toBe('Bản thiết kế PDF');
+  });
+
+  it('tên có HTML nguy hiểm vẫn chỉ là chữ trong cả hàng lẫn JSON tooltip', () => {
+    const html = window.createGanttTaskRowHtml(subMau().children[0]);
+    expect(html).toContain('&lt;b&gt;màu&lt;/b&gt;');
+    expect(html).not.toContain('<b>');
+  });
+});
+
+describe('thẻ tooltip tự vẽ cho tên dòng (yêu cầu #2/#2b)', () => {
+  it('nhiệm vụ: đủ Lãnh đạo phòng phụ trách · Cán bộ · Tiến độ · Kết quả đầu ra', () => {
+    const d = window.duLieuHoverGantt({
+      level: '3',
+      name: 'Nhiệm vụ X',
+      leaderNames: ['Phó phòng A'],
+      assigneeName: 'Trần Thị Bình',
+      completion: '25',
+      output: 'Hồ sơ .zip',
+    });
+    const html = window.buildGanttHoverCardHtml(d);
+    expect(html).toContain('Lãnh đạo phòng phụ trách');
+    expect(html).toContain('Phó phòng A');
+    expect(html).toContain('Trần Thị Bình');
+    expect(html).toContain('25%');
+    expect(html).toContain('Kết quả đầu ra');
+    expect(html).toContain('Hồ sơ .zip');
+    expect(html).not.toContain('Ban lãnh đạo kiểm soát'); // mức nhiệm vụ không có ô này
+  });
+
+  it('công việc: Ban lãnh đạo kiểm soát + gom cán bộ DUY NHẤT từ cây con + tiến độ server', () => {
+    const d = window.duLieuHoverGantt({
+      name: 'Ra mắt cổng',
+      endDate: '2026-03-31',
+      progress: '50',
+      supervisorName: 'Phó GĐ Một',
+      leaderNames: ['Trưởng phòng A', 'Phó phòng A'],
+      tasks: [{ assigneeName: 'An' }, { assigneeName: 'An' }, { assigneeName: 'Bình' }],
+      subs: [],
+    });
+    const html = window.buildGanttHoverCardHtml(d);
+    expect(html).toContain('Ban lãnh đạo kiểm soát');
+    expect(html).toContain('Phó GĐ Một');
+    expect(html).toContain('Trưởng phòng A, Phó phòng A');
+    expect(html).toContain('An, Bình'); // trùng lặp bị gom
+    expect(html).toContain('50%');
+    expect(html).not.toContain('Kết quả đầu ra');
+  });
+
+  it('giá trị người nhập qua escapeHtml — không sinh thẻ thật trong tooltip', () => {
+    const html = window.buildGanttHoverCardHtml(
+      window.duLieuHoverGantt({
+        level: '3',
+        name: '<img src=x onerror=alert(1)>tên',
+        leaderNames: [],
+        assigneeName: '<script>',
+        completion: '0',
+        output: '',
+      })
+    );
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img ');
+  });
+
+  it('dữ liệu thiếu (null/rỗng) không nổ: các dòng trống in gạch ngang', () => {
+    const html = window.buildGanttHoverCardHtml(
+      window.duLieuHoverGantt({
+        level: '2',
+        name: '',
+        leaderNames: [],
+        assigneeName: '',
+        completion: null,
+        output: '',
+      })
+    );
+    expect(html).toContain('Công việc con');
+    expect(html.match(/—/g).length).toBeGreaterThanOrEqual(3);
   });
 });

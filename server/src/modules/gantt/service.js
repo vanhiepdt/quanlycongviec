@@ -234,10 +234,8 @@ export async function ganttTree(
   const ghiTen = (row) => {
     if ('leader_names' in row) return;
     row.supervisor_name =
-      row.supervisor_id != null ? banDoTen.get(String(row.supervisor_id)) ?? null : null;
-    row.leader_names = (row.leader_ids ?? [])
-      .map((id) => banDoTen.get(String(id)))
-      .filter(Boolean);
+      row.supervisor_id != null ? (banDoTen.get(String(row.supervisor_id)) ?? null) : null;
+    row.leader_names = (row.leader_ids ?? []).map((id) => banDoTen.get(String(id))).filter(Boolean);
   };
   works.forEach(ghiTen);
   for (const list of itemsTheoWork.values()) list.forEach(ghiTen);
