@@ -13,7 +13,7 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 |---|---|
 | Nhánh đang làm | `vps/tinh-nang-phan-cong` (tách từ `vps/phase-6-stats`, HEAD `b2e65f1`) — **Phase 6 + tính năng phân công ba lớp** (yêu cầu người dùng 2026-08-26). Nhánh trước: `vps/phase-6-stats` dừng ở `b2e65f1`, `vps/phase-5-approval` ở `5e89293` |
 | Phase đã xong | **0**–**6** (6/9 việc Phase 6 + trả nợ N+1 `getTasks`; RPC **27 chạy / 10 còn 501**) **+ tính năng ngoài kế hoạch**: phân công ba lớp — migration `005_phan_cong.sql` (`works`/`work_items` thêm `supervisor_id`, `leader_ids`, CHECK `task_leader_single`), module `assignments/service.js` (nguồn ứng viên + chặn sai nguồn), endpoint `GET /departments/assignment-options`, cầu RPC mang trường mới, giao diện form/modal |
-| Test đang xanh | **898** trong 50 file, lint + `format:check` sạch. Pin XSS mới: **77 chỗ / 555 giá trị** (`docs/XSS-4.6.md`) |
+| Test đang xanh | **900** trong 51 file, lint + `format:check` sạch. Pin XSS mới: **77 chỗ / 550 giá trị** (`docs/XSS-4.6.md`). Test mới `col-parity.test.js` chốt COL client khớp COL server (bẫy 2026-08-26) |
 | Phase kế tiếp | **7 — đề nghị, quản lý app, chat, xuất Excel** (§7 việc 7.1–7.6; §8.4 nhóm G TC-MISC-01..13; khói R8–R12). Prompt dán sẵn ở mục 3 |
 | Còn treo | **D3–D8 UI**: máy chủ REST `/approvals/.../{submit,approve,reject}` + `pending-count` có từ Phase 5; `app.js` chưa có nút trên cây — **không** tự làm trừ khi người dùng yêu cầu. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt** trên mảng đã do server chạm phạm vi (muốn server-side thì thêm `GET /stats/items`); Gantt nhóm `assignee` đưa công việc vào nhóm MỖI người có nhiệm vụ trong đó và hiện toàn cây con (sửa `nhomTheoAssignee` nếu muốn chỉ hiện nhánh). **R8–R12** đề nghị/chat/app/Excel + `addNotificationWithAuth` = Phase 7 |
 | Đang chờ người dùng | **KHÔNG còn câu nào.** |
@@ -72,7 +72,7 @@ TRƯỚC KHI LÀM BẤT CỨ VIỆC GÌ:
    test chèn tay mã viết cứng không nhích sequence ⇒ API tạo mới 409 IM LẶNG nếu không assert
    status; audit ghi SAU phản hồi nên test đếm activity_logs phải chờ + lấy mốc động; PowerShell
    Get-Content|Set-Content hỏng UTF-8 không BOM (node --check vẫn xanh!); helper trả HTML phải
-   tên create*/build*/render* với pin TC-SEC-17 = 77 chỗ / 555 giá trị; app.js dùng CRLF và giữ
+   tên create*/build*/render* với pin TC-SEC-17 = 77 chỗ / 550 giá trị; app.js dùng CRLF và giữ
    chuỗi HTML trong string literal (mọi \" và \n là 2 ký tự raw) — sửa bằng script node có guard
    chống chạy lặp, đừng replace tay; view v_countable_* tạo bằng SELECT * nên thêm cột mới phải
    CREATE OR REPLACE VIEW trong migration (đã làm trong 005).

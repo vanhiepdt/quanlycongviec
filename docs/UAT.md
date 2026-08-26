@@ -340,7 +340,7 @@ RPC còn `pending()` **đúng 10 tên**: `getProposals`, `addProposalWithAuth`, 
 ### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8) — giữ từ Phase 4
 
 - `/` và `/index.html` → `200 text/html; charset=utf-8`, **không** có `Cache-Control` dài.
-- `assets/js/app.js?v=20260826-62` + **file mới** `assets/js/project-details.js?v=20260826-1`
+- `assets/js/app.js?v=20260826-63` + **file mới** `assets/js/project-details.js?v=20260826-2`
   (nạp SAU app.js, ghi đè modal chi tiết — bump cả hai khi đổi app.js).
 - 5 gói tự chứa `200` kèm `cache-control: public, max-age=2592000`.
 - Đủ đầu bảo vệ; 404 **không** cache 30 ngày; 0 CDN.

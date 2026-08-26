@@ -24,8 +24,9 @@ const { sites, sinks } = soatFile(APP);
 const CO_Y_KHONG_BOC = [
   // Cờ `selected`/`checked` do CHÍNH mã sinh ra ("selected" hoặc ""), không có dữ liệu người dùng.
   // Đây là chỗ trong thẻ mà không có dấu bao, nên nếu là dữ liệu ngoài thì cực nguy hiểm — vì vậy
-  // ba chỗ này phải nêu tên rõ ràng thay vì bỏ qua cả nhóm "trong-the".
-  { ctx: 'trong-the', ma: 'text3', so: 3, ly_do: 'cờ "selected" do mã sinh, không phải dữ liệu' },
+  // phải nêu tên rõ ràng thay vì bỏ qua cả nhóm "trong-the". (2026-08-26: bỏ ô "Quản lý công việc"
+  // khỏi form công việc nên mất 1 trong 3 chỗ cũ, còn 2.)
+  { ctx: 'trong-the', ma: 'text3', so: 2, ly_do: 'cờ "selected" do mã sinh, không phải dữ liệu' },
   // Chỉ số của `.map()` — là SỐ, và nằm trong on* nhưng NGOÀI chuỗi JS: `onclick="f(" + i + ")"`.
   { ctx: 'handler-ngoai', ma: 'index', so: 4, ly_do: 'chỉ số .map(), là số nguyên do mã sinh' },
   // `const wrapRow = text => "<tr><td …>" + text + "</td></tr>"`. Cả 4 chỗ gọi đều truyền HTML
@@ -116,13 +117,15 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
       expect(src).toContain(`function ${ten}(value)`);
   });
 
-  it('TC-SEC-17: con số đã chốt — 77 chỗ ghi HTML, 555 giá trị nội suy', () => {
+  it('TC-SEC-17: con số đã chốt — 77 chỗ ghi HTML, 550 giá trị nội suy', () => {
     // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Việc 4.6 chốt 70 chỗ ghi và 474 giá trị;
     // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481;
     // việc 5.12 thêm 17 chỗ (nút cấp 2/cấp 3 + ô ẩn level/parent) ⇒ 498, không thêm chỗ ghi nào.
+    // 2026-08-26 phân công ba lớp chốt ở 555; rồi bỏ ô "Quản lý công việc" khỏi form tạo/sửa
+    // công việc (khối phân công ba lớp thay thế) −5 giá trị ⇒ 550, số chỗ ghi giữ 77.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 77, gia_tri: 555 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 77, gia_tri: 550 });
   });
 });
 

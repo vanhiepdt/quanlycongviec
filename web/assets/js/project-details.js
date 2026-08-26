@@ -8,16 +8,19 @@
 // Toàn bộ HTML dựng bằng builder có escape (quy ước chống XSS §4.6: build*/create*/render*).
 "use strict";
 
-/** Hàng "nhãn — giá trị" của modal chi tiết. */
-function buildDetailRowHtml(label, value) {
+/** Ô "nhãn trên — giá trị dưới" của modal chi tiết (dạng thẻ nhỏ, hết kiểu lệch hai đầu). */
+function buildDetailRowHtml(label, value, trongRong) {
+  const raw = String(value ?? "").trim();
+  const coGiaTri = raw !== "" && raw !== "null" && raw !== "undefined";
   return (
-    '<div class="flex justify-between gap-3 py-1.5 border-b border-gray-100">' +
-    '<span class="text-xs text-gray-400 flex-shrink-0 pt-0.5">' +
+    '<div class="bg-gray-50/80 border border-gray-100 rounded-lg px-3 py-2 min-w-0">' +
+    '<div class="text-[11px] uppercase tracking-wide text-gray-400 truncate">' +
     escapeHtml(label) +
-    "</span>" +
-    '<span class="text-sm font-medium text-gray-800 text-right break-words">' +
-    (value || '<span class="text-gray-300">—</span>') +
-    "</span></div>"
+    "</div>" +
+    (coGiaTri
+      ? '<div class="text-sm font-semibold text-gray-800 break-words leading-snug">' + value + "</div>"
+      : '<div class="text-sm italic font-normal text-gray-300">' + escapeHtml(trongRong || "—") + "</div>") +
+    "</div>"
   );
 }
 
@@ -58,7 +61,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     '<div class="flex items-center gap-2 min-w-0">' +
     '<i id="sw-caret-' +
     escapeHtml(sw[COL.T_ID]) +
-    '" class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>' +
+    '" class="fas fa-chevron-down text-gray-400 text-xs transition-transform" style="transform: rotate(-90deg)"></i>' +
     '<i class="fas fa-folder-open text-blue-400"></i>' +
     '<span class="font-semibold text-gray-900 truncate">' +
     escapeHtml(sw[COL.T_NAME]) +
@@ -73,14 +76,14 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     escapeHtml(sw[COL.T_COMPLETION] || 0) +
     "%</div>" +
     "</div>" +
-    '<div class="grid grid-cols-1 xl:grid-cols-3 gap-x-4 mt-2">' +
-    buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(sw[COL.T_SUP])) +
-    buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(sw[COL.T_LEADERS])) +
-    buildDetailRowHtml("Cán bộ làm trực tiếp", escapeHtml(sw[COL.T_ASSIGNEE])) +
+    '<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">' +
+    buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(sw[COL.T_SUP]), "Chưa phân công") +
+    buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(sw[COL.T_LEADERS]), "Chưa phân công") +
+    buildDetailRowHtml("Cán bộ làm trực tiếp", escapeHtml(sw[COL.T_ASSIGNEE]), "Chưa gán") +
     "</div>" +
     '<div id="sw-tasks-' +
     escapeHtml(sw[COL.T_ID]) +
-    '" class="mt-3 space-y-2">' +
+    '" class="mt-3 space-y-2 hidden">' +
     (nvTrong.length
       ? nvTrong.map(t => createTaskListItem(t)).join("")
       : '<p class="text-sm text-gray-400 italic py-2">Chưa có nhiệm vụ nào trong công việc con này</p>') +
@@ -156,14 +159,13 @@ function showProjectDetailsModal(projectId, projectName) {
     "            </div>\n" +
     '            <div class="bg-white rounded-xl p-4 border border-gray-100">\n' +
     '                <h5 class="font-semibold text-gray-800 mb-2 text-sm">Phân công</h5>\n' +
-    '                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-x-6">\n' +
-    buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT])) +
-    buildDetailRowHtml("Ban giám đốc kiểm soát", escapeHtml(project[COL.P_SUP])) +
-    buildDetailRowHtml("Phụ trách chung", escapeHtml(project[COL.P_LEADERS])) +
-    buildDetailRowHtml("Quản lý công việc", escapeHtml(project[COL.P_MANAGER])) +
-    "                </div>\n" +
-    '                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-x-6 mt-1">\n' +
+    '                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">\n' +
+    buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
+    buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(project[COL.P_SUP]), "Chưa phân công") +
+    buildDetailRowHtml("Phụ trách chung (lãnh đạo phòng)", escapeHtml(project[COL.P_LEADERS]), "Chưa phân công") +
     buildDetailRowHtml("Trạng thái", escapeHtml(project[COL.P_STATUS])) +
+    "                </div>\n" +
+    '                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">\n' +
     buildDetailRowHtml(
       "Thời gian",
       escapeHtml(formatDateForDisplay(project[COL.P_START])) +

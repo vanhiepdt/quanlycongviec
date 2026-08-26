@@ -48,6 +48,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `buildSupervisorOptionsHtml`, `buildLeaderCheckboxesHtml`, `buildDeptIdOptions`; mọi id/name
 > người dùng nội suy đi qua `escapeHtml`/`escapeHtmlAttr`/`escapeForInlineHandler`. Pin canh bởi
 > TC-SEC-17.
+>
+> **Cập nhật 2026-08-26 (bổ sung — bỏ ô «Quản lý công việc»).** Ô chọn người quản lý trong form
+> tạo/sửa công việc bị cắt (thay bằng khối phân công ba lớp): mất **1 chỗ ghi HTML** (select) và
+> **5 giá trị nội suy**, đồng thời bớt 1 chỗ cờ `selected` cố ý không bọc (`text3` 3 → 2 chỗ,
+> xem TC-SEC-11) ⇒ **77 chỗ / 550 giá trị**. Lưu ý: pin chỉ đếm app.js; chuỗi HTML mới trong
+> `project-details.js` chưa thuộc bộ soát này (file ghi đè, sẽ soát riêng khi tách module).
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
