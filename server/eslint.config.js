@@ -47,6 +47,10 @@ export default [
       'tests/unit/countable-stats-ui.test.js',
       'tests/unit/subwork-button-ui.test.js',
       'tests/unit/gantt-ui.test.js',
+      // dept-select.test.js: dropdown «Phòng» của form công việc — chạy app.js thật trong jsdom.
+      'tests/unit/dept-select.test.js',
+      // project-form-phan-cong.test.js: simulation form tạo công việc với fetch giả — jsdom.
+      'tests/unit/project-form-phan-cong.test.js',
     ],
     languageOptions: {
       globals: {
@@ -59,6 +63,10 @@ export default [
         JSON: 'readonly',
         Object: 'readonly',
         String: 'readonly',
+        // DOMParser: dept-select.test.js phân tích HTML do buildDeptIdOptions dựng ra.
+        DOMParser: 'readonly',
+        // Event: project-form-phan-cong.test.js bắn sự kiện change lên ô chọn phòng.
+        Event: 'readonly',
         // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.
         Proxy: 'readonly',
         // localStorage: gantt-ui.test.js khẳng định trạng thái thu gọn Gantt được ghi vào đây

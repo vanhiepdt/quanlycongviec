@@ -65,6 +65,10 @@ export const COL = Object.freeze({
   D_VICE: 'Email Phó phòng',
   D_ORDER: 'Thứ tự',
   D_NOTES: 'Ghi chú',
+  // id số trong bảng departments — option Phòng của form công việc PHẢI mang giá trị này vì
+  // projectFromLegacy ép numberOrUndefined (gửi mã PH01 vào là phòng bị bỏ im lặng). Khoá phải
+  // có ở CẢ HAI phía COL (client app.js) — test col-parity chốt.
+  D_DB_ID: 'ID phòng (DB)',
   S_ID: 'Mã NV',
   S_NAME: 'Họ tên',
   S_EMAIL: 'Email',
@@ -95,6 +99,19 @@ function numberOrUndefined(value) {
 }
 
 /**
+ * Ô `<select>` tham chiếu (Phòng / Ban lãnh đạo kiểm soát): `""` là MỘT LỰA CHỌN («Công việc
+ * chung» / «Không chọn») nên phải thành `null` để PATCH xoá liên kết — server `idInput` cũng hiểu
+ * `null`/`""` = bỏ liên kết. Bỏ khoá (`undefined`) khi form không gửi trường: PATCH không được đổi
+ * gì chỉ vì không gửi. Bẫy 2026-08-26: `numberOrUndefined("")` trả `undefined` khiến «chọn lại
+ * Công việc chung» khi SỬA thành silent no-op — phòng cũ bị giữ lại.
+ */
+function idOrNullOrUndefined(value) {
+  if (value === '' || value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
  * Ô "Lãnh đạo phòng phụ trách" của form là MỘT `<input type="hidden">` chứa các id phân tách
  * dấu phẩy (checkbox cập nhật), vì `FormData` vòng lặp của `handleAdd` chỉ giữ giá trị cuối.
  * `""` ⇒ `[]`: form luôn gửi trường này khi người dùng được sửa phân công — rỗng là chủ ý xoá hết.
@@ -119,9 +136,14 @@ export function projectFromLegacy(data = {}) {
     name: pick(data, 'name'),
     description: pick(data, 'description'),
     managerName: pick(data, 'manager'),
-    // Ô phòng mới của form (yêu cầu 2026-08-26): `""` = "Công việc chung" ⇒ không ghi ⇒ NULL.
-    departmentId: numberOrUndefined(pick(data, 'departmentId')),
-    supervisorId: numberOrUndefined(pick(data, 'supervisorId')),
+    // Ô phòng mới của form (yêu cầu 2026-08-26): value là ID SỐ (COL.D_DB_ID); `""` = «Công việc
+    // chung» ⇒ `null` (tạo: NULL; sửa: xoá phòng cũ). Thiếu khoá ⇒ không đổi.
+    departmentId: Object.hasOwn(data, 'departmentId')
+      ? idOrNullOrUndefined(data.departmentId)
+      : undefined,
+    supervisorId: Object.hasOwn(data, 'supervisorId')
+      ? idOrNullOrUndefined(data.supervisorId)
+      : undefined,
     leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
     endDate: Object.hasOwn(data, 'endDate') ? dateOrNull(data.endDate) : undefined,
@@ -367,6 +389,8 @@ export function staffToLegacy(row, ctx = {}) {
 export function departmentToLegacy(row, ctx = {}) {
   const grouped = ctx.managerEmailsByDeptId?.get(row.id);
   return {
+    // D_DB_ID = khoá chính số của `departments` — nguồn cho `<option>` phòng của form công việc.
+    [COL.D_DB_ID]: row.id ?? '',
     [COL.D_ID]: row.code,
     [COL.D_NAME]: row.name ?? '',
     [COL.D_DIRECTOR]: joinEmails(row.directorEmails ?? grouped?.deputy_director),

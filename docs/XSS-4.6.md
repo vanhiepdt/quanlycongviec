@@ -54,6 +54,21 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > **5 giá trị nội suy**, đồng thời bớt 1 chỗ cờ `selected` cố ý không bọc (`text3` 3 → 2 chỗ,
 > xem TC-SEC-11) ⇒ **77 chỗ / 550 giá trị**. Lưu ý: pin chỉ đếm app.js; chuỗi HTML mới trong
 > `project-details.js` chưa thuộc bộ soát này (file ghi đè, sẽ soát riêng khi tách module).
+>
+> **Cập nhật 2026-08-26 (bẫy COL lần 2 — vẽ lại ô Phòng khi bối cảnh nạp trễ).** Form công việc
+> thêm **1 chỗ ghi HTML**: `deptSel.innerHTML = buildDeptIdOptions(…)` trong `createProjectModal`
+> — khi mở form trước khi `getDepartmentContext` kịp trả, context về là vẽ lại ô Phòng rồi mới
+> nạp phân công (chống ô phòng trống vĩnh viễn). `buildDeptIdOptions` là builder thoát đủ
+> (`escapeHtmlAttr` cho id số, `escapeHtml` cho tên phòng), không có giá trị nội suy mới
+> ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17).
+>
+> **Cập nhật 2026-08-26 (6 yêu cầu giao diện — lọc tháng, tạo nhiệm vụ gắn dự án, dòng Phòng).**
+> Thêm bộ lọc tháng ở mục Quản lý công việc: ô trống «không có công việc» giờ dựng có điều kiện,
+> kèm `escapeHtml(thangDangXem)`; thẻ công việc thêm dòng «Phòng:» với
+> `escapeHtml(project[COL.P_DEPT] || "Chưa gán")`; form nhiệm vụ thêm khối «Thuộc dự án»
+> (select dựng bằng `.map(...).join("")`, mọi giá trị đi qua `escapeHtml`) và ô Người thực hiện
+> ẩn/hiện theo cấp (giá trị hằng do mã sinh). Ô chọn phòng dựng lại bằng builder COL-an-toàn.
+> Ròng rã **+1 giá trị nội suy**, số chỗ ghi giữ 78 ⇒ **78 chỗ / 551 giá trị** (TC-SEC-17).
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

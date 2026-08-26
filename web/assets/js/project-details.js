@@ -53,6 +53,10 @@ function batTatNhiemVuTrongCVCon(swCode) {
  */
 function createSubworkDetailHtml(sw, tatCaNV) {
   const nvTrong = tatCaNV.filter(t => t[COL.T_PARENT] === sw[COL.T_ID]);
+  // Cán bộ thực hiện của công việc con = những người được gán ở NHIỆM VỤ bên trong nó.
+  const canBoThucHien = [
+    ...new Set(nvTrong.map(t => t[COL.T_ASSIGNEE]).filter(v => v && v !== "Chưa gán")),
+  ].join(", ");
   return (
     '<div class="bg-blue-50/60 border border-blue-100 rounded-xl p-3 mb-3">' +
     '<div class="flex items-center justify-between cursor-pointer select-none gap-2" onclick="batTatNhiemVuTrongCVCon(\'' +
@@ -79,7 +83,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     '<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">' +
     buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(sw[COL.T_SUP]), "Chưa phân công") +
     buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(sw[COL.T_LEADERS]), "Chưa phân công") +
-    buildDetailRowHtml("Cán bộ làm trực tiếp", escapeHtml(sw[COL.T_ASSIGNEE]), "Chưa gán") +
+    buildDetailRowHtml("Cán bộ thực hiện", escapeHtml(canBoThucHien), "Chưa có nhiệm vụ được gán") +
     "</div>" +
     '<div id="sw-tasks-' +
     escapeHtml(sw[COL.T_ID]) +
@@ -87,6 +91,15 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     (nvTrong.length
       ? nvTrong.map(t => createTaskListItem(t)).join("")
       : '<p class="text-sm text-gray-400 italic py-2">Chưa có nhiệm vụ nào trong công việc con này</p>') +
+    (canUserCreateTask()
+      ? '<div class="pt-1"><button type="button" class="text-xs font-medium text-blue-600 hover:text-blue-800 add-task-from-subwork-btn" data-project-id="' +
+        escapeHtml(sw[COL.T_PID]) +
+        '" data-project-name="' +
+        escapeHtml((allProjects.find(p => p[COL.P_ID] === sw[COL.T_PID]) || {})[COL.P_NAME] || "") +
+        '" data-parent-id="' +
+        escapeHtml(sw[COL.T_ID]) +
+        '"><i class="fas fa-plus mr-1"></i>Thêm nhiệm vụ cho công việc con này</button></div>'
+      : "") +
     "</div>" +
     "</div>"
   );
@@ -127,17 +140,7 @@ function showProjectDetailsModal(projectId, projectName) {
       nvMoiCoi.map(t => createTaskListItem(t)).join("")
     : "";
 
-  const canBoHtml = canBoThamGia.length
-    ? canBoThamGia
-        .map(
-          cb =>
-            '<span class="inline-block bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-xs mr-1 mb-1"><i class="fas fa-user mr-1 opacity-60"></i>' +
-            escapeHtml(cb) +
-            "</span>"
-        )
-        .join("")
-    : '<p class="text-sm text-gray-400 italic">Chưa giao cho cán bộ nào</p>';
-
+  
   const text =
     "\n" +
     '<div id="project-details-modal" class="modal active z-[60]">\n' +
@@ -159,13 +162,14 @@ function showProjectDetailsModal(projectId, projectName) {
     "            </div>\n" +
     '            <div class="bg-white rounded-xl p-4 border border-gray-100">\n' +
     '                <h5 class="font-semibold text-gray-800 mb-2 text-sm">Phân công</h5>\n' +
-    '                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">\n' +
-    buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
+        '                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">\n' +
     buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(project[COL.P_SUP]), "Chưa phân công") +
-    buildDetailRowHtml("Phụ trách chung (lãnh đạo phòng)", escapeHtml(project[COL.P_LEADERS]), "Chưa phân công") +
-    buildDetailRowHtml("Trạng thái", escapeHtml(project[COL.P_STATUS])) +
+    buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(project[COL.P_LEADERS]), "Chưa phân công") +
+    buildDetailRowHtml("Cán bộ thực hiện", escapeHtml(canBoThamGia.join(", ")), "Chưa giao cho cán bộ nào") +
     "                </div>\n" +
-    '                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">\n' +
+    '                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-3">\n' +
+    buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
+    buildDetailRowHtml("Trạng thái", escapeHtml(project[COL.P_STATUS])) +
     buildDetailRowHtml(
       "Thời gian",
       escapeHtml(formatDateForDisplay(project[COL.P_START])) +
@@ -176,16 +180,17 @@ function showProjectDetailsModal(projectId, projectName) {
     buildDetailRowHtml("Tiến độ chung", escapeHtml(tongTienDo) + "%") +
     "                </div>\n" +
     "            </div>\n" +
-    '            <div class="bg-white rounded-xl p-4 border border-gray-100">\n' +
-    '                <h5 class="font-semibold text-gray-800 mb-2 text-sm">Cán bộ được giao (' +
-    canBoThamGia.length +
-    ')</h5>\n' +
-    canBoHtml +
-    "\n            </div>\n" +
     '            <div>\n' +
     '                <div class="flex items-center justify-between mb-3">\n' +
     '                    <h5 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">Cây công việc</h5>\n' +
     "                    " +
+    (canUserCreateTask()
+      ? '<button type="button" class="btn-primary py-1.5 text-xs mr-2 add-task-from-project-btn" data-project-id="' +
+        escapeHtml(projectId) +
+        '" data-project-name="' +
+        escapeHtml(projectName) +
+        '" title="+ Nhiệm vụ"><i class="fas fa-plus mr-1"></i>+ Nhiệm vụ</button>'
+      : "") +
     createSubworkFromWorkButtonHtml(projectId, projectName, "btn-secondary py-1.5 text-xs", true) +
     "\n" +
     "                </div>\n" +
