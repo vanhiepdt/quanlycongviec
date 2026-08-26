@@ -16,6 +16,7 @@
 // Dữ liệu đếm/hiện ĐỌC QUA `v_countable_*` nhờ tái dùng `taiDuLieuDem` của thống kê — mục Chờ
 // duyệt không bao giờ xuất hiện trên Gantt.
 import * as deptRepo from '../departments/repo.js';
+import * as userRepo from '../users/repo.js';
 import { boLocPhong, dungPhong, giaoNhau, ngayCua, taiDuLieuDem } from '../stats/service.js';
 
 export const GROUP_MODES = Object.freeze(['department', 'deputy', 'assignee']);
@@ -36,6 +37,9 @@ function nutItem(row) {
     dueDate: row.due_date,
     assigneeName: row.assignee_name ?? null,
     completion: Number(row.completion ?? 0),
+    // Phân công ba lớp + kết quả đầu ra — dữ liệu cho tooltip của giao diện Gantt.
+    output: row.output ?? '',
+    leaderNames: row.leader_names ?? [],
   };
 }
 
@@ -80,6 +84,8 @@ function nutWork(work) {
     departmentId: work.department_id ?? null,
     startDate: work.start_date,
     endDate: work.end_date,
+    supervisorName: work.supervisor_name ?? null,
+    leaderNames: work.leader_names ?? [],
     subs: [],
     tasks: [],
   };
@@ -210,6 +216,31 @@ export async function ganttTree(
     if (!itemsTheoWork.has(row.work_id)) itemsTheoWork.set(row.work_id, []);
     itemsTheoWork.get(row.work_id).push(row);
   }
+
+  // Tên phân công cho tooltip Gantt: đổi MỘT lượt id→full_name cho mọi id được nhắc trong các
+  // công việc/mục sắp hiển thị (supervisor + leader_ids). leader_names gắn thẳng lên dòng để
+  // nutItem/nutWork đọc như cột thường.
+  const ids = new Set();
+  const themId = (v) => v != null && ids.add(Number(v));
+  for (const w of works) {
+    themId(w.supervisor_id);
+    (w.leader_ids ?? []).forEach(themId);
+  }
+  for (const list of itemsTheoWork.values())
+    for (const it of list) (it.leader_ids ?? []).forEach(themId);
+  const banDoTen = new Map(
+    (await userRepo.listByIds([...ids])).map((r) => [String(r.id), r.full_name])
+  );
+  const ghiTen = (row) => {
+    if ('leader_names' in row) return;
+    row.supervisor_name =
+      row.supervisor_id != null ? banDoTen.get(String(row.supervisor_id)) ?? null : null;
+    row.leader_names = (row.leader_ids ?? [])
+      .map((id) => banDoTen.get(String(id)))
+      .filter(Boolean);
+  };
+  works.forEach(ghiTen);
+  for (const list of itemsTheoWork.values()) list.forEach(ghiTen);
 
   const groups =
     groupBy === 'deputy'

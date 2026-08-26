@@ -62,6 +62,42 @@ describe('GET /api/v1/gantt — nhóm theo Phòng', () => {
     expect(names[names.length - 1]).toBe('(chưa phân)');
     expect(res.body.data.groups[0].works).toHaveLength(1);
   });
+
+  it('cây trả kèm tên Ban kiểm soát / lãnh đạo phòng và «Kết quả đầu ra» cho tooltip', async () => {
+    const pgd = await makeLoginUser({
+      code: 'NV006',
+      full_name: 'Phó GĐ Kiểm Soát',
+      email: 'pgdks@test.local',
+      role: 'Phó Giám đốc',
+      department_id: phongA.id,
+    });
+    const tpb = await makeLoginUser({
+      code: 'NV007',
+      full_name: 'Trần Trưởng B',
+      email: 'tpb@test.local',
+      role: 'Trưởng phòng',
+      department_id: phongA.id,
+    });
+    const work = await makeWork({ code: 'CV001', department_id: phongA.id });
+    await pool.query(`UPDATE works SET supervisor_id = $2, leader_ids = $3 WHERE id = $1`, [
+      work.id,
+      pgd.id,
+      [tpb.id],
+    ]);
+    await pool.query(
+      `INSERT INTO work_items (code, work_id, level, name, assignee_name, leader_ids, output)
+       VALUES ('CV001-001', $1, 3, 'Nhiệm vụ tooltip', 'Nguyễn Văn A', ARRAY[$2]::bigint[], 'Bản báo cáo PDF')`,
+      [work.id, tpb.id]
+    );
+
+    const res = await apiAdmin.get('/api/v1/gantt');
+    const w = res.body.data.groups[0].works[0];
+    expect(w.supervisorName).toBe('Phó GĐ Kiểm Soát');
+    expect(w.leaderNames).toEqual(['Trần Trưởng B']);
+    const task = w.tasks.find((t) => t.code === 'CV001-001');
+    expect(task.leaderNames).toEqual(['Trần Trưởng B']);
+    expect(task.output).toBe('Bản báo cáo PDF');
+  });
 });
 
 describe('GET /api/v1/gantt — nhóm theo Phó Giám đốc + cây 4 mức', () => {
