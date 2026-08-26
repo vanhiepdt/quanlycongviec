@@ -77,3 +77,41 @@ TC-SEC-17 (pin đếm giá trị nội suy qua `escapeHtml`) đổi mốc **550 
 ## 7. Việc còn lại (không thuộc vòng này)
 
 Triển khai lên VPS (lặp lại từ sổ tiến độ): đồng bộ `web/` + `server/src/` lên VPS, `npm run migrate:up` (005 nếu chưa), restart Node, UPDATE tên admin trên CSDL VPS — người dùng phía VPS vẫn đang chạy bản cũ (đã có banner `console.info` để tự nhận biết).
+
+---
+
+## 8. Vòng lần 3 (cùng ngày) — «Cán bộ trực tiếp» + modal chi tiết gọn lại
+
+> Ngày: **2026-08-26** · Đầu session: nhánh `vps/tinh-nang-phan-cong`, HEAD `5cb6360`, baseline
+> **914/914 test · 54 file** xanh, lint/format/`node --check` sạch — xác nhận đủ trước khi sửa.
+
+### 8.1 Việc làm và vị trí
+
+| # | Yêu cầu | Sửa ở đâu |
+|---|---|---|
+| 4a | Nhãn «Người thực hiện» → **«Cán bộ trực tiếp»** trong ô gán người của `createTaskModal` | `web/assets/js/app.js` ~1540 (label trong chuỗi template, mốc `<label class=\"form-label\">Cán bộ trực tiếp</label>`); 2 nhãn xem nhanh «Chi tiết nhiệm vụ» ở dòng **3869** và **3909** |
+| 4b | Ứng viên của ô này **chỉ lấy role «Nhân viên»** | `app.js` dòng **1544**: nối `.filter(canBo => canBo[COL.S_ROLE] === "Nhân viên")` SAU filter «Nhà cung cấp» có sẵn — mọi nhánh quyền vẫn chạy trước như cũ. Trưởng/Phó phòng/Phó GĐ/admin biến mất khỏi dropdown dù vai nào mở form |
+| 5 | Option người **chỉ họ tên, bỏ email** | `app.js` ~1644: xoá khai báo `text4` (ghép `" (email)"`) và bỏ `escapeHtml(text4)` trong option gán người; value option vẫn là **tên người** — trường `assignee_id` từ form ghép về sau và luật server `LEADER_NOT_IN_SOURCE` không hề đụng tới |
+| 1 | Thông tin phân công của modal chi tiết thành **MỘT HÀNG** | `project-details.js` dòng **84** `buildPhanCongNhomHtml()` (builder nhận văn bản thô, tự `escapeHtml` MỘT lần); hàng công việc ở dòng **240–245** (class `phan-cong-hang flex flex-wrap`), hàng của từng CV con ở dòng **156–162**. Chữ nhỏ **11px/12px cùng cỡ**, dấu «·» ngăn giữa các nhóm (`PHAN_CONG_CACH_HTML` dòng 42), `flex-wrap` cho phép xuống tối đa dòng 2 khi hẹp — hết kiểu 3 ô xếp dọc |
+| 2 | Tên công việc con vào **KHUNG riêng** | `project-details.js` dòng **123**: hàng tiêu đề CV con thành hộp trắng viền xanh `cv-con-tieu-de rounded-lg px-3 py-2 shadow-sm` — hết chữ trôi trên nền xanh; danh sách nhiệm vụ vẫn nằm ngoài khung |
+| 3 | Icon **BÚT CHỈ** theo quyền trên từng CV con | SVG inline tự vẽ `buildButChiIconHtml()` (dòng **46**); quyền render `coQuyenSuaCongViecCon(sw)` (dòng **71**) = `isAdmin()` tái dùng + tên trong `T_SUP`/`T_LEADERS` (tên do máy chủ trả) của CHÍNH CV con đó qua `tenTrongDanhSach()` (dòng 55); button `edit-subwork-btn data-id=` (dòng **146–152**); listener trong `showProjectDetailsModal` dòng **293–303** — bấm thì **kiểm lại quyền** rồi `openEditModal("task", id)` (form sửa cấp 2 hiện đủ ô Ban lãnh đạo/Lãnh đạo phòng), trái quyền thì toast lỗi |
+
+Không đụng: server, schema, `assignments` service, RPC bridge, `Code.gs.moi`.
+
+### 8.2 Kiểm chứng
+
+| Hạng mục | Kết quả |
+|---|---|
+| Byte vùng đụng tới của app.js so `git show HEAD:web/assets/js/app.js` | **4539 dòng cả hai bản** — thay đổi bù nhau ±1 dòng (−1 `text4` ≈ +1 filter); ký tự Việt nguyên vẹn, quy ước escape giữ đúng (thuộc tính `"` trần ngoài chuỗi, biểu thức JS bên trong) |
+| Vá bằng gì | script node `tools/_tam.mjs` đọc/ghi utf8, mỗi mốc phải xuất hiện ĐÚNG số lần mới ghi (đã xoá sau dùng). Không dùng PowerShell Set-Content |
+| Test jsdom mới | `server/tests/unit/task-form-candidate.test.js` **4/4** (nhãn mới, trường dữ liệu giữ `name="assignee"`, ứng viên chỉ Nhân viên cho cả admin lẫn quản lý, option không chứa `@`) · `server/tests/unit/project-details-phan-cong.test.js` **8/8** (hàng flex 3 nhóm + 2 chấm ngăn, mỗi CV con 1 hàng riêng, khung `.cv-con-tieu-de`, HTML nguy hiểm trong tên CV con vẫn là chữ, bút chì: admin thấy 2 · Phó GĐ đúng CV con mình · lãnh đạo phòng đúng CV con mình · nhân viên ngoài cuộc 0, bấm nút mở form sửa đúng `CV001-01`) |
+| Bộ cũ | Full suite **926/926 test · 56 file** xanh (lượt đầu đỏ 1 test integration vì thời điểm chạy — chạy lại và chạy tách nhóm đều xanh trọn; toàn bộ còn lại không đổi hành vi) · unit riêng 422/25 · integration 504/31 |
+| Pin XSS | Chạy lại `node tools/dem-xss.mjs`: **78 chỗ ghi HTML / 550 giá trị** (−1 giá trị do bỏ nội suy email). Pin `TC-SEC-17` đã bump kèm dòng lý do; `docs/XSS-4.6.md` thêm 2 mục cập nhật |
+| Lint + format | eslint 0 lỗi (đã khai 2 file test jsdom mới vào `eslint.config.js`) · prettier sạch |
+| Cache-buster + banner | `web/index.html`: `app.js?v=20260826-68→-69`, `project-details.js?v=20260826-3→-4`; banner console `"[QLCV] app.js 20260826-69"` ở app.js dòng 9 |
+
+### 8.3 Bẫy mới gặp ở vòng này (đã ghi thêm §13.5)
+
+Vá file bằng công cụ editor dạng JSON: tham số văn bản bị lớp JSON xử lý trước làm mất cặp `\` trước
+nháy trong chuỗi nguồn, nên `old_text` chứa `\"` không bao giờ khớp mặc dù "nhìn" giống hệt — phải
+xác nhận bằng đếm mã ký tự quanh mốc (`codePointAt`) hoặc chọn mốc trong-dòng không vướng escape.
