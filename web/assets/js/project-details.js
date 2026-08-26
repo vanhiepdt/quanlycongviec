@@ -38,6 +38,65 @@ function buildStatCardHtml(so, nhan, mauChu) {
   );
 }
 
+/** Dấu chấm «·» ngăn các nhóm trong HÀNG phân công (xếp ngang bằng flex, tối đa xuống dòng 2). */
+const PHAN_CONG_CACH_HTML =
+  '<span class="phan-cong-cach select-none self-center px-2 sm:px-3 text-gray-300" aria-hidden="true">·</span>';
+
+/** Icon BÚT CHỈ vẽ tay (SVG inline) cho nút sửa công việc con — KHÔNG nạp thư viện nào mới. */
+function buildButChiIconHtml() {
+  return (
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>' +
+    "</svg>"
+  );
+}
+
+/** «ten» có nằm trong chuỗi danh sách TÊN phân tách bởi dấu phẩy (T_SUP / T_LEADERS lưu tên hiển thị)? */
+function tenTrongDanhSach(ten, chuoiDanhSach) {
+  const canTra = String(ten || "").trim();
+  if (!canTra) return false;
+  return String(chuoiDanhSach || "")
+    .split(",")
+    .map(item => item.trim())
+    .includes(canTra);
+}
+
+/**
+ * Quyền SỬA phân công/thông tin của MỘT CÔNG VIỆC CON — bám đúng luật nguồn phía máy chủ
+ * (005_phan_cong.sql): Quản trị hệ thống · Phó GĐ được nêu trong «Ban lãnh đạo kiểm soát» của
+ * CHÍNH công việc con đó · lãnh đạo phòng của công việc con đó. Người thường chỉ xem.
+ * Tái dùng isAdmin() sẵn có của app.js; hai danh sách do máy chủ trả về, không chế logic mới.
+ */
+function coQuyenSuaCongViecCon(sw) {
+  if (!isAuthenticated || !currentUser || !sw) return false;
+  if (isAdmin()) return true;
+  const ten = String(currentUser.name || "").trim();
+  if (!ten) return false;
+  return tenTrongDanhSach(ten, sw[COL.T_SUP]) || tenTrongDanhSach(ten, sw[COL.T_LEADERS]);
+}
+
+/**
+ * Nhóm nhỏ của HÀNG phân công (vòng lần 3): nhãn + giá trị CÙNG cỡ chữ nhỏ, đặt cạnh nhau trong
+ * một hàng flex (khác buildDetailRowHtml — kiểu thẻ «label trên / value dưới» xếp dọc).
+ * Builder nhận VĂN BẢN THÔ và tự escape MỘT lần — caller đừng escape trước (quy ước §4.6).
+ */
+function buildPhanCongNhomHtml(nhan, giaTri, trongRong) {
+  const raw = String(giaTri == null ? "" : giaTri).trim();
+  const coGiaTri = raw !== "" && raw !== "null" && raw !== "undefined";
+  return (
+    '<div class="phan-cong-nhom min-w-0 flex-1 basis-[180px] leading-snug">' +
+    '<span class="phan-cong-nhan block text-[11px] uppercase tracking-wide text-gray-400 whitespace-nowrap mr-2">' +
+    escapeHtml(nhan) +
+    "</span>" +
+    '<span class="phan-cong-gia block text-xs font-medium text-gray-700 break-words">' +
+    (coGiaTri
+      ? escapeHtml(raw)
+      : '<span class="text-xs italic text-gray-300">' + escapeHtml(trongRong || "—") + "</span>") +
+    "</span></div>"
+  );
+}
+
 /** Bật/tắt danh sách nhiệm vụ nằm trong một công việc con. */
 function batTatNhiemVuTrongCVCon(swCode) {
   const el = document.getElementById("sw-tasks-" + swCode);
@@ -59,7 +118,9 @@ function createSubworkDetailHtml(sw, tatCaNV) {
   ].join(", ");
   return (
     '<div class="bg-blue-50/60 border border-blue-100 rounded-xl p-3 mb-3">' +
-    '<div class="flex items-center justify-between cursor-pointer select-none gap-2" onclick="batTatNhiemVuTrongCVCon(\'' +
+    // KHUNG TIÊU ĐỀ RIÊNG (vòng lần 3): tên công việc con nằm trong hộp trắng viền xanh — rõ
+    // ranh giới với danh sách nhiệm vụ bên dưới, bỏ kiểu chữ trôi trên nền xanh.
+    '<div class="cv-con-tieu-de bg-white/90 border border-blue-200 rounded-lg px-3 py-2 shadow-sm flex items-center justify-between cursor-pointer select-none gap-2" onclick="batTatNhiemVuTrongCVCon(\'' +
     escapeForInlineHandler(sw[COL.T_ID]) +
     '\')">' +
     '<div class="flex items-center gap-2 min-w-0">' +
@@ -79,11 +140,25 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     '<div class="text-xs text-gray-500 whitespace-nowrap">Tiến độ ' +
     escapeHtml(sw[COL.T_COMPLETION] || 0) +
     "%</div>" +
+    // BÚT CHỈ sửa phân công/thông tin CV con — HIỂN THỊ THEO QUYỀN (coQuyenSuaCongViecCon):
+    // Quản trị hệ thống · Phó GĐ trong «Ban lãnh đạo kiểm soát» của CV con này · lãnh đạo phòng
+    // của CV con này. Người khác chỉ xem; quyền còn được kiểm lại LÚC BẤM (sau phần render).
+    (coQuyenSuaCongViecCon(sw)
+      ? '<button type="button" class="edit-subwork-btn ml-1 shrink-0 p-1 rounded-md border border-blue-200 bg-white text-blue-500 hover:bg-blue-50 hover:text-blue-700" data-id="' +
+        escapeHtml(sw[COL.T_ID]) +
+        '" title="Sửa phân công / thông tin công việc con" aria-label="Sửa công việc con">' +
+        buildButChiIconHtml() +
+        "</button>"
+      : "") +
     "</div>" +
-    '<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">' +
-    buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(sw[COL.T_SUP]), "Chưa phân công") +
-    buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(sw[COL.T_LEADERS]), "Chưa phân công") +
-    buildDetailRowHtml("Cán bộ thực hiện", escapeHtml(canBoThucHien), "Chưa có nhiệm vụ được gán") +
+    // Thông tin phân công của CV con: MỘT hàng ngang gọn giống khối «Phân công» phía trên,
+    // chữ nhỏ cùng cỡ — thay cho lưới 3 ô xếp dọc cũ.
+    '<div class="phan-cong-hang flex flex-wrap items-start gap-y-1 mt-2">' +
+    buildPhanCongNhomHtml("Ban lãnh đạo kiểm soát", sw[COL.T_SUP], "Chưa phân công") +
+    PHAN_CONG_CACH_HTML +
+    buildPhanCongNhomHtml("Lãnh đạo phòng phụ trách", sw[COL.T_LEADERS], "Chưa phân công") +
+    PHAN_CONG_CACH_HTML +
+    buildPhanCongNhomHtml("Cán bộ thực hiện", canBoThucHien, "Chưa có nhiệm vụ được gán") +
     "</div>" +
     '<div id="sw-tasks-' +
     escapeHtml(sw[COL.T_ID]) +
@@ -162,10 +237,10 @@ function showProjectDetailsModal(projectId, projectName) {
     "            </div>\n" +
     '            <div class="bg-white rounded-xl p-4 border border-gray-100">\n' +
     '                <h5 class="font-semibold text-gray-800 mb-2 text-sm">Phân công</h5>\n' +
-        '                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">\n' +
-    buildDetailRowHtml("Ban lãnh đạo kiểm soát", escapeHtml(project[COL.P_SUP]), "Chưa phân công") +
-    buildDetailRowHtml("Lãnh đạo phòng phụ trách", escapeHtml(project[COL.P_LEADERS]), "Chưa phân công") +
-    buildDetailRowHtml("Cán bộ thực hiện", escapeHtml(canBoThamGia.join(", ")), "Chưa giao cho cán bộ nào") +
+        '                <div class="phan-cong-hang flex flex-wrap items-start gap-y-1">\n' +
+    buildPhanCongNhomHtml("Ban lãnh đạo kiểm soát", project[COL.P_SUP], "Chưa phân công") + PHAN_CONG_CACH_HTML +
+    buildPhanCongNhomHtml("Lãnh đạo phòng phụ trách", project[COL.P_LEADERS], "Chưa phân công") + PHAN_CONG_CACH_HTML +
+    buildPhanCongNhomHtml("Cán bộ thực hiện", canBoThamGia.join(", "), "Chưa giao cho cán bộ nào") +
     "                </div>\n" +
     '                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-3">\n' +
     buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
@@ -209,6 +284,21 @@ function showProjectDetailsModal(projectId, projectName) {
     closeButton.addEventListener("click", event => {
       event.preventDefault();
       closeModal("project-details-modal");
+    });
+  });
+  // NÚT BÚT CHỈ trên từng khối Công việc con — mở form sửa phân công/thông tin CV con
+  // (openEditModal với type "task" hiện đủ ô Ban lãnh đạo / Lãnh đạo phòng của cấp 2).
+  // Quyền được kiểm LẠI lúc bấm bằng đúng hàm đã dùng khi render — chống bấm nút cũ còn treo
+  // hoặc can thiệp DOM thủ công; máy chủ vẫn là rào chặn cuối cùng.
+  modalEl.querySelectorAll(".edit-subwork-btn").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = String(button.dataset.id || "");
+      const sw = allTasks.find(t => t[COL.T_ID] === id);
+      coQuyenSuaCongViecCon(sw)
+        ? openEditModal("task", id)
+        : showToast("Bạn không có quyền sửa phân công của công việc con này", "error");
     });
   });
 }

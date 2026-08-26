@@ -54,6 +54,9 @@ export default [
       // task-form-candidate.test.js: nhãn «Cán bộ trực tiếp» + ứng viên chỉ Nhân viên của form
       // nhiệm vụ — chạy app.js thật trong jsdom, DOMParser để bóc form dựng bằng chuỗi.
       'tests/unit/task-form-candidate.test.js',
+      // project-details-phan-cong.test.js: hàng phân công 1 hàng + khung tên CV con + icon bút
+      // chì theo quyền trong modal chi tiết — chạy app.js thật + project-details.js thật trong jsdom.
+      'tests/unit/project-details-phan-cong.test.js',
     ],
     languageOptions: {
       globals: {

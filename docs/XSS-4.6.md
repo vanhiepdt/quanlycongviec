@@ -75,6 +75,14 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `text4` cùng một nội suy `escapeHtml(text4)` ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17, −1 giá trị).
 > Nhãn ô đổi thành «Cán bộ trực tiếp», danh sách ứng viên lọc chỉ role `Nhân viên` — không thêm
 > HTML mới nào, mọi chuỗi tiếng Việt trong nhãn là hằng số chương trình.
+>
+> **Cập nhật 2026-08-26 (vòng lần 3 — modal chi tiết cấp 1).** Gộp thông tin phân công thành
+> MỘT hàng flex (`buildPhanCongNhomHtml`, builder tự escape MỘT lần, nhận văn bản thô), tên công
+> việc con bỏ vào khung riêng, thêm nút bút chì SVG inline theo quyền. Toàn bộ ở
+> `web/assets/js/project-details.js` — file này KHÔNG thuộc bộ đếm của TC-SEC-17 (chỉ soát
+> `app.js`) nên pin giữ nguyên **78 chỗ / 550 giá trị**; mọi giá trị nội suy mới đều qua
+> `escapeHtml` / `escapeForInlineHandler`, sự kiện gắn bằng `addEventListener` (không dùng
+> onclick kèm dữ liệu), id dòng trong thuộc tính data-* đã escape.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
