@@ -72,7 +72,7 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
 
   it('TC-RPC-03: mỗi tên đã làm được đều khai đúng method + route REST', () => {
     const implemented = Object.entries(RPC_TABLE).filter(([, e]) => !e.notImplemented);
-    expect(implemented).toHaveLength(17);
+    expect(implemented).toHaveLength(27);
     for (const [name, entry] of implemented) {
       expect(entry.rest, name).toMatch(/^(GET|POST|PATCH|DELETE) \//);
       expect(typeof entry.handler, name).toBe('function');
@@ -84,8 +84,13 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(37);
     const pending = res.body.data.functions.filter((f) => !f.implemented);
-    expect(pending).toHaveLength(20);
-    expect(pending.map((f) => f.name)).toContain('getStaffList');
+    expect(pending).toHaveLength(10);
+    expect(pending.map((f) => f.name)).toContain('getProposals');
+    expect(pending.map((f) => f.name)).not.toContain('getStaffList');
+    expect(pending.map((f) => f.name)).not.toContain('addDepartmentWithAuth');
+    expect(pending.map((f) => f.name)).not.toContain('getDataForUser');
+    expect(pending.map((f) => f.name)).not.toContain('getInitialDataWithAuth');
+    expect(pending.map((f) => f.name)).not.toContain('getDepartmentContext');
   });
 });
 
@@ -105,14 +110,14 @@ describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
   });
 
   it('TC-RPC-07: tên chưa có nghiệp vụ ⇒ 501 + câu tiếng Việt gọi đúng tên chức năng', async () => {
-    const res = await rpc('getStaffList', []);
+    const res = await rpc('getProposals', []);
     expect(res.status).toBe(501);
     expect(res.body.ok).toBe(false);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toContain('Danh sách nhân sự');
+    expect(res.body.error.message).toContain('Danh sách đề nghị');
   });
 
-  it('TC-RPC-08: cả 20 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
+  it('TC-RPC-08: cả 10 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
     const pendingNames = Object.entries(RPC_TABLE)
       .filter(([, e]) => e.notImplemented)
       .map(([name]) => name);
@@ -195,10 +200,13 @@ describe('mở trang khi chưa đăng nhập — phải ra modal, không ra lỗ
     expect(res.body.data.success).toBeUndefined();
   });
 
-  it('TC-RPC-37: ĐÃ đăng nhập ⇒ vẫn 501, vì dữ liệu đầu trang mới là thứ còn thiếu thật', async () => {
+  it('TC-RPC-37: ĐÃ đăng nhập ⇒ gói đầu trang (success + user.name), không còn 501', async () => {
     const res = await rpc('getInitialDataWithAuth');
-    expect(res.status).toBe(501);
-    expect(res.body.error.message).toContain('Nạp dữ liệu đầu trang');
+    expect(res.status).toBe(200);
+    expect(res.body.data.success).toBe(true);
+    expect(res.body.data.user.name).toBe(admin.full_name);
+    expect(res.body.data.user.full_name).toBe(admin.full_name);
+    expect(res.body.data.requireLogin).toBeUndefined();
   });
 
   it('TC-RPC-38: đăng xuất rồi mở lại trang ⇒ lại về cờ đăng nhập, không kẹt ở lỗi', async () => {
@@ -338,6 +346,52 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     notes: 'Ghi chú',
     resultLinks: '[Bản nháp] https://a.vn/x?a=1,2\n[Bản cuối] https://b.vn/y',
     ...over,
+  });
+
+  it('TC-RPC-24b: addTaskWithAuth gửi level=2 (nút «+ công việc con») ⇒ cấp 2 không cha', async () => {
+    const data = await call('addTaskWithAuth', [
+      form({ name: 'Công việc con', level: '2', parent: '' }),
+    ]);
+    expect(data.taskId).toMatch(/^CV\d{3,}/);
+    const { rows } = await pool.query(
+      'SELECT code, level, parent_id FROM work_items WHERE code = $1',
+      [data.taskId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].level).toBe(2);
+    expect(rows[0].parent_id).toBeNull();
+  });
+
+  it('TC-RPC-24c: addTaskWithAuth gửi level=3 + parent (nút trên hàng cấp 2) ⇒ cấp 3 có cha', async () => {
+    const sub = await call('addTaskWithAuth', [form({ name: 'Nhóm con', level: '2', parent: '' })]);
+    const child = await call('addTaskWithAuth', [
+      form({ name: 'Nhiệm vụ trong nhóm', level: '3', parent: sub.taskId }),
+    ]);
+    const { rows } = await pool.query(
+      'SELECT i.code, i.level, p.code AS parent_code FROM work_items i LEFT JOIN work_items p ON p.id = i.parent_id WHERE i.code = $1',
+      [child.taskId]
+    );
+    expect(rows[0].level).toBe(3);
+    expect(rows[0].parent_code).toBe(sub.taskId);
+  });
+
+  it('TC-RPC-24d: Nhân viên gửi level=2 ⇒ 403, không tạo dòng — không nới §6', async () => {
+    const nv = await makeLoginUser({
+      code: 'NV002',
+      email: 'nv512@congty.vn',
+      role: 'Nhân viên',
+      full_name: 'Nhân viên 5.12',
+    });
+    const nvApi = client(app);
+    await nvApi.login(nv.email);
+    const res = await nvApi.post('/api/rpc/addTaskWithAuth', {
+      args: [form({ name: 'Cấp 2 lậu', level: '2', parent: '' })],
+    });
+    expect(res.status).toBe(403);
+    const { rows } = await pool.query(
+      "SELECT count(*)::int AS n FROM work_items WHERE name = 'Cấp 2 lậu'"
+    );
+    expect(rows[0].n).toBe(0);
   });
 
   it('TC-RPC-24: addTaskWithAuth — projectId là MÃ ⇒ vào workRef, textarea link tách theo DÒNG', async () => {

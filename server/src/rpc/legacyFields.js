@@ -29,6 +29,11 @@ export const COL = Object.freeze({
   P_APPROVER: 'Người duyệt',
   P_APPROVED_DATE: 'Ngày duyệt',
   P_REJECT_REASON: 'Lý do từ chối',
+  // Phân công ba lớp (005_phan_cong.sql) — khoá MỚI, không tồn tại trong bảng Sheets cũ nên
+  // đặt tên theo từ vựng hiện hành, không cần giữ tên cột cũ.
+  P_DEPT_ID: 'ID phòng',
+  P_SUP: 'Ban lãnh đạo kiểm soát',
+  P_LEADERS: 'Lãnh đạo phòng phụ trách',
   T_ID: 'Mã nhiệm vụ',
   T_PID: 'Mã dự án',
   T_NAME: 'Tên nhiệm vụ',
@@ -48,6 +53,8 @@ export const COL = Object.freeze({
   T_REMINDERS: 'Nhắc việc',
   T_LEVEL: 'Cấp',
   T_PARENT: 'Mã cha',
+  T_SUP: 'Ban lãnh đạo kiểm soát',
+  T_LEADERS: 'Lãnh đạo phòng phụ trách',
   T_APPROVAL: 'Trạng thái duyệt',
   T_APPROVER: 'Người duyệt',
   T_APPROVED_DATE: 'Ngày duyệt',
@@ -58,6 +65,24 @@ export const COL = Object.freeze({
   D_VICE: 'Email Phó phòng',
   D_ORDER: 'Thứ tự',
   D_NOTES: 'Ghi chú',
+  // id số trong bảng departments — option Phòng của form công việc PHẢI mang giá trị này vì
+  // projectFromLegacy ép numberOrUndefined (gửi mã PH01 vào là phòng bị bỏ im lặng). Khoá phải
+  // có ở CẢ HAI phía COL (client app.js) — test col-parity chốt.
+  D_DB_ID: 'ID phòng (DB)',
+  S_ID: 'Mã NV',
+  S_NAME: 'Họ tên',
+  S_EMAIL: 'Email',
+  S_POS: 'Chức vụ',
+  S_ROLE: 'Phân quyền',
+  S_PASSWORD: 'Mật khẩu',
+  S_DEPT: 'Phòng',
+  S_DEPT_ROLE: 'Vai trò phòng',
+  S_OBJECT_TYPE: 'Đối tượng',
+  S_NOTES: 'Ghi chú',
+  A_TIME: 'Thời gian',
+  A_ACTION: 'Hành động',
+  A_USER: 'Người thực hiện',
+  A_DETAILS: 'Chi tiết',
 });
 
 /** Trả về `undefined` (không phải `null`) để khoá không xuất hiện trong payload gửi cho route. */
@@ -74,6 +99,32 @@ function numberOrUndefined(value) {
 }
 
 /**
+ * Ô `<select>` tham chiếu (Phòng / Ban lãnh đạo kiểm soát): `""` là MỘT LỰA CHỌN («Công việc
+ * chung» / «Không chọn») nên phải thành `null` để PATCH xoá liên kết — server `idInput` cũng hiểu
+ * `null`/`""` = bỏ liên kết. Bỏ khoá (`undefined`) khi form không gửi trường: PATCH không được đổi
+ * gì chỉ vì không gửi. Bẫy 2026-08-26: `numberOrUndefined("")` trả `undefined` khiến «chọn lại
+ * Công việc chung» khi SỬA thành silent no-op — phòng cũ bị giữ lại.
+ */
+function idOrNullOrUndefined(value) {
+  if (value === '' || value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Ô "Lãnh đạo phòng phụ trách" của form là MỘT `<input type="hidden">` chứa các id phân tách
+ * dấu phẩy (checkbox cập nhật), vì `FormData` vòng lặp của `handleAdd` chỉ giữ giá trị cuối.
+ * `""` ⇒ `[]`: form luôn gửi trường này khi người dùng được sửa phân công — rỗng là chủ ý xoá hết.
+ */
+function leaderIdsFromForm(value) {
+  if (value === '' || value == null) return [];
+  return String(value)
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+/**
  * Payload GHI của `#project-form` → thân request `/api/v1/works`.
  *
  * Form chỉ có 6 trường (`name`, `description`, `manager`, `startDate`, `endDate`, `status`);
@@ -85,6 +136,15 @@ export function projectFromLegacy(data = {}) {
     name: pick(data, 'name'),
     description: pick(data, 'description'),
     managerName: pick(data, 'manager'),
+    // Ô phòng mới của form (yêu cầu 2026-08-26): value là ID SỐ (COL.D_DB_ID); `""` = «Công việc
+    // chung» ⇒ `null` (tạo: NULL; sửa: xoá phòng cũ). Thiếu khoá ⇒ không đổi.
+    departmentId: Object.hasOwn(data, 'departmentId')
+      ? idOrNullOrUndefined(data.departmentId)
+      : undefined,
+    supervisorId: Object.hasOwn(data, 'supervisorId')
+      ? idOrNullOrUndefined(data.supervisorId)
+      : undefined,
+    leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
     endDate: Object.hasOwn(data, 'endDate') ? dateOrNull(data.endDate) : undefined,
     status: pick(data, 'status'),
@@ -97,12 +157,19 @@ export function projectFromLegacy(data = {}) {
  * `projectId` của form là **mã** công việc (`CV001`) vì `<option value>` lấy từ `COL.P_ID`, nên
  * nó vào `workRef` chứ không vào một khoá id nào. `resultLinks` là một `<input>` duy nhất chứa
  * nhiều link phân tách bằng dòng mới hoặc dấu phẩy → REST nhận MẢNG.
+ *
+ * Việc 5.12: `#task-form` có hai ô ẩn `level` + `parent` (không phải `<select>` cho người dùng).
+ * Cấp suy ra từ chỗ bấm trên cây — thiếu `level` thì REST vẫn mặc định 3 như form «+ Thêm» cũ.
  */
 export function taskFromLegacy(data = {}) {
   const out = dropUndefined({
     name: pick(data, 'name'),
     description: pick(data, 'description'),
     assigneeName: pick(data, 'assignee'),
+    // Phân công ba lớp (005_phan_cong.sql): cấp 2 có cả hai ô; nhiệm vụ chỉ có leader — máy chủ
+    // chặn supervisor khác rỗng ở service nên cứ truyền nguyên những gì form gửi.
+    supervisorId: numberOrUndefined(pick(data, 'supervisorId')),
+    leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     status: pick(data, 'status'),
     priority: pick(data, 'priority'),
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
@@ -115,10 +182,37 @@ export function taskFromLegacy(data = {}) {
   });
   if (Object.hasOwn(data, 'projectId') && data.projectId !== '') out.workRef = data.projectId;
   if (Object.hasOwn(data, 'resultLinks')) out.resultLinks = splitLinks(data.resultLinks);
+  const level = numberOrUndefined(pick(data, 'level'));
+  if (level === 2 || level === 3) out.level = level;
+  if (Object.hasOwn(data, 'parent') || Object.hasOwn(data, 'parentRef')) {
+    const raw = Object.hasOwn(data, 'parent') ? data.parent : data.parentRef;
+    out.parentRef = raw === '' || raw == null ? null : raw;
+  }
   return out;
 }
 
-/** Payload GHI của modal phòng → thân request `/api/v1/departments` (Phase 6). */
+/**
+ * Payload GHI của `#staff-form` → thân request `/api/v1/users`.
+ *
+ * Form: `name`, `email`, `position`, `role` (nhãn form: Admin/Quản lý), `password`,
+ * `department` (tên phòng), `deptRole`, `objectType`, `notes`. Service lo ánh xạ vai trò
+ * và dò phòng theo tên — cầu RPC không tự đoán.
+ */
+export function staffFromLegacy(data = {}) {
+  return dropUndefined({
+    name: pick(data, 'name'),
+    email: pick(data, 'email'),
+    position: pick(data, 'position'),
+    role: pick(data, 'role'),
+    password: pick(data, 'password'),
+    department: pick(data, 'department'),
+    deptRole: pick(data, 'deptRole'),
+    objectType: pick(data, 'objectType'),
+    notes: pick(data, 'notes'),
+  });
+}
+
+/** Payload GHI của modal phòng → thân request `/api/v1/departments`. */
 export function departmentFromLegacy(data = {}) {
   return dropUndefined({
     name: pick(data, 'name'),
@@ -169,6 +263,7 @@ function dayOf(value) {
  */
 export function projectToLegacy(row, ctx = {}) {
   const deptNameById = ctx.deptNameById ?? new Map();
+  const nameById = ctx.nameById ?? new Map();
   return {
     [COL.P_ID]: row.code,
     [COL.P_NAME]: row.name ?? '',
@@ -178,6 +273,12 @@ export function projectToLegacy(row, ctx = {}) {
     [COL.P_END]: row.end_date ?? '',
     [COL.P_STATUS]: row.status ?? '',
     [COL.P_DEPT]: deptNameById.get(row.department_id) ?? '',
+    // Phân công ba lớp: id để form điền sẵn select, tên để modal chi tiết hiển thị.
+    [COL.P_DEPT_ID]: row.department_id ?? '',
+    [COL.P_SUP]: nameById.get(row.supervisor_id) ?? '',
+    supervisorId: row.supervisor_id ?? '',
+    [COL.P_LEADERS]: (row.leader_ids ?? []).map((id) => nameById.get(id) ?? `#${id}`).join(', '),
+    leaderIds: [...(row.leader_ids ?? [])],
     [COL.P_MANAGER_EMAIL]: ctx.emailById?.get(row.manager_id) ?? '',
     [COL.P_APPROVAL]: row.approval_status ?? '',
     [COL.P_APPROVER]: ctx.nameById?.get(row.approver_id) ?? '',
@@ -207,6 +308,13 @@ export function taskToLegacy(row, ctx = {}) {
     [COL.T_NAME]: row.name ?? '',
     [COL.T_DESC]: row.description ?? '',
     [COL.T_ASSIGNEE]: row.assignee_name ?? '',
+    // Phân công ba lớp: nhiệm vụ chỉ có "Lãnh đạo phòng phụ trách" (một người); cấp 2 có cả hai.
+    [COL.T_SUP]: ctx.nameById?.get(row.supervisor_id) ?? '',
+    supervisorId: row.supervisor_id ?? '',
+    [COL.T_LEADERS]: (row.leader_ids ?? [])
+      .map((id) => ctx.nameById?.get(id) ?? `#${id}`)
+      .join(', '),
+    leaderIds: [...(row.leader_ids ?? [])],
     [COL.T_ASSIGNEE_EMAIL]: ctx.emailById?.get(row.assignee_id) ?? '',
     [COL.T_STATUS]: row.status ?? '',
     [COL.T_PRIORITY]: row.priority ?? '',
@@ -250,4 +358,92 @@ export function remindersToLegacy(rows) {
   }));
 }
 
-export default { COL, projectToLegacy, taskToLegacy, remindersToLegacy };
+/**
+ * Dòng `users` → khoá `COL.S_*` mà `app.js` đọc (`staff[COL.S_NAME]`).
+ *
+ * `COL.S_PASSWORD` LUÔN chuỗi rỗng: giao diện cũ có cột đó vì Sheets lưu mật khẩu gần như
+ * thuần; máy chủ mới không được đưa băm ra ngoài dù chỉ một lần (cùng luật với `publicUser`).
+ */
+export function staffToLegacy(row, ctx = {}) {
+  const deptNameById = ctx.deptNameById ?? new Map();
+  return {
+    [COL.S_ID]: row.code,
+    [COL.S_NAME]: row.full_name ?? '',
+    [COL.S_EMAIL]: row.email ?? '',
+    [COL.S_POS]: row.position ?? '',
+    [COL.S_ROLE]: row.role ?? '',
+    [COL.S_PASSWORD]: '',
+    [COL.S_DEPT]: deptNameById.get(row.department_id) ?? '',
+    [COL.S_DEPT_ROLE]: row.dept_role ?? '',
+    [COL.S_OBJECT_TYPE]: row.object_type ?? '',
+    [COL.S_NOTES]: row.notes ?? '',
+  };
+}
+
+/**
+ * Dòng phòng → khoá `COL.D_*`.
+ *
+ * Nhận cả dòng CSDL (`sort_order`, email lấy từ `ctx.managerEmailsByDeptId`) lẫn hình REST
+ * (`sortOrder`, `directorEmails` / `headEmails` / `viceEmails`) để RPC và bootstrap dùng chung.
+ */
+export function departmentToLegacy(row, ctx = {}) {
+  const grouped = ctx.managerEmailsByDeptId?.get(row.id);
+  return {
+    // D_DB_ID = khoá chính số của `departments` — nguồn cho `<option>` phòng của form công việc.
+    [COL.D_DB_ID]: row.id ?? '',
+    [COL.D_ID]: row.code,
+    [COL.D_NAME]: row.name ?? '',
+    [COL.D_DIRECTOR]: joinEmails(row.directorEmails ?? grouped?.deputy_director),
+    [COL.D_HEAD]: joinEmails(row.headEmails ?? grouped?.head),
+    [COL.D_VICE]: joinEmails(row.viceEmails ?? grouped?.vice),
+    [COL.D_ORDER]: row.sortOrder ?? row.sort_order ?? 0,
+    [COL.D_NOTES]: row.notes ?? '',
+  };
+}
+
+function joinEmails(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(';');
+  if (value == null || value === '') return '';
+  return String(value);
+}
+
+/**
+ * Dòng `activity_logs` → khoá `COL.A_*` mà `renderActivity` đọc.
+ *
+ * `details` là jsonb tự do: hiện `code` nếu có (nhật ký cây/duyệt luôn ghi mã), không thì
+ * chuỗi JSON — `renderActivity` thoát HTML nên không phải lỗ XSS.
+ */
+export function activityToLegacy(row) {
+  return {
+    [COL.A_TIME]: row.created_at ?? '',
+    [COL.A_ACTION]: row.action ?? '',
+    [COL.A_USER]: row.actor_name ?? '',
+    [COL.A_DETAILS]: moTaNhatKy(row.details),
+  };
+}
+
+function moTaNhatKy(details) {
+  if (details == null || details === '') return '';
+  if (typeof details === 'string') return details;
+  if (typeof details === 'object' && details.code) {
+    return details.name ? `${details.code} — ${details.name}` : String(details.code);
+  }
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return '';
+  }
+}
+
+export default {
+  COL,
+  projectToLegacy,
+  taskToLegacy,
+  taskFromLegacy,
+  remindersToLegacy,
+  staffToLegacy,
+  staffFromLegacy,
+  departmentToLegacy,
+  departmentFromLegacy,
+  activityToLegacy,
+};

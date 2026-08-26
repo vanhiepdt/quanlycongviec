@@ -13,6 +13,13 @@ import { AppError } from '../../utils/errors.js';
 /** Tối thiểu 8 ký tự (§7 việc 1.7 · TC-AUTH-12). */
 export const MIN_PASSWORD_LENGTH = 8;
 
+/**
+ * Băm không khớp mật khẩu nào dùng được. Dùng cho (1) so giả khi email không tồn tại để thời
+ * gian trả lời không lộ email, và (2) tài khoản "Nhà cung cấp" không có mật khẩu — cột
+ * `password_hash` là NOT NULL nên phải có giá trị, nhưng không được đăng nhập được.
+ */
+export const UNUSABLE_HASH = '$2b$12$C6UzMDM.H6dfI/f/IKcEe.Xr0i4S0lCMDPl1oXCxHF2qHzKPDCJmC';
+
 // bcrypt chỉ dùng 72 byte đầu của mật khẩu và **âm thầm bỏ phần sau**. Chặn ở đây để không có
 // chuyện hai mật khẩu dài khác nhau lại cùng đăng nhập được.
 export const MAX_PASSWORD_BYTES = 72;

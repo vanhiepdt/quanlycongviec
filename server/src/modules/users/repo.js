@@ -4,6 +4,7 @@
 // Mọi hàm nhận `client` tuỳ chọn ở tham số đầu: truyền client của `withTransaction()` khi cần
 // nằm trong cùng một transaction, để trống thì dùng pool.
 import { pool } from '../../db/pool.js';
+import { buildInsert, buildUpdateSet, refToColumn } from '../../utils/sql.js';
 
 const db = (client) => client ?? pool;
 
@@ -14,9 +15,48 @@ const PUBLIC_COLUMNS = `
   department_id, dept_role, notes, is_active, must_change_password,
   created_at, updated_at`;
 
+/** Cột được phép ghi khi tạo/sửa. Tên cột chỉ đến từ đây, không bao giờ từ req.body. */
+export const WRITABLE = Object.freeze([
+  'full_name',
+  'email',
+  'position',
+  'role',
+  'object_type',
+  'department_id',
+  'dept_role',
+  'notes',
+  'is_active',
+  'must_change_password',
+]);
+
+/**
+ * Mã nhân sự kế tiếp: `NV001`, `NV002`... Sequence, không "đọc mã lớn nhất rồi +1".
+ * Bỏ qua mã đã có: test và seed chèn mã viết cứng (`NV001`) mà không nhích sequence
+ * (bẫy §13.5), nên lần `next_code` đầu dễ trùng.
+ */
+export async function nextUserCode(client = null) {
+  for (let i = 0; i < 50; i += 1) {
+    const { rows } = await db(client).query(`SELECT next_code('NV', 'seq_user_code') AS code`);
+    const code = rows[0].code;
+    const { rows: existing } = await db(client).query('SELECT 1 FROM users WHERE code = $1', [
+      code,
+    ]);
+    if (existing.length === 0) return code;
+  }
+  throw new Error('Không sinh được mã nhân sự mới');
+}
+
 /** Chuẩn hoá email người dùng nhập: cắt trắng hai đầu. Hoa/thường để `citext` lo (TC-AUTH-03). */
 export function normalizeEmail(value) {
   return String(value ?? '').trim();
+}
+
+/** Dò người dùng theo email (`citext`). Không trả `password_hash`. */
+export async function findByEmail(email, client = null) {
+  const { rows } = await db(client).query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE email = $1`, [
+    normalizeEmail(email),
+  ]);
+  return rows[0] ?? null;
 }
 
 /**
@@ -40,6 +80,48 @@ export async function findById(id, client = null) {
   return rows[0] ?? null;
 }
 
+export async function findByCode(code, client = null) {
+  const { rows } = await db(client).query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE code = $1`, [
+    String(code ?? ''),
+  ]);
+  return rows[0] ?? null;
+}
+
+/** Dò theo id số HOẶC mã (`NV001`) — xem `refToColumn`. Dùng cho mọi route có `:id`. */
+export async function findByRef(ref, client = null) {
+  const { column, value } = refToColumn(ref);
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users WHERE ${column} = $1`,
+    [value]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Toàn bộ người dùng, không có `password_hash`. Dùng cho gói đầu trang (việc 5.10) và danh sách
+ * nhân sự (việc 5.11): ai cũng được *đọc* người dùng (§6), nên không lọc theo phòng ở đây.
+ */
+export async function listAll(client = null) {
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users ORDER BY full_name, id`
+  );
+  return rows;
+}
+
+/**
+ * Toàn bộ người dùng thuộc MỘT TRONG CÁC vai cho trước — so khớp CHÍNH XÁC (bẫy `includes`
+ * 'admin', §13.5). Dùng để dựng danh sách ứng viên phân công (assignments/service.js).
+ */
+export async function listByRoles(roles, client = null) {
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users
+      WHERE role = ANY($1::text[])
+      ORDER BY full_name, id`,
+    [roles]
+  );
+  return rows;
+}
+
 /**
  * Dò người dùng theo HỌ TÊN. Phase 3 cần vì các API cây nhận `assigneeName` (chữ người dùng
  * gõ/dán từ bản cũ) chứ không phải id.
@@ -56,6 +138,17 @@ export async function findIdsByFullName(fullName, client = null) {
       WHERE lower(btrim(full_name)) = lower(btrim($1))
       ORDER BY id`,
     [name]
+  );
+  return rows;
+}
+
+/** Nhiều người theo danh sách id (dùng để hiện tên danh sách lãnh đạo phòng đã chọn). */
+export async function listByIds(ids, client = null) {
+  const clean = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n));
+  if (clean.length === 0) return [];
+  const { rows } = await db(client).query(
+    `SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ANY($1::bigint[]) ORDER BY id`,
+    [clean]
   );
   return rows;
 }
@@ -138,4 +231,65 @@ export async function updatePassword(id, passwordHash, client = null) {
     [id, passwordHash]
   );
   return rows[0] ?? null;
+}
+
+/**
+ * Tạo người dùng. `code` để trống thì tự sinh. `password_hash` bắt buộc — cột NOT NULL, không
+ * được để service quên. Cột này cố ý không nằm trong `WRITABLE`: chỉ hai hàm mật khẩu mới ghi.
+ */
+export async function insert(data, client = null) {
+  const code = data.code ?? (await nextUserCode(client));
+  const { columns, values, params } = buildInsert(WRITABLE, data, {
+    code,
+    password_hash: data.password_hash,
+  });
+  const { rows } = await db(client).query(
+    `INSERT INTO users (${columns.join(', ')}) VALUES (${params.join(', ')})
+     RETURNING ${PUBLIC_COLUMNS}`,
+    values
+  );
+  return rows[0];
+}
+
+/** Sửa người dùng. Không có cột nào cần ghi thì trả dòng hiện tại, không chạy UPDATE rỗng. */
+export async function update(id, patch, client = null) {
+  const { sets, values } = buildUpdateSet(WRITABLE, patch, 2);
+  if (sets.length === 0) return findById(id, client);
+  const { rows } = await db(client).query(
+    `UPDATE users SET ${sets.join(', ')} WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`,
+    [id, ...values]
+  );
+  return rows[0] ?? null;
+}
+
+/** Đổi băm mật khẩu (admin đặt lại). Không đụng `must_change_password` — service quyết. */
+export async function setPasswordHash(id, passwordHash, client = null) {
+  const { rows } = await db(client).query(
+    `UPDATE users SET password_hash = $2 WHERE id = $1 RETURNING ${PUBLIC_COLUMNS}`,
+    [id, passwordHash]
+  );
+  return rows[0] ?? null;
+}
+
+/** Xoá người dùng. Phiên và thông báo CASCADE; công việc/nhiệm vụ SET NULL. */
+export async function remove(id, client = null) {
+  const { rowCount } = await db(client).query('DELETE FROM users WHERE id = $1', [id]);
+  return rowCount;
+}
+
+/** Số người đang thuộc một phòng — chặn xoá phòng còn người (câu tiếng Việt của bản cũ). */
+export async function countByDepartmentId(departmentId, client = null) {
+  const { rows } = await db(client).query(
+    'SELECT count(*)::int AS n FROM users WHERE department_id = $1',
+    [departmentId]
+  );
+  return rows[0].n;
+}
+
+/** Đếm người theo vai — chặn xoá/hạ cấp admin cuối cùng. */
+export async function countByRole(role, client = null) {
+  const { rows } = await db(client).query('SELECT count(*)::int AS n FROM users WHERE role = $1', [
+    role,
+  ]);
+  return rows[0].n;
 }

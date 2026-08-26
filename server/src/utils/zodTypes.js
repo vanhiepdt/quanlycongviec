@@ -31,16 +31,24 @@ export const completionInput = z
     return Math.min(100, Math.max(0, Math.round(n)));
   });
 
-/** Id tham chiếu tới một dòng khác: số dương, hoặc `null` để bỏ liên kết. */
+/**
+ * Id tham chiếu tới một dòng khác: số dương, hoặc `null` để bỏ liên kết.
+ * Thiếu khoá (`undefined`) phải giữ `undefined` — PATCH không được hiểu là "xoá liên kết"
+ * chỉ vì người gọi không gửi trường đó (zod `.optional().transform` vẫn chạy với `undefined`).
+ */
 export const idInput = z
   .union([z.number(), z.string(), z.null()])
   .optional()
   .transform((v) => {
-    if (v === null || v === undefined || String(v).trim() === '') return null;
+    if (v === undefined) return undefined;
+    if (v === null || String(v).trim() === '') return null;
     const n = Number(v);
     return Number.isInteger(n) && n > 0 ? n : Number.NaN;
   })
-  .refine((v) => v === null || Number.isInteger(v), 'Mã tham chiếu không hợp lệ');
+  .refine(
+    (v) => v === undefined || v === null || Number.isInteger(v),
+    'Mã tham chiếu không hợp lệ'
+  );
 
 /** Chuỗi có cắt trắng hai đầu, giới hạn độ dài để không ai nhét 1MB vào một cột text. */
 export const text = (max = 500) => z.string().trim().max(max);

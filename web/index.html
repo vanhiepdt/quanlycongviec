@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Dự Án</title>
+    <title>Quản Lý Công Việc</title>
     <!-- Thư viện ngoài: TẢI VỀ web/assets/vendor/ (§7 việc 4.3). Không dùng CDN trên bản chạy
          thật — mất mạng ra ngoài là giao diện trắng, và mỗi CDN là một chỗ người khác chèn được
          mã vào trang của mình. -->
@@ -40,7 +40,7 @@
                 <div>
                     <h1>
                         <a href="<?= sheetUrl ?>" target="_blank" style="font-weight: 700;">
-                            Quản Lý Dự Án
+                            Quản Lý Công Việc
                         </a>
                     </h1>
                     <p class="text-xs text-gray-500">Quản lý thông minh</p>
@@ -115,7 +115,7 @@
                     class="w-8 h-8 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mr-3 transition-colors duration-200">
                     <i class="fas fa-folder-open ${getStatusIconClass(projectStatus)} text-sm"></i>
                 </div>
-                <span>Dự án</span>
+                <span>Công việc</span>
                 <div
                     class="ml-auto w-2 h-2 rounded-full bg-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 </div>
@@ -291,7 +291,7 @@
                             <i class="fas fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 text-xs"></i>
                             <input type="text" id="overview-project-filter" list="overview-project-list"
                                 class="w-80 pl-8 pr-8 py-2 text-sm border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all bg-transparent"
-                                placeholder="Lọc theo dự án..." autocomplete="off">
+                                placeholder="Lọc theo công việc..." autocomplete="off">
                             <datalist id="overview-project-list"></datalist>
                             <button type="button" id="clear-project-filter"
                                 class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 hidden transition-colors"
@@ -327,7 +327,7 @@
                             class="absolute right-0 mt-2 w-48 glass-card shadow-xl z-20">
                             <a href="#" id="quick-add-project" class="quick-add-item">
                                 <i class="fas fa-folder-plus text-purple-600"></i>
-                                <span>Dự án mới</span>
+                                <span>Công việc mới</span>
                             </a>
                             <a href="#" id="quick-add-task" class="quick-add-item">
                                 <i class="fas fa-plus-circle text-emerald-600"></i>
@@ -335,7 +335,7 @@
                             </a>
                             <a href="#" id="quick-add-staff" class="quick-add-item">
                                 <i class="fas fa-user-plus text-amber-600"></i>
-                                <span>Nhân viên mới</span>
+                                <span>Cán bộ mới</span>
                             </a>
                             <a href="#" id="quick-add-proposal" class="quick-add-item">
                                 <i class="fas fa-file-alt text-orange-600"></i>
@@ -389,7 +389,7 @@
                 <!-- Stats Cards - Enhanced with patterns -->
                 <div class="stats-container">
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <!-- Card 1: Tổng dự án -->
+                        <!-- Card 1: Tổng công việc -->
                         <div class="modern-stat-card group">
                             <div class="card-gradient bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700"></div>
                             <div class="card-content">
@@ -399,7 +399,7 @@
                                     </div>
                                     <div class="main-stat">
                                         <span class="stat-number" id="total-projects">-</span>
-                                        <span class="stat-label">Tổng dự án</span>
+                                        <span class="stat-label">Tổng công việc</span>
                                     </div>
                                 </div>
                                 <div class="card-details">
@@ -531,7 +531,7 @@
                     </div>
 
                     <div class="glass-card">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Phân bố tiến độ dự án</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Phân bố tiến độ công việc</h3>
                         <div class="relative h-64">
                             <canvas id="project-progress-chart"></canvas>
                             <div id="project-chart-message"
@@ -554,7 +554,7 @@
 
                     <!-- Row 2: Staff Performance, Timeline Progress, Project Comparison -->
                     <div class="glass-card">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Hiệu quả nhân viên</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Hiệu quả cán bộ</h3>
                         <div class="relative h-64">
                             <canvas id="staff-performance-chart"></canvas>
                             <div id="staff-chart-message"
@@ -576,7 +576,7 @@
                     </div>
 
                     <div class="glass-card">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-6">So sánh dự án</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">So sánh công việc</h3>
                         <div class="relative h-64">
                             <canvas id="project-comparison-chart"></canvas>
                             <div id="comparison-chart-message"
@@ -591,11 +591,11 @@
             <!-- Projects Section -->
             <div id="projects-section" class="section">
                 <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-2xl font-bold text-gray-900">Quản lý dự án</h3>
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý công việc</h3>
                     <div class="flex items-center space-x-3">
                         <!-- Search input mới -->
                         <div class="relative">
-                            <input type="text" id="projects-search" placeholder="Tìm kiếm dự án..."
+                            <input type="text" id="projects-search" placeholder="Tìm kiếm công việc..."
                                 class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
                         </div>
@@ -606,8 +606,17 @@
                             <option value="Hoàn thành">Hoàn thành</option>
                             <option value="Tạm dừng">Tạm dừng</option>
                         </select>
+                        <!-- Bộ lọc theo tháng (yêu cầu 4): chỉ hiện công việc PHỦ QUA tháng chọn -->
+                        <input type="month" id="projects-month-filter"
+                            class="px-3 py-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200"
+                            title="Chỉ hiện công việc phủ qua tháng này">
+                        <button id="projects-month-clear"
+                            class="px-3 py-2 text-sm text-gray-600 bg-white/70 border border-gray-200/50 rounded-xl hover:bg-gray-100 transition-colors duration-200"
+                            title="Bỏ lọc theo tháng">
+                            <i class="fas fa-eraser mr-1"></i>Bỏ lọc
+                        </button>
                         <button id="add-project-standalone" class="btn-primary">
-                            <i class="fas fa-plus mr-2"></i>Tạo dự án mới
+                            <i class="fas fa-plus mr-2"></i>Tạo công việc mới
                         </button>
                     </div>
                 </div>
@@ -650,7 +659,7 @@
                     </div>
                 </div>
                 <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div class="loading-card">Đang tải dự án...</div>
+                    <div class="loading-card">Đang tải công việc...</div>
                 </div>
             </div>
 
@@ -847,7 +856,7 @@
                                     <th class="border border-gray-200 px-4 py-1 text-center">
                                         <div class="flex items-center justify-center">
                                             <i class="fas fa-user text-green-500 mr-2"></i>
-                                            <span class="font-semibold text-green-600">NHÂN VIÊN</span>
+                                            <span class="font-semibold text-green-600">CÁN BỘ</span>
                                         </div>
                                     </th>
                                 </tr>
@@ -857,11 +866,11 @@
                                 <tr class="bg-blue-50">
                                     <td colspan="4"
                                         class="border border-gray-200 px-4 py-2 font-semibold text-blue-800 bg-blue-100">
-                                        <i class="fas fa-folder-open mr-2"></i>QUẢN LÝ DỰ ÁN
+                                        <i class="fas fa-folder-open mr-2"></i>QUẢN LÝ CÔNG VIỆC
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td class="border border-gray-200 px-4 py-1 text-sm">Tạo dự án mới</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Tạo công việc mới</td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
@@ -873,7 +882,7 @@
                                     </td>
                                 </tr>
                                 <tr class="bg-gray-50">
-                                    <td class="border border-gray-200 px-4 py-1 text-sm">Xem tất cả dự án</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Xem tất cả công việc</td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
@@ -885,7 +894,7 @@
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sửa/xóa dự án được phân công
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sửa/xóa công việc được phân công
                                     </td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
                                         <i class="fas fa-check text-green-500 text-lg"></i>
@@ -894,11 +903,11 @@
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
-                                        <div class="text-xs text-gray-500 mt-1">Chỉ sửa được trạng thái dự án</div>
+                                        <div class="text-xs text-gray-500 mt-1">Chỉ sửa được trạng thái công việc</div>
                                     </td>
                                 </tr>
                                 <tr class="bg-gray-50">
-                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sao chép dự án</td>
+                                    <td class="border border-gray-200 px-4 py-1 text-sm">Sao chép công việc</td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
@@ -926,7 +935,7 @@
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
-                                        <div class="text-xs text-gray-500 mt-1">Trong dự án được giao</div>
+                                        <div class="text-xs text-gray-500 mt-1">Trong công việc được giao</div>
                                     </td>
                                 </tr>
                                 <tr class="bg-gray-50">
@@ -938,7 +947,7 @@
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
-                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách dự án</div>
+                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách công việc</div>
                                     </td>
                                 </tr>
                                 <tr>
@@ -975,7 +984,7 @@
                                         <i class="fas fa-check text-green-500 text-lg"></i>
                                     </td>
                                     <td class="border border-gray-200 px-4 py-1 text-center">
-                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách dự án</div>
+                                        <div class="text-xs text-gray-500 mt-1">Nếu là người phụ trách công việc</div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -988,19 +997,24 @@
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-2xl font-bold text-gray-900">Sơ đồ Gantt</h3>
 
-                    <!-- Phần chọn ngày (3 tháng) -->
+                    <!-- Chọn THÁNG + NĂM xem (2026-08-26: thay «1/2/3 tháng» và «từ ngày – đến ngày»).
+                         Option nạp sẵn bằng JS (dongBoOThangNamGantt). -->
                     <div class="flex items-center space-x-3">
-                        <label class="text-sm text-gray-600">Từ:</label>
-                        <input type="date" id="gantt-start-date" class="form-input py-1 px-2 text-sm w-36">
-                        <label class="text-sm text-gray-600">Đến:</label>
-                        <input type="date" id="gantt-end-date" class="form-input py-1 px-2 text-sm w-36" readonly>
+                        <label class="text-sm text-gray-600">Xem:</label>
+                        <select id="gantt-month-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn tháng xem"></select>
+                        <select id="gantt-year-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn năm xem"></select>
                         <div id="current-period" class="font-semibold text-gray-700 px-2 hidden"></div>
                     </div>
 
-                    <!-- Bộ lọc và tìm kiếm -->
+                    <!-- Bộ lọc nhóm (việc 6.6/6.8), nhân viên, tìm kiếm -->
                     <div class="flex items-center space-x-3">
+                        <select id="gantt-group-by" class="form-select py-2 px-3 text-sm w-44">
+                            <option value="department">Nhóm theo Phòng</option>
+                            <option value="deputy">Nhóm theo Phó Giám đốc</option>
+                            <option value="assignee">Nhóm theo Người thực hiện</option>
+                        </select>
                         <select id="gantt-staff-filter" class="form-select py-2 px-3 text-sm w-44">
-                            <option value="">Tất cả nhân viên</option>
+                            <option value="">Tất cả cán bộ</option>
                         </select>
                         <div class="relative">
                             <input type="text" id="gantt-search" placeholder="Tìm kiếm..."
@@ -1019,7 +1033,7 @@
                             <div class="flex-1 gantt-days"></div>
                         </div>
 
-                        <!-- Danh sách dự án và nhiệm vụ -->
+                        <!-- Danh sách công việc và nhiệm vụ -->
                         <div id="gantt-items" class="relative">
                             <div class="loading-card py-16">Đang tải dữ liệu sơ đồ Gantt...</div>
                         </div>
@@ -1138,7 +1152,10 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260825"></script>
+    <script src="assets/js/app.js?v=20260826-70"></script>
+<!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
+<script src="assets/js/project-details.js?v=20260826-4"></script>
+
 </body>
 
 </html>

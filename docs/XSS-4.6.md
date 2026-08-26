@@ -16,6 +16,81 @@ Phase 4 là XSS, không phải nghiệp vụ.**
 Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean.html` cũ (56 dòng có nhắc
 `innerHTML`, trong đó có cả chỗ ĐỌC). Con số phải soát thật là **474**.
 
+> **Cập nhật Phase 5 (việc 5.6).** Nhãn vàng "Chờ duyệt" thêm 5 chỗ gọi `pendingApprovalBadge(...)`
+> vào ba hàm vẽ (`createProjectCard`, `renderTasks`, `createTaskTableRowSimple`,
+> `createTaskListItem`) ⇒ **481 giá trị**, vẫn **70 chỗ ghi HTML** (không thêm `innerHTML` nào).
+> Năm chỗ này nằm trong danh sách "cố ý không bọc" của `xss-guard.test.js`: hàm trả về HTML đã
+> thoát sẵn, bọc thêm là hiện thẻ ra dưới dạng chữ. Hành vi thoát của chính nó do
+> `tests/unit/pending-badge.test.js` canh.
+>
+> **Cập nhật Phase 5 (việc 5.12).** Nút «+ công việc con» thêm 17 giá trị nội suy ⇒ **498 giá trị**,
+> vẫn **70 chỗ ghi HTML**. Tám chỗ gọi `createSubworkFromWorkButtonHtml` /
+> `createTaskFromSubworkButtonHtml` xếp `HTML-LONG` (hàm `create*` trả HTML đã thoát sẵn; bọc thêm
+> là hiện thẻ ra chữ). Chín chỗ còn lại (`className`, `data-project-*`, `data-parent-id`, ô ẩn
+> `level`/`parent`) đi qua `escapeHtml`. Hành vi nút/ô ẩn do `tests/unit/subwork-button-ui.test.js`
+> canh.
+>
+> **Cập nhật Phase 6.** Gantt vẽ lại từ cây máy chủ + Tổng quan nạp 6 biểu đồ từ `/stats/charts`
+> thêm **4 chỗ ghi HTML** (`gantt-items` ×3, `.gantt-days` ×1) và **43 giá trị nội suy** ⇒
+> **74 chỗ / 541 giá trị**. Toàn bộ helper mới trả HTML đặt tên đúng quy ước BUILDER:
+> `createGanttToggleHtml`, `createGanttGroupRowHtml`, `createGanttWorkRowHtml`,
+> `createGanttSubRowHtml`, `createGanttTaskRowHtml`, `createGanttTreeHtml`,
+> `buildGanttCellHtml` (nhận VĂN BẢN thô, tự escape một lần — caller không escape trước),
+> `renderGanttDaysHtml`. Thuộc tính id/class phát sinh (`bodyId`, `domId`, `an`) và mọi số
+> đếm/ngày nội suy đều đi qua `escapeHtml`. Hành vi cắt-thanh/ngoài-khoảng/thu-gọn do
+> `tests/unit/gantt-ui.test.js` canh.
+>
+> **Cập nhật 2026-08-26 (tính năng phân công ba lớp).** Modal chi tiết viết lại thành file riêng
+> `web/assets/js/project-details.js` (nạp sau app.js, ghi đè `showProjectDetailsModal`) cùng khối
+> HTML phân công chèn vào form công việc/nhiệm vụ trong app.js: thêm **3 chỗ ghi HTML** và
+> **14 giá trị nội suy** ⇒ **77 chỗ / 555 giá trị**. Helper mới trả HTML đều đặt tên đúng quy ước
+> BUILDER: `buildDetailRowHtml`, `buildStatCardHtml`, `createSubworkDetailHtml`,
+> `buildSupervisorOptionsHtml`, `buildLeaderCheckboxesHtml`, `buildDeptIdOptions`; mọi id/name
+> người dùng nội suy đi qua `escapeHtml`/`escapeHtmlAttr`/`escapeForInlineHandler`. Pin canh bởi
+> TC-SEC-17.
+>
+> **Cập nhật 2026-08-26 (bổ sung — bỏ ô «Quản lý công việc»).** Ô chọn người quản lý trong form
+> tạo/sửa công việc bị cắt (thay bằng khối phân công ba lớp): mất **1 chỗ ghi HTML** (select) và
+> **5 giá trị nội suy**, đồng thời bớt 1 chỗ cờ `selected` cố ý không bọc (`text3` 3 → 2 chỗ,
+> xem TC-SEC-11) ⇒ **77 chỗ / 550 giá trị**. Lưu ý: pin chỉ đếm app.js; chuỗi HTML mới trong
+> `project-details.js` chưa thuộc bộ soát này (file ghi đè, sẽ soát riêng khi tách module).
+>
+> **Cập nhật 2026-08-26 (bẫy COL lần 2 — vẽ lại ô Phòng khi bối cảnh nạp trễ).** Form công việc
+> thêm **1 chỗ ghi HTML**: `deptSel.innerHTML = buildDeptIdOptions(…)` trong `createProjectModal`
+> — khi mở form trước khi `getDepartmentContext` kịp trả, context về là vẽ lại ô Phòng rồi mới
+> nạp phân công (chống ô phòng trống vĩnh viễn). `buildDeptIdOptions` là builder thoát đủ
+> (`escapeHtmlAttr` cho id số, `escapeHtml` cho tên phòng), không có giá trị nội suy mới
+> ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17).
+>
+> **Cập nhật 2026-08-26 (6 yêu cầu giao diện — lọc tháng, tạo nhiệm vụ gắn dự án, dòng Phòng).**
+> Thêm bộ lọc tháng ở mục Quản lý công việc: ô trống «không có công việc» giờ dựng có điều kiện,
+> kèm `escapeHtml(thangDangXem)`; thẻ công việc thêm dòng «Phòng:» với
+> `escapeHtml(project[COL.P_DEPT] || "Chưa gán")`; form nhiệm vụ thêm khối «Thuộc dự án»
+> (select dựng bằng `.map(...).join("")`, mọi giá trị đi qua `escapeHtml`) và ô Người thực hiện
+> ẩn/hiện theo cấp (giá trị hằng do mã sinh). Ô chọn phòng dựng lại bằng builder COL-an-toàn.
+> Ròng rã **+1 giá trị nội suy**, số chỗ ghi giữ 78 ⇒ **78 chỗ / 551 giá trị** (TC-SEC-17).
+>
+> **Cập nhật 2026-08-26 (vòng lần 3 — «Cán bộ trực tiếp»).** Option ứng viên của ô gán người
+> trong `createTaskModal` bỏ phần hiển thị email («Tên (email)» → «Tên»): xoá biến trung gian
+> `text4` cùng một nội suy `escapeHtml(text4)` ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17, −1 giá trị).
+> Nhãn ô đổi thành «Cán bộ trực tiếp», danh sách ứng viên lọc chỉ role `Nhân viên` — không thêm
+> HTML mới nào, mọi chuỗi tiếng Việt trong nhãn là hằng số chương trình.
+>
+> **Cập nhật 2026-08-26 (vòng lần 3 — modal chi tiết cấp 1).** Gộp thông tin phân công thành
+> MỘT hàng flex (`buildPhanCongNhomHtml`, builder tự escape MỘT lần, nhận văn bản thô), tên công
+> việc con bỏ vào khung riêng, thêm nút bút chì SVG inline theo quyền. Toàn bộ ở
+> `web/assets/js/project-details.js` — file này KHÔNG thuộc bộ đếm của TC-SEC-17 (chỉ soát
+> `app.js`) nên pin giữ nguyên **78 chỗ / 550 giá trị**; mọi giá trị nội suy mới đều qua
+> `escapeHtml` / `escapeForInlineHandler`, sự kiện gắn bằng `addEventListener` (không dùng
+> onclick kèm dữ liệu), id dòng trong thuộc tính data-* đã escape.
+>
+> **Cập nhật 2026-08-26 (Gantt xem theo tháng).** Giao diện Gantt thêm thẻ tooltip tự vẽ cho TÊN
+> dòng (`#tooltip-gantt`.innerHTML = `buildGanttHoverCardHtml` — builder escape trực tiếp từng
+> trường bằng `escapeHtml`) và ô Năm xoá option trước khi nạp lại; tên công việc/CV con/nhiệm vụ
+> nhúng JSON tooltip đã qua `escapeHtmlAttr` một lần (bộ soát ghi 3 giá trị cờ "trong-the" như
+> cờ selected) ⇒ **80 chỗ / 566 giá trị** (TC-SEC-17). Bộ Legacy còn lại của Gantt không còn đọc
+> hai ô ngày đã bỏ — dom-contract TC-DEAD-02 về trạng thái sạch.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |
@@ -104,7 +179,8 @@ cd server && npx vitest run tests/unit/xss-guard.test.js tests/unit/xss-escape.t
   `"` và `'` lồng nhau nên mọi mẫu kiểu `[^"']*$` đều trượt — đúng nhóm nguy hiểm nhất).
 - `tests/unit/xss-guard.test.js` (TC-SEC-10…20) — chốt: không còn lỗ nào ngoài 8 chỗ ở §4, mọi
   `on*` dùng `escapeForInlineHandler`, mọi `href/src` qua `safeUrl`, không có thuộc tính thiếu dấu
-  bao, và hai con số 70/474. TC-SEC-18…20 soát `tests/fixtures/xss-mau.js` — file có lỗ **đã biết**
+  bao, và hai con số 70/481 (474 của việc 4.6 + 5 nhãn vàng của việc 5.6). TC-SEC-18…20 soát
+  `tests/fixtures/xss-mau.js` — file có lỗ **đã biết**
   — để một bộ soát bị hỏng không thể báo "xanh" oan.
 - `tests/unit/xss-escape.test.js` (TC-SEC-21…34) — hành vi thật trong jsdom: đọc
   `getAttribute('onclick')` rồi **chạy** đoạn mã đó, đòn tấn công phải đến nơi dưới dạng dữ liệu và

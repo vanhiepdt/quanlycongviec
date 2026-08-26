@@ -39,6 +39,7 @@ export async function attachSession(req, res, next) {
       id: row.id,
       code: row.code,
       full_name: row.full_name,
+      name: row.full_name,
       email: row.email,
       position: row.position,
       role: row.role,

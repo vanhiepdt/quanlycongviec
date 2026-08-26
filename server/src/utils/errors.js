@@ -40,6 +40,11 @@ export const ERROR_STATUS = Object.freeze({
   TARGET_WORK_NOT_FOUND: 400, // TC-TREE-19 — công việc đích không tồn tại
   REMINDER_ON_SUBWORK: 409, // TC-TREE-28 — nhắc việc chỉ dành cho cấp 3
   DEPT_MISMATCH_WORK: 400, // TC-TREE-36 — đặt phòng khác phòng của công việc cha
+
+  // --- Phân công ba lớp (005_phan_cong.sql) -------------------------------------------------
+  // Nhiệm vụ chọn "Lãnh đạo phòng phụ trách" ngoài nguồn hợp lệ: không thuộc leader_ids của
+  // công việc con chứa nó và không thuộc nhóm Phó GĐ phụ trách phòng khi nằm dưới cha trực tiếp.
+  LEADER_NOT_IN_SOURCE: 400,
 });
 
 export class AppError extends Error {

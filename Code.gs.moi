@@ -3,6 +3,7 @@ var _cr = "Bản quyền thuộc về gsheets.vn",
   _qjii = [8, 7913, 36, 106, 59, 63, 51, 7819, 36, 106, 62, 34, 63, 7827, 41, 106, 60, 7819, 106, 45, 57, 34, 47, 47, 62, 57, 100, 60, 36],
   _iwruum = "7vv119ir",
   _cachedEmail = null,
+  _cachedEmailRaw = null,
   _licenseCache;
 const xorDecode = function (codes) {
     return codes.map(function (code) {
@@ -19,12 +20,24 @@ const xorDecode = function (codes) {
     return num = Math.imul(num ^ num >>> 16, 2246822507) ^ Math.imul(num2 ^ num2 >>> 13, 3266489909), num2 = Math.imul(num2 ^ num2 >>> 16, 2246822507) ^ Math.imul(num ^ num >>> 13, 3266489909), (4294967296 * (2097151 & num2) + (num >>> 0)).toString(36);
   },
   isValidLicenseKey = function (key) {
-    var decoded = xorDecode(_reed);
-    if (_cachedEmail === null) _cachedEmail = Session.getEffectiveUser().getEmail().toLowerCase();
-    return key === cyrb53Hash(_cachedEmail + decoded);
+    // Vá 23/08/2026 (§4.1 KE-HOACH-PHAT-TRIEN.md): chuẩn hoá email về chữ thường ở
+    // ĐÚNG MỘT CHỖ (getNormalizedEffectiveEmail) để hai bên hash cùng một chuỗi.
+    // Trước bản vá, hàm này hash email đã lowercase còn getLicenseState hash email
+    // nguyên văn -> hai hash lệch nhau -> 78 cổng kiểm tra đều trả undefined.
+    if (!key) return false;
+    var decoded = xorDecode(_reed),
+      email = getNormalizedEffectiveEmail();
+    if (!email) return false;
+    if (key === cyrb53Hash(email + decoded)) return true;
+    // Nhận cả key đã sinh từ email nguyên văn trước bản vá, để không phải kích hoạt lại.
+    return _cachedEmailRaw !== email && key === cyrb53Hash(_cachedEmailRaw + decoded);
   },
   getLicenseState = function () {
     // --- BẮT ĐẦU CHỈNH SỬA TỪ ĐÂY ---
+
+    // 0. Cache: hàm này được gọi ở 78 cổng kiểm tra trong một request. Không cache là
+    //    mỗi lần lại gọi PropertiesService + Session, rất chậm và tốn quota.
+    if (_licenseCache !== undefined) return _licenseCache;
 
     // 1. Kiểm tra phiên bản (bỏ chặn)
     if (isValidLicenseKey.toString().length < 40) return _licenseCache = false;
@@ -37,29 +50,42 @@ const xorDecode = function (codes) {
 
     // 2. Lấy key từ Properties hoặc tự động tạo cho user hiện tại
     var scriptProperties = PropertiesService.getScriptProperties(),
-      storedLk = scriptProperties.getProperty("_lk");
+      storedLk = scriptProperties.getProperty("_lk"),
+      email = getNormalizedEffectiveEmail();
 
-    // Nếu chưa có key trong property, tự động tạo cho user hiện tại để không cần nhập Key thủ công
-    if (!storedLk) {
-      var email = Session.getEffectiveUser().getEmail();
-      var decoded2 = xorDecode(_reed);
-      // Tạo hash tương ứng với email hiện tại
-      storedLk = cyrb53Hash(email + decoded2);
-    }
-    if (!storedLk) return _licenseCache = null; // Trường hợp email là null hoặc lỗi khác
+    // Không lấy được email thì không có gì để hash — trả null để cổng kiểm tra chặn.
+    if (!email) return _licenseCache = null;
 
-    // Kiểm tra lại tính hợp lệ (với key vừa tạo thì luôn đúng)
-    if (!isValidLicenseKey(storedLk)) {
-      var email = Session.getEffectiveUser().getEmail();
+    // Chưa có key, hoặc key trong Properties không khớp email hiện tại: tự sinh lại.
+    // Dùng CÙNG một email đã chuẩn hoá như isValidLicenseKey — đây là chỗ trước đây sai.
+    if (!storedLk || !isValidLicenseKey(storedLk)) {
       storedLk = cyrb53Hash(email + xorDecode(_reed));
     }
+    if (!storedLk) return _licenseCache = null;
     return _licenseCache = storedLk;
 
     // --- KẾT THÚC CHỈNH SỬA ---
   };
+/**
+ * Email của người đang chạy script, đã chuẩn hoá: trim + chữ thường.
+ * `_cachedEmailRaw` giữ bản nguyên văn để còn nhận được key sinh trước bản vá 23/08/2026.
+ * Cả isValidLicenseKey và getLicenseState đều phải gọi hàm này — hai bên hash cùng một
+ * chuỗi, lệch nhau một chữ hoa là toàn bộ backend im lặng trả undefined.
+ */
+function getNormalizedEffectiveEmail() {
+  if (_cachedEmail !== null) return _cachedEmail;
+  var raw = "";
+  try {
+    raw = Session.getEffectiveUser().getEmail() || "";
+  } catch (err) {
+    raw = "";
+  }
+  return _cachedEmailRaw = String(raw).trim(), _cachedEmail = _cachedEmailRaw.toLowerCase(), _cachedEmail;
+}
 function _activateKey(key) {
   if (!isValidLicenseKey(key)) return false;
-  return PropertiesService.getScriptProperties().setProperty("_lk", key), true;
+  // Xoá cache để lần gọi getLicenseState tiếp theo đọc lại key vừa ghi.
+  return PropertiesService.getScriptProperties().setProperty("_lk", key), _licenseCache = undefined, true;
 }
 function _getUrl() {
   return ScriptApp.getService().getUrl();
@@ -175,6 +201,8 @@ const PROJECT_DEPARTMENT_COLUMN_NAME = "Phòng",
   APPROVAL_REJECTED = "Từ chối",
   LEVEL_SUBWORK = 2,
   LEVEL_TASK = 3,
+  // Nhãn nhóm cho Nhiệm vụ (Cấp 3) không nằm trong Công việc con nào — xem getWorkTree.
+  UNASSIGNED_SUBWORK_LABEL = "(chưa gán công việc con)",
   NEW_PROJECT_COLUMNS = [PROJECT_DEPARTMENT_COLUMN_NAME, PROJECT_MANAGER_EMAIL_COLUMN_NAME, PROJECT_APPROVAL_COLUMN_NAME, PROJECT_APPROVER_COLUMN_NAME, PROJECT_APPROVED_DATE_COLUMN_NAME, PROJECT_REJECT_REASON_COLUMN_NAME],
   NEW_TASK_COLUMNS = [TASK_LEVEL_COLUMN_NAME, TASK_PARENT_ID_COLUMN_NAME, TASK_ASSIGNEE_EMAIL_COLUMN_NAME, TASK_APPROVAL_COLUMN_NAME, TASK_APPROVER_COLUMN_NAME, TASK_APPROVED_DATE_COLUMN_NAME];
 
@@ -236,20 +264,13 @@ function extractTasksFromProjectValues(values) {
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     if (!row) continue;
-    const projectTasksJson = row[projectTasksJsonIndex],
-      projectId = row[projectIdIndex];
-    if (projectTasksJson && typeof projectTasksJson === "string" && projectTasksJson.trim()) try {
-      const parsed = JSON.parse(projectTasksJson);
-      if (Array.isArray(parsed)) {
-        const mappedParsed = parsed.map(parsed2 => {
-          const data = {
-            ...parsed2
-          };
-          return data[TASK_PROJECT_ID_COLUMN_NAME] = projectId, data;
-        });
-        list = list.concat(mappedParsed);
-      }
-    } catch (err) {}
+    const projectId = row[projectIdIndex],
+      // parseTaskJson: một ô JSON hỏng trả [] chứ không throw — bản cũ dùng JSON.parse trong
+      // try/catch riêng, nay dồn về một chỗ để cả 2 đường đọc (fast + getTasks) xử lý giống nhau.
+      parsed = parseTaskJson(row[projectTasksJsonIndex]);
+    if (parsed.length === 0) continue;
+    // GĐ2: bơm "Cấp" = 3 và "Mã cha" = "" cho dữ liệu chưa chạy migrateV2, ép "Cấp" về Number.
+    list = list.concat(parsed.filter(item => item && typeof item === "object").map(item => normalizeTaskForOutput(item, projectId)));
   }
   return list;
 }
@@ -1600,6 +1621,205 @@ function getProjects() {
     return console.error("Error getting projects:", err), [];
   }
 }
+// ===== GĐ2: tiện ích cho cây 3 tầng nằm trong mảng "Nhiệm vụ JSON" =====
+// Nhắc lại kiến trúc: KHÔNG có sheet Nhiệm vụ rời. Cấp 2 (Công việc con) và Cấp 3
+// (Nhiệm vụ) nằm CÙNG một mảng JSON của đúng dòng công việc, phân biệt bằng "Cấp" và
+// "Mã cha". Vì vậy mọi phép kiểm tra cha–con chỉ cần một lần đọc ô JSON đó.
+
+/** Cấp của một phần tử JSON, luôn trả về SỐ 2 hoặc 3. Thiếu hoặc rác => 3 (Nhiệm vụ). */
+function getTaskLevel(task) {
+  return task && Number(task[TASK_LEVEL_COLUMN_NAME]) === LEVEL_SUBWORK ? LEVEL_SUBWORK : LEVEL_TASK;
+}
+/** Mã cha của một phần tử JSON, luôn trả về chuỗi đã trim. Thiếu => "". */
+function getTaskParentId(task) {
+  return task ? String(task[TASK_PARENT_ID_COLUMN_NAME] || "").trim() : "";
+}
+/**
+ * Bơm mặc định GĐ2 vào một phần tử JSON TRƯỚC KHI trả về frontend.
+ * Trả về bản COPY — không sửa mảng gốc, vì các hàm ghi dùng lại đúng mảng đó.
+ *
+ * - "Cấp" luôn là SỐ 2 hoặc 3. Dữ liệu chưa chạy migrateV2 (thiếu khoá) và dữ liệu lưu
+ *   dạng chuỗi ("3") đều về Number, nên frontend so sánh `=== 3` được mà không phải ép kiểu.
+ * - "Mã cha" luôn là chuỗi đã trim. Cấp 2 bị ép về "" vì cấp 2 không có cha.
+ * - "Mã dự án" bơm theo dòng công việc đang đọc, để cả cấp 2 và cấp 3 đều trỏ về gốc.
+ */
+function normalizeTaskForOutput(task, projectId) {
+  const data = {
+      ...task
+    },
+    level = getTaskLevel(task);
+  data[TASK_LEVEL_COLUMN_NAME] = level;
+  data[TASK_PARENT_ID_COLUMN_NAME] = level === LEVEL_SUBWORK ? "" : getTaskParentId(task);
+  if (projectId !== undefined) data[TASK_PROJECT_ID_COLUMN_NAME] = projectId;
+  return data;
+}
+/** Đọc mảng "Nhiệm vụ JSON" từ giá trị một ô. Rỗng hoặc JSON hỏng => [] (không throw). */
+function parseTaskJson(value) {
+  if (!value || typeof value !== "string" || value.trim() === "") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+/** Tìm một phần tử trong mảng JSON theo Mã nhiệm vụ. */
+function findTaskInList(list, taskId) {
+  const wanted = String(taskId || "").trim();
+  if (!wanted) return null;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && String(list[i][TASK_ID_COLUMN_NAME] || "").trim() === wanted) return list[i];
+  }
+  return null;
+}
+/** Mã của mọi phần tử đang nhận taskId làm cha (con trực tiếp). */
+function findTaskChildIds(list, taskId) {
+  const wanted = String(taskId || "").trim();
+  if (!wanted) return [];
+  return list.filter(item => getTaskParentId(item) === wanted).map(item => String(item[TASK_ID_COLUMN_NAME] || "").trim()).filter(item => item !== "");
+}
+/**
+ * Mã của MỌI con cháu của taskId trong cùng mảng JSON (không gồm chính nó).
+ * Dùng cho xoá đệ quy ở deleteTask.
+ *
+ * Duyệt theo tầng (BFS) thay vì gọi đệ quy: không tràn stack, và `seen` chặn lặp vô hạn nếu
+ * dữ liệu cũ đã trỏ vòng sẵn (A là cha B, B là cha A). Cây chỉ có 3 tầng nên thực tế chạy
+ * đúng 1 vòng, nhưng viết tổng quát để đổi cấp về sau không phải sửa lại.
+ */
+function collectTaskDescendantIds(list, taskId) {
+  const start = String(taskId || "").trim();
+  if (!start) return [];
+  const result = [],
+    seen = {};
+  seen[start] = true;
+  let frontier = [start],
+    guard = 0;
+  while (frontier.length > 0 && guard++ < 100) {
+    const next = [];
+    frontier.forEach(parentId => {
+      findTaskChildIds(list, parentId).forEach(childId => {
+        if (seen[childId]) return;
+        seen[childId] = true;
+        result.push(childId);
+        next.push(childId);
+      });
+    });
+    frontier = next;
+  }
+  return result;
+}
+/**
+ * Kiểm Mã cha đề xuất. Trả { ok: true, parentId } hoặc { ok: false, error }.
+ *
+ * - Cấp 2 bắt buộc để trống — cấp 2 là gốc cây con, dự án không có tầng thứ 4.
+ * - Cấp 3 để trống là hợp lệ: nhiệm vụ nằm thẳng trong công việc (toàn bộ dữ liệu cũ
+ *   sau migrateV2 đều ở dạng này).
+ * - Cấp 3 có Mã cha thì mã đó phải là một phần tử CẤP 2 trong CÙNG mảng.
+ * - Không được trỏ vào chính mình, cũng không được trỏ vào con cháu của chính mình
+ *   (đi ngược lên theo Mã cha để chặn vòng lặp; có bộ đếm chống dữ liệu đã hỏng sẵn).
+ */
+function validateTaskParent(list, level, parentId, selfId) {
+  const cleanParent = String(parentId === undefined || parentId === null ? "" : parentId).trim(),
+    self = String(selfId || "").trim();
+  if (level === LEVEL_SUBWORK) {
+    if (cleanParent === "") return {
+      ok: true,
+      parentId: ""
+    };
+    return {
+      ok: false,
+      error: "Công việc con (Cấp 2) không được có \"" + TASK_PARENT_ID_COLUMN_NAME + "\" — nó nằm trực tiếp trong công việc."
+    };
+  }
+  if (cleanParent === "") return {
+    ok: true,
+    parentId: ""
+  };
+  if (self && cleanParent === self) return {
+    ok: false,
+    error: "Không thể đặt chính nhiệm vụ này làm công việc con cha của nó."
+  };
+  const parent = findTaskInList(list, cleanParent);
+  if (!parent) return {
+    ok: false,
+    error: "Không tìm thấy công việc con có mã \"" + cleanParent + "\" trong công việc này."
+  };
+  if (getTaskLevel(parent) !== LEVEL_SUBWORK) return {
+    ok: false,
+    error: "\"" + cleanParent + "\" là Nhiệm vụ (Cấp 3), không thể làm cha. Chỉ Công việc con (Cấp 2) mới nhận con."
+  };
+  let cursor = parent,
+    guard = 0;
+  while (cursor && guard++ < 500) {
+    const cursorParent = getTaskParentId(cursor);
+    if (cursorParent === "") break;
+    if (self && cursorParent === self) return {
+      ok: false,
+      error: "Trỏ vòng lặp: \"" + cleanParent + "\" đang là con cháu của \"" + self + "\"."
+    };
+    cursor = findTaskInList(list, cursorParent);
+  }
+  return {
+    ok: true,
+    parentId: cleanParent
+  };
+}
+/** Email theo Họ tên trong sheet Người dùng. Tên trùng nhau hoặc không thấy => "". */
+function resolveStaffEmailByName(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return "";
+  const map = buildStaffNameEmailMap();
+  return map.duplicated[clean] ? "" : map.byName[clean] || "";
+}
+/** Ép "% hoàn thành" về số nguyên 0–100. Rỗng / không phải số => 0 (giữ hành vi cũ). */
+function parseTaskCompletion(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  const num = parseInt(value, 10);
+  return isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+}
+/**
+ * Email người thực hiện sau khi sửa. Dùng chung cho 2 nhánh của updateTask.
+ *
+ * - Frontend gửi thẳng `assigneeEmail` thì tin dùng luôn.
+ * - Họ tên KHÔNG đổi: giữ email cũ. Quan trọng vì buildStaffNameEmailMap đọc cả sheet
+ *   Người dùng — tra lại mỗi lần sửa là tốn quota vô ích; và email cũ có thể đã được sửa
+ *   tay trong sheet, tra lại sẽ ghi đè mất.
+ * - Họ tên ĐỔI: tra lại theo tên mới. Tên trùng nhau hoặc không có trong sheet thì trả ""
+ *   chứ KHÔNG giữ email cũ — email cũ là của người khác, giữ lại là gán sai người.
+ */
+function resolveTaskAssigneeEmail(task, taskData) {
+  if (taskData && taskData.assigneeEmail !== undefined && taskData.assigneeEmail !== null && String(taskData.assigneeEmail).trim() !== "") return normalizeEmail(taskData.assigneeEmail);
+  const oldName = String(task && task[TASK_ASSIGNEE_COLUMN_NAME] || "").trim(),
+    oldEmail = normalizeEmail(task && task[TASK_ASSIGNEE_EMAIL_COLUMN_NAME] || ""),
+    newName = taskData && taskData.assignee ? String(taskData.assignee).trim() : "";
+  if (newName === "") return "";
+  if (newName === oldName) return oldEmail !== "" ? oldEmail : resolveStaffEmailByName(newName);
+  return resolveStaffEmailByName(newName);
+}
+/**
+ * Ghi các trường form sửa được vào một phần tử JSON, tại chỗ.
+ *
+ * KHÔNG chạm "Mã nhiệm vụ", "Cấp", "Mã cha", "Email người thực hiện" và các khoá duyệt —
+ * những khoá đó do updateTask tự quyết định SAU khi kiểm hợp lệ. Nhờ vậy form gửi thiếu
+ * khoá cũng không làm mất dữ liệu cây 3 tầng.
+ */
+function applyTaskFieldsFromInput(task, taskData) {
+  task[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim();
+  task[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "";
+  task[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "";
+  task[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình";
+  task[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate));
+  task[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate));
+  task[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu";
+  task[TASK_COMPLETION_COLUMN_NAME] = parseTaskCompletion(taskData.completion);
+  task[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate));
+  task[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "";
+  task[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "";
+  task[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "";
+  task[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "";
+  if (!task[TASK_REMINDERS_COLUMN_NAME]) task[TASK_REMINDERS_COLUMN_NAME] = [];
+  return task;
+}
 function addTask(taskData) {
   var licenseKey = getLicenseState();
   if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
@@ -1626,17 +1846,16 @@ function addTask(taskData) {
       success: false,
       error: "Mã dự án \"" + taskData.projectId + "\" không tồn tại."
     };
-    const range = projectSheet.getRange(foundRow.rowNumber, projectTasksJsonIndex + 1);
-    let list = [];
-    try {
-      const value = range.getValue();
-      value && typeof value === "string" && (list = JSON.parse(value));
-    } catch (err) {
-      list = [];
-    }
-    const list2 = list || [],
-      list2Length = list2.length,
-      newTaskId = generateTaskIdForProject(taskData.projectId, list2Length),
+    const range = projectSheet.getRange(foundRow.rowNumber, projectTasksJsonIndex + 1),
+      list = parseTaskJson(range.getValue()),
+      // GĐ2: 2 = Công việc con, 3 = Nhiệm vụ. Không truyền level => 3, đúng như hành vi cũ.
+      level = Number(taskData.level) === LEVEL_SUBWORK ? LEVEL_SUBWORK : LEVEL_TASK,
+      parentCheck = validateTaskParent(list, level, taskData.parentId, null);
+    if (!parentCheck.ok) return {
+      success: false,
+      error: parentCheck.error
+    };
+    const newTaskId = generateTaskIdForProject(taskData.projectId, list.length),
       data = {};
     data[TASK_ID_COLUMN_NAME] = newTaskId, data[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), data[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", data[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", data[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", data[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", data[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), data[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate));
     let num = 0;
@@ -1644,9 +1863,30 @@ function addTask(taskData) {
       const num2 = parseInt(taskData.completion, 10);
       !isNaN(num2) && (num = Math.max(0, Math.min(100, num2)));
     }
-    return data[TASK_COMPLETION_COLUMN_NAME] = num, data[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), data[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", data[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", data[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", data[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", data[TASK_REMINDERS_COLUMN_NAME] = [], list.push(data), range.setValue(formatJSONCompact(list)), SpreadsheetApp.flush(), logActivity("Thêm nhiệm vụ", "Tên: " + taskData.name + ", Giao cho: " + (taskData.assignee || "N/A") + ", ID: " + newTaskId, taskData.projectId), {
+    data[TASK_COMPLETION_COLUMN_NAME] = num;
+    data[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate));
+    data[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "";
+    data[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "";
+    data[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "";
+    data[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "";
+    data[TASK_REMINDERS_COLUMN_NAME] = [];
+    // GĐ2: hai khoá quyết định cây 3 tầng. Ghi cả khi Cấp 3 để dữ liệu mới không phụ
+    // thuộc vào việc getTasks có bơm mặc định hay không.
+    data[TASK_LEVEL_COLUMN_NAME] = level;
+    data[TASK_PARENT_ID_COLUMN_NAME] = parentCheck.parentId;
+    // Khoá email (GĐ1). Trạng thái duyệt đặt "Đã duyệt" cho khớp dữ liệu sau migrateV2;
+    // GĐ4 mới đổi thành "Chờ duyệt" khi người tạo là Trưởng/Phó phòng.
+    data[TASK_ASSIGNEE_EMAIL_COLUMN_NAME] = taskData.assigneeEmail ? normalizeEmail(taskData.assigneeEmail) : resolveStaffEmailByName(taskData.assignee);
+    data[TASK_APPROVAL_COLUMN_NAME] = APPROVAL_APPROVED;
+    list.push(data);
+    range.setValue(formatJSONCompact(list));
+    SpreadsheetApp.flush();
+    logActivity(level === LEVEL_SUBWORK ? "Thêm công việc con" : "Thêm nhiệm vụ", "Tên: " + taskData.name + ", Giao cho: " + (taskData.assignee || "N/A") + ", ID: " + newTaskId + (parentCheck.parentId ? ", thuộc công việc con: " + parentCheck.parentId : ""), taskData.projectId);
+    return {
       success: true,
-      taskId: newTaskId
+      taskId: newTaskId,
+      level: level,
+      parentId: parentCheck.parentId
     };
   } catch (err) {
     return console.error("Error adding task:", err), {
@@ -1670,7 +1910,8 @@ function updateTask(taskId, taskData) {
       projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME),
       projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME);
     if (projectTasksJsonIndex === -1) throw new Error("Không tìm thấy cột \"" + PROJECT_TASKS_JSON_COLUMN_NAME + "\".");
-    if (!taskId) return {
+    const wantedId = String(taskId || "").trim();
+    if (!wantedId) return {
       success: false,
       error: "ID nhiệm vụ không được cung cấp."
     };
@@ -1687,72 +1928,118 @@ function updateTask(taskId, taskData) {
       success: false,
       error: "Không tìm thấy nhiệm vụ."
     };
-    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-    let text = null,
-      sourceProjectId = null,
+    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues(),
+      targetProjectId = String(taskData.projectId).trim();
+    let sourceRowNumber = null,
+      sourceProjectId = "",
       taskIndex = -1,
       list = [];
     for (let i = 0; i < values.length; i++) {
-      const value = values[i],
-        projectId = value[projectIdIndex],
-        projectTasksJson = value[projectTasksJsonIndex];
-      try {
-        if (projectTasksJson && typeof projectTasksJson === "string") {
-          const parsed = JSON.parse(projectTasksJson),
-            parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
-          if (parsedIndex !== -1) {
-            text = i + 2, sourceProjectId = projectId, taskIndex = parsedIndex, list = parsed;
-            break;
-          }
-        }
-      } catch (err) {
-        continue;
-      }
+      const parsed = parseTaskJson(values[i][projectTasksJsonIndex]);
+      if (parsed.length === 0) continue;
+      const parsedIndex = parsed.findIndex(item => item && String(item[TASK_ID_COLUMN_NAME] || "").trim() === wantedId);
+      if (parsedIndex === -1) continue;
+      sourceRowNumber = i + 2;
+      sourceProjectId = projectIdIndex === -1 ? "" : String(values[i][projectIdIndex] || "").trim();
+      taskIndex = parsedIndex;
+      list = parsed;
+      break;
     }
-    if (!text) return {
+    if (!sourceRowNumber) return {
       success: false,
-      error: "Không tìm thấy nhiệm vụ ID: " + taskId
+      error: "Không tìm thấy nhiệm vụ ID: " + wantedId
     };
-    if (sourceProjectId !== taskData.projectId) {
-      list.splice(taskIndex, 1), projectSheet.getRange(text, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list));
-      let text2 = null,
-        list2 = [];
-      for (let i = 0; i < values.length; i++) {
-        if (String(values[i][projectIdIndex]).trim() === String(taskData.projectId).trim()) {
-          text2 = i + 2;
-          const projectTasksJson = values[i][projectTasksJsonIndex];
-          try {
-            if (projectTasksJson && typeof projectTasksJson === "string") list2 = JSON.parse(projectTasksJson);
-          } catch (err) {}
-          break;
-        }
-      }
-      if (!text2) return {
+    const task = list[taskIndex],
+      level = getTaskLevel(task),
+      childIds = findTaskChildIds(list, wantedId),
+      // Tính TRƯỚC khi applyTaskFieldsFromInput ghi đè "Người thực hiện": hàm này cần so
+      // họ tên cũ với họ tên mới để quyết định có tra lại sheet Người dùng hay không.
+      nextAssigneeEmail = resolveTaskAssigneeEmail(task, taskData);
+    // GĐ2 — KHÔNG cho đổi "Cấp". Đổi cấp là di chuyển cây: 3 → 2 phải gỡ "Mã cha", 2 → 3
+    // phải xử lý cả đàn con. Để giai đoạn sau. Báo lỗi rõ chứ không bỏ qua im lặng, để
+    // frontend gửi sai còn biết mà sửa.
+    if (taskData.level !== undefined && taskData.level !== null && taskData.level !== "" && Number(taskData.level) !== level) return {
+      success: false,
+      error: "Không thể đổi \"" + TASK_LEVEL_COLUMN_NAME + "\" của mục đã tạo (đang là " + level + ", yêu cầu " + Number(taskData.level) + "). Hãy xoá rồi tạo lại ở cấp mong muốn."
+    };
+    if (sourceProjectId !== targetProjectId) {
+      // Chuyển sang công việc khác. Cấp 2 đang có con thì CHẶN: đàn con nằm trong mảng JSON
+      // của công việc cũ, chuyển riêng cha đi là chúng thành mồ côi ngay.
+      if (level === LEVEL_SUBWORK && childIds.length > 0) return {
         success: false,
-        error: "Không tìm thấy dự án mới ID: " + taskData.projectId
+        error: "Không thể chuyển \"" + (task[TASK_NAME_COLUMN_NAME] || wantedId) + "\" sang công việc khác vì đang có " + childIds.length + " nhiệm vụ con. Hãy chuyển hoặc xoá các nhiệm vụ con trước."
       };
-      const newTaskId = generateTaskIdForProject(taskData.projectId, list2.length);
-      let num2 = 0;
-      if (taskData.completion !== undefined && taskData.completion !== null && taskData.completion !== "") {
-        const num3 = parseInt(taskData.completion, 10);
-        !isNaN(num3) && (num2 = Math.max(0, Math.min(100, num3)));
+      // Tìm dòng đích TRƯỚC khi gỡ khỏi dòng nguồn. Bản cũ gỡ trước rồi mới tìm, nên mã công
+      // việc đích không tồn tại là mất hẳn nhiệm vụ — nó đã bị ghi ra khỏi sheet.
+      let targetRowNumber = null,
+        targetList = [];
+      for (let i = 0; i < values.length; i++) {
+        if (projectIdIndex === -1 || String(values[i][projectIdIndex] || "").trim() !== targetProjectId) continue;
+        targetRowNumber = i + 2;
+        targetList = parseTaskJson(values[i][projectTasksJsonIndex]);
+        break;
       }
-      const data = {};
-      return data[TASK_ID_COLUMN_NAME] = newTaskId, data[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), data[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", data[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", data[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", data[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), data[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate)), data[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", data[TASK_COMPLETION_COLUMN_NAME] = num2, data[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), data[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", data[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", data[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", data[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", data[TASK_REMINDERS_COLUMN_NAME] = list[taskIndex] ? list[taskIndex][TASK_REMINDERS_COLUMN_NAME] || [] : [], list2.push(data), projectSheet.getRange(text2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list2)), SpreadsheetApp.flush(), logActivity("Chuyển nhiệm vụ", "ID: " + taskId + " → " + newTaskId + ", Tên: " + taskData.name + ", Từ " + sourceProjectId + " sang " + taskData.projectId, taskData.projectId), {
+      if (!targetRowNumber) return {
+        success: false,
+        error: "Không tìm thấy dự án mới ID: " + targetProjectId
+      };
+      const newTaskId = generateTaskIdForProject(targetProjectId, targetList.length),
+        droppedParent = getTaskParentId(task),
+        // Copy cả object rồi mới ghi đè: giữ nguyên nhắc việc, trạng thái duyệt, "Cấp" và mọi
+        // khoá lạ. Bản cũ dựng object mới từ danh sách trắng nên mất hết khoá GĐ1–GĐ4.
+        moved = {
+          ...task
+        };
+      applyTaskFieldsFromInput(moved, taskData);
+      moved[TASK_ID_COLUMN_NAME] = newTaskId;
+      moved[TASK_PROJECT_ID_COLUMN_NAME] = targetProjectId;
+      moved[TASK_LEVEL_COLUMN_NAME] = level;
+      // "Mã cha" chỉ có nghĩa trong mảng của MỘT công việc. Sang công việc khác thì bỏ trống,
+      // nhiệm vụ nằm thẳng trong công việc mới; người dùng gán lại cha nếu muốn.
+      moved[TASK_PARENT_ID_COLUMN_NAME] = "";
+      moved[TASK_ASSIGNEE_EMAIL_COLUMN_NAME] = nextAssigneeEmail;
+      list.splice(taskIndex, 1);
+      targetList.push(moved);
+      projectSheet.getRange(sourceRowNumber, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list));
+      projectSheet.getRange(targetRowNumber, projectTasksJsonIndex + 1).setValue(formatJSONCompact(targetList));
+      SpreadsheetApp.flush();
+      logActivity(level === LEVEL_SUBWORK ? "Chuyển công việc con" : "Chuyển nhiệm vụ", "ID: " + wantedId + " → " + newTaskId + ", Tên: " + moved[TASK_NAME_COLUMN_NAME] + ", Từ " + sourceProjectId + " sang " + targetProjectId + (droppedParent ? ", đã bỏ " + TASK_PARENT_ID_COLUMN_NAME + " " + droppedParent : ""), targetProjectId);
+      return {
         success: true,
         updated: true,
-        newTaskId: newTaskId
+        moved: true,
+        newTaskId: newTaskId,
+        level: level,
+        parentId: "",
+        parentCleared: droppedParent !== ""
       };
     }
-    let num = 0;
-    if (taskData.completion !== undefined && taskData.completion !== null && taskData.completion !== "") {
-      const num2 = parseInt(taskData.completion, 10);
-      !isNaN(num2) && (num = Math.max(0, Math.min(100, num2)));
+    // Cùng công việc: sửa tại chỗ.
+    let parentId = getTaskParentId(task);
+    if (taskData.parentId !== undefined && taskData.parentId !== null) {
+      // Cho đổi "Mã cha", nhưng phải qua validateTaskParent: chặn trỏ vào chính mình, trỏ vào
+      // con cháu của mình (vòng lặp), trỏ vào mã không tồn tại, và chặn lấy Cấp 3 làm cha.
+      const parentCheck = validateTaskParent(list, level, taskData.parentId, wantedId);
+      if (!parentCheck.ok) return {
+        success: false,
+        error: parentCheck.error
+      };
+      parentId = parentCheck.parentId;
     }
-    const task = list[taskIndex];
-    return task[TASK_NAME_COLUMN_NAME] = String(taskData.name).trim(), task[TASK_DESC_COLUMN_NAME] = taskData.description ? String(taskData.description).trim() : "", task[TASK_ASSIGNEE_COLUMN_NAME] = taskData.assignee ? String(taskData.assignee).trim() : "", task[TASK_PRIORITY_COLUMN_NAME] = taskData.priority || "Trung bình", task[TASK_START_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.startDate)), task[TASK_DUE_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.dueDate)), task[TASK_STATUS_COLUMN_NAME] = taskData.status || "Chưa bắt đầu", task[TASK_COMPLETION_COLUMN_NAME] = num, task[TASK_REPORT_DATE_COLUMN_NAME] = formatSheetDate(parseDate(taskData.reportDate)), task[TASK_TARGET_COLUMN_NAME] = taskData.target ? String(taskData.target).trim() : "", task[TASK_RESULT_LINKS_COLUMN_NAME] = taskData.resultLinks ? String(taskData.resultLinks).trim() : "", task[TASK_OUTPUT_COLUMN_NAME] = taskData.output ? String(taskData.output).trim() : "", task[TASK_NOTES_COLUMN_NAME] = taskData.notes ? String(taskData.notes).trim() : "", !task[TASK_REMINDERS_COLUMN_NAME] && (task[TASK_REMINDERS_COLUMN_NAME] = []), projectSheet.getRange(text, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list)), SpreadsheetApp.flush(), logActivity("Cập nhật nhiệm vụ", "ID: " + taskId + ", Tên: " + taskData.name, taskData.projectId), {
+    applyTaskFieldsFromInput(task, taskData);
+    task[TASK_LEVEL_COLUMN_NAME] = level;
+    task[TASK_PARENT_ID_COLUMN_NAME] = level === LEVEL_SUBWORK ? "" : parentId;
+    task[TASK_ASSIGNEE_EMAIL_COLUMN_NAME] = nextAssigneeEmail;
+    projectSheet.getRange(sourceRowNumber, projectTasksJsonIndex + 1).setValue(formatJSONCompact(list));
+    SpreadsheetApp.flush();
+    logActivity(level === LEVEL_SUBWORK ? "Cập nhật công việc con" : "Cập nhật nhiệm vụ", "ID: " + wantedId + ", Tên: " + task[TASK_NAME_COLUMN_NAME] + (parentId ? ", " + TASK_PARENT_ID_COLUMN_NAME + ": " + parentId : ""), targetProjectId);
+    return {
       success: true,
-      updated: true
+      updated: true,
+      taskId: wantedId,
+      level: level,
+      parentId: level === LEVEL_SUBWORK ? "" : parentId,
+      childCount: childIds.length
     };
   } catch (err) {
     return console.error("Error updating task " + taskId + ":", err), {
@@ -1786,25 +2073,39 @@ function deleteTask(taskId) {
       error: "Không tìm thấy nhiệm vụ."
     };
     const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    const wantedId = String(taskId).trim();
     for (let i = 0; i < values.length; i++) {
-      const value = values[i],
-        projectTasksJson = value[projectTasksJsonIndex],
-        projectId = value[projectIdIndex];
-      try {
-        if (projectTasksJson && typeof projectTasksJson === "string") {
-          let parsed = JSON.parse(projectTasksJson);
-          const parsedIndex = parsed.findIndex(parsed2 => parsed2[TASK_ID_COLUMN_NAME] === taskId);
-          if (parsedIndex !== -1) {
-            const parsed2 = parsed[parsedIndex],
-              task = parsed2[TASK_NAME_COLUMN_NAME] || taskId;
-            return parsed.splice(parsedIndex, 1), projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(parsed)), SpreadsheetApp.flush(), logActivity("Xóa nhiệm vụ", "ID: " + taskId + ", Tên: " + task, projectId), {
-              success: true
-            };
-          }
-        }
-      } catch (err) {
-        continue;
-      }
+      const list = parseTaskJson(values[i][projectTasksJsonIndex]);
+      if (list.length === 0) continue;
+      const targetIndex = list.findIndex(item => item && String(item[TASK_ID_COLUMN_NAME] || "").trim() === wantedId);
+      if (targetIndex === -1) continue;
+      const projectId = projectIdIndex === -1 ? null : values[i][projectIdIndex],
+        target = list[targetIndex],
+        targetName = target[TASK_NAME_COLUMN_NAME] || wantedId,
+        level = getTaskLevel(target),
+        // GĐ2 — XOÁ ĐỆ QUY. Xoá một Công việc con (Cấp 2) thì mọi Nhiệm vụ (Cấp 3) trỏ
+        // "Mã cha" về nó phải đi theo: cấp 2 và cấp 3 nằm CÙNG mảng JSON này, để lại là
+        // thành mồ côi — getWorkTree sẽ gom vào nhóm "(chưa gán công việc con)" và người
+        // dùng thấy nhiệm vụ lơ lửng không hiểu từ đâu ra.
+        deletedChildren = collectTaskDescendantIds(list, wantedId),
+        removeSet = {};
+      removeSet[wantedId] = true;
+      deletedChildren.forEach(childId => removeSet[childId] = true);
+      // Lọc một lượt thay vì splice nhiều lần — splice trong lúc lặp là lệch chỉ số.
+      const kept = list.filter(item => !removeSet[String(item && item[TASK_ID_COLUMN_NAME] || "").trim()]);
+      projectSheet.getRange(i + 2, projectTasksJsonIndex + 1).setValue(formatJSONCompact(kept));
+      SpreadsheetApp.flush();
+      logActivity(level === LEVEL_SUBWORK ? "Xóa công việc con" : "Xóa nhiệm vụ", "ID: " + wantedId + ", Tên: " + targetName + (deletedChildren.length > 0 ? ", xoá kèm " + deletedChildren.length + " nhiệm vụ con: " + deletedChildren.join(", ") : ""), projectId);
+      // deletedChildren trả về cho frontend để nó biết đã mất thêm những gì mà cập nhật state
+      // (removeOptimisticUpdate cho từng mã con) và hiện thông báo đúng số lượng.
+      return {
+        success: true,
+        taskId: wantedId,
+        level: level,
+        projectId: projectId,
+        deletedChildren: deletedChildren,
+        deletedCount: 1 + deletedChildren.length
+      };
     }
     return {
       success: false,
@@ -2056,27 +2357,96 @@ function getTasks() {
     if (projectTasksJsonIndex === -1) return [];
     const lastRow = projectSheet.getLastRow();
     if (lastRow < 2) return [];
+    // Một lần đọc cho CẢ hai cột. Bản cũ gọi thêm getRange().getValue() một lần MỖI dòng chỉ
+    // để lấy "Mã dự án" — sheet 200 công việc là 200 lượt gọi API, chậm và tốn quota.
+    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
     let list = [];
-    const range = projectSheet.getRange(2, projectTasksJsonIndex + 1, lastRow - 1, 1),
-      values = range.getValues();
-    return values.forEach((value, index) => {
-      const value2 = value[0];
-      if (value2 && typeof value2 === "string") {
-        const parsed = JSON.parse(value2);
-        if (Array.isArray(parsed)) {
-          const value3 = projectSheet.getRange(index + 2, projectIdIndex + 1).getValue(),
-            mappedParsed = parsed.map(parsed2 => ({
-              ...parsed2,
-              [TASK_PROJECT_ID_COLUMN_NAME]: value3
-            }));
-          list = list.concat(mappedParsed);
-        }
-      }
-    }), list;
+    for (let i = 0; i < values.length; i++) {
+      const projectId = projectIdIndex === -1 ? "" : values[i][projectIdIndex],
+        // parseTaskJson thay cho JSON.parse trần: bản cũ gọi JSON.parse trong forEach KHÔNG có
+        // try/catch, nên một ô JSON hỏng làm cả getTasks nhảy xuống catch ngoài và trả về [] —
+        // mất sạch nhiệm vụ của mọi công việc chỉ vì một dòng lỗi.
+        parsed = parseTaskJson(values[i][projectTasksJsonIndex]);
+      if (parsed.length === 0) continue;
+      // GĐ2: bơm mặc định "Cấp" = 3 và "Mã cha" = "" nếu object cũ chưa có, và ép "Cấp" về
+      // Number. Nhờ vậy UI, getSummaryStats và getWorkTree không phải kiểm undefined, app chạy
+      // được cả khi chưa chạy migrateV2.
+      list = list.concat(parsed.filter(item => item && typeof item === "object").map(item => normalizeTaskForOutput(item, projectId)));
+    }
+    return list;
   } catch (err) {
     return console.error("Error getting tasks:", err), [];
   }
 }
+/**
+ * Khoảng [startValue, endValue] của một công việc có GIAO với [rangeStart, rangeEnd] không.
+ *
+ * Không truyền khoảng lọc ⇒ luôn true. Công việc chưa điền ngày cũng ⇒ true: thà hiện thừa
+ * một dòng còn hơn ẩn mất việc chỉ vì thiếu ngày (quyết định của GĐ3, mục 4).
+ */
+function dateRangeOverlaps(startValue, endValue, rangeStart, rangeEnd) {
+  if (!rangeStart && !rangeEnd) return true;
+  const start = parseDate(startValue),
+    end = parseDate(endValue);
+  if (!start && !end) return true;
+  const from = start || end,
+    to = end || start;
+  if (rangeEnd && from > rangeEnd) return false;
+  if (rangeStart && to < rangeStart) return false;
+  return true;
+}
+/**
+ * Cây 3 tầng, MỘT lần đọc sheet: Công việc → Công việc con (Cấp 2) → Nhiệm vụ (Cấp 3).
+ * Frontend không phải tự nối cha–con nữa.
+ *
+ * `filter` — mọi khoá đều tuỳ chọn:
+ *   projectId      chỉ một công việc
+ *   department     lọc theo cột "Phòng" của công việc (GĐ3)
+ *   assigneeEmail  chỉ giữ Nhiệm vụ của một người, so theo "Email người thực hiện"
+ *   from / to      lọc theo GIAO NHAU với khoảng "Ngày bắt đầu"–"Ngày kết thúc" của công
+ *                  việc, KHÔNG theo ngày tạo — việc kéo dài 3 tháng hiện ở cả 3 tháng (GĐ3)
+ *
+ * Nhiệm vụ có "Mã cha" trỏ vào mã không tồn tại (cha đã bị xoá bằng bản deleteTask cũ) hoặc
+ * để trống KHÔNG bị bỏ: chúng vào một nút giả `isUnassigned: true` xếp cuối, tên
+ * `UNASSIGNED_SUBWORK_LABEL`. Nguyên tắc: không bao giờ có dữ liệu vô hình trên giao diện.
+ *
+ * CHƯA làm ở đây (để GĐ4): lọc theo quyền (phòng mình / việc mình quản lý) và bỏ mục
+ * "Chờ duyệt" khỏi thống kê. Hàm này trả về mọi thứ nó đọc được.
+ */
+function getWorkTree(filter) {
+  var licenseKey = getLicenseState();
+  if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
+  const empty = {
+    projects: [],
+    totals: {
+      projects: 0,
+      subWorks: 0,
+      tasks: 0,
+      unassignedTasks: 0
+    }
+  };
+  try {
+    const options = filter || {},
+      spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+      projectSheet = spreadsheet.getSheetByName(PROJECT_SHEET_NAME);
+    if (!projectSheet) return empty;
+    const headers = getHeaders(projectSheet),
+      projectIdIndex = headers.indexOf(PROJECT_ID_COLUMN_NAME),
+      projectTasksJsonIndex = headers.indexOf(PROJECT_TASKS_JSON_COLUMN_NAME);
+    if (projectIdIndex === -1 || projectTasksJsonIndex === -1) return empty;
+    const lastRow = projectSheet.getLastRow();
+    if (lastRow < 2) return empty;
+    const values = projectSheet.getRange(2, 1, lastRow - 1, headers.length).getValues(),
+      wantProjectId = String(options.projectId || "").trim(),
+      wantDepartment = String(options.department || "").trim(),
+      wantAssigneeEmail = normalizeEmail(options.assigneeEmail || ""),
+      rangeStart = options.from ? parseDate(options.from) : null,
+      rangeEnd = options.to ? parseDate(options.to) : null,
+      projects = [];
+    let totalSubWorks = 0,
+      totalTasks = 0,
+      totalUnassigned = 0;
+// >>>GD2_TREE_PLACEHOLDER<<<
 function addStaff(staffData) {
   var licenseKey = getLicenseState();
   if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
@@ -2206,19 +2576,32 @@ function getStaffList() {
     return console.error("Error getting staff list:", err), [];
   }
 }
+/**
+ * Chỉ giữ Nhiệm vụ (Cấp 3) trong một danh sách đã qua normalizeTaskForOutput.
+ *
+ * GĐ2 — chốt cách đếm: cấp 2 (Công việc con) là NHÓM, không phải việc phải làm. Mọi hàm đếm
+ * và vẽ biểu đồ đều phải lọc qua đây, nếu không tổng số nhiệm vụ sẽ nhảy lên đúng bằng số
+ * công việc con vừa tạo và người dùng tưởng hệ thống đếm sai.
+ */
+function filterLevel3Tasks(tasks) {
+  if (!tasks || !Array.isArray(tasks)) return [];
+  return tasks.filter(task => task && typeof task === "object" && getTaskLevel(task) === LEVEL_TASK);
+}
 function getTaskStatusChartData(tasks) {
   var licenseKey = getLicenseState();
   if (!licenseKey || !isValidLicenseKey(licenseKey) || getLicenseState.toString().length < 80) return;
   try {
-    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) return {
+    // GĐ2: biểu đồ chỉ vẽ theo Nhiệm vụ (Cấp 3). Xem filterLevel3Tasks.
+    const level3Tasks = filterLevel3Tasks(tasks);
+    if (level3Tasks.length === 0) return {
       labels: [],
       data: [],
       message: "Không có dữ liệu nhiệm vụ để tạo biểu đồ."
     };
     const data = {},
       taskStatusColumnName = TASK_STATUS_COLUMN_NAME;
-    tasks.forEach(task => {
-      if (typeof task === "object" && task !== null && task.hasOwnProperty(taskStatusColumnName)) {
+    level3Tasks.forEach(task => {
+      if (task.hasOwnProperty(taskStatusColumnName)) {
         const trimmed = String(task[taskStatusColumnName] || "Không xác định").trim();
         trimmed && (data[trimmed] = (data[trimmed] || 0) + 1);
       }
@@ -2250,26 +2633,29 @@ function getSummaryStats(projects, tasks) {
     let num = 0,
       num2 = 0,
       num3 = 0;
-    const taskCount = tasks && Array.isArray(tasks) ? tasks.length : 0,
+    // GĐ2: chỉ Cấp 3 được tính là "nhiệm vụ". Cấp 2 là nhóm — đếm nó vào đây là tổng số và
+    // tiến độ đều sai. subWorkCount trả riêng để giao diện hiện "N công việc con" nếu muốn.
+    const level3Tasks = filterLevel3Tasks(tasks),
+      taskCount = level3Tasks.length,
+      subWorkCount = tasks && Array.isArray(tasks) ? tasks.length - taskCount : 0,
       now = new Date();
     now.setHours(0, 0, 0, 0);
-    if (tasks && Array.isArray(tasks)) {
-      const taskStatusColumnName = TASK_STATUS_COLUMN_NAME,
-        taskDueDateColumnName = TASK_DUE_DATE_COLUMN_NAME;
-      tasks.forEach(task => {
-        if (typeof task !== "object" || task === null || !task.hasOwnProperty(taskStatusColumnName)) return;
-        const lower = String(task[taskStatusColumnName] || "").trim().toLowerCase(),
-          task2 = task[taskDueDateColumnName];
-        if (lower.includes("hoàn thành")) num++;else lower.includes("đang") && num2++;
-        if (!lower.includes("hoàn thành") && task2) {
-          const parsedDate = parseDate(task2);
-          parsedDate && parsedDate < now && num3++;
-        }
-      });
-    }
+    const taskStatusColumnName = TASK_STATUS_COLUMN_NAME,
+      taskDueDateColumnName = TASK_DUE_DATE_COLUMN_NAME;
+    level3Tasks.forEach(task => {
+      if (!task.hasOwnProperty(taskStatusColumnName)) return;
+      const lower = String(task[taskStatusColumnName] || "").trim().toLowerCase(),
+        task2 = task[taskDueDateColumnName];
+      if (lower.includes("hoàn thành")) num++;else lower.includes("đang") && num2++;
+      if (!lower.includes("hoàn thành") && task2) {
+        const parsedDate = parseDate(task2);
+        parsedDate && parsedDate < now && num3++;
+      }
+    });
     return {
       totalProjects: projectCount,
       totalTasks: taskCount,
+      totalSubWorks: subWorkCount,
       completedTasks: num,
       ongoingTasks: num2,
       overdueTasks: num3
@@ -3205,6 +3591,55 @@ function doGet(request) {
 function _actPage() {
   return "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}.c{background:rgba(30,41,59,.8);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:40px;max-width:420px;width:100%;text-align:center}.i{width:160px;height:64px;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.3);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px;padding:8px}h1{font-size:20px;font-weight:900;margin-bottom:8px}p{color:#94a3b8;font-size:14px;margin-bottom:16px}a{color:#60a5fa;text-decoration:none;font-weight:700}input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:14px 16px;color:#93c5fd;font-family:monospace;font-size:15px;outline:none;margin-bottom:16px;text-align:center;letter-spacing:1px}input:focus{border-color:#3b82f6}button{width:100%;background:#3b82f6;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;transition:all .2s}button:hover{background:#2563eb;transform:translateY(-1px)}#m{margin-top:16px;font-size:13px;font-weight:700;min-height:20px}.ft{margin-top:24px;font-size:11px;color:#64748b;line-height:1.5;border-top:1px solid rgba(255,255,255,0.05);padding-top:16px}</style></head><body><div class=\"c\"><div class=\"i\"><img src=https://gsheets.vn/wp-content/uploads/2026/02/Logo26.png style=\"max-width:100%;max-height:100%;object-fit:contain\" onerror=\"this.replaceWith(document.createTextNode(String.fromCodePoint(128640)))\"></div><h1>Xác minh tiện ích</h1><p>Sản phẩm được cung cấp bởi <a href=https://gsheets.vn target=\"_blank\">gsheets.vn</a></p><p>Đăng ký License Key <a href=https://docs.google.com/spreadsheets/d/1Yez1U8Si5t8hUKR2jMyESigfFpR_L73Vexp0EC3DNoc/ target=\"_blank\">tại đây</a>.</p><input id=\"k\" placeholder=\"Nhập License Key...\" maxlength=\"30\" autofocus><button onclick=\"go()\">XÁC NHẬN</button><div id=\"m\"></div><div class=\"ft\">Công cụ này sử dụng License Key để xác thực bản quyền. Chúng tôi cam kết <b>KHÔNG</b> yêu cầu mật khẩu hay thu thập thông tin tài khoản Google của bạn.</div></div>" + "<scr" + "ipt>function go(){var k=document.getElementById(\"k\").value.trim();if(!k){s(\"Vui lòng nhập License Key!\",\"#ef4444\");return}s(\"Đang xác thực...\",\"#93c5fd\");google.script.run.withSuccessHandler(function(r){if(r){s(\"\\u2705 Thành công!\",\"#4ade80\");google.script.run.withSuccessHandler(function(u){window.open(u,\"_top\")}).withFailureHandler(function(){window.open(window.location.href,\"_top\")})._getUrl()}else{s(\"\\u274c Key không hợp lệ\",\"#ef4444\")}}).withFailureHandler(function(){s(\"\\u274c Lỗi kết nối\",\"#ef4444\")})._activateKey(k)}function s(t,c){var e=document.getElementById(\"m\");e.textContent=t;e.style.color=c}document.getElementById(\"k\").addEventListener(\"keypress\",function(e){if(e.key===\"Enter\")go()})</" + "scr" + "ipt></body></html>";
 }
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+
+// ===== Chẩn đoán: CỐ Ý không có cổng license, để còn dùng được khi cổng đang chặn =====
+/**
+ * Chạy tay trong Apps Script editor khi app trắng trang hoặc mọi lời gọi trả undefined.
+ * In ra đúng lý do 78 cổng kiểm tra đang chặn. Không ghi gì vào sheet.
+ */
+function debugLicense() {
+  var raw = "";
+  try {
+    raw = Session.getEffectiveUser().getEmail() || "";
+  } catch (err) {
+    raw = "(không đọc được: " + err.message + ")";
+  }
+  var state = getLicenseState(),
+    lines = ["Email nguyên văn      : \"" + raw + "\"", "Email đã chuẩn hoá    : \"" + getNormalizedEffectiveEmail() + "\"", "Có chữ hoa trong email: " + (raw !== String(raw).toLowerCase() ? "CÓ — đúng bệnh §4.1" : "không"), "_lk trong Properties  : " + (PropertiesService.getScriptProperties().getProperty("_lk") || "(trống — key đang tự sinh)"), "getLicenseState()     : " + state, "isValidLicenseKey()   : " + (typeof state === "string" ? isValidLicenseKey(state) : "(bỏ qua, state không phải chuỗi)"), "getLicenseState.length: " + getLicenseState.toString().length + " (cần >= 80)", "isValidLicenseKey.len : " + isValidLicenseKey.toString().length + " (cần >= 40)"],
+    ok = typeof state === "string" && isValidLicenseKey(state) && getLicenseState.toString().length >= 80 && isValidLicenseKey.toString().length >= 40;
+  lines.push("=> CỔNG LICENSE: " + (ok ? "MỞ — backend chạy bình thường" : "ĐANG CHẶN — mọi hàm sẽ trả undefined"));
+  var text = lines.join("\n");
+  return console.log(text), text;
+}
+/**
+ * In tiêu đề thật của từng sheet kèm số thứ tự cột, và liệt kê cột nào của GĐ1–GĐ4 còn
+ * thiếu. Dùng để đối chiếu khi migrateV2 báo "(đã có đủ)" mà mắt không thấy cột mới —
+ * cột mới được thêm vào SAU cột cuối cùng có dữ liệu, có thể nằm ngoài vùng đang xem.
+ */
+function debugSheetHeaders() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+    expected = {},
+    lines = ["File: " + spreadsheet.getName()];
+  expected[STAFF_SHEET_NAME] = [STAFF_DEPARTMENT_COLUMN_NAME, STAFF_DEPT_ROLE_COLUMN_NAME];
+  expected[PROJECT_SHEET_NAME] = NEW_PROJECT_COLUMNS;
+  expected[DEPARTMENT_SHEET_NAME] = DEPARTMENT_HEADERS;
+  return spreadsheet.getSheets().forEach(function (sheet) {
+    var name = sheet.getName(),
+      lastColumn = sheet.getLastColumn(),
+      lastRow = sheet.getLastRow(),
+      headers = lastColumn > 0 ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function (item) {
+        return item ? String(item).trim() : "";
+      }) : [];
+    lines.push(""), lines.push("--- Sheet \"" + name + "\": " + lastRow + " dòng, " + lastColumn + " cột có dữ liệu (maxColumns=" + sheet.getMaxColumns() + ")");
+    headers.forEach(function (header, index) {
+      lines.push("    cột " + (index + 1) + ": \"" + header + "\"");
+    });
+    var want = expected[name];
+    if (want) {
+      var missing = want.filter(function (item) {
+        return headers.indexOf(item) === -1;
+      });
+      lines.push("    CỘT MỚI CÒN THIẾU: " + (missing.length ? missing.join(", ") : "(không thiếu cột nào)"));
+    }
+  }), lines.push(""), lines.push("Báo \"không thiếu cột nào\" mà mắt không thấy cột: kéo sang phải tới đúng số cột ghi ở trên, hoặc bỏ ẩn cột."), console.log(lines.join("\n")), lines.join("\n");
 }

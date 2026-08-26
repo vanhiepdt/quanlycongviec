@@ -11,7 +11,9 @@ const db = (client) => client ?? pool;
 export const LEVEL_SUBWORK = 2;
 export const LEVEL_TASK = 3;
 
-const COLUMNS = `id, code, work_id, parent_id, level, department_id, name, description,
+const COLUMNS = `id, code, work_id, parent_id, level, department_id,
+                 supervisor_id, leader_ids,
+                 name, description,
                  assignee_id, assignee_name, status, priority,
                  start_date, due_date, report_date, completion,
                  target, output, notes, result_links,
@@ -44,6 +46,11 @@ export const WRITABLE = Object.freeze([
   'description',
   'assignee_id',
   'assignee_name',
+  // Phân công ba lớp (005_phan_cong.sql): Ban lãnh đạo kiểm soát chỉ ở cấp 2; "Lãnh đạo phòng
+  // phụ trách" ở cấp 2 là mảng nhiều người, cấp 3 tối đa một người (CHECK `task_leader_single`).
+  // Nguồn hợp lệ kiểm ở service — cấp 3 gửi supervisor khác rỗng sẽ bị chặn ngay tại đó.
+  'supervisor_id',
+  'leader_ids',
   'status',
   'priority',
   'start_date',
@@ -364,10 +371,11 @@ export async function remove(id, client = null) {
  * Nhân bản MỘT dòng. Cột reset đúng như `copyTask`/`copyProject` bản cũ: tiến độ 0, trạng thái
  * "Chưa bắt đầu", ngày báo cáo trống — bản sao là việc chưa làm.
  *
- * Khoá duyệt cũng reset về `Đã duyệt` (mặc định của cột, đúng như bản cũ `addTask` gán cho dòng
- * mới): bản sao KHÔNG được thừa hưởng `Từ chối` của bản gốc (sao xong đã bị từ chối sẵn), và
- * cũng không nên là `Chờ duyệt` vì mục đó bị loại khỏi mọi con số thống kê (§13.5) nên dòng vừa
- * tạo sẽ vô hình. Ghi ở §13.3.
+ * Khoá duyệt KHÔNG copy từ bản gốc mà do người gọi truyền (`approvalStatus`, mặc định `Đã duyệt`
+ * cho đường gọi cũ chưa truyền). Hai lý do: bản sao không được thừa hưởng `Từ chối` của bản gốc
+ * (sao xong đã bị từ chối sẵn), và bản sao là đầu việc MỚI nên phải qua đúng cửa duyệt của người
+ * bấm Nhân bản (§7 việc 5.1) — nếu không thì nhân bản là một đường vòng qua luồng duyệt. Ghi ở
+ * §13.3.
  *
  * Nhắc việc KHÔNG được nhân bản: nhắc việc gắn với một mốc ngày cụ thể của bản gốc, sao chép
  * sang bản sao chỉ tạo ra thông báo sai ngày.
@@ -377,7 +385,7 @@ export async function remove(id, client = null) {
  */
 export async function copyRow(
   sourceId,
-  { code, workId, parentId, name = null, sortOrder = null, ...origin },
+  { code, workId, parentId, name = null, sortOrder = null, approvalStatus = 'Đã duyệt', ...origin },
   client = null
 ) {
   const o = {
@@ -395,21 +403,22 @@ export async function copyRow(
        assignee_id, assignee_name, status, priority,
        start_date, due_date, report_date, completion,
        target, output, notes, result_links,
-       sort_order,
+       approval_status, sort_order,
        created_by, created_by_name, origin, assigned_by_id, assigned_by_name, assigned_at)
      SELECT $1, $2, $3, level, coalesce($4, name), description,
             assignee_id, assignee_name, 'Chưa bắt đầu', priority,
             start_date, due_date, NULL, 0,
             target, output, notes, result_links,
-            coalesce($5, sort_order),
-            $6, $7, $8, $9, $10, $11
-       FROM work_items WHERE id = $12
+            $5, coalesce($6, sort_order),
+            $7, $8, $9, $10, $11, $12
+       FROM work_items WHERE id = $13
      RETURNING ${COLUMNS}`,
     [
       code,
       workId,
       parentId,
       name,
+      approvalStatus,
       sortOrder,
       o.created_by,
       o.created_by_name,

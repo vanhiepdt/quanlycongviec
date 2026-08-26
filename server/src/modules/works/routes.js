@@ -11,12 +11,26 @@ import * as itemsService from '../workItems/service.js';
 import * as service from './service.js';
 import { getTree } from './tree.js';
 
+// Mảng id người (Lãnh đạo phòng phụ trách): mỗi phần tử đi qua `idInput`, rồi chặn thêm phần tử
+// không phải số nguyên hợp lệ (`NaN` do `idInput` sinh khi dữ liệu vào sai).
+const leaderIdsInput = z
+  .array(idInput)
+  .max(50)
+  .refine((ids) => ids.every((id) => id == null || Number.isInteger(id)), {
+    message: 'Danh sách lãnh đạo phòng phụ trách có mã không hợp lệ',
+  })
+  .optional();
+
 const createSchema = z.object({
   name: requiredText('Vui lòng nhập tên công việc', 500),
   description: text(5000).optional(),
   managerId: idInput,
   managerName: text(200).optional(),
   departmentId: idInput,
+  // Phân công ba lớp (005_phan_cong.sql): Ban lãnh đạo kiểm soát (1 người) + Lãnh đạo phòng
+  // phụ trách (mảng id). Nguồn hợp lệ kiểm ở service — schema chỉ chặn hình dạng dữ liệu.
+  supervisorId: idInput,
+  leaderIds: leaderIdsInput,
   startDate: dateInput,
   endDate: dateInput,
   status: text(50).optional(),
@@ -60,6 +74,8 @@ function toRow(body) {
     managerId: 'manager_id',
     managerName: 'manager_name',
     departmentId: 'department_id',
+    supervisorId: 'supervisor_id',
+    leaderIds: 'leader_ids',
     startDate: 'start_date',
     endDate: 'end_date',
     status: 'status',

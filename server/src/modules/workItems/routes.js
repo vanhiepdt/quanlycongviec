@@ -21,6 +21,16 @@ const createSchema = z.object({
   description: text(5000).optional(),
   assigneeId: idInput,
   assigneeName: text(200).optional(),
+  // Phân công ba lớp (005_phan_cong.sql): Ban kiểm soát chỉ hợp lệ ở cấp 2; leader của nhiệm vụ
+  // tối đa 1 người — nguồn hợp lệ kiểm ở service, CHECK `task_leader_single` là hàng rào cuối.
+  supervisorId: idInput,
+  leaderIds: z
+    .array(idInput)
+    .max(50)
+    .refine((ids) => ids.every((id) => id == null || Number.isInteger(id)), {
+      message: 'Danh sách lãnh đạo phòng phụ trách có mã không hợp lệ',
+    })
+    .optional(),
   status: text(50).optional(),
   priority: text(50).optional(),
   startDate: dateInput,
@@ -57,6 +67,8 @@ function toRow(body) {
     description: 'description',
     assigneeId: 'assignee_id',
     assigneeName: 'assignee_name',
+    supervisorId: 'supervisor_id',
+    leaderIds: 'leader_ids',
     status: 'status',
     priority: 'priority',
     startDate: 'start_date',

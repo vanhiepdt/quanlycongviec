@@ -24,18 +24,40 @@ const { sites, sinks } = soatFile(APP);
 const CO_Y_KHONG_BOC = [
   // Cờ `selected`/`checked` do CHÍNH mã sinh ra ("selected" hoặc ""), không có dữ liệu người dùng.
   // Đây là chỗ trong thẻ mà không có dấu bao, nên nếu là dữ liệu ngoài thì cực nguy hiểm — vì vậy
-  // ba chỗ này phải nêu tên rõ ràng thay vì bỏ qua cả nhóm "trong-the".
-  { ctx: 'trong-the', ma: 'text3', so: 3, ly_do: 'cờ "selected" do mã sinh, không phải dữ liệu' },
+  // phải nêu tên rõ ràng thay vì bỏ qua cả nhóm "trong-the". (2026-08-26: bỏ ô "Quản lý công việc"
+  // khỏi form công việc nên mất 1 trong 3 chỗ cũ, còn 2.)
+  { ctx: 'trong-the', ma: 'text3', so: 2, ly_do: 'cờ "selected" do mã sinh, không phải dữ liệu' },
   // Chỉ số của `.map()` — là SỐ, và nằm trong on* nhưng NGOÀI chuỗi JS: `onclick="f(" + i + ")"`.
   { ctx: 'handler-ngoai', ma: 'index', so: 4, ly_do: 'chỉ số .map(), là số nguyên do mã sinh' },
   // `const wrapRow = text => "<tr><td …>" + text + "</td></tr>"`. Cả 4 chỗ gọi đều truyền HTML
   // hằng (thông báo "không có dữ liệu"), nên bọc là hiện ra thẻ dưới dạng chữ.
   { ctx: 'text', ma: 'text', so: 1, ly_do: 'wrapRow: 4 chỗ gọi đều truyền HTML hằng' },
+  // Việc 5.6 — nhãn vàng 'Chờ duyệt'. Hàm TRẢ VỀ HTML (thẻ <span>) chứ không trả dữ liệu, nên bọc
+  // là hiện thẻ ra dưới dạng chữ. Nội dung nhãn là hằng số của chương trình và vẫn tự đi qua
+  // escapeHtml/escapeHtmlAttr bên trong; `tests/unit/pending-badge.test.js` kiểm hành vi đó bằng
+  // cách bơm đòn tấn công vào tên của một mục đang chờ duyệt.
+  {
+    ctx: 'text',
+    ma: 'pendingApprovalBadge(task)',
+    so: 3,
+    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
+  },
+  {
+    ctx: 'text',
+    ma: 'pendingApprovalBadge(project)',
+    so: 2,
+    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
+  },
 ];
 
 /** Chỗ ghi HTML mà vế phải không phải HTML dựng sẵn — đã soát tay từng chỗ. */
 const SINK_DA_SOAT_TAY = [
-  { ma: '""', so: 5, ly_do: 'xoá rỗng vùng chứa, không có dữ liệu nào đi vào' },
+  {
+    ma: '""',
+    so: 6,
+    ly_do:
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại)',
+  },
   {
     ma: 'el.dataset.originalContent',
     so: 1,
@@ -100,11 +122,27 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
       expect(src).toContain(`function ${ten}(value)`);
   });
 
-  it('TC-SEC-17: con số đã chốt của việc 4.6 — 70 chỗ ghi HTML, 474 giá trị nội suy', () => {
-    // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Thực tế là 70 chỗ ghi và 474 giá trị.
+  it('TC-SEC-17: con số đã chốt — 80 chỗ ghi HTML, 566 giá trị nội suy', () => {
+    // Kế hoạch §7 ghi "53 chỗ innerHTML": đó là 53 DÒNG. Việc 4.6 chốt 70 chỗ ghi và 474 giá trị;
+    // việc 5.6 thêm 5 chỗ gọi `pendingApprovalBadge` (nhãn vàng) ⇒ 481;
+    // việc 5.12 thêm 17 chỗ (nút cấp 2/cấp 3 + ô ẩn level/parent) ⇒ 498, không thêm chỗ ghi nào.
+    // 2026-08-26 phân công ba lớp chốt ở 555; rồi bỏ ô "Quản lý công việc" khỏi form tạo/sửa
+    // công việc (khối phân công ba lớp thay thế) −5 giá trị ⇒ 550, số chỗ ghi giữ 77.
+    // 2026-08-26 (bẫy COL lần 2): vẽ lại ô Phòng khi bối cảnh phòng nạp trễ — thêm 1 chỗ
+    // `deptSel.innerHTML = buildDeptIdOptions(…)` (builder thoát đủ) ⇒ 78 chỗ ghi, giá trị giữ 550.
+    // 2026-08-26 (6 yêu cầu giao diện): lọc tháng ở Quản lý công việc thêm
+    // `escapeHtml(thangDangXem)`; dòng «Phòng:» trên thẻ thêm `escapeHtml(project[COL.P_DEPT] …)`;
+    // khối «Thuộc dự án» dựng bằng .map(...).join("") với escapeHtml đầy đủ; ô Người thực hiện
+    // ẩn/hiện theo cấp là giá trị hằng do mã sinh. Ròng rã +1 giá trị ⇒ 551, chỗ ghi giữ 78.
+    // 2026-08-26 (vòng lần 3): option ứng viên «Cán bộ trực tiếp» bỏ phần hiển thị email —
+    // xoá nội suy `escapeHtml(text4)` −1 giá trị ⇒ 550, chỗ ghi giữ nguyên 78.
+    // 2026-08-26 (Gantt xem theo tháng): tooltip thẻ tự vẽ — +1 sink `#tooltip-gantt`.innerHTML
+    // (builder thoát đủ) và +1 sink xoá rỗng option Năm; hàng Gantt thêm JSON tooltip đã qua
+    // escapeHtmlAttr ×3 (giá trị "trong-the" như cờ selected) cùng các nhãn thẻ escape trực tiếp
+    // ⇒ 80 chỗ / 566 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 70, gia_tri: 474 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 80, gia_tri: 566 });
   });
 });
 

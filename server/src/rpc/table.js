@@ -12,10 +12,14 @@
 // thật do `handler` làm, qua `ctx.call` — xem `subrequest.js`.
 import { AppError } from '../utils/errors.js';
 import {
+  activityToLegacy,
   departmentFromLegacy,
+  departmentToLegacy,
   projectFromLegacy,
   projectToLegacy,
   remindersToLegacy,
+  staffFromLegacy,
+  staffToLegacy,
   taskFromLegacy,
   taskToLegacy,
 } from './legacyFields.js';
@@ -40,6 +44,41 @@ function required(value, name) {
     throw new AppError('VALIDATION_ERROR', `Thiếu tham số «${name}»`, { field: name });
   }
   return value;
+}
+
+/**
+ * Gói REST của việc 5.10 → hình dạng mà `handleSuccessfulLogin` đọc
+ * (`data.user`, `data.projects`, `data.tasks`, `data.staff`, …).
+ *
+ * `proposals` / `apps` cố ý mảng rỗng: module còn Phase 7, nhưng thiếu khoá thì UI gán `[]`
+ * im lặng còn 501 thì toast đỏ chặn cả trang.
+ */
+function legacyBundleFromRest(data) {
+  const deptNameById = new Map((data.departments ?? []).map((d) => [d.id, d.name]));
+  const emailById = new Map((data.people ?? []).map((p) => [p.id, p.email]));
+  const nameById = new Map((data.people ?? []).map((p) => [p.id, p.full_name ?? p.name]));
+  const workCodeById = new Map((data.works ?? []).map((w) => [w.id, w.code]));
+  const itemCodeById = new Map((data.items ?? []).map((i) => [i.id, i.code]));
+  const remindersByItemId = new Map((data.items ?? []).map((i) => [i.id, i.reminders ?? []]));
+  const projectCtx = { deptNameById, emailById, nameById };
+  const taskCtx = { workCodeById, itemCodeById, remindersByItemId, emailById, nameById };
+
+  return {
+    success: true,
+    user: data.user,
+    projects: (data.works ?? []).map((row) => projectToLegacy(row, projectCtx)),
+    tasks: (data.items ?? []).map((row) => taskToLegacy(row, taskCtx)),
+    staff: (data.people ?? []).map((row) => staffToLegacy(row, { deptNameById })),
+    adminNames: (data.people ?? [])
+      .filter((p) => p.role === 'admin')
+      .map((p) => p.full_name ?? p.name),
+    chartData: data.chartData ?? { labels: [], data: [] },
+    recentActivities: (data.activities ?? []).map((row) => activityToLegacy(row)),
+    summaryStats: data.summaryStats ?? {},
+    pendingCount: data.pendingCount ?? { works: 0, items: 0, total: 0 },
+    proposals: [],
+    apps: [],
+  };
 }
 
 export const RPC_TABLE = Object.freeze({
@@ -103,40 +142,52 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
-  // --- Nạp dữ liệu đầu trang -----------------------------------------------------------------
-  // `GET /api/v1/bootstrap` (§5.2) cần cả nhân sự, đề nghị, app, thống kê và biểu đồ — những
-  // module chưa tồn tại. Làm nửa vời ở đây thì giao diện dựng ra bảng rỗng và người dùng tưởng
-  // dữ liệu đã mất, nên để thất bại rõ ràng cho tới khi có đủ module.
-  getDataForUser: pending('Nạp dữ liệu người dùng', 'GET /bootstrap'),
+  // --- Nạp dữ liệu đầu trang (việc 5.10) ------------------------------------------------------
+  //
+  // Ba tên này cùng uống `GET /bootstrap` (và `GET /departments/context`). Đề nghị / app vẫn
+  // trả mảng rỗng: module chưa có (Phase 7), nhưng `handleSuccessfulLogin` gán thẳng
+  // `allProposals = data.proposals || []` — thiếu khoá thì không sao, còn 501 thì toast đỏ
+  // chặn cả trang Tổng quan.
+  getDataForUser: {
+    rest: 'GET /bootstrap',
+    async handler(args, ctx) {
+      return legacyBundleFromRest(await ctx.call('GET', '/bootstrap'));
+    },
+  },
 
   /**
-   * Ngoại lệ CÓ LÝ DO của nhóm `pending` (việc 4.4).
+   * Ngoại lệ CÓ LÝ DO vẫn giữ sau việc 5.10 (việc 4.4 / TC-RPC-36).
    *
-   * Đây là lời gọi ĐẦU TIÊN của trang (`checkAuthenticationAndInitialize`, dòng 131 `app.js`), nên
-   * nó quyết định người chưa đăng nhập thấy gì. Nếu trả 501 như các tên chưa làm khác thì khách
-   * vào trang nhận ngay một toast đỏ "Chức năng … chưa được chuyển sang máy chủ mới" rồi mới thấy
-   * modal — đúng kỹ thuật nhưng sai nghiệp vụ: người ta chưa đăng nhập thì việc cần làm là ĐĂNG
-   * NHẬP, không phải đọc lỗi hệ thống.
-   *
-   * Bản cũ đã có sẵn đường đi đúng cho việc này: `{requireLogin: true}` ⇒ `showLoginModal()` (dòng
-   * 133 `app.js`), không kèm lỗi. Nên: chưa có phiên ⇒ trả đúng cờ đó; ĐÃ có phiên ⇒ vẫn 501, vì
-   * lúc đó dữ liệu đầu trang là thứ thật sự còn thiếu và phải thấy rõ (chờ `GET /bootstrap`,
-   * Phase 5). Vẫn giữ `notImplemented: true` để `GET /api/rpc` không khai khống là đã làm xong.
+   * Đây là lời gọi ĐẦU TIÊN của trang (`checkAuthenticationAndInitialize`, dòng 131 `app.js`).
+   * Khách chưa đăng nhập: `{requireLogin: true}` ⇒ `showLoginModal()`, không toast lỗi. Đã có
+   * phiên: cùng gói với `getDataForUser`. Không trả 401 — `app.js` không đi nhánh modal nếu
+   * failure handler chạy.
    */
   getInitialDataWithAuth: {
     rest: 'GET /bootstrap',
     public: true,
-    notImplemented: true,
-    handler(args, ctx) {
+    async handler(args, ctx) {
       if (!ctx.req.user) return { requireLogin: true };
-      throw new AppError(
-        'NOT_IMPLEMENTED',
-        'Chức năng «Nạp dữ liệu đầu trang» chưa được chuyển sang máy chủ mới. Vui lòng liên hệ quản trị.'
-      );
+      return legacyBundleFromRest(await ctx.call('GET', '/bootstrap'));
     },
   },
 
-  getDepartmentContext: pending('Ngữ cảnh phòng ban', 'GET /departments/context'),
+  getDepartmentContext: {
+    rest: 'GET /departments/context',
+    async handler(args, ctx) {
+      const data = await ctx.call('GET', '/departments/context');
+      return {
+        success: true,
+        departments: (data.departments ?? []).map((row) => departmentToLegacy(row)),
+        departmentNames: data.departmentNames ?? [],
+        visibleDepartments: data.visibleDepartments ?? [],
+        myDepartment: data.myDepartment ?? '',
+        myDeptRole: data.myDeptRole ?? '',
+        isDeputyDirector: data.isDeputyDirector === true,
+        isDepartmentHead: data.isDepartmentHead === true,
+      };
+    },
+  },
 
   // --- Công việc cấp 1 (giao diện cũ gọi là "dự án", §0.1) ------------------------------------
   //
@@ -205,30 +256,19 @@ export const RPC_TABLE = Object.freeze({
 
   // --- Nhiệm vụ (cấp 3) và công việc con (cấp 2) ----------------------------------------------
   //
-  // `getTasks()` của bản cũ không có tham số và trả VỀ TẤT CẢ nhiệm vụ, còn
-  // `GET /api/v1/work-items` bắt buộc có `workRef` (một dòng không tồn tại ngoài công việc nào).
-  // Nên ở đây phải quét từng công việc — N+1 lời gọi, chấp nhận tạm vì đây là lớp có thời hạn;
-  // bản thay thế là `GET /api/v1/bootstrap` gộp một câu SQL (§13.5).
+  // `getTasks()` của bản cũ không có tham số và trả VỀ TẤT CẢ nhiệm vụ. Nợ Phase 4 đã trả ở
+  // đây: handler KHÔNG còn quét từng công việc một lời gọi `/work-items` (N+1, đo ở §8.5 C6)
+  // mà dùng `ctx.visibleTree()` — cùng gói `cayChoUser` của bootstrap, MỘT bộ truy vấn bất kể
+  // số công việc. Hình dạng phản hồi giữ nguyên 100%.
   getTasks: {
     rest: 'GET /work-items?workRef=',
     async handler(args, ctx) {
-      const { works = [] } = await ctx.call('GET', '/works');
-      const rows = [];
-      const workCodeById = new Map();
-      const itemCodeById = new Map();
-      for (const work of works) {
-        workCodeById.set(work.id, work.code);
-        const { items = [] } = await ctx.call('GET', '/work-items', {}, { workRef: work.code });
-        for (const item of items) {
-          itemCodeById.set(item.id, item.code);
-          rows.push(item);
-        }
-      }
-      // Nhắc việc lấy MỘT lần cho mọi dòng (`mapByItemIds`), không phải mỗi dòng một lời gọi:
-      // giao diện cũ đọc `task[COL.T_REMINDERS]` như mảng có sẵn (dòng 621).
-      const remindersByItemId = await ctx.remindersByItemIds(rows.map((r) => r.id));
+      const { works, items } = await ctx.visibleTree();
+      const workCodeById = new Map(works.map((w) => [w.id, w.code]));
+      const itemCodeById = new Map(items.map((i) => [i.id, i.code]));
+      const remindersByItemId = new Map(items.map((i) => [i.id, i.reminders ?? []]));
       const context = { workCodeById, itemCodeById, remindersByItemId };
-      return rows.map((row) => taskToLegacy(row, context));
+      return items.map((row) => taskToLegacy(row, context));
     },
   },
 
@@ -343,25 +383,84 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
+  // --- Nhân sự / phòng (việc 5.11) -----------------------------------------------------------
+  //
+  // `getStaffList` trả MẢNG THUẦN khoá `COL.S_*`: `handleEdit` gán thẳng `allStaff = response2`.
+  // Ghi trả `{success:true, staffId/departmentId}` là MÃ (`NV003` / `PH01`), không phải id số.
+  getStaffList: {
+    rest: 'GET /users',
+    async handler(args, ctx) {
+      const data = await ctx.call('GET', '/users');
+      const context = { deptNameById: await ctx.deptNameById() };
+      return (data.people ?? []).map((row) => staffToLegacy(row, context));
+    },
+  },
+
+  addStaffWithAuth: {
+    rest: 'POST /users',
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/users', staffFromLegacy(data ?? {}));
+      return { success: true, staffId: created.person.code };
+    },
+  },
+
+  updateStaffWithAuth: {
+    rest: 'PATCH /users/:idOrCode',
+    async handler([id, data], ctx) {
+      required(id, 'Mã nhân viên');
+      const updated = await ctx.call(
+        'PATCH',
+        `/users/${encodeURIComponent(id)}`,
+        staffFromLegacy(data ?? {})
+      );
+      return { success: true, staffId: updated.person.code };
+    },
+  },
+
+  deleteStaffWithAuth: {
+    rest: 'DELETE /users/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã nhân viên');
+      const result = await ctx.call('DELETE', `/users/${encodeURIComponent(id)}`);
+      return { success: true, deletedStaff: result.deletedUser };
+    },
+  },
+
+  addDepartmentWithAuth: {
+    rest: 'POST /departments',
+    fromLegacy: departmentFromLegacy,
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/departments', departmentFromLegacy(data ?? {}));
+      return { success: true, departmentId: created.department.code };
+    },
+  },
+
+  updateDepartmentWithAuth: {
+    rest: 'PATCH /departments/:idOrCode',
+    fromLegacy: departmentFromLegacy,
+    async handler([id, data], ctx) {
+      required(id, 'Mã phòng');
+      const updated = await ctx.call(
+        'PATCH',
+        `/departments/${encodeURIComponent(id)}`,
+        departmentFromLegacy(data ?? {})
+      );
+      return { success: true, departmentId: updated.department.code };
+    },
+  },
+
+  deleteDepartmentWithAuth: {
+    rest: 'DELETE /departments/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã phòng');
+      const result = await ctx.call('DELETE', `/departments/${encodeURIComponent(id)}`);
+      return { success: true, deletedDepartment: result.deletedDepartment };
+    },
+  },
+
   // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
   // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
   // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-  getStaffList: pending('Danh sách nhân sự', 'GET /users'),
-  addStaffWithAuth: pending('Thêm nhân sự', 'POST /users'),
-  updateStaffWithAuth: pending('Sửa nhân sự', 'PATCH /users/:id'),
-  deleteStaffWithAuth: pending('Xoá nhân sự', 'DELETE /users/:id'),
-
-  addDepartmentWithAuth: {
-    ...pending('Thêm phòng', 'POST /departments'),
-    // Giữ lại phép dịch trường để khi có module phòng thì chỉ cần đổi `handler`, không phải dò lại
-    // tên các ô trong modal (`director`/`head`/`vice`/`order`).
-    fromLegacy: departmentFromLegacy,
-  },
-  updateDepartmentWithAuth: {
-    ...pending('Sửa phòng', 'PATCH /departments/:id'),
-    fromLegacy: departmentFromLegacy,
-  },
-  deleteDepartmentWithAuth: pending('Xoá phòng', 'DELETE /departments/:id'),
 
   getProposals: pending('Danh sách đề nghị', 'GET /proposals'),
   addProposalWithAuth: pending('Thêm đề nghị', 'POST /proposals'),

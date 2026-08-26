@@ -36,6 +36,16 @@ rpc() {
   printf '   [%s] %-24s %s\n' "$code" "$name" "$(printf '%s' "$LAST" | head -c 300)"
 }
 
+# rest <đường dưới /api/v1>  → GET bằng cùng phiên (cookie jar); in mã HTTP + đầu thân.
+rest() {
+  local path=$1 out code
+  out=$(curl -s -b "$JAR" -c "$JAR" -H 'Accept: application/json' \
+    -w '\n%{http_code}' "$BASE/api/v1/$path")
+  code=${out##*$'\n'}
+  LAST=${out%$'\n'*}
+  printf '   [%s] %-24s %s\n' "$code" "GET $path" "$(printf '%s' "$LAST" | head -c 300)"
+}
+
 # psql <câu SQL>  — SQL cũng đi qua STDIN, cùng một lý do bảng mã như trên.
 psqlq() { printf '%s\n' "$1" | docker exec -i qlcv-dev-db psql -qtAU qlcv -d quanlycongviec_uat; }
 
@@ -89,15 +99,19 @@ login 'admin@test.local' 'MatKhauMoi@123'
 rpc changePassword '{"args":["MatKhauMoi@123","Test@12345","Test@12345"]}'
 
 # ---------------------------------------------------------------- NHÓM 2: TỔNG QUAN (10 điểm)
-# Cả 10 điểm chỉ có MỘT nguồn dữ liệu: `getDataForUser` (và `getInitialDataWithAuth` khi đã có
-# phiên) nạp `allProjects/allTasks/allStaff/...` lúc mở trang, rồi 4 thẻ số + 6 biểu đồ +
-# "hoạt động gần đây" đều vẽ từ mấy biến đó. Nguồn còn 501 thì cả nhóm đỏ theo — không có cách
-# nào tích lẻ từng biểu đồ.
-diem 'T1–T10 nguồn dữ liệu đầu trang'
+# T1–T4: nguồn dữ liệu đầu trang. T5–T10 (Phase 6): 6 biểu đồ + «hoạt động gần đây» tính ở
+# SERVER qua `/stats/charts?type=` (6 loại) và `/stats/activities` — app.js gọi thẳng REST này
+# khi vào Tổng quan (`napTongQuanTuServer`), không còn tự tính trong trình duyệt.
+diem 'T1–T10 nguồn dữ liệu đầu trang + 6 biểu đồ/hoạt động từ /stats/*'
 login 'admin@test.local' 'Test@12345'
 rpc getDataForUser
 rpc getInitialDataWithAuth
 rpc getDepartmentContext
+for t in status project-progress staff-performance task-priority timeline-progress project-comparison; do
+  rest "stats/charts?type=$t"
+done
+rest 'stats/summary'
+rest 'stats/activities?page=1&limit=22'
 echo '   -- và khi CHƯA đăng nhập, getInitialDataWithAuth phải trả cờ đăng nhập, KHÔNG trả 501:'
 rm -f "$JAR"
 prime
@@ -121,14 +135,13 @@ rpc copyProjectWithAuth "{\"args\":[\"CV001\",\"KHÓI 8.5 — bản sao CV001\"]
 diem 'C5 tìm kiếm công việc — lọc chạy ở giao diện, dữ liệu do getProjects cấp'
 rpc getProjects
 
-diem 'C6 mở chi tiết công việc — cần getTasks (N+1 lời gọi, §13.5)'
+diem 'C6 mở chi tiết công việc — getTasks đã GỘP MỘT TRUY VẤN (hết nợ N+1, Phase 6)'
 rpc getTasks
 
-diem 'C7 tạo CÔNG VIỆC CON (cấp 2) — biểu mẫu cũ có gửi được `level`/`Mã cha` hay không?'
-echo '   -- `#task-form` không có ô nào tên level/parent; COL.T_LEVEL và COL.T_PARENT chỉ được'
-echo '      khai ở bảng COL (app.js:56–57) rồi không chỗ nào đọc/ghi. Nên lời gọi tạo bên dưới'
-echo '      KHÔNG mang cấp, và máy chủ mặc định thành cấp 3:'
-rpc addTaskWithAuth "{\"args\":[{\"projectId\":\"$CV\",\"name\":\"KHÓI 8.5 — thử tạo cấp 2\",\"status\":\"Chưa bắt đầu\",\"priority\":\"Trung bình\"}]}"
+diem 'C7 tạo CÔNG VIỆC CON (cấp 2) — nút «+ công việc con» trên cây gửi ô ẩn level=2'
+echo '   -- Việc 5.12: bấm hàng CÔNG VIỆC ⇒ FormData mang level=2, parent rỗng. Không thêm'
+	echo '      <select name="level">. «+ Thêm nhiệm vụ» vẫn không gửi cấp ⇒ REST mặc định 3.'
+rpc addTaskWithAuth "{\"args\":[{\"projectId\":\"$CV\",\"name\":\"KHÓI 8.5 — thử tạo cấp 2\",\"status\":\"Chưa bắt đầu\",\"priority\":\"Trung bình\",\"level\":\"2\",\"parent\":\"\"}]}"
 psqlq "SELECT code||' cấp='||level||' cha='||coalesce(parent_id::text,'NULL') FROM work_items
         WHERE name LIKE 'KHÓI 8.5%' ORDER BY id;" | sed 's/^/   csdl: /'
 
@@ -197,15 +210,21 @@ grep -c 'approveWork\|rejectWork\|duyet\|approval' web/assets/js/app.js |
   sed 's/^/   số chỗ app.js nhắc tới duyệt công việc: /'
 
 # ---------------------------------------------------------------- NHÓM 5: NGƯỜI DÙNG & PHÒNG (10)
-diem 'N1–N10 nhân sự và phòng — 7 tên hàm cũ, cả 7 còn 501'
+diem 'N1–N10 nhân sự và phòng — 7 tên đã nối (việc 5.11): getStaffList 200, thiếu tham số 400, mã lạ 404'
 for f in getStaffList addStaffWithAuth updateStaffWithAuth deleteStaffWithAuth \
   addDepartmentWithAuth updateDepartmentWithAuth deleteDepartmentWithAuth; do
   rpc "$f" '{"args":[{}]}'
 done
 
 # ---------------------------------------------------------------- NHÓM 6: CÒN LẠI (12 điểm)
-diem 'R1–R7 Gantt (1/2/3 tháng · nhóm theo 3 kiểu · thu gọn) — vẽ ở giao diện từ allTasks/allProjects'
-echo '   -- không có lời gọi máy chủ riêng cho Gantt; nguồn là dữ liệu đầu trang (nhóm 2).'
+diem 'R1–R7 Gantt — máy chủ nhóm sẵn cây 4 mức (việc 6.6); 1/2/3 tháng & thu gọn vẽ ở giao diện'
+echo '   -- Phase 6: app.js gọi GET /api/v1/gantt?groupBy=… khi vào mục Gantt; 3 kiểu nhóm +'
+echo '      cửa sổ from/to (n×30 ngày) kiểm ngay ở đây, thanh cắt hai đầu do tests/unit/gantt-ui.test.js canh.'
+rest 'gantt?groupBy=department'
+rest 'gantt?groupBy=deputy'
+rest 'gantt?groupBy=assignee'
+TU=$(date -d '-30 days' +%F); DEN=$(date -d '+90 days' +%F)
+rest "gantt?from=$TU&to=$DEN&groupBy=department"
 diem 'R8–R9 đề nghị tạo/sửa'
 rpc getProposals
 rpc addProposalWithAuth '{"args":[{"type":"Trong kế hoạch","content":"thử"}]}'

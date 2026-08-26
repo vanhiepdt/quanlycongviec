@@ -15,7 +15,7 @@ Cách dùng:
 4. Mục nào sai: ghi vào cột **Ghi chú** ngay dưới dòng đó theo mẫu `→ LỖI: <thấy gì>` rồi mở
    một dòng mới ở §13.4 của `KE-HOACH-VPS.md`.
 
-Tổng: **88 mã** / 13 nhóm.
+Tổng: **88 mã** / 13 nhóm (+ **8 mã PA** nhóm N bổ sung 2026-08-26).
 
 | Nhóm | Số mã | Nhóm | Số mã |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Tổng: **88 mã** / 13 nhóm.
 | D. Người dùng & Phòng | 10 | K. Luồng duyệt (mới) | 8 |
 | E. Tổng quan & thống kê | 11 | L. Lọc (mới) | 2 |
 | F. Sơ đồ Gantt | 9 | M. Tiện ích mới trên VPS | 4 |
-| G. Đề nghị | 6 | | |
+| G. Đề nghị | 6 | N. Phân công ba lớp (2026-08-26) | 8 |
 
 ---
 
@@ -170,25 +170,74 @@ Tổng: **88 mã** / 13 nhóm.
 - [ ] **M3** Sao lưu tự động hằng ngày **và** đã thử phục hồi thành công một lần từ bản sao lưu.
 - [ ] **M4** `/healthz` trả 200 cho Nginx; `/readyz` trả 503 khi tắt cơ sở dữ liệu.
 
+## N. Phân công ba lớp — bổ sung 2026-08-26
+
+Ba lớp phân công trên cây công việc: **Ban lãnh đạo kiểm soát** (1 người — admin hoặc Phó GĐ
+phụ trách phòng; công việc "Công việc chung" thì mọi Phó GĐ + admin), **Lãnh đạo phòng phụ
+trách** (nhiều người — Trưởng/Phó phòng của phòng đã chọn; công việc chung ⇒ rỗng), **Cán bộ làm
+trực tiếp** (1 người — chính là cột Người thực hiện đổi tên hiển thị). Nhiệm vụ (cấp 3) KHÔNG có
+ô Ban kiểm soát và chỉ chọn TỐI ĐA MỘT lãnh đạo phòng phụ trách, nguồn bị ép ở máy chủ:
+nằm trong công việc con ⇒ phải thuộc danh sách lãnh đạo của chính CV con đó; thuộc công việc cha
+trực tiếp ⇒ phải thuộc các Phó GĐ phụ trách phòng. Dữ liệu cũ tự điền theo luật mặc định khi chạy
+migration `005_phan_cong.sql`.
+
+- [ ] **PA1** Form tạo/sửa Công việc có đủ ô: Phòng (có lựa chọn «Công việc chung»), Ban lãnh đạo
+      kiểm soát, Lãnh đạo phòng phụ trách (đa chọn). Đổi phòng là danh sách ứng viên nạp lại.
+- [ ] **PA2** Chọn phòng cụ thể ⇒ Ban lãnh đạo kiểm soát **được điền sẵn** Phó GĐ phụ trách phòng
+      đó (không có thì admin); chọn «Công việc chung» ⇒ mặc định admin, lãnh đạo phòng rỗng.
+- [ ] **PA3** Gửi phân công SAI nguồn bị máy chủ chặn 400: supervisor là Trưởng phòng; leader là
+      cán bộ thường; công việc chung mà có leader.
+- [ ] **PA4** Công việc con kế thừa Ban kiểm soát + Lãnh đạo phòng của cha lúc tạo, và **được
+      phép** chọn lại danh sách khác cha («không bắt buộc trùng»).
+- [ ] **PA5** Nhiệm vụ trong công việc con: chỉ được chọn leader thuộc danh sách của CV con đó;
+      chọn người ngoài (kể cả Phó GĐ) ⇒ 400 `LEADER_NOT_IN_SOURCE`.
+- [ ] **PA6** Nhiệm vụ thuộc công việc cha trực tiếp: leader phải là một trong các Phó GĐ phụ
+      trách phòng; chọn lãnh đạo phòng thường ⇒ 400.
+- [ ] **PA7** Nhiệm vụ KHÔNG có ô Ban lãnh đạo kiểm soát — gửi khác rỗng lên API ⇒ 400; chọn hai
+      leader ⇒ 400 (CHECK `task_leader_single` chặn cả SQL trực tiếp).
+- [ ] **PA8** Modal chi tiết công việc (bấm vào tên công việc): rộng ~1500px, hiện đầy đủ Ban giám
+      đốc kiểm soát, «Phụ trách chung», cán bộ được giao gom từ cả công việc con lẫn nhiệm vụ;
+      Công việc con là khối xanh có hàng phân công riêng, bấm vào mới xòe Nhiệm vụ bên trong —
+      nhiệm vụ và công việc con không bao giờ hiện lẫn kiểu.
+
 ---
 
 ## Checklist khói §8.5 — 6 nhóm / 60 điểm
 
-**Lượt chạy: 2026-08-25 · Phase 4 · nhánh `vps/phase-4-frontend`.**
+**Lượt chạy lại: 2026-08-25 · Phase 6 · nhánh `vps/phase-6-stats` · HEAD `3df2e44`.**
+(Lượt trước: Phase 5 · `57cfa89` · 36 ✅ · 23 ⏳.)
 
-Môi trường: Nginx (cổng 8099) phục vụ tệp tĩnh trong `web/` và chuyển `/api/*` sang Express 5,
-PostgreSQL 16 với cơ sở dữ liệu **riêng** `quanlycongviec_uat` nạp bằng `npm run seed:dev`
-(không chạm vào dữ liệu dev). Mọi điểm đi đúng đường thật của người dùng:
-`google.script.run.<tên cũ>` → `web/assets/js/api-bridge.js` → `POST /api/rpc/<tên>`
-(kèm `X-CSRF-Token`) → `/api/v1` → cơ sở dữ liệu.
+Môi trường lượt này: Node trên máy thật cổng 3000 với `DATABASE_URL=…/quanlycongviec_uat`
+(`BASE=http://127.0.0.1:3000`, không cần Nginx cho phần API; migration đã đứng ở 004 từ
+Phase 5 nên không phải migrate thêm). Bộ khói **đã mở rộng** theo đúng ghi nợ §13.5: thêm
+helper `rest` (GET `/api/v1/*` bằng cookie phiên) và các điểm mới — T5–T10 gọi thẳng
+`/stats/charts?type=` ×6 + `/stats/summary` + `/stats/activities`; R1–R7 gọi
+`/gantt?groupBy=department|deputy|assignee` + cửa sổ from/to. Chữ lạc hậu «cả 7 còn 501» (N1)
+và «getTasks N+1» (C6) cũng đã sửa.
+
+Mọi điểm đi đúng đường thật của người dùng: `google.script.run.<tên cũ>` →
+`web/assets/js/api-bridge.js` → `POST /api/rpc/<tên>` (kèm `X-CSRF-Token`) → `/api/v1` → CSDL.
+Từ Phase 6, Tổng quan/Gantt còn đi đường REST MỚI: `GET /api/v1/stats|gantt`.
 
 Chạy lại: `bash tools/smoke-8.5.sh` — in mã HTTP từng điểm, tự dọn các dòng nó tạo ra và
-kết thúc bằng số dòng còn lại để đối chiếu với seed (9 công việc / 30 đầu việc).
+kết thúc bằng số dòng còn lại để đối chiếu với seed (**9 công việc / 30 đầu việc**).
 
-Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuyển, chờ Phase sau (không tính đỏ)
+Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuyển / chưa kiểm hết trên đường khói
 · — bản cũ không có điểm này.
 
-**Tổng: 19 ✅ · 2 ❌ · 38 ⏳ · 1 —**
+**Tổng: 49 ✅ · 0 ❌ · 10 ⏳ · 1 —** (đếm theo 60 ô checklist, không đếm hai lần)
+
+- 49 ✅ = Đ1–Đ6 (6) + T1–T10 (**đủ 4 thẻ có số thật + 6 biểu đồ vẽ từ server + hoạt động có phân trang**, 10) + C1–C14 (14) + D1–D2 (2) + N1–N10 (10) + R1–R7 (**Gantt cây 4 mức nhóm 3 kiểu + cửa sổ ngày**, 7).
+- 0 ❌ — không phát hiện hồi quy mới trong phase này.
+- 10 ⏳ = D3–D8 nút/badge UI duyệt trên cây (6) + R8–R11 đề nghị/chat/app (4) — cả hai nhóm là Phase 7/UI sau.
+- 1 — = R12 xuất Excel (Phase 7, bản cũ không có).
+
+Đối chiếu số liệu Apps Script ↔ VPS (việc **6.9**, TC-STAT-16): hai thuật toán cũ được port 1:1
+(`getSummaryStats` của Code.clean.gs và `renderStats`/`render*Chart` của app.js — **UI tự tính
+lại, bỏ qua tham số summaryStats, allTasks gồm cả cấp 2**) chạy trên cùng gói legacy rồi so với
+REST mới ở tầng CẤP 3: **chênh 0 từng con số** ở 4 thẻ + 6 biểu đồ. Dòng chênh duy nhất có chủ ý:
+«Tổng nhiệm vụ» UI cũ đếm thêm cấp 2 (bộ dữ liệu đối chiếu: chênh đúng 2 đơn vị) — chuẩn §0.1.
+Chi tiết: `server/tests/integration/stats-parity.test.js`.
 
 ### 1. Đăng nhập — 6/6 ✅
 
@@ -201,115 +250,127 @@ Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuy�
 | Đ5 | Vào lại | ✅ | Mật khẩu **cũ** `401`, mật khẩu **mới** `200` |
 | Đ6 | Hết phiên | ✅ | `UPDATE sessions SET expires_at = now() - interval '1 hour'` ⇒ `[401]`, không đi tiếp bằng phiên cũ |
 
-### 2. Tổng quan — 0/10, cả nhóm ⏳ (chưa chuyển)
+### 2. Tổng quan — 10/10 ✅ (Phase 6: vẽ từ server)
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
-| T1–T4 | 4 thẻ số có số (kèm bấm vào số mở đúng danh sách) | ⏳ | `[501] getDataForUser`, `[501] getInitialDataWithAuth`, `[501] getDepartmentContext` |
-| T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ⏳ | cùng 3 tên trên; không có nguồn dữ liệu nào khác cho đầu trang |
+| T1–T4 | 4 thẻ số có **nguồn** (kèm bấm vào số mở đúng danh sách) | ✅ nguồn | `[200] getDataForUser`, `[200] getInitialDataWithAuth`, `[200] getDepartmentContext`. Gói `GET /api/v1/bootstrap` trả `summaryStats` + `chartData` + `pendingCount` + `activities` đọc qua `v_countable_*` (việc 5.4). |
+| T5–T10 | 6 biểu đồ vẽ ra + «hoạt động gần đây» có dòng | ✅ Phase 6 | Bộ khói gọi thẳng REST mới, đủ 6 loại đều `[200]` với `{labels,data}` đúng hình dạng Chart.js: `status` / `project-progress` / `staff-performance` / `task-priority` / `timeline-progress` / `project-comparison`; kèm `[200] GET stats/summary` (7 công việc · 16 nhiệm vụ · 8 hoàn thành · 8 đang · 2 quá hạn trên dữ liệu khói) và `[200] GET stats/activities?page=1&limit=22` (phân trang, nút «Xem thêm»). app.js nạp bằng `napTongQuanTuServer()` khi vào Tổng quan; đếm qua `v_countable_*` — thêm mục Chờ duyệt không làm lệch một đơn vị (TC-STAT-05, TC-APR-06 ở `stats-api.test.js`). |
 
-Cả 10 điểm bị chặn bởi **một** nguyên nhân: 3 tên nạp dữ liệu đầu trang còn `pending()`.
-Chúng thuộc việc **5.10** (`GET /api/v1/bootstrap`) của Phase 5. Đã kiểm được phần cầu nối
-làm đúng phần của nó: khi **chưa** đăng nhập, `getInitialDataWithAuth` trả
-`[200] {"requireLogin":true}` chứ **không** trả 501 — giao diện vì thế vẫn hiện modal
-đăng nhập thay vì báo lỗi máy chủ.
+Khi **chưa** đăng nhập, `getInitialDataWithAuth` vẫn trả `[200] {"requireLogin":true}` chứ **không**
+401/501 — giữ nguyên ngoại lệ Phase 4. Lần khói đầu session này 500 `INTERNAL` vì UAT thiếu
+migration 004 (xem đầu mục); không phải lỗi code.
 
-### 3. Công việc — 13/14 ✅, 1 ❌
+### 3. Công việc — 14/14 ✅ (C7 hết đỏ, việc 5.12)
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
-| C1 | Tạo công việc | ✅ | `[200] addProjectWithAuth` → `CV019` |
-| C2 | Sửa | ✅ | `[200] updateProjectWithAuth` → `CV019` |
-| C3 | Xoá | ✅ | `[200] deleteProjectWithAuth` → xoá cả cây con: `deletedItems:["CV019-071","CV019-072"], deletedCount:3` |
-| C4 | Nhân bản | ✅ | `[200] copyProjectWithAuth` → «Đã nhân bản thành **CV020** (kèm 9 dòng con)» |
-| C5 | Tìm kiếm | ✅ | Lọc chạy ở giao diện, dữ liệu do `[200] getProjects` cấp (đủ 13 cột tên tiếng Việt bản cũ) |
-| C6 | Mở chi tiết | ✅ | `[200] getTasks` (đây là chỗ N+1 lời gọi đã ghi ở §13.5) |
-| C7 | **Tạo công việc con (cấp 2)** | ❌ | `[200] addTaskWithAuth` → `CV019-071`, nhưng `csdl: CV019-071 **cấp=3 cha=NULL**` |
-| C8 | Tạo nhiệm vụ (cấp 3) | ✅ | `[200] addTaskWithAuth` → `CV019-072` |
-| C9 | Kéo–thả | ✅ | `[200] reorderTasks` đổi đúng thứ tự 9 mã; mã lạ bị `skipped:["MÃ-KHÔNG-CÓ"]` chứ không làm đổ cả lệnh |
-| C10 | Nhắc việc — thêm | ✅ | `[200] addTaskReminder` ×2 → `id:10`, `id:11` |
-| C11 | Nhắc việc — sửa | ✅ | `[200] updateTaskReminder` sửa **theo số thứ tự** của bản cũ, đổi đúng dòng `id:11` (bẫy index→id, §13.5); số thứ tự ngoài danh sách → `[404]` «Không tìm thấy nhắc việc cần sửa (danh sách đã đổi)» |
-| C12 | Nhắc việc — xoá | ✅ | `[200] deleteTaskReminder` → còn đúng 1 dòng |
-| C13 | Link kết quả | ✅ | `[200] updateTaskWithAuth`; `csdl: 3 link: ["[Báo cáo] https://vd.local/bc.pdf", "https://vd.local/anh.png", "không-phải-link"]` — mỗi dòng một link, giữ nguyên phần `[Tên]`, dòng rác vẫn lưu chứ không chặn người dùng |
-| C14 | Hoàn thành nhanh | ✅ | `[200] updateTaskWithAuth` — một cú bấm đặt trạng thái + 100% + ngày báo cáo |
+| C1 | Tạo công việc | ✅ | `[200] addProjectWithAuth` |
+| C2 | Sửa | ✅ | `[200] updateProjectWithAuth` |
+| C3 | Xoá | ✅ | `[200] deleteProjectWithAuth` → xoá cả cây con, `deletedCount:3` |
+| C4 | Nhân bản | ✅ | `[200] copyProjectWithAuth` |
+| C5 | Tìm kiếm | ✅ | Lọc chạy ở giao diện, dữ liệu do `[200] getProjects` cấp |
+| C6 | Mở chi tiết | ✅ | `[200] getTasks` — **nợ N+1** vẫn còn, gộp ở việc **6.x / Phase 6** (§13.5) |
+| C7 | **Tạo công việc con (cấp 2)** | ✅ | Việc 5.12 phương án (b): nút «+ công việc con» trên cây + ô ẩn `level`/`parent`. Khói gửi `level:"2", parent:""` → `csdl: CV028-093 **cấp=2 cha=NULL`**. Không thêm `<select name="level">`. Nhân viên tạo cấp 2 qua RPC → 403 (`TC-RPC-24d`). |
+| C8 | Tạo nhiệm vụ (cấp 3) | ✅ | `[200] addTaskWithAuth` → `CV028-094` (không gửi level ⇒ REST mặc định 3). Có cảnh báo `ASSIGNEE_NOT_FOUND` nếu tên người không khớp — không làm đổ lệnh. |
+| C9 | Kéo–thả | ✅ | `[200] reorderTasks`; mã lạ bị `skipped` |
+| C10 | Nhắc việc — thêm | ✅ | `[200] addTaskReminder` |
+| C11 | Nhắc việc — sửa | ✅ | `[200] updateTaskReminder` theo **số thứ tự** bản cũ (bẫy index→id) |
+| C12 | Nhắc việc — xoá | ✅ | `[200] deleteTaskReminder` |
+| C13 | Link kết quả | ✅ | `[200] updateTaskWithAuth`; jsonb giữ nguyên `[Tên]` và dòng rác |
+| C14 | Hoàn thành nhanh | ✅ | `[200] updateTaskWithAuth` — một cú bấm: trạng thái + 100% + ngày báo cáo |
 
-**❌ C7** không phải lỗi cầu nối mà là **khoảng trống của giao diện cũ**: `#task-form` không có ô
-nào tên `level` hay `Mã cha`; `COL.T_LEVEL` và `COL.T_PARENT` chỉ được khai ở bảng `COL`
-([app.js:56-57](../web/assets/js/app.js#L56-L57)) rồi không chỗ nào đọc/ghi. Vì thế mọi đầu việc
-do bản cũ tạo đều là **cấp 3 không cha**. Cầu nối không được phép tự thêm ô mới (điều lệ đầu
-`app.js`: cấm đổi tên hàm / đổi id DOM ở Phase 4), nên điểm này ở lại đỏ và phải xử ở Phase sau
-bằng cách thêm ô chọn cấp + cha vào biểu mẫu.
+C7 **không** còn là khoảng trống giao diện: `#task-form` có hai ô ẩn `#task-create-level` /
+`#task-create-parent`; bấm hàng công việc ⇒ cấp 2 không cha; bấm hàng công việc con ⇒ cấp 3
+kèm `parentRef`; «+ Thêm» đứng riêng vẫn cấp 3. Test: `dom-contract.test.js`,
+`task-from-legacy-level.test.js`, `subwork-button-ui.test.js`, `rpc-bridge` TC-RPC-24b/c/d.
 
-### 4. Duyệt — 0/8, 1 ❌ + 7 ⏳
+### 4. Duyệt — D1–D2 ✅; D3–D8 máy chủ xong, nút UI ⏳
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
-| D1 | **Trưởng phòng tạo ra `Chờ duyệt`** | ❌ | tp01 (Trưởng phòng, phòng 1) tạo `CV021` → `csdl: CV021 **duyệt=Đã duyệt**`. Đối chứng: admin tạo `CV022` cũng «Đã duyệt» ⇒ trạng thái không phụ thuộc vai trò |
-| D2 | Nhãn vàng hiện | ⏳ | không có dòng `Chờ duyệt` nào để hiện (việc 5.6) |
-| D3 | Badge đếm đúng | ⏳ | như trên (việc 5.5) |
-| D4 | Phó GĐ thấy nút | ⏳ | trong 37 tên hàm cũ (§5.2) **không có** tên nào cho duyệt/từ chối (việc 5.2–5.3) |
-| D5 | Duyệt | ⏳ | như trên (việc 5.2) |
-| D6 | Từ chối | ⏳ | như trên, lý do bắt buộc ≥10 ký tự (việc 5.2) |
-| D7 | Thông báo tới | ⏳ | như trên (việc 5.7) |
-| D8 | Thống kê không đổi khi chờ duyệt | ⏳ | phụ thuộc nhóm 2 (chưa có thẻ số) · hai view `v_countable_works`/`v_countable_items` là việc 5.4 |
+| D1 | **Trưởng phòng tạo ra `Chờ duyệt`** | ✅ | Việc 5.1. tp01 tạo → `csdl: CV030 **duyệt=Chờ duyệt**`. |
+| D2 | admin tạo ⇒ `Đã duyệt` (đối chứng) **và** nhãn vàng trên cây | ✅ máy chủ / ✅ nhãn | admin tạo → `csdl: CV031 **duyệt=Đã duyệt**`. Nhãn vàng `pendingApprovalBadge` (việc 5.6) gắn 5 chỗ vẽ (thẻ công việc, bảng nhiệm vụ, list, Gantt-hàng, chi tiết). Test `pending-badge.test.js`. |
+| D3 | Badge đếm đúng | ⏳ UI | Máy chủ: `GET /api/v1/approvals/pending-count` + khoá `pendingCount` trong bootstrap (việc 5.5), có test. `app.js` **không** đọc `pendingCount` của gói bootstrap — `#projects-pending-count` / `#tasks-pending-count` đang đếm trạng thái **«Chưa bắt đầu / Tạm dừng»**, không phải chờ duyệt. Script khói `grep approveWork\|rejectWork\|duyet\|approval` in `0` vì **quá hẹp** (`pendingApprovalBadge` đã có); đừng lấy con số đó làm bằng chứng «chưa có nhãn». |
+| D4 | Phó GĐ thấy nút Duyệt | ⏳ UI | REST `POST /api/v1/approvals/:entity/:id/{submit,approve,reject}` **đã có** (việc 5.2–5.3, test `approvals-api.test.js`). **Không** có tên RPC tương ứng trong 37 tên. `app.js` **không** có nút Duyệt/Từ chối trên hàng công việc / công việc con — chỉ còn chỗ duyệt **đề nghị** (Phase 7). |
+| D5 | Duyệt | ⏳ UI | Như D4. Khói không gọi REST approve. Đừng tô xanh chỉ vì test máy chủ xanh. |
+| D6 | Từ chối (lý do ≥ 10 ký tự) | ⏳ UI | Như D4. Service chặn lý do rỗng / ngắn; XSS lý do từ chối có test. |
+| D7 | Thông báo tới | ⏳ UI | Việc 5.7 ghi bảng `notifications` khi có mục mới chờ / được duyệt / bị từ chối. Khói không đọc bảng này. Badge thông báo trên UI chưa nối lại sau mỗi lần duyệt. |
+| D8 | Thống kê không đổi khi chờ duyệt | ⏳ đối chiếu | Việc 5.4: hai view + test EXPLAIN. Bootstrap thống kê đọc view. Đối chiếu **4 thẻ + 6 biểu đồ không đổi một đơn vị** trên UI là việc **6.1/6.2/6.9**. |
 
-**❌ D1**: cột `works.approval_status` có mặc định `'Đã duyệt'::text` và **không** chỗ nào trong
-Phase 3/4 đặt «Chờ duyệt» theo vai trò người tạo. Đó là việc **5.1** của Phase 5. Ghi là đỏ vì
-đây là điểm §8.5 đã kiểm được và cho kết quả **sai** với nghiệp vụ, khác với D2–D8 là chưa
-chuyển. Giao diện cũ cũng không có nút nào cho duyệt công việc (đếm được **0** chỗ trong
-`app.js` nhắc tới duyệt công việc; cả 3 chuỗi «Chờ duyệt» đều thuộc phần **đề nghị**).
+Script khói D3–D8 vẫn in «không có tên hàm cũ» + `grep` = 0 — đó là **nợ của bộ khói**, không
+phải bằng chứng máy chủ thiếu. Máy chủ 5.1–5.7 **đã có test**; phần còn thiếu để tô xanh D3–D8
+là **nút trên cây + badge đọc `pendingCount`**. Việc này **không** thuộc Phase 6 (thống kê/Gantt)
+— ghi ở đây để session sau không quên, và **không** tự mở rộng Phase 6 làm luôn.
 
-### 5. Người dùng & Phòng — 0/10, cả nhóm ⏳
-
-| Mã | Điểm kiểm | KQ | Bằng chứng |
-|---|---|---|---|
-| N1–N3 | Thêm / sửa / xoá người dùng | ⏳ | `[501] addStaffWithAuth`, `updateStaffWithAuth`, `deleteStaffWithAuth` |
-| N4 | Gán phòng | ⏳ | `[501] updateStaffWithAuth` |
-| N5 | Gán vai trò phòng | ⏳ | như trên |
-| N6–N7 | Thêm / sửa phòng | ⏳ | `[501] addDepartmentWithAuth`, `updateDepartmentWithAuth` |
-| N8 | Gán Phó Giám đốc | ⏳ | `[501] updateDepartmentWithAuth` |
-| N9 | Xoá phòng còn người ⇒ bị chặn | ⏳ | `[501] deleteDepartmentWithAuth` |
-| N10 | Xoá phòng rỗng ⇒ được | ⏳ | như trên |
-
-Cả 7 tên hàm của nhóm này còn `pending()` (cùng với `getStaffList`). Nghiệp vụ bên dưới **đã có
-và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-department.test.js`,
-`rbac-matrix.test.js`); chỉ còn thiếu lớp ánh xạ tên cũ → `/api/v1`, là việc **5.11** của Phase 5.
-
-### 6. Còn lại — 0/12, 11 ⏳ + 1 —
+### 5. Người dùng & Phòng — RPC đã nối (việc 5.11); khói dummy args không phải 501
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
-| R1–R3 | Gantt 1 / 2 / 3 tháng | ⏳ | Gantt **không** có lời gọi máy chủ riêng, vẽ từ `allTasks`/`allProjects` ⇒ chặn theo nhóm 2 |
-| R4–R6 | Nhóm theo 3 kiểu | ⏳ | như trên |
-| R7 | Thu gọn | ⏳ | như trên |
-| R8 | Đề nghị — tạo | ⏳ | `[501] getProposals`, `[501] addProposalWithAuth` |
-| R9 | Đề nghị — sửa | ⏳ | `[501] updateProposalWithAuth` |
-| R10 | Chat gửi / nhận | ⏳ | `[501] getChatMessages`, `[501] sendChatMessage` |
-| R11 | App mở được | ⏳ | `[501] addApp` |
-| R12 | Xuất 3 file Excel | — | `app.js` **không có** hàm xuất nào (không `XLSX`, không `export*`): đây là tính năng **mới** của bản VPS (§2.13, mã UAT **M1**), lịch Phase 7 |
+| N1–N3 | Thêm / sửa / xoá người dùng | ✅ RPC | `getStaffList` `[200]` mảng thô. `addStaffWithAuth` với `{}` → `[400]` «Tên nhân viên là bắt buộc.» (validation, **không** 501). `updateStaffWithAuth`/`deleteStaffWithAuth` với `{}` → `[404]` vì id `"[object Object]"` — bộ khói gửi `'{"args":[{}]}'` cho cả 7 tên. REST `/api/v1/users` **viết ở việc 5.11** (không có từ Phase 1 — §7 câu cũ đã sửa). |
+| N4 | Gán phòng | ✅ RPC | Cùng `updateStaffWithAuth` → REST PATCH users. |
+| N5 | Gán vai trò phòng | ✅ RPC | như trên |
+| N6–N7 | Thêm / sửa phòng | ✅ RPC | `addDepartmentWithAuth` `{}` → `[400]`; `updateDepartmentWithAuth` đã chạy từ Phase 4. |
+| N8 | Gán Phó Giám đốc | ✅ RPC | `updateDepartmentWithAuth` |
+| N9 | Xoá phòng còn người ⇒ bị chặn | ✅ RPC | `deleteDepartmentWithAuth` đã nối; nghiệp vụ chặn phòng còn người nằm ở service (test `users-departments-crud.test.js`). Khói không gửi mã phòng thật. |
+| N10 | Xoá phòng rỗng ⇒ được | ✅ RPC | như trên; seed có `PH05` rỗng. |
 
-### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8)
+Cả 7 tên **không còn `pending()`**. Bộ khói vẫn ghi chú «cả 7 còn 501» — **nợ comment**, không
+phải trạng thái thật. Happy-path (thêm nhân sự đủ trường, xoá PH05) **chưa** nằm trong
+`smoke-8.5.sh`; đã kiểm tay `addStaffWithAuth` thiếu tên → 400 đúng. Đừng báo N* «xong UAT tay»
+chỉ vì hết 501.
 
-- `/` và `/index.html` → `200 text/html; charset=utf-8`, 70 272 B, **không** có `Cache-Control` dài.
-- `assets/css/app.css?v=20260825` 80 443 B · `assets/js/api-bridge.js?v=20260825` 16 933 B ·
-  `assets/js/app.js?v=20260825` 304 952 B — tất cả `200`.
-- 5 gói tự chứa đều `200` kèm `cache-control: public, max-age=2592000`:
-  `assets/vendor/tailwind/tailwind.min.css` 39 780 B · `chartjs/chart.umd.min.js` 208 522 B ·
-  `alpinejs/alpine.min.js` 54 447 B · `fontawesome/css/all.min.css` 102 025 B · `inter/inter.css` 7 263 B.
-- Đủ đầu bảo vệ trên mọi phản hồi: `nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`,
-  COOP, `Permissions-Policy` và CSP.
-- Tệp không tồn tại → `404` **có** đầu bảo vệ nhưng **không** có cache 30 ngày (bẫy `always`, §13.5).
-- Tìm `cdn.tailwindcss.com|cdnjs|googleapis` trong HTML được phục vụ: **0 chỗ**.
+### 6. Còn lại — R1–R7 ✅ Phase 6; R8–R11 ⏳ Phase 7; R12 —
 
-### Ba điểm phải làm gì tiếp
+| Mã | Điểm kiểm | KQ | Bằng chứng |
+|---|---|---|---|
+| R1–R3 | Gantt 1 / 2 / 3 tháng | ✅ Phase 6 | `GET /api/v1/gantt?from=&to=` — bộ khói gọi cửa sổ 30→90 ngày `[200]` trả cây đúng khoảng (việc ngoài hẳn biến mất, việc vắt qua còn). Ô «Xem: 1/2/3 tháng» đặt `ganttEndDate = start + n×30 − 1` (n=3 đúng 90 ngày như mặc định cũ); thanh **cắt hai đầu** / **ẩn khi ngoài khoảng** do `tests/unit/gantt-ui.test.js` canh (TC-STAT-13/14). |
+| R4–R6 | Nhóm theo 3 kiểu | ✅ Phase 6 | Ba lượt khói `[200] GET gantt?groupBy=department / deputy / assignee`. Thứ tự phòng theo `sort_order` (TC-STAT-11); Phó GĐ phụ trách 2 phòng gộp MỘT nhóm (TC-STAT-12) — cả hai có test riêng trong `gantt-api.test.js`. |
+| R7 | Thu gọn | ✅ Phase 6 | Việc **6.8**: nút thu gọn ở cả 3 mức Nhóm/Công việc/Công việc con, khoá lưu `localStorage` (`qlcv_gantt_collapsed`), tải lại trang vẫn giữ — TC-STAT-15 trong `gantt-ui.test.js`. |
+| R8 | Đề nghị — tạo | ⏳ | `[501] getProposals`, `[501] addProposalWithAuth` — Phase 7 |
+| R9 | Đề nghị — sửa | ⏳ | `[501] updateProposalWithAuth` — Phase 7 |
+| R10 | Chat gửi / nhận | ⏳ | `[501] getChatMessages`, `[501] sendChatMessage` — Phase 7 |
+| R11 | App mở được | ⏳ | `[501] addApp` — Phase 7. Còn `updateApp`/`deleteApp`/`addNotificationWithAuth` cũng 501. |
+| R12 | Xuất 3 file Excel | — | `app.js` **không có** hàm xuất nào. Tính năng mới §2.13 / UAT **M1**, lịch Phase 7. |
 
-1. **C7** — §13.4 mục 14 đã chốt **phương án (b)** ngày 2026-08-25: tạo cấp 2 bằng nút
-   «+ công việc con» ngay trên cây, `#task-form` giữ nguyên là tạo cấp 3, **không** thêm ô «Cấp».
-   Cài ở việc **5.12** (Phase 5) vì Phase 4 bị cấm đổi DOM.
-2. **D1** — đặt `approval_status = 'Chờ duyệt'` khi người tạo là Trưởng/Phó phòng: việc **5.1**.
-3. **38 điểm ⏳** — 17 điểm (nhóm Tổng quan + R1–R7) mở bằng việc **5.10** `GET /api/v1/bootstrap`;
-   10 điểm nhân sự/phòng mở bằng việc **5.11**; 7 điểm nhóm Duyệt bằng việc **5.2–5.7**;
-   4 điểm đề nghị/chat/app phải chờ **Phase 7**. Không có điểm nào ⏳ vì cầu nối sai.
+RPC còn `pending()` **đúng 10 tên**: `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`,
+`deleteProposalWithAuth`, `addApp`, `updateApp`, `deleteApp`, `getChatMessages`, `sendChatMessage`,
+`addNotificationWithAuth`. **27/37** đã chạy thật.
+
+### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8) — giữ từ Phase 4
+
+- `/` và `/index.html` → `200 text/html; charset=utf-8`, **không** có `Cache-Control` dài.
+- `assets/js/app.js?v=20260826-63` + **file mới** `assets/js/project-details.js?v=20260826-2`
+  (nạp SAU app.js, ghi đè modal chi tiết — bump cả hai khi đổi app.js).
+- 5 gói tự chứa `200` kèm `cache-control: public, max-age=2592000`.
+- Đủ đầu bảo vệ; 404 **không** cache 30 ngày; 0 CDN.
+
+### Lượt khói sau tính năng phân công ba lớp (2026-08-26, nhánh `vps/tinh-nang-phan-cong`)
+
+Chạy trọn bộ trên CSDL UAT (`quanlycongviec_uat`) **đã migrate 005**: phân bố mã
+`48×200 · 4×400 · 4×401 · 1×403 · 5×404 · 6×501` — không một `500`. Các điểm âm đều là điểm kiểm
+chủ đích (thiếu tham số, chưa đăng nhập, mã lạ); R8–R11 vẫn `501` đúng nhóm Phase 7. Bộ tự dọn về
+đúng dữ liệu seed.
+
+Điểm mới của tính năng này được canh bằng **19 phép kiểm** trong
+`server/tests/integration/assignments.test.js` (đăng nhập thật + Postgres thật): ứng viên theo
+phòng/chung; lưu đúng supervisor + leaders; chặn sai nguồn ở công việc / cấp 2 / nhiệm vụ;
+nhiệm vụ dưới CV con chỉ chọn leader trong danh sách của CV con đó; nhiệm vụ dưới cha chỉ chọn
+Phó GĐ phụ trách phòng; CHECK `task_leader_single` chặn cả SQL trực tiếp (23514). Backfill dữ liệu
+cũ đã xác minh trên UAT: công việc có phòng nhận Phó GĐ phụ trách + `{head,vice}`, việc chung
+nhận admin.
+
+### Việc tiếp theo (không còn điểm đỏ)
+
+1. **Phase 7** — đề nghị / quản lý app / chat / xuất Excel: §7 việc 7.1–7.6; 10 tên RPC còn 501;
+   quyền xuất chỉ trong phạm vi được thấy (**7.6** dễ thành lỗ rò). `addNotificationWithAuth` cũng để đó.
+2. **D3–D8 UI** — nút Duyệt/Từ chối trên cây + badge đọc `pendingCount`. Máy chủ REST xong từ
+   Phase 5, không có tên RPC; vẫn chưa ai yêu cầu làm.
+3. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt**
+   trên mảng đã do máy chủ chạm phạm vi (không có đường rò); nếu muốn lọc qua server thì thêm
+   `GET /stats/items` ở một session sau. Gantt nhóm `assignee` hiện đưa công việc vào nhóm của
+   MỖI người có nhiệm vụ trong đó và hiện toàn cây con — nếu muốn chỉ hiện nhánh của người đó
+   thì sửa `nhomTheoAssignee`.
 
 ---
 
@@ -317,7 +378,7 @@ và đã có test** ở Phase 2–3 (`repo-departments.test.js`, `work-items-dep
 
 | Ngày | Mã | Hiện tượng | Đã xử lý |
 |---|---|---|---|
-| 2026-08-25 | §8.5 C7 | Biểu mẫu cũ không tạo được công việc con cấp 2: `CV019-071` vào csdl với `cấp=3 cha=NULL`; `COL.T_LEVEL`/`COL.T_PARENT` khai ở `app.js:56–57` rồi không dùng | Chưa — chờ thêm ô cấp/cha vào `#task-form` (Phase 4 bị cấm đổi DOM) |
-| 2026-08-25 | §8.5 D1 | Trưởng phòng tạo `CV021` nhưng `approval_status` ra «Đã duyệt» (mặc định cột) | Chưa — việc 5.1 của Phase 5 |
+| 2026-08-25 | §8.5 C7 | Biểu mẫu cũ không tạo được công việc con cấp 2: `CV019-071` vào csdl với `cấp=3 cha=NULL`; `COL.T_LEVEL`/`COL.T_PARENT` khai ở `app.js:56–57` rồi không dùng | ✅ 2026-08-25 việc **5.12** phương án (b): nút «+ công việc con» trên cây + ô ẩn; khói `CV028-093 cấp=2 cha=NULL`. Không thêm ô «Cấp». |
+| 2026-08-25 | §8.5 D1 | Trưởng phòng tạo `CV021` nhưng `approval_status` ra «Đã duyệt» (mặc định cột) | ✅ 2026-08-25 việc **5.1**: tp01 → `CV030 duyệt=Chờ duyệt`; admin → `CV031 duyệt=Đã duyệt`. |
 
 

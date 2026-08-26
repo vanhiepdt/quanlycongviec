@@ -13,13 +13,27 @@ import { warnDueBeforeStart } from '../../utils/dateChecks.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import * as assignments from '../assignments/service.js';
+import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
+
+/** Công việc là cấp 1 của cây 3 tầng — hằng số để luật duyệt đọc được ý nghĩa con số. */
+const LEVEL_WORK = 1;
 
 /** Chặn theo quyền + phạm vi trên MỘT dòng cụ thể (§6: kiểm ở cả middleware và service). */
 function assertCan(user, action, row) {
   const verdict = can(user, action, 'work', row);
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+}
+
+/**
+ * Cổng ghi thứ hai, HẸP HƠN §6: mục đang chờ duyệt chỉ người lập (hoặc người duyệt được) mới sửa
+ * và xoá được (§7 việc 5.6). Gọi SAU `assertCan` để mã lỗi chung của §6 ra trước.
+ */
+function assertSuaDuoc(user, row) {
+  const verdict = coSuaDuocKhiChoDuyet(user, row);
+  if (!verdict.ok) throw new AppError('FORBIDDEN', verdict.message);
 }
 
 /** Dòng công việc theo id/mã, không có thì 404. */
@@ -41,6 +55,12 @@ export async function getOne(user, ref) {
   return work;
 }
 
+/** Kiểm Ban lãnh đạo kiểm soát + Lãnh đạo phòng phụ trách theo phòng CUỐI CÙNG của dòng. */
+async function assertPhanCong(patch, departmentId, client) {
+  await assignments.assertSupervisor(patch.supervisor_id ?? null, departmentId, client);
+  await assignments.assertLeaders(patch.leader_ids ?? [], departmentId, client);
+}
+
 export async function create(user, input) {
   assertCan(user, 'create', null);
   // Người nhận việc của cấp 1 là người quản lý công việc: tự đứng tên ⇒ "Tự đăng ký", giao cho
@@ -50,14 +70,39 @@ export async function create(user, input) {
     recipientId: input.manager_id ?? null,
     recipientName: input.manager_name ?? null,
   });
-  const work = await withPgErrors(() => repo.insert({ ...input, ...origin }));
+  // Phân công kiểm NGUỒN ở server: supervisor phải là admin/Phó GĐ phụ trách phòng; leaders phải
+  // là Trưởng/Phó phòng của phòng. Công việc chung (không phòng) ⇒ leaders phải rỗng.
+  await withTransaction(async (client) => {
+    await assertPhanCong(input, input.department_id ?? null, client);
+    return null;
+  });
+  // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo (§7 việc 5.1), không nhận từ thân request:
+  // `boCotKhoaDuyet` gỡ giá trị người dùng gửi lên trước, nếu không thì Trưởng phòng chỉ cần
+  // thêm `approvalStatus: 'Đã duyệt'` là tự duyệt xong việc của mình.
+  const work = await withPgErrors(() =>
+    repo.insert({
+      ...boCotKhoaDuyet(input),
+      approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK),
+      ...origin,
+    })
+  );
   return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
 }
 
 export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
-  const work = await withPgErrors(() => repo.update(current.id, patch));
+  assertSuaDuoc(user, current);
+  // Đổi phòng cùng lúc với đổi phân công ⇒ kiểm theo phòng MỚI (phòng đích), không theo phòng cũ.
+  const phongMoi = Object.hasOwn(patch, 'department_id')
+    ? patch.department_id
+    : current.department_id;
+  await withTransaction(async (client) => {
+    await assertPhanCong(patch, phongMoi ?? null, client);
+    return null;
+  });
+  // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
+  const work = await withPgErrors(() => repo.update(current.id, boCotKhoaDuyet(patch)));
   return {
     work,
     // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
@@ -74,6 +119,7 @@ export function remove(user, ref) {
   return withTransaction(async (client) => {
     const current = await mustFind(ref, client);
     assertCan(user, 'delete', current);
+    assertSuaDuoc(user, current);
     const items = await itemsRepo.listByWork(current.id, {}, client);
     await repo.remove(current.id, client);
     return {
@@ -129,7 +175,18 @@ export function copy(user, ref, { name = null } = {}) {
       recipientName: source.manager_name ?? null,
     });
     const work = await withPgErrors(() =>
-      repo.copyRow(source.id, { code, name, ...workOrigin }, client)
+      repo.copyRow(
+        source.id,
+        {
+          code,
+          name,
+          // Bản sao đi qua đúng cửa duyệt của người bấm Nhân bản, không thừa hưởng khoá duyệt của
+          // bản gốc (§7 việc 5.1).
+          approvalStatus: trangThaiDuyetKhiTao(user, LEVEL_WORK),
+          ...workOrigin,
+        },
+        client
+      )
     );
 
     const items = await itemsRepo.listByWork(source.id, {}, client);
@@ -144,6 +201,7 @@ export function copy(user, ref, { name = null } = {}) {
           code: itemCode,
           workId: work.id,
           parentId: null,
+          approvalStatus: trangThaiDuyetKhiTao(user, itemsRepo.LEVEL_SUBWORK),
           ...deriveOrigin({
             actor: user,
             recipientId: item.assignee_id ?? null,
@@ -165,6 +223,7 @@ export function copy(user, ref, { name = null } = {}) {
           workId: work.id,
           // Cha đã bị xoá khỏi dữ liệu gốc hoặc nhiệm vụ mồ côi ⇒ bản sao cũng mồ côi.
           parentId: item.parent_id == null ? null : (idMap.get(item.parent_id) ?? null),
+          approvalStatus: trangThaiDuyetKhiTao(user, itemsRepo.LEVEL_TASK),
           ...deriveOrigin({
             actor: user,
             recipientId: item.assignee_id ?? null,
