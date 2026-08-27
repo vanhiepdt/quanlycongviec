@@ -1,9 +1,14 @@
 // Bảng ánh xạ 37 tên hàm cũ → route `/api/v1/*` (§5.2).
 //
 // Bảng này là hợp đồng của cầu tương thích: MỖI tên hàm mà `web/assets/js/app.js` gọi phải có
-// đúng một dòng ở đây, kể cả những tên chưa có nghiệp vụ ở máy chủ mới. Thiếu một tên thì lời gọi
-// im lặng trả `undefined` và giao diện hỏng ở chỗ không ai đoán được — nên tên chưa làm được vẫn
-// phải có dòng, chỉ khác là trả lỗi 501 với câu tiếng Việt nói rõ chức năng nào chưa có.
+// đúng một dòng ở đây. Thiếu một tên thì lời gọi im lặng trả `undefined` và giao diện hỏng ở chỗ
+// không ai đoán được.
+//
+// TỪ 2026-08-27: **37/37 tên chạy thật**, không còn dòng nào chờ (`addNotificationWithAuth` là tên
+// cuối, nối ở phiên Phase 7). Khuôn `pending()` từng dùng cho các tên chưa chuyển đã bỏ vì không
+// còn chỗ gọi; cần khai lại một tên chưa làm thì dựng lại đối tượng
+// `{ rest, notImplemented: true, handler() { throw new AppError('NOT_IMPLEMENTED', …) } }` —
+// `routes.js` và `GET /api/rpc` vẫn đọc cờ `notImplemented`. Tuyệt đối không bỏ trống dòng.
 //
 // KẾ HOẠCH NÓI 36, THỰC TẾ 37: đếm hết các dòng bảng §5.2 và đối chiếu với `app.js` thì có 37
 // tên (§13.5). Con số 36 trong §5.1/§5.2 là sai sót của kế hoạch, đã sửa lại.
@@ -28,20 +33,6 @@ import {
   taskFromLegacy,
   taskToLegacy,
 } from './legacyFields.js';
-
-/** Hàm cũ có thật nhưng nghiệp vụ chưa chuyển sang máy chủ mới — thất bại RÕ RÀNG, không im lặng. */
-function pending(label, rest = null) {
-  return {
-    rest,
-    notImplemented: true,
-    handler() {
-      throw new AppError(
-        'NOT_IMPLEMENTED',
-        `Chức năng «${label}» chưa được chuyển sang máy chủ mới. Vui lòng liên hệ quản trị.`
-      );
-    },
-  };
-}
 
 /** Đối số bắt buộc phải có: giao diện cũ gọi thiếu tham số là lỗi lập trình, phải hiện ra ngay. */
 function required(value, name) {
@@ -590,11 +581,31 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
-  // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
-  // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
-  // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-
-  addNotificationWithAuth: pending('Tạo thông báo', 'POST /notifications'),
+  // --- Thông báo ------------------------------------------------------------------------------
+  // Tên RPC CUỐI CÙNG được nối (§13.3 phiên 2026-08-27). Từ đây bảng không còn dòng `pending()`
+  // nào: 37/37 tên chạy thật.
+  addNotificationWithAuth: {
+    rest: 'POST /notifications',
+    async handler([data], ctx) {
+      // Form cũ (`createNotificationModal`) gửi thẳng ba tên `content` / `recipient` / `type` qua
+      // `new FormData`, không phải tên cột Sheets — nên không cần hàm `*FromLegacy` để đổi tên.
+      const raw = data ?? {};
+      const created = await ctx.call('POST', '/notifications', {
+        content: raw.content ?? '',
+        recipient: raw.recipient ?? '',
+        type: raw.type ?? '',
+      });
+      // `addNotification` bản cũ trả `{success, notificationId}`; `handleAdd` chỉ đọc
+      // `response.success` cho loại `notification`, nhưng vẫn trả id cho đúng hình dạng cũ. Bảng
+      // mới không có cột `code` nên id là số, và một lần gửi "tất cả mọi người" sinh nhiều dòng ⇒
+      // kèm `total` để chỗ gọi mới biết đã gửi cho bao nhiêu người.
+      return {
+        success: true,
+        notificationId: created.notifications[0]?.id ?? null,
+        total: created.total,
+      };
+    },
+  },
 });
 
 export const RPC_NAMES = Object.freeze(Object.keys(RPC_TABLE));

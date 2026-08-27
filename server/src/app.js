@@ -18,6 +18,7 @@ import { chatRouter } from './modules/chat/routes.js';
 import { departmentsRouter } from './modules/departments/routes.js';
 import { exportRouter } from './modules/export/routes.js';
 import { ganttRouter } from './modules/gantt/routes.js';
+import { notificationsRouter } from './modules/notifications/routes.js';
 import { proposalsRouter } from './modules/proposals/routes.js';
 import { statsRouter } from './modules/stats/routes.js';
 import { usersRouter } from './modules/users/routes.js';
@@ -114,6 +115,7 @@ export function createV1Router() {
   v1.use('/proposals', proposalsRouter);
   v1.use('/apps', appsRouter);
   v1.use('/chat', chatRouter);
+  v1.use('/notifications', notificationsRouter);
   v1.use('/export', exportRouter);
   return v1;
 }

@@ -6,8 +6,9 @@
 //      Lưu — không có lỗi nào hiện ra.
 //   2. HÌNH DẠNG CŨ: `getProjects`/`getTasks` trả MẢNG khoá tiếng Việt (`Mã dự án`, `Tên nhiệm vụ`),
 //      các hàm ghi trả `{success:true, projectId/taskId}` — đúng thứ 28 chỗ gọi đang đọc.
-//   3. KHÔNG ÂM THẦM: tên chưa có nghiệp vụ trả 501 kèm câu tiếng Việt; thiếu token CSRF trả 403;
-//      tên lạ trả 404. Không bao giờ 200 rỗng.
+//   3. KHÔNG ÂM THẦM: thiếu token CSRF trả 403; tên lạ trả 404; lời gọi thiếu dữ liệu trả 400 nói
+//      rõ trường nào. Không bao giờ 200 rỗng. Từ 2026-08-27 KHÔNG còn tên nào trả 501 — 37/37 tên
+//      đã nối vào nghiệp vụ thật (`addNotificationWithAuth` là tên cuối).
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
@@ -72,36 +73,29 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
 
   it('TC-RPC-03: mỗi tên đã làm được đều khai đúng method + route REST', () => {
     const implemented = Object.entries(RPC_TABLE).filter(([, e]) => !e.notImplemented);
-    // Phase 7: 7.1 nối 4 tên đề nghị, 7.2 nối 3 tên app, 7.3 nối 2 tên chat ⇒ 27 + 4 + 3 + 2 = 36.
-    expect(implemented).toHaveLength(36);
+    // Phase 7 nối nốt: 7.1 bốn tên đề nghị, 7.2 ba tên app, 7.3 hai tên chat và
+    // `addNotificationWithAuth` ⇒ 27 + 4 + 3 + 2 + 1 = 37, tức TOÀN BỘ bảng.
+    expect(implemented).toHaveLength(37);
     for (const [name, entry] of implemented) {
       expect(entry.rest, name).toMatch(/^(GET|POST|PATCH|DELETE) \//);
       expect(typeof entry.handler, name).toBe('function');
     }
   });
 
-  it('TC-RPC-04: GET /api/rpc liệt kê cả tên chưa làm để không ai tưởng là thiếu', async () => {
+  it('TC-RPC-04: GET /api/rpc báo 37/37 đã nối, KHÔNG còn tên nào chờ', async () => {
     const res = await api.get('/api/rpc');
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(37);
     const pending = res.body.data.functions.filter((f) => !f.implemented);
-    expect(pending).toHaveLength(1);
-    expect(pending.map((f) => f.name)).toContain('addNotificationWithAuth');
-    // Đề nghị (7.1), Quản lý App (7.2) và Chat (7.3) đã nối vào nghiệp vụ — không còn nằm trong
-    // nhóm chờ.
-    expect(pending.map((f) => f.name)).not.toContain('getProposals');
-    expect(pending.map((f) => f.name)).not.toContain('addApp');
-    expect(pending.map((f) => f.name)).not.toContain('getChatMessages');
-    expect(pending.map((f) => f.name)).not.toContain('sendChatMessage');
-    expect(pending.map((f) => f.name)).not.toContain('getStaffList');
-    expect(pending.map((f) => f.name)).not.toContain('addDepartmentWithAuth');
-    expect(pending.map((f) => f.name)).not.toContain('getDataForUser');
-    expect(pending.map((f) => f.name)).not.toContain('getInitialDataWithAuth');
-    expect(pending.map((f) => f.name)).not.toContain('getDepartmentContext');
+    expect(pending).toHaveLength(0);
+    // Tên cuối cùng từng chờ (Phase 5 → Phase 7) giờ có route thật.
+    const noti = res.body.data.functions.find((f) => f.name === 'addNotificationWithAuth');
+    expect(noti.implemented).toBe(true);
+    expect(noti.rest).toBe('POST /notifications');
   });
 });
 
-describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
+describe('cửa vào: CSRF, tên lạ, không còn tên nào chờ', () => {
   it('TC-RPC-05: thiếu header CSRF ⇒ 403, hàm ghi KHÔNG chạy', async () => {
     const res = await rpc('addProjectWithAuth', [{ name: 'Việc lén' }], { csrf: null });
     expect(res.status).toBe(403);
@@ -116,22 +110,39 @@ describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
     expect(res.body.error.message).toContain('kiemTraViSao');
   });
 
-  it('TC-RPC-07: tên chưa có nghiệp vụ ⇒ 501 + câu tiếng Việt gọi đúng tên chức năng', async () => {
-    const res = await rpc('addNotificationWithAuth', [{}]);
-    expect(res.status).toBe(501);
-    expect(res.body.ok).toBe(false);
-    expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toContain('Tạo thông báo');
+  it('TC-RPC-07: addNotificationWithAuth chạy THẬT — tên cuối cùng hết 501', async () => {
+    const nhan = await makeLoginUser({
+      code: 'NV002',
+      email: 'b@congty.vn',
+      full_name: 'Trần Thị B',
+      role: 'Nhân viên',
+      department_id: dept.id,
+    });
+    const res = await rpc('addNotificationWithAuth', [
+      { content: 'Họp toàn đơn vị 8h thứ Hai', recipient: 'Trần Thị B', type: 'Khẩn cấp' },
+    ]);
+    expect(res.status).toBe(200);
+    expect(res.body.data.success).toBe(true);
+    expect(res.body.data.notificationId).toBeTypeOf('number');
+    expect(res.body.data.total).toBe(1);
+    // Và có dòng thật trong bảng, gắn đúng người nhận (tên → `user_id`, §4.3).
+    const { rows } = await pool.query('SELECT user_id, content, type FROM notifications');
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0].user_id)).toBe(Number(nhan.id));
+    expect(rows[0].content).toBe('Họp toàn đơn vị 8h thứ Hai');
+    expect(rows[0].type).toBe('warning');
   });
 
-  it('TC-RPC-08: tên chưa làm còn lại trả 501, không tên nào lọt thành 200', async () => {
+  it('TC-RPC-08: không còn tên nào mang cờ notImplemented, và lời gọi thiếu dữ liệu ra 400 chứ không 501', async () => {
     const pendingNames = Object.entries(RPC_TABLE)
       .filter(([, e]) => e.notImplemented)
       .map(([name]) => name);
-    for (const name of pendingNames) {
-      const res = await rpc(name, [{}, {}]);
-      expect(res.status, name).toBe(501);
-    }
+    expect(pendingNames).toEqual([]);
+    // `[{}]` từng là lời gọi trả 501; giờ nó đi vào nghiệp vụ thật nên phải trả lỗi dữ liệu.
+    const res = await rpc('addNotificationWithAuth', [{}]);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.field).toBe('content');
   });
 });
 
