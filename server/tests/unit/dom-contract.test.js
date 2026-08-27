@@ -44,9 +44,21 @@ describe('4.7 — không còn listener treo vào id không tồn tại', () => {
    * có nhắc tên ba id này để người sau biết vì sao chúng biến mất — nhắc trong chú thích thì không
    * sao, còn còn sót dưới dạng chuỗi nghĩa là vẫn còn code chạm vào chúng.
    */
-  it('TC-DEAD-03: ba id chết không còn tồn tại dưới dạng chuỗi trong code', () => {
-    for (const dead of ['add-notification-btn', 'add-project-btn', 'add-task-btn']) {
+  it('TC-DEAD-03: năm id chết không còn tồn tại dưới dạng chuỗi trong code', () => {
+    // 2026-08-27: tab Nhiệm vụ bỏ ô ngày đơn lẻ (thay bằng Tháng/Năm) — hai id dưới cùng phải chết
+    // ở CẢ hai phía: xoá khỏi index.html thì cũng không được còn code nào đọc chúng.
+    for (const dead of [
+      'add-notification-btn',
+      'add-project-btn',
+      'add-task-btn',
+      'tasks-date-filter',
+      'tasks-date-clear',
+    ]) {
       expect({ dead, conSot: APP.includes(`"${dead}"`) }).toEqual({ dead, conSot: false });
+      expect({ dead, trongHtml: INDEX.includes(`id="${dead}"`) }).toEqual({
+        dead,
+        trongHtml: false,
+      });
     }
   });
 });

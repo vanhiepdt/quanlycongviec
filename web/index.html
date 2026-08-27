@@ -695,20 +695,25 @@
             <div id="tasks-section" class="section">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-2xl font-bold text-gray-900">Quản lý nhiệm vụ</h3>
-                    <div class="flex items-center space-x-3">
+                    <div class="flex items-center flex-wrap gap-3">
                         <div class="relative">
                             <input type="text" id="tasks-search" placeholder="Tìm kiếm nhiệm vụ..."
                                 class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
                         </div>
+                        <!-- 2026-08-27: bỏ ô «ngày» đơn lẻ, lọc theo THÁNG + NĂM (nhiệm vụ có khoảng
+                             [bắt đầu, hạn] GIAO với tháng đã chọn). Option nạp bằng JS: dongBoOThangNamTasks. -->
                         <div class="flex items-center gap-2">
                           <i class="fas fa-calendar-day text-blue-500"></i>
-                          <input type="date" id="tasks-date-filter" class="form-input py-2 px-2 text-sm w-36"
-                                title="Lọc nhiệm vụ theo khoảng Ngày bắt đầu - Hạn chót">
-                          <button type="button" id="tasks-date-clear" class="text-gray-400 hover:text-red-500" title="Bỏ lọc ngày">
-                            <i class="fas fa-times-circle"></i>
-                          </button>
+                          <select id="tasks-month-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn tháng lọc nhiệm vụ"></select>
+                          <select id="tasks-year-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn năm lọc nhiệm vụ"></select>
                         </div>
+                        <select id="tasks-staff-filter" class="form-select py-2 px-3 text-sm w-44" aria-label="Lọc nhiệm vụ theo người thực hiện">
+                            <option value="">Tất cả cán bộ</option>
+                        </select>
+                        <select id="tasks-dept-filter" class="form-select py-2 px-3 text-sm w-44" aria-label="Lọc nhiệm vụ theo phòng">
+                            <option value="">Tất cả phòng</option>
+                        </select>
                         <select id="tasks-status-filter" class="form-select w-40">
                             <option value="">Tất cả</option>
                             <option value="Chưa bắt đầu">Chưa bắt đầu</option>
@@ -1180,7 +1185,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260827-75"></script>
+    <script src="assets/js/app.js?v=20260827-76"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260826-4"></script>
 

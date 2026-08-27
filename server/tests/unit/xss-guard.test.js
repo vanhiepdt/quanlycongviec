@@ -54,9 +54,9 @@ const CO_Y_KHONG_BOC = [
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 6,
+    so: 7,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -144,9 +144,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // "Lỗi tải tin nhắn" — vòng hỏi lại 10 giây phải im lặng khi mạng chập chờn, chứ không xoá
     // khung chat người dùng đang đọc. Xoá 1 chỗ ghi HẰNG (không có nội suy) ⇒ 79 chỗ, giá trị
     // giữ 566.
+    // 2026-08-27 (tab Nhiệm vụ — lọc Tháng/Năm/Cán bộ/Phòng + gom theo công việc con): renderTasks
+    // bỏ khối glass-card theo công việc cấp 1, thay bằng dải phân cách mỏng
+    // (`createTasksWorkSeparatorHtml`) + `createTasksSubworkBlockHtml` cho từng công việc con; hai
+    // builder này escape từng trường một lần nên +4 giá trị nội suy, và ô Năm mới xoá rỗng option
+    // trước khi nạp lại (+1 chỗ ghi HẰNG) ⇒ 80 chỗ / 570 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 79, gia_tri: 566 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 80, gia_tri: 570 });
   });
 });
 

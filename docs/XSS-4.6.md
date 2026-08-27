@@ -99,6 +99,17 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `escapeHtml(formatChatMessage(...))` trong `renderChatMessages` — máy chủ lưu nguyên văn thẻ
 > người gõ (TC-MISC-08), nên chỗ thoát duy nhất là chỗ vẽ này; test
 > `tests/unit/chat-ui.test.js` chạy app.js thật trong jsdom để chốt.
+>
+> **Cập nhật 2026-08-27 (tab Nhiệm vụ — lọc Tháng/Năm/Cán bộ/Phòng, gom theo công việc con).**
+> `renderTasks` không còn dựng một khối `glass-card` cho mỗi công việc cấp 1; cấp 1 giờ chỉ là dải
+> phân cách mỏng (`createTasksWorkSeparatorHtml`) và mỗi CÔNG VIỆC CON là một khối riêng
+> (`createTasksSubworkBlockHtml`: mũi tên thu gọn, thư mục đỏ, mã, số nhiệm vụ, trạng thái + tiến độ
+> tổng hợp theo đúng luật `ganCayCon`). Hai builder này thoát từng trường một lần
+> (`escapeHtml` cho chữ, `escapeHtmlAttr` cho `data-khoi` / `data-project-id` / `data-project-name`),
+> không có on* mang dữ liệu; ròng rã **+4 giá trị nội suy**. Ô Năm của tab Nhiệm vụ xoá rỗng option
+> trước khi nạp lại — **+1 chỗ ghi HẰNG** (`innerHTML = ""`, đã ghi vào `SINK_DA_SOAT_TAY`)
+> ⇒ **80 chỗ / 570 giá trị** (TC-SEC-17). Hai ô ngày cũ (`#tasks-date-filter`,
+> `#tasks-date-clear`) bị bỏ ở CẢ index.html và app.js nên dom-contract vẫn sạch.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

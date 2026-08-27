@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-75");
+console.info("[QLCV] app.js 20260827-76");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -23,8 +23,10 @@ let chartInstance = null,
   allApps = [],
   currentProposalFilter = "",
   currentOverviewProjectFilter = null,
-  tasksStartDateFilter = formatDateForInput(new Date()),
-  expandedCompletedProjects = new Set(),
+  tasksXemThang = new Date().getMonth() + 1,
+  tasksXemNam = new Date().getFullYear(),
+  tasksLocCanBo = "",
+  tasksLocPhong = "",
   allAdminNames = [],
   currentGanttDate = new Date(),
   ganttStartDate = new Date();
@@ -596,23 +598,13 @@ function setupEventListeners() {
   }), document.getElementById("overdue-tasks")?.closest(".modern-stat-card")?.addEventListener("click", () => {
     openStatListModal("task", "overdue", "Danh sách nhiệm vụ quá hạn");
   }), setupGanttEventListeners(), setupOverviewProjectFilter();
-  const tasksDateFilterEl = document.getElementById("tasks-date-filter");
-  tasksDateFilterEl && (tasksDateFilterEl.value = tasksStartDateFilter, tasksDateFilterEl.addEventListener("change", function () {
-    tasksStartDateFilter = this.value, renderTasks(), renderTaskStats();
-  })), document.getElementById("tasks-date-clear")?.addEventListener("click", function () {
-    tasksStartDateFilter = "";
-    const tasksDateFilterEl2 = document.getElementById("tasks-date-filter");
-    if (tasksDateFilterEl2) tasksDateFilterEl2.value = "";
-    renderTasks(), renderTaskStats();
-  }), document.addEventListener("click", function (event) {
-    const toggleBtn = event.target.closest(".tasks-toggle-btn");
+  // 2026-08-27: tab Nhiệm vụ dùng Tháng/Năm + Cán bộ + Phòng (không còn ô «ngày» đơn lẻ),
+  // và mỗi công việc con là một khối tự thu gọn được.
+  setupTasksFilterControls();
+  document.addEventListener("click", function (event) {
+    const toggleBtn = event.target.closest(".tasks-subwork-toggle");
     if (!toggleBtn) return;
-    const project = toggleBtn.dataset.project,
-      el = document.getElementById("tasks-table-" + project),
-      el2 = toggleBtn.querySelector("i");
-    if (expandedCompletedProjects.has(project)) expandedCompletedProjects.delete(project);else expandedCompletedProjects.add(project);
-    if (el) el.classList.toggle("hidden");
-    el2 && (el2.classList.toggle("fa-chevron-right"), el2.classList.toggle("fa-chevron-down"));
+    doiTrangThaiThuGonTasks(toggleBtn.dataset.khoi || "");
   });
 }
 function setupOverviewProjectFilter() {
@@ -936,6 +928,8 @@ function createProjectCard(project, showDetails = false) {
 function renderTasks() {
   const tasksGridEl = document.getElementById("tasks-grid");
   if (!tasksGridEl) return;
+  // Nạp lại option cho 4 ô lọc: dữ liệu cán bộ/phòng về sau lúc gắn bộ lắng nghe nên phải bù ở đây.
+  dongBoOThangNamTasks(), populateTasksStaffFilter(), populateTasksDeptFilter();
   let list = [];
   if (isAdmin()) list = allTasks;else {
     const userAllowedProjects = getUserAllowedProjects();
@@ -964,18 +958,203 @@ function renderTasks() {
   sorted.forEach(sorted2 => {
     const project = allProjects.find(project2 => project2[COL.P_ID] === sorted2),
       projectName = project ? project[COL.P_NAME] : "Công việc " + sorted2,
-      projectStatus = project ? project[COL.P_STATUS] : "",
-      projectManager = project ? project[COL.P_MANAGER] : "",
-      text2 = project ? formatDateForDisplay(project[COL.P_START]) : "",
-      text3 = project ? formatDateForDisplay(project[COL.P_END]) : "",
-      data2 = data[sorted2],
-      filteredData2 = data2.filter(taskMatchesDateFilter);
-    if (filteredData2.length === 0) return;
-    const allMatch = data2.every(data22 => (data22[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")),
-      allMatch2 = allMatch && !expandedCompletedProjects.has(sorted2),
-      filteredData22 = filteredData2;
-    text += "\n            <div class=\"glass-card\">\n            <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n              <div class=\"flex items-center justify-between\">\n                <h3 class=\"text-lg font-semibold text-gray-900 flex items-center\">\n                  " + (allMatch ? "<button class=\"tasks-toggle-btn mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center\" data-project=\"" + escapeHtml(sorted2) + "\" title=\"Thu gọn/Mở rộng\"><i class=\"fas fa-chevron-" + (allMatch2 ? "right" : "down") + "\"></i></button>" : "") + "\n                  " + escapeHtml(projectName) + " (" + escapeHtml(sorted2) + ")\n                  <span class=\"status-badge " + escapeHtml(getStatusClass(projectStatus)) + " ml-3 text-xs\">" + (escapeHtml(projectStatus) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + "\n                  " + (allMatch ? "<span class=\"ml-2 text-xs text-green-600\"><i class=\"fas fa-check-circle\"></i> Hoàn thành</span>" : "") + "\n                </h3>\n                <div class=\"flex items-center space-x-3\">\n                  <div class=\"flex items-center space-x-2\">\n                    <span class=\"text-xs text-gray-500\"> " + (escapeHtml(projectManager) || "Chưa gán") + " • " + escapeHtml(text2) + " - " + escapeHtml(text3) + "</span>\n                    <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + data2.length + " nhiệm vụ</span>\n                  </div>\n                  " + createSubworkFromWorkButtonHtml(sorted2, projectName, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n                  <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtml(sorted2) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n                    + Thêm\n                  </button>\n                </div>\n              </div>\n            </div>\n            <div class=\"overflow-x-auto tasks-table-wrap " + (allMatch2 ? "hidden" : "") + "\" id=\"tasks-table-" + escapeHtml(sorted2) + "\">\n              <table class=\"min-w-full table-auto\">\n                <thead class=\"bg-gray-50\">\n                  <tr>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nhiệm vụ</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Người thực hiện</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Trạng thái</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ưu tiên</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Tiến độ</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Link kết quả</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ngày bắt đầu</th>\n                    <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Hạn chót</th>\n                    <th class=\"px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>\n                  </tr>\n                </thead>\n                <tbody class=\"bg-white divide-y divide-gray-200\">\n                  " + filteredData22.map(filteredData222 => createTaskTableRowSimple(filteredData222)).join("") + "\n                </tbody>\n              </table>\n            </div>\n            </div>\n          ";
-  }), tasksGridEl.innerHTML = text || "<div class=\"loading-card\">Không có nhiệm vụ nào khớp ngày đã chọn</div>";
+      xep = xepNhiemVuTheoCongViecCon(data[sorted2], sorted2);
+    if (xep.khoi.length === 0) return;
+    text += createTasksWorkSeparatorHtml(sorted2, projectName, project, xep.tongSoNhiemVu) + xep.khoi.map(khoi => createTasksSubworkBlockHtml(khoi)).join("");
+  }), tasksGridEl.innerHTML = text || "<div class=\"loading-card\">Không có nhiệm vụ nào khớp bộ lọc đã chọn</div>";
+}
+/**
+ * Dải phân cách MỎNG của công việc cấp 1 (2026-08-27): chỉ một dòng tiêu đề, không lặp lại thanh
+ * công cụ như trước — mọi nhiệm vụ nằm trong các khối công việc con phía dưới.
+ */
+function createTasksWorkSeparatorHtml(maCongViec, tenCongViec, project, soNhiemVu) {
+  const trangThai = project ? project[COL.P_STATUS] || "" : "",
+    nguoiQuanLy = project ? project[COL.P_MANAGER] || "" : "",
+    phong = project ? project[COL.P_DEPT] || "" : "";
+  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\">" + escapeHtml(tenCongViec) + " (" + escapeHtml(maCongViec) + ")</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
+}
+/**
+ * Xếp các dòng của MỘT công việc cấp 1 thành khối theo CÔNG VIỆC CON (cấp 2).
+ *
+ * Vỏ cấp 2 lấy từ `allTasks` (cây đầy đủ) để nhiệm vụ vẫn về đúng khối kể cả khi bản thân dòng cấp 2
+ * không nằm trong danh sách người dùng thấy; nhiệm vụ cấp 3 thì lấy từ `rows` rồi qua bộ lọc.
+ * Nhiệm vụ không có cha (hoặc cha lạ) dồn vào khối «Nhiệm vụ trực thuộc công việc» đặt sau cùng.
+ */
+function xepNhiemVuTheoCongViecCon(rows, maCongViec) {
+  const congViecCon = allTasks.filter(row => row[COL.T_PID] === maCongViec && Number(row[COL.T_LEVEL]) === 2),
+    nhiemVu = rows.filter(row => Number(row[COL.T_LEVEL]) !== 2 && taskMatchesTasksFilters(row)),
+    theoCha = {};
+  nhiemVu.forEach(row => {
+    const maCha = row[COL.T_PARENT] || "";
+    (theoCha[maCha] = theoCha[maCha] || []).push(row);
+  });
+  const khoi = [];
+  congViecCon.slice().sort((a, b) => String(a[COL.T_ID] || "").localeCompare(String(b[COL.T_ID] || ""))).forEach(con => {
+    const maCon = con[COL.T_ID] || "",
+      ds = theoCha[maCon] || [];
+    delete theoCha[maCon];
+    if (ds.length > 0) khoi.push({
+      khoa: maCon,
+      ma: maCon,
+      ten: con[COL.T_NAME] || "",
+      maCongViec: maCongViec,
+      tenCongViec: "",
+      nhiemVu: ds,
+      truc: false
+    });
+  });
+  let treo = [];
+  Object.keys(theoCha).forEach(key => {
+    treo = treo.concat(theoCha[key]);
+  });
+  if (treo.length > 0) khoi.push({
+    khoa: "truc:" + maCongViec,
+    ma: maCongViec,
+    ten: "Nhiệm vụ trực thuộc công việc",
+    maCongViec: maCongViec,
+    tenCongViec: "",
+    nhiemVu: treo,
+    truc: true
+  });
+  let tongSoNhiemVu = 0;
+  khoi.forEach(item => {
+    tongSoNhiemVu += item.nhiemVu.length;
+  });
+  return {
+    khoi: khoi,
+    tongSoNhiemVu: tongSoNhiemVu
+  };
+}
+/**
+ * Trạng thái + tiến độ tổng hợp của một khối — ĐÚNG luật `ganCayCon` phía máy chủ
+ * (tiến độ = % nhiệm vụ hoàn thành). Tính trên các nhiệm vụ ĐANG HIỆN nên số nhiệm vụ,
+ * tiến độ và trạng thái ở đầu khối luôn khớp với bảng bên dưới.
+ */
+function tinhTongHopNhiemVu(rows) {
+  const tong = rows.length,
+    xong = rows.filter(row => String(row[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
+    tre = rows.some(row => isTaskOverdue(row[COL.T_DUE]) && !String(row[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")),
+    hoanThanh = tong > 0 && xong === tong;
+  return {
+    tong: tong,
+    xong: xong,
+    tienDo: tong > 0 ? Math.round(xong / tong * 100) : 0,
+    trangThai: hoanThanh ? "Hoàn thành" : tre ? "Trễ hạn" : "Đang thực hiện",
+    lop: hoanThanh ? "status-completed" : tre ? "status-overdue" : "status-active"
+  };
+}
+/** Một khối = đầu khối (mũi tên thu gọn + thư mục đỏ + mã + đếm + tổng hợp) và bảng nhiệm vụ. */
+function createTasksSubworkBlockHtml(khoi) {
+  const tongHop = tinhTongHopNhiemVu(khoi.nhiemVu),
+    thuGon = tasksThuGon.has(khoi.khoa),
+    tieuDe = khoi.truc ? khoi.ten : khoi.ten + " (" + khoi.ma + ")";
+  return "\n    <div class=\"glass-card\">\n      <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n        <div class=\"flex items-center justify-between gap-3\">\n          <h4 class=\"text-base font-semibold text-gray-900 flex items-center min-w-0\">\n            <button type=\"button\" class=\"tasks-subwork-toggle mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center shrink-0\" data-khoi=\"" + escapeHtmlAttr(khoi.khoa) + "\" title=\"Thu gọn/Mở rộng\" aria-expanded=\"" + (thuGon ? "false" : "true") + "\"><i class=\"fas fa-chevron-" + (thuGon ? "right" : "down") + "\"></i></button>\n            <i class=\"fas fa-folder" + (thuGon ? "" : "-open") + " text-red-500 mr-2 shrink-0\"></i>\n            <span class=\"truncate\">" + escapeHtml(tieuDe) + "</span>\n            <span class=\"status-badge " + escapeHtml(tongHop.lop) + " ml-3 text-xs shrink-0\">" + escapeHtml(tongHop.trangThai) + "</span>\n          </h4>\n          <div class=\"flex items-center gap-3 shrink-0\">\n            <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + escapeHtml(tongHop.tong) + " nhiệm vụ</span>\n            <div class=\"flex items-center gap-2\">\n              <div class=\"w-24 h-2 bg-gray-200 rounded-full\">\n                <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(tongHop.tienDo) + "%\"></div>\n              </div>\n              <span class=\"text-xs text-gray-600 w-10 text-right\">" + escapeHtml(tongHop.tienDo) + "%</span>\n            </div>\n            <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtmlAttr(khoi.maCongViec) + "\" data-project-name=\"" + escapeHtmlAttr(khoi.ten) + "\" title=\"Thêm nhiệm vụ\">\n              + Thêm\n            </button>\n          </div>\n        </div>\n      </div>\n      <div class=\"overflow-x-auto tasks-table-wrap " + (thuGon ? "hidden" : "") + "\">\n        <table class=\"min-w-full table-auto\">\n          <thead class=\"bg-gray-50\">\n            <tr>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nhiệm vụ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Người thực hiện</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Trạng thái</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ưu tiên</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Tiến độ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Link kết quả</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ngày bắt đầu</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Hạn chót</th>\n              <th class=\"px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>\n            </tr>\n          </thead>\n          <tbody class=\"bg-white divide-y divide-gray-200\">\n            " + khoi.nhiemVu.map(nhiemVu => createTaskTableRowSimple(nhiemVu)).join("") + "\n          </tbody>\n        </table>\n      </div>\n    </div>\n  ";
+}
+/** ======================================================================
+ * TAB NHIỆM VỤ (2026-08-27): lọc theo THÁNG/NĂM + CÁN BỘ + PHÒNG; mỗi công việc con là
+ * một khối thu gọn được, trạng thái thu gọn có khoá RIÊNG, không dùng chung với Gantt.
+ * ==================================================================== */
+const TASKS_THU_GON_KEY = "qlcv_tasks_collapsed";
+let tasksThuGon = docTrangThaiThuGonTasks();
+function docTrangThaiThuGonTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_THU_GON_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+function luuTrangThaiThuGonTasks() {
+  try {
+    localStorage.setItem(TASKS_THU_GON_KEY, JSON.stringify([...tasksThuGon]));
+  } catch (err) {
+    /* chế độ riêng tư chặn localStorage — thu gọn vẫn hoạt động, chỉ không nhớ */
+  }
+}
+function doiTrangThaiThuGonTasks(khoa) {
+  if (!khoa) return;
+  tasksThuGon.has(khoa) ? tasksThuGon.delete(khoa) : tasksThuGon.add(khoa);
+  luuTrangThaiThuGonTasks(), renderTasks();
+}
+function taskMatchesStaffFilter(task) {
+  return !tasksLocCanBo || String(task[COL.T_ASSIGNEE] || "") === tasksLocCanBo;
+}
+/** Nhiệm vụ mang phòng của CÔNG VIỆC cha — không có cột phòng riêng cho nhiệm vụ. */
+function taskMatchesDeptFilter(task) {
+  if (!tasksLocPhong) return true;
+  const congViec = allProjects.find(item => item[COL.P_ID] === task[COL.T_PID]);
+  return !!congViec && String(congViec[COL.P_DEPT] || "") === tasksLocPhong;
+}
+function taskMatchesTasksFilters(task) {
+  return taskMatchesDateFilter(task) && taskMatchesStaffFilter(task) && taskMatchesDeptFilter(task);
+}
+/** Ô Tháng/Năm + Cán bộ + Phòng của tab Nhiệm vụ — nối MỘT lần (mốc dataset.daNoi như Gantt). */
+function setupTasksFilterControls() {
+  dongBoOThangNamTasks(), populateTasksStaffFilter(), populateTasksDeptFilter();
+  const oThang = document.getElementById("tasks-month-select"),
+    oNam = document.getElementById("tasks-year-select"),
+    oCanBo = document.getElementById("tasks-staff-filter"),
+    oPhong = document.getElementById("tasks-dept-filter");
+  oThang && !oThang.dataset.daNoi && ((oThang.dataset.daNoi = "1"), oThang.addEventListener("change", handleTasksMonthChange));
+  oNam && !oNam.dataset.daNoi && ((oNam.dataset.daNoi = "1"), oNam.addEventListener("change", handleTasksYearChange));
+  oCanBo && !oCanBo.dataset.daNoi && ((oCanBo.dataset.daNoi = "1"), oCanBo.addEventListener("change", handleTasksStaffFilter));
+  oPhong && !oPhong.dataset.daNoi && ((oPhong.dataset.daNoi = "1"), oPhong.addEventListener("change", handleTasksDeptFilter));
+}
+function dongBoOThangNamTasks() {
+  const oThang = document.getElementById("tasks-month-select"),
+    oNam = document.getElementById("tasks-year-select");
+  if (!oThang || !oNam) return;
+  if (oThang.options.length === 0)
+    for (let i = 1; i <= 12; i++) {
+      const op = document.createElement("option");
+      op.value = String(i), op.textContent = "Tháng " + i, oThang.appendChild(op);
+    }
+  const namHienTai = new Date().getFullYear(),
+    cacNam = [];
+  for (let y = namHienTai - 2; y <= namHienTai + 3; y++) cacNam.push(y);
+  if (cacNam.indexOf(tasksXemNam) < 0) cacNam.push(tasksXemNam);
+  cacNam.sort((a, b) => a - b);
+  if (oNam.options.length !== cacNam.length) {
+    oNam.innerHTML = "";
+    cacNam.forEach(y => {
+      const op = document.createElement("option");
+      op.value = String(y), op.textContent = "Năm " + y, oNam.appendChild(op);
+    });
+  }
+  oThang.value = String(tasksXemThang), oNam.value = String(tasksXemNam);
+}
+function populateTasksStaffFilter() {
+  const el = document.getElementById("tasks-staff-filter");
+  if (!el || el.options.length > 1) return;
+  allStaff.filter(staff => staff[COL.S_OBJECT_TYPE] !== "Nhà cung cấp").forEach(staff => {
+    const op = document.createElement("option");
+    op.value = staff[COL.S_NAME], op.textContent = staff[COL.S_NAME], el.appendChild(op);
+  });
+}
+function populateTasksDeptFilter() {
+  const el = document.getElementById("tasks-dept-filter");
+  if (!el || el.options.length > 1) return;
+  const list = isAdmin() ? departmentNames : visibleDepartments.length > 0 ? visibleDepartments : departmentNames;
+  (list || []).forEach(ten => {
+    const op = document.createElement("option");
+    op.value = ten, op.textContent = ten, el.appendChild(op);
+  });
+}
+function handleTasksMonthChange(event) {
+  const so = parseInt(event.target.value, 10);
+  if (!(so >= 1 && so <= 12)) return;
+  tasksXemThang = so, renderTasks(), renderTaskStats();
+}
+function handleTasksYearChange(event) {
+  const so = parseInt(event.target.value, 10);
+  if (!(so >= 1900 && so <= 2200)) return;
+  tasksXemNam = so, renderTasks(), renderTaskStats();
+}
+function handleTasksStaffFilter(event) {
+  tasksLocCanBo = event.target.value || "", renderTasks(), renderTaskStats();
+}
+function handleTasksDeptFilter(event) {
+  tasksLocPhong = event.target.value || "", renderTasks(), renderTaskStats();
 }
 function createTaskTableRowSimple(task) {
   const taskId = task[COL.T_ID] || "N/A",
@@ -3400,7 +3579,7 @@ function renderTaskStats() {
         project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
       return project && project[COL.P_MANAGER] === currentUser.name;
     })).filter(isCountableRow),
-    filteredTasks2 = allTasks2.filter(taskMatchesDateFilter),
+    filteredTasks2 = allTasks2.filter(taskMatchesTasksFilters),
     data = {
       pending: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
       active: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("đang")).length,
@@ -4089,15 +4268,42 @@ function handleAppRedirect(url, event) {
     document.body.insertAdjacentHTML("beforeend", text3);
   }, null);
 }
+/**
+ * Số thứ tự ngày (số nguyên) — bẫy §13.5(b): chuỗi 'yyyy-mm-dd' phân tích ra 00:00 UTC = 07:00 ICT,
+ * nên so Date thô với mốc nửa đêm giờ máy lệch một ngày (nhiệm vụ cuối tháng bị coi là ngoài phạm vi).
+ * Vì vậy tách y/m/d bằng chuỗi rồi quy về SỐ NGÀY, không so sánh Date.
+ */
+function phanTichYMDNgay(value) {
+  if (value == null || value === "") return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : [value.getFullYear(), value.getMonth() + 1, value.getDate()];
+  const text = String(value).trim(),
+    iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/),
+    vn = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (iso) return [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  if (vn) return [Number(vn[3]), Number(vn[2]), Number(vn[1])];
+  const date = new Date(text);
+  return isNaN(date.getTime()) ? null : [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+}
+function soThuTuNgay(value) {
+  const ymd = phanTichYMDNgay(value);
+  return ymd ? Math.floor(Date.UTC(ymd[0], ymd[1] - 1, ymd[2]) / 864e5) : null;
+}
+/**
+ * Luật lọc tháng (2026-08-27): nhiệm vụ hiện khi khoảng [Ngày bắt đầu, Hạn chót] GIAO với
+ * [đầu tháng, cuối tháng] đang chọn. CHỐT: nhiệm vụ không có ngày nào thì ẨN khi đang lọc tháng.
+ */
 function taskMatchesDateFilter(task) {
-  if (!tasksStartDateFilter) return true;
-  const date = new Date(tasksStartDateFilter);
-  date.setHours(0, 0, 0, 0);
-  const startDate = parseDateString(task[COL.T_START]);
-  if (!startDate || isNaN(startDate.getTime())) return true;
-  startDate.setHours(0, 0, 0, 0);
-  let dueDate = parseDateString(task[COL.T_DUE]);
-  return dueDate = dueDate && !isNaN(dueDate.getTime()) ? dueDate : startDate, dueDate.setHours(0, 0, 0, 0), date >= startDate && date <= dueDate;
+  const thang = Number(tasksXemThang),
+    nam = Number(tasksXemNam);
+  if (!(thang >= 1 && thang <= 12) || !(nam >= 1900 && nam <= 2200)) return true;
+  const dauThang = Math.floor(Date.UTC(nam, thang - 1, 1) / 864e5),
+    cuoiThang = Math.floor(Date.UTC(nam, thang, 0) / 864e5),
+    batDau = soThuTuNgay(task[COL.T_START]),
+    han = soThuTuNgay(task[COL.T_DUE]);
+  if (batDau == null && han == null) return false;
+  const a = batDau == null ? han : batDau,
+    b = han == null ? batDau : han;
+  return Math.min(a, b) <= cuoiThang && Math.max(a, b) >= dauThang;
 }
 function createAppModal(isEdit, app) {
   const text = isEdit ? "Cập nhật Ứng dụng" : "Thêm Ứng dụng mới",

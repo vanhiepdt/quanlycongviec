@@ -62,6 +62,9 @@ export default [
       'tests/unit/chat-ui.test.js',
       // export-menu.test.js: 3 liên kết xuất Excel + bộ lọc tháng gắn vào URL (việc 7.5).
       'tests/unit/export-menu.test.js',
+      // tasks-nhiem-vu-ui.test.js: tab Quản lý Nhiệm vụ — lọc Tháng/Năm/Cán bộ/Phòng và gom khối
+      // theo công việc con (2026-08-27) — chạy app.js thật trong jsdom.
+      'tests/unit/tasks-nhiem-vu-ui.test.js',
     ],
     languageOptions: {
       globals: {
