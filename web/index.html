@@ -59,6 +59,10 @@
                         <div class="flex-1 min-w-0">
                             <p id="user-name" class="text-sm font-medium text-gray-900 truncate"></p>
                             <p id="user-role" class="text-xs text-gray-600"></p>
+                            <!-- Nhãn ủy quyền: app.js mở ra khi có bản ủy quyền đang hiệu lực CHO mình,
+                                 kèm title "đang dùng quyền của <ai> đến <ngày>" -->
+                            <span id="uy-quyen-badge"
+                                class="hidden mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 cursor-help"></span>
                         </div>
                     </div>
                     <div class="flex gap-2 mt-2">
@@ -71,6 +75,10 @@
                             <i class="fas fa-sign-out-alt mr-2"></i>Đăng xuất
                         </button>
                     </div>
+                    <button id="uy-quyen-btn"
+                        class="w-full mt-2 px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors duration-200">
+                        <i class="fas fa-user-shield mr-2"></i>Ủy quyền của tôi
+                    </button>
                 </div>
 
                 <!-- Login button when not logged in -->
@@ -1185,7 +1193,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260827-77"></script>
+    <script src="assets/js/app.js?v=20260827-78"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260826-4"></script>
 

@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-77");
+console.info("[QLCV] app.js 20260827-78");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -202,7 +202,7 @@ function handleSuccessfulLogin(data) {
     const overviewFilterContainerEl = document.getElementById("overview-filter-container");
     overviewFilterContainerEl && overviewFilterContainerEl.classList.remove("hidden");
   }
-  setupGanttEventListeners(), loadDepartmentContext(), currentSection === "gantt" && renderGanttChart(), typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), setTimeout(() => {
+  setupGanttEventListeners(), loadDepartmentContext(), currentSection === "gantt" && renderGanttChart(), typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), napUyQuyenCuaToi(), setTimeout(() => {
     currentSection === "overview" && loadChatMessagesAsync();
   }, 500);
 }
@@ -499,7 +499,7 @@ function setupEventListeners() {
     });
   }), document.getElementById("send-chat-btn")?.addEventListener("click", sendChatMessage), document.getElementById("chat-input")?.addEventListener("keypress", function (event) {
     event.key === "Enter" && sendChatMessage();
-  }), document.addEventListener("click", handleQuickCompleteTask), document.getElementById("change-password-btn")?.addEventListener("click", showChangePasswordModal), document.getElementById("mobile-menu-btn").addEventListener("click", toggleMobileMenu), document.getElementById("mobile-overlay").addEventListener("click", closeMobileMenu), document.getElementById("login-btn")?.addEventListener("click", showLoginModal), document.getElementById("logout-btn")?.addEventListener("click", handleLogout), document.getElementById("login-form")?.addEventListener("submit", function (event) {
+  }), document.addEventListener("click", handleQuickCompleteTask), document.getElementById("change-password-btn")?.addEventListener("click", showChangePasswordModal), document.getElementById("uy-quyen-btn")?.addEventListener("click", moModalUyQuyen), document.getElementById("mobile-menu-btn").addEventListener("click", toggleMobileMenu), document.getElementById("mobile-overlay").addEventListener("click", closeMobileMenu), document.getElementById("login-btn")?.addEventListener("click", showLoginModal), document.getElementById("logout-btn")?.addEventListener("click", handleLogout), document.getElementById("login-form")?.addEventListener("submit", function (event) {
     event.preventDefault();
     const trimmed = document.getElementById("login-email").value.trim(),
       trimmed2 = document.getElementById("login-password").value.trim();
@@ -5104,5 +5104,319 @@ function renderGanttDaysHtml(totalDays) {
   }
   return html;
 }
+
+
+// ============================================================================
+// ỦY QUYỀN CÓ THỜI HẠN (§6 `docs/KE-HOACH-UY-QUYEN.md`)
+//
+// Quyền mượn được TÍNH Ở MÁY CHỦ trong `can()`; phần dưới đây chỉ hiển thị và gọi REST. Không có
+// dòng nào tự suy ra "tôi được làm gì" — sai lệch giữa hai phía thì máy chủ vẫn là rào chặn cuối.
+// ============================================================================
+
+/** Ủy quyền TÔI ĐANG NHẬN và còn hiệu lực — nguồn duy nhất của nhãn cạnh tên người dùng. */
+let uyQuyenNhan = [];
+
+/**
+ * GHI REST `/api/v1/...` (POST/PATCH/DELETE). Cầu RPC không dùng được ở đây: thêm tên mới vào cầu
+ * là đổi hình dạng cầu (37 tên đang bị test ghim), còn `restGet` chỉ biết đọc.
+ *
+ * CSRF theo đúng luật của máy chủ (`middleware/csrf.js`): giá trị nằm trong cookie đọc được, tên
+ * kết thúc bằng `_csrf`, và phải gửi lặp lại ở header `X-CSRF-Token`. Không có cookie thì gọi
+ * `GET /api/csrf` một lần — request đọc, `issueCsrfCookie` sẽ phát cookie.
+ *
+ * Trả `{ ok, data, error }` chứ không ném: mọi chỗ gọi đều cần hiện câu lỗi của máy chủ
+ * (DELEGATION_OVERLAP, DELEGATION_SCOPE_TOO_WIDE...) đúng nguyên văn cho người dùng.
+ */
+async function restGhi(method, path, body) {
+  try {
+    let token = docCookieCsrf();
+    if (!token) {
+      await fetch("/api/csrf", { credentials: "same-origin", headers: { Accept: "application/json" } });
+      token = docCookieCsrf();
+    }
+    const res = await fetch(path, {
+      method: method,
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": token || "" },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (res.status === 401) {
+      showLoginModal();
+      return { ok: false, error: "Phiên đăng nhập đã hết, hãy đăng nhập lại" };
+    }
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, error: (json && json.error && json.error.message) || "Máy chủ trả lỗi HTTP " + res.status };
+    }
+    return { ok: true, data: json && json.data ? json.data : null };
+  } catch (err) {
+    return { ok: false, error: "Không gọi được máy chủ: " + err.message };
+  }
+}
+
+/** Cookie CSRF: tên phụ thuộc biến môi trường máy chủ, chỉ chắc phần đuôi `_csrf` (xem api-bridge.js). */
+function docCookieCsrf() {
+  const parts = String(typeof document === "undefined" ? "" : document.cookie || "").split(";");
+  for (let i = 0; i < parts.length; i++) {
+    const pair = parts[i].trim(),
+      eq = pair.indexOf("=");
+    if (eq > 0 && pair.slice(0, eq).endsWith("_csrf")) return decodeURIComponent(pair.slice(eq + 1));
+  }
+  return "";
+}
+
+/** `YYYY-MM-DD` → `dd/mm/yyyy` cho phần hiển thị. Chuỗi lạ thì trả lại nguyên văn, không đoán. */
+function ngayVN(value) {
+  const text = String(value == null ? "" : value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text.slice(8, 10) + "/" + text.slice(5, 7) + "/" + text.slice(0, 4) : text;
+}
+
+/** Hôm nay theo MÁY người dùng, dạng `YYYY-MM-DD` — chỉ dùng làm giá trị mặc định của ô ngày. */
+function homNayISO() {
+  const now = new Date(),
+    hai = value => String(value).padStart(2, "0");
+  return now.getFullYear() + "-" + hai(now.getMonth() + 1) + "-" + hai(now.getDate());
+}
+
+/** Tôi là đầu nào của bản ghi: `id` của phiên là nguồn duy nhất, KHÔNG so theo họ tên (trùng tên). */
+function laCuaToi(row, cot) {
+  return currentUser && String(row[cot] || "") === String(currentUser.id || "");
+}
+
+/**
+ * Nạp danh sách ủy quyền của phiên hiện tại và vẽ lại nhãn. IM LẶNG: máy chủ cũ chưa có đường
+ * `/api/v1/delegations` thì `restGetIm` trả `null`, giao diện chỉ thiếu nhãn — không nổ toast.
+ */
+async function napUyQuyenCuaToi() {
+  const duLieu = await restGetIm("/api/v1/delegations");
+  const rows = (duLieu && duLieu.delegations) || [];
+  uyQuyenNhan = rows.filter(row => row.dang_hieu_luc === true && laCuaToi(row, "to_user_id"));
+  veNhanUyQuyen();
+  return rows;
+}
+
+/** Nhãn «đang được ủy quyền» cạnh tên người dùng, kèm tooltip nói rõ mượn quyền của AI, đến NGÀY nào. */
+function veNhanUyQuyen() {
+  const el = document.getElementById("uy-quyen-badge");
+  if (!el) return;
+  if (uyQuyenNhan.length === 0) {
+    el.classList.add("hidden"), el.removeAttribute("title");
+    return;
+  }
+  el.classList.remove("hidden"), el.textContent = "đang được ủy quyền";
+  el.setAttribute(
+    "title",
+    uyQuyenNhan.map(row => "Bạn đang dùng quyền của " + (row.from_user_name || "?") + " đến " + ngayVN(row.to_date)).join("\n")
+  );
+}
+
+/** Tên phòng theo id — phạm vi máy chủ trả về là mảng id, người dùng chỉ hiểu tên. */
+function tenPhongTheoIds(ids) {
+  const list = Array.isArray(ids) ? ids : [];
+  if (list.length === 0) return "Tất cả phòng tôi phụ trách";
+  return list
+    .map(id => {
+      const dept = (allDepartments || []).find(item => String(item[COL.D_DB_ID] || "") === String(id));
+      return dept ? String(dept[COL.D_NAME] || "") : "#" + id;
+    })
+    .join(", ");
+}
+
+/** Một dòng bảng ủy quyền. `laGiao` = bản ghi TÔI cho người khác (mới có nút huỷ). */
+function buildUyQuyenRow(row, laGiao) {
+  const hieuLuc = row.dang_hieu_luc === true,
+    daHuy = String(row.status || "") === "cancelled",
+    trangThai = daHuy ? "Đã huỷ" : hieuLuc ? "Đang hiệu lực" : "Chưa/hết hiệu lực",
+    mauTrangThai = daHuy ? "bg-gray-100 text-gray-600" : hieuLuc ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700",
+    nguoi = laGiao ? row.to_user_name : row.from_user_name;
+  return (
+    "<tr class=\"border-b border-gray-100\">" +
+    "<td class=\"py-2 pr-3 text-gray-900\">" +
+    escapeHtml(nguoi || "") +
+    "</td>" +
+    "<td class=\"py-2 pr-3 text-gray-600 whitespace-nowrap\">" +
+    escapeHtml(ngayVN(row.from_date)) +
+    " – " +
+    escapeHtml(ngayVN(row.to_date)) +
+    "</td>" +
+    "<td class=\"py-2 pr-3 text-gray-600\">" +
+    escapeHtml(tenPhongTheoIds(row.department_ids)) +
+    "</td>" +
+    "<td class=\"py-2 pr-3\"><span class=\"px-2 py-0.5 rounded-full text-xs " +
+    escapeHtmlAttr(mauTrangThai) +
+    "\">" +
+    escapeHtml(trangThai) +
+    "</span></td>" +
+    "<td class=\"py-2 pr-3 text-gray-600\">" +
+    escapeHtml(row.note || "") +
+    "</td>" +
+    "<td class=\"py-2 text-right\">" +
+    (laGiao && !daHuy
+      ? "<button type=\"button\" class=\"uy-quyen-huy text-xs text-red-600 hover:text-red-700\" data-id=\"" +
+        escapeHtmlAttr(row.id) +
+        "\" data-nguoi=\"" +
+        escapeHtmlAttr(nguoi || "") +
+        "\"><i class=\"fas fa-ban mr-1\"></i>Huỷ</button>"
+      : "") +
+    "</td>" +
+    "</tr>"
+  );
+}
+
+/** Một bảng (tôi giao / tôi nhận). Rỗng thì nói rõ là rỗng, không để khoảng trắng vô nghĩa. */
+function buildUyQuyenBang(rows, laGiao) {
+  if (rows.length === 0) {
+    return "<p class=\"text-sm text-gray-500 italic py-2\">" + escapeHtml(laGiao ? "Bạn chưa ủy quyền cho ai." : "Chưa ai ủy quyền cho bạn.") + "</p>";
+  }
+  return (
+    "<div class=\"overflow-x-auto\"><table class=\"w-full text-sm\"><thead><tr class=\"text-left text-xs uppercase text-gray-500 border-b border-gray-200\">" +
+    "<th class=\"py-2 pr-3\">" +
+    escapeHtml(laGiao ? "Người nhận" : "Người ủy quyền") +
+    "</th><th class=\"py-2 pr-3\">Khoảng ngày</th><th class=\"py-2 pr-3\">Phạm vi</th>" +
+    "<th class=\"py-2 pr-3\">Trạng thái</th><th class=\"py-2 pr-3\">Ghi chú</th><th></th>" +
+    "</tr></thead><tbody>" +
+    rows.map(row => buildUyQuyenRow(row, laGiao)).join("") +
+    "</tbody></table></div>"
+  );
+}
+
+/**
+ * Modal «Ủy quyền của tôi». Form tạo mới CHỈ hỏi người nhận, khoảng ngày và ghi chú: phạm vi để
+ * máy chủ suy ra từ các phòng người ủy quyền đang phụ trách (`department_managers`) — giao diện
+ * không tự chọn phòng, vì đoán rộng hơn máy chủ chỉ đổi một lời từ chối rõ ràng thành một ô nhập
+ * gây nhầm.
+ */
+function createUyQuyenModal(dsGiao, dsNhan) {
+  return (
+    "\n  <div id=\"uy-quyen-modal\" class=\"modal\">\n      <div class=\"modal-content max-w-3xl\">\n" +
+    "          <div class=\"flex items-center justify-between mb-4\">\n" +
+    "              <h3 class=\"text-xl font-bold text-gray-900\"><i class=\"fas fa-user-shield mr-2 text-blue-600\"></i>Ủy quyền của tôi</h3>\n" +
+    "              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\"><i class=\"fas fa-times\"></i></button>\n" +
+    "          </div>\n\n" +
+    "          <p class=\"text-xs text-gray-500 mb-4\">Người được ủy quyền dùng quyền của bạn trong đúng khoảng ngày, chỉ ở các phòng bạn phụ trách. Mọi việc họ làm nhờ ủy quyền đều được ghi nhật ký kèm mã bản ủy quyền.</p>\n\n" +
+    "          <h4 class=\"text-sm font-semibold text-gray-700 mb-1\">Tôi ủy quyền cho</h4>\n          " +
+    buildUyQuyenBang(dsGiao, true) +
+    "\n\n          <h4 class=\"text-sm font-semibold text-gray-700 mt-5 mb-1\">Tôi được ủy quyền</h4>\n          " +
+    buildUyQuyenBang(dsNhan, false) +
+    "\n\n          <form id=\"uy-quyen-form\" class=\"mt-5 pt-4 border-t border-gray-200\">\n" +
+    "              <h4 class=\"text-sm font-semibold text-gray-700 mb-2\">Ủy quyền mới</h4>\n" +
+    "              <div class=\"grid grid-cols-1 md:grid-cols-3 gap-3 mb-3\">\n" +
+    "                  <div class=\"form-group mb-0\">\n" +
+    "                      <label class=\"form-label required\">Email người nhận</label>\n" +
+    "                      <input type=\"text\" name=\"to\" class=\"form-input\" list=\"uy-quyen-staff-list\" placeholder=\"nguoinhan@...\" required>\n" +
+    "                      " +
+    buildStaffEmailDatalist("uy-quyen-staff-list", "") +
+    "\n                  </div>\n" +
+    "                  <div class=\"form-group mb-0\">\n" +
+    "                      <label class=\"form-label required\">Từ ngày</label>\n" +
+    "                      <input type=\"date\" name=\"fromDate\" class=\"form-input\" required value=\"" +
+    escapeHtmlAttr(homNayISO()) +
+    "\">\n                  </div>\n" +
+    "                  <div class=\"form-group mb-0\">\n" +
+    "                      <label class=\"form-label required\">Đến ngày</label>\n" +
+    "                      <input type=\"date\" name=\"toDate\" class=\"form-input\" required value=\"" +
+    escapeHtmlAttr(homNayISO()) +
+    "\">\n                  </div>\n" +
+    "              </div>\n" +
+    "              <div class=\"form-group\">\n" +
+    "                  <label class=\"form-label\">Ghi chú</label>\n" +
+    "                  <input type=\"text\" name=\"note\" class=\"form-input\" maxlength=\"1000\" placeholder=\"Đi công tác, họp ngoài cơ quan...\">\n" +
+    "              </div>\n" +
+    "              <div id=\"uy-quyen-error\" class=\"hidden mb-3\"></div>\n" +
+    "              <div class=\"flex justify-end space-x-3\">\n" +
+    "                  <button type=\"button\" class=\"btn-secondary close-modal\">Đóng</button>\n" +
+    "                  <button type=\"submit\" class=\"btn-accent\"><i class=\"fas fa-user-shield mr-2\"></i>Ủy quyền</button>\n" +
+    "              </div>\n" +
+    "          </form>\n" +
+    "      </div>\n  </div>\n"
+  );
+}
+
+/** Hiện lỗi trong modal ủy quyền — câu chữ của máy chủ, không diễn giải lại. */
+function showUyQuyenError(message) {
+  const el = document.getElementById("uy-quyen-error");
+  if (!el) return;
+  message
+    ? (el.innerHTML = "<div class=\"text-red-600 text-sm\">" + escapeHtml(message) + "</div>", el.classList.remove("hidden"))
+    : (el.innerHTML = "", el.classList.add("hidden"));
+}
+
+/**
+ * Mở modal ủy quyền. Không đi qua `openModal()` vì hàm đó đẩy submit sang `handleAdd/handleEdit` —
+ * hai hàm ấy không biết loại "uy-quyen" (cùng lý do như `openDepartmentModal`).
+ */
+async function moModalUyQuyen() {
+  if (!isAuthenticated) {
+    showToast("Vui lòng đăng nhập", "error");
+    return;
+  }
+  const duLieu = await restGet("/api/v1/delegations");
+  if (!duLieu) return;
+  const rows = duLieu.delegations || [];
+  uyQuyenNhan = rows.filter(row => row.dang_hieu_luc === true && laCuaToi(row, "to_user_id"));
+  veNhanUyQuyen();
+  const existing = document.getElementById("uy-quyen-modal");
+  existing && existing.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = createUyQuyenModal(
+    rows.filter(row => laCuaToi(row, "from_user_id")),
+    rows.filter(row => laCuaToi(row, "to_user_id"))
+  ), document.body.appendChild(wrapper.firstElementChild);
+  const modal = document.getElementById("uy-quyen-modal");
+  modal.classList.add("active"), modal.querySelector("form")?.addEventListener("submit", function (event) {
+    event.preventDefault(), taoUyQuyen();
+  }), modal.querySelectorAll(".close-modal").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault(), closeModal("uy-quyen-modal");
+    });
+  }), modal.querySelectorAll(".uy-quyen-huy").forEach(button => {
+    button.addEventListener("click", function () {
+      huyUyQuyen(this.dataset.id, this.dataset.nguoi);
+    });
+  }), modal.addEventListener("click", event => {
+    event.target === modal && closeModal("uy-quyen-modal");
+  });
+}
+
+/** Tạo bản ủy quyền. Ngày gửi lên đúng `YYYY-MM-DD` của `<input type="date">`, không tự đổi định dạng. */
+async function taoUyQuyen() {
+  const form = document.getElementById("uy-quyen-form");
+  if (!form) return;
+  const submitButton = form.querySelector("button[type=\"submit\"]"),
+    formData = new FormData(form),
+    read = key => String(formData.get(key) || "").trim(),
+    than = { toUserId: read("to").toLowerCase(), fromDate: read("fromDate"), toDate: read("toDate"), note: read("note") };
+  if (!than.toUserId || !than.fromDate || !than.toDate) {
+    showUyQuyenError("Cần đủ email người nhận và hai mốc ngày.");
+    return;
+  }
+  if (than.toDate < than.fromDate) {
+    showUyQuyenError("Ngày kết thúc không được trước ngày bắt đầu.");
+    return;
+  }
+  showUyQuyenError(""), setButtonLoading(submitButton, true);
+  const res = await restGhi("POST", "/api/v1/delegations", than);
+  setButtonLoading(submitButton, false);
+  if (!res.ok) {
+    showUyQuyenError(res.error);
+    return;
+  }
+  showToast("Đã ủy quyền cho " + than.toUserId, "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
+}
+
+/** Huỷ MỀM một bản ủy quyền của mình (máy chủ đặt `status='cancelled'`, dòng vẫn còn để tra nhật ký). */
+async function huyUyQuyen(id, nguoi) {
+  if (!id) return;
+  if (!window.confirm("Huỷ ủy quyền cho " + (nguoi || "người này") + "?")) return;
+  const res = await restGhi("DELETE", "/api/v1/delegations/" + encodeURIComponent(id));
+  if (!res.ok) {
+    showToast(res.error, "error");
+    return;
+  }
+  showToast("Đã huỷ ủy quyền", "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
+}
+
+
+
 
 

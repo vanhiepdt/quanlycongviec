@@ -110,6 +110,24 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > trước khi nạp lại — **+1 chỗ ghi HẰNG** (`innerHTML = ""`, đã ghi vào `SINK_DA_SOAT_TAY`)
 > ⇒ **80 chỗ / 570 giá trị** (TC-SEC-17). Hai ô ngày cũ (`#tasks-date-filter`,
 > `#tasks-date-clear`) bị bỏ ở CẢ index.html và app.js nên dom-contract vẫn sạch.
+>
+> **Cập nhật 2026-08-27 (ủy quyền có thời hạn — §6 `docs/KE-HOACH-UY-QUYEN.md`).** Modal «Ủy quyền
+> của tôi» thêm **3 chỗ ghi HTML**: bảng ủy quyền (`createUyQuyenModal(...)` — hai bảng «tôi giao» /
+> «tôi nhận» dựng qua `buildUyQuyenBang` → `buildUyQuyenRow`), khung lỗi trong modal
+> (`showUyQuyenError` dựng `<div class="text-red-600 …">` + `escapeHtml(message)`), và **1 chỗ ghi
+> HẰNG** xoá rỗng khung lỗi đó (`innerHTML = ""`, `SINK_DA_SOAT_TAY` `""` 7 → 8 chỗ).
+> **+18 giá trị nội suy**: tên hai đầu người, hai mốc ngày (`ngayVN`), tên phòng của phạm vi
+> (`tenPhongTheoIds`, id lạ thì hiện `#<id>`), nhãn trạng thái + lớp màu, ghi chú, `data-id` /
+> `data-nguoi` của nút huỷ, hai giá trị `value` mặc định của `<input type="date">`, và hai nhãn cột
+> đổi theo chiều ủy quyền ⇒ **83 chỗ / 588 giá trị** (TC-SEC-17).
+>
+> Ba điểm đáng nói ở khối này: (a) không có on* nào mang dữ liệu — nút huỷ đọc `dataset.id` /
+> `dataset.nguoi` trong listener chứ không nhét id vào `onclick="…"`, nên không cần
+> `escapeForInlineHandler`; (b) câu lỗi của MÁY CHỦ (`DELEGATION_OVERLAP`,
+> `DELEGATION_SCOPE_TOO_WIDE`…) cũng đi qua `escapeHtml` — chuỗi từ máy chủ vẫn là chuỗi ngoài;
+> (c) `tenPhongTheoIds` đọc `allDepartments` (tên phòng do người dùng nhập) nên phải thoát y như
+> dữ liệu người dùng. `tests/unit/uy-quyen-ui.test.js` bơm `<img src=x onerror=alert(1)>` vào tên
+> người, tên phòng và ghi chú để chốt cả ba đường.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

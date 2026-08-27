@@ -54,9 +54,9 @@ const CO_Y_KHONG_BOC = [
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 7,
+    so: 8,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -149,9 +149,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // (`createTasksWorkSeparatorHtml`) + `createTasksSubworkBlockHtml` cho từng công việc con; hai
     // builder này escape từng trường một lần nên +4 giá trị nội suy, và ô Năm mới xoá rỗng option
     // trước khi nạp lại (+1 chỗ ghi HẰNG) ⇒ 80 chỗ / 570 giá trị.
+    // 2026-08-27 (ủy quyền có thời hạn, §6 `docs/KE-HOACH-UY-QUYEN.md`): modal «Ủy quyền của tôi»
+    // thêm 3 chỗ ghi — khung lỗi (dựng HTML), xoá rỗng khung lỗi (hằng ""), và bảng ủy quyền dựng
+    // bằng `createUyQuyenModal(...)`. Mỗi trường của bản ghi (tên hai đầu người, ngày, tên phòng,
+    // trạng thái, ghi chú, `data-id`, `data-nguoi`) đi qua escapeHtml/escapeHtmlAttr đúng một lần
+    // ⇒ 83 chỗ / 588 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 80, gia_tri: 570 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 83, gia_tri: 588 });
   });
 });
 
