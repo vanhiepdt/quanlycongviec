@@ -314,6 +314,34 @@
                         title="Làm mới dữ liệu">
                         <i class="fas fa-sync-alt text-gray-600"></i>
                     </button>
+                    <!-- Xuất Excel (§7 việc 7.5): 3 mẫu, tải thẳng qua GET /api/v1/export/*.xlsx.
+                         Liên kết là HTML TĨNH, `capNhatLinkXuatExcel()` chỉ gắn thêm ?month= của bộ
+                         lọc đang bật. Phạm vi dữ liệu do MÁY CHỦ quyết (việc 7.6) — không có tham
+                         số nào ở đây nới được nó. -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" id="export-btn"
+                            class="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors duration-200"
+                            title="Xuất Excel">
+                            <i class="fas fa-file-excel text-emerald-600"></i>
+                        </button>
+                        <div x-show="open" @click.away="open = false"
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                            class="absolute right-0 mt-2 w-64 glass-card shadow-xl z-20">
+                            <a href="/api/v1/export/works.xlsx" id="export-works" class="quick-add-item">
+                                <i class="fas fa-sitemap text-blue-600"></i>
+                                <span>Công việc 3 cấp</span>
+                            </a>
+                            <a href="/api/v1/export/tasks.xlsx" id="export-tasks" class="quick-add-item">
+                                <i class="fas fa-user-check text-emerald-600"></i>
+                                <span>Nhiệm vụ theo người</span>
+                            </a>
+                            <a href="/api/v1/export/stats.xlsx" id="export-stats" class="quick-add-item">
+                                <i class="fas fa-chart-pie text-purple-600"></i>
+                                <span>Thống kê theo phòng</span>
+                            </a>
+                        </div>
+                    </div>
                     <!-- Quick Add -->
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open"
@@ -1152,7 +1180,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260827-71"></script>
+    <script src="assets/js/app.js?v=20260827-72"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260826-4"></script>
 

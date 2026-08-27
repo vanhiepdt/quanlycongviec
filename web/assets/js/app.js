@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-71");
+console.info("[QLCV] app.js 20260827-72");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -506,11 +506,11 @@ function setupEventListeners() {
   }), document.getElementById("projects-search")?.addEventListener("input", event => {
     filterCards(".project-card", event.target.value.toLowerCase());
   }), document.getElementById("projects-month-filter")?.addEventListener("change", () => {
-    renderProjects(), filterProjects();
+    renderProjects(), filterProjects(), capNhatLinkXuatExcel();
   }), document.getElementById("projects-month-clear")?.addEventListener("click", () => {
     const monthEl = document.getElementById("projects-month-filter");
-    monthEl && (monthEl.value = ""), renderProjects(), filterProjects();
-  }), document.getElementById("tasks-search")?.addEventListener("input", event => {
+    monthEl && (monthEl.value = ""), renderProjects(), filterProjects(), capNhatLinkXuatExcel();
+  }), document.getElementById("export-btn")?.addEventListener("click", capNhatLinkXuatExcel),document.getElementById("tasks-search")?.addEventListener("input", event => {
     filterTaskRows(event.target.value.toLowerCase());
   }), document.getElementById("tasks-status-filter")?.addEventListener("change", filterTasks), document.getElementById("projects-status-filter")?.addEventListener("change", filterProjects), document.addEventListener("click", function (event) {
     if (!isAuthenticated) return;
@@ -3456,6 +3456,36 @@ function batDauHoiLaiChat() {
 }
 function dungHoiLaiChat() {
   chatPollTimer && (clearInterval(chatPollTimer), chatPollTimer = null);
+}
+// ============================================================================
+// PHASE 7 việc 7.5 — Xuất Excel: 3 liên kết tĩnh trong menu, chỉ gắn thêm bộ lọc tháng
+//
+// KHÔNG dựng dữ liệu ở trình duyệt và KHÔNG gửi tham số phạm vi nào: máy chủ lọc theo đúng hàm
+// của API danh sách (việc 7.6). Ở đây chỉ nối `?month=` để số dòng trong file khớp số mục đang
+// hiện trên màn hình khi người dùng đang lọc tháng.
+// ============================================================================
+const XUAT_EXCEL_LINK = { "export-works": "works", "export-tasks": "tasks", "export-stats": "stats" };
+
+/** Ngày cuối của tháng "YYYY-MM" — mẫu thống kê nhận khoảng from/to chứ không nhận `month`. */
+function cuoiThangCua(thang) {
+  const [nam, thangSo] = thang.split("-").map(Number);
+  return thang + "-" + String(new Date(nam, thangSo, 0).getDate()).padStart(2, "0");
+}
+function capNhatLinkXuatExcel() {
+  const monthEl = document.getElementById("projects-month-filter"),
+    thang = monthEl && monthEl.value ? monthEl.value : "";
+  Object.keys(XUAT_EXCEL_LINK).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const mau = XUAT_EXCEL_LINK[id];
+    let url = "/api/v1/export/" + mau + ".xlsx";
+    if (thang) {
+      url += mau === "stats"
+        ? "?from=" + thang + "-01&to=" + cuoiThangCua(thang)
+        : "?month=" + thang;
+    }
+    el.setAttribute("href", url);
+  });
 }
 function updateChatBadge(count) {
   const chatBadgeEl = document.getElementById("chat-badge");

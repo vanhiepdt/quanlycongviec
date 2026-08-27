@@ -60,6 +60,8 @@ export default [
       // chat-ui.test.js: vòng hỏi lại 10 giây + thoát HTML của khung chat (việc 7.3) — chạy app.js
       // thật trong jsdom, fetch giả.
       'tests/unit/chat-ui.test.js',
+      // export-menu.test.js: 3 liên kết xuất Excel + bộ lọc tháng gắn vào URL (việc 7.5).
+      'tests/unit/export-menu.test.js',
     ],
     languageOptions: {
       globals: {
