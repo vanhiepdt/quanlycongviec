@@ -48,6 +48,11 @@ const optional = {
   DB_POOL_MAX: intIn(1, 100).default('10'),
   DB_STATEMENT_TIMEOUT_MS: intIn(100, 600000).default('15000'),
   CRON_OVERDUE: z.string().default('0 7 * * *'),
+  // Dọn tin chat cũ (§7 việc 7.4). Hằng tuần, 03:30 Chủ nhật: giờ thấp điểm, và một tuần một lần
+  // là đủ vì mốc giữ lại tính theo ngày chứ không theo lượt chạy.
+  CRON_CHAT_CLEANUP: z.string().default('30 3 * * 0'),
+  // Số ngày giữ lại tin chat. 90 theo §7 việc 7.4; để ở env cho lần cần đổi mà không sửa mã.
+  CHAT_KEEP_DAYS: intIn(1, 3650).default('90'),
   // Cờ tắt lịch chạy (§7 việc 5.8). MẶC ĐỊNH TẮT chứ không bật: staging và máy dev dùng chung
   // một CSDL bản sao, hai container cùng bật lịch là hai lượt thông báo trùng cho mỗi người.
   // Production bật tường minh trong `deploy/.env`.

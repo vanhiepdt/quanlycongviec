@@ -21,6 +21,7 @@ import cron from 'node-cron';
 import { env } from '../config/env.js';
 import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
+import * as chatService from '../modules/chat/service.js';
 import * as notiRepo from '../modules/notifications/repo.js';
 
 /** Nhiệm vụ đã xong thì không quá hạn nữa, dù hạn chót đã lùi lại bao lâu. */
@@ -127,9 +128,33 @@ export async function quetQuaHan({ now = new Date() } = {}) {
 
 /** Việc đã đăng ký, giữ lại để `dungLichChay()` gỡ được — tránh chồng lịch khi test/khởi động lại. */
 let viecDaDangKy = null;
+/** Lịch dọn chat cũ (việc 7.4) — giữ riêng để gỡ được độc lập với lịch quét quá hạn. */
+let viecDonChat = null;
+
+/**
+ * Một lượt dọn tin chat cũ (§7 việc 7.4).
+ *
+ * Mốc tính theo NGÀY trong CSDL (`now() - interval`), không theo lần chạy: bỏ một tuần vì container
+ * tắt thì lượt sau vẫn xoá đúng phần cần xoá, không dồn nợ.
+ *
+ * Chỉ dọn CHAT. Đề nghị, thông báo, nhật ký đều có luật giữ khác nhau và không nằm trong việc này.
+ *
+ * @param {object} opts
+ * @param {number} opts.soNgay số ngày giữ lại (mặc định `CHAT_KEEP_DAYS`)
+ * @returns {Promise<{daXoa: number, soNgay: number}>}
+ */
+export async function donChatCu({ soNgay = env.CHAT_KEEP_DAYS } = {}) {
+  const daXoa = await chatService.donTinCu(soNgay);
+  const ketQua = { daXoa, soNgay };
+  logger.info(ketQua, 'Dọn tin chat cũ xong');
+  return ketQua;
+}
 
 /**
  * Bật lịch chạy. Trả về `null` khi `CRON_ENABLED=false` — chỗ gọi không phải tự kiểm cờ.
+ *
+ * Cờ `CRON_ENABLED` che CẢ HAI lịch: máy dev và staging dùng chung CSDL bản sao, một máy dọn chat
+ * là mọi máy mất tin — nên lịch dọn cũng phải tắt theo cùng một cờ, không có cờ riêng.
  *
  * Lỗi trong một lượt quét được NUỐT lại (chỉ ghi log): một lượt hỏng vì CSDL bận không được phép
  * làm chết tiến trình đang phục vụ người dùng, và lượt sau vẫn phải chạy.
@@ -156,11 +181,39 @@ export function batLichChay() {
     { timezone: env.TZ }
   );
   logger.info({ lich: env.CRON_OVERDUE, tz: env.TZ }, 'Đã bật lịch quét nhiệm vụ quá hạn');
+
+  // Lịch dọn chat sai biểu thức thì BỎ RIÊNG nó, không kéo theo lịch quét quá hạn đã đăng ký xong.
+  if (cron.validate(env.CRON_CHAT_CLEANUP)) {
+    viecDonChat = cron.schedule(
+      env.CRON_CHAT_CLEANUP,
+      async () => {
+        try {
+          await donChatCu();
+        } catch (err) {
+          logger.error({ err: err.message }, 'Lượt dọn tin chat cũ hỏng');
+        }
+      },
+      { timezone: env.TZ }
+    );
+    logger.info(
+      { lich: env.CRON_CHAT_CLEANUP, giuNgay: env.CHAT_KEEP_DAYS },
+      'Đã bật lịch dọn tin chat cũ'
+    );
+  } else {
+    logger.error(
+      { CRON_CHAT_CLEANUP: env.CRON_CHAT_CLEANUP },
+      'Biểu thức lịch dọn chat không hợp lệ, không bật lịch dọn'
+    );
+  }
   return viecDaDangKy;
 }
 
 /** Gỡ lịch. Gọi khi tắt máy chủ để tiến trình không bị giữ lại bởi bộ đếm giờ. */
 export function dungLichChay() {
+  if (viecDonChat) {
+    viecDonChat.stop();
+    viecDonChat = null;
+  }
   if (!viecDaDangKy) return;
   viecDaDangKy.stop();
   viecDaDangKy = null;
