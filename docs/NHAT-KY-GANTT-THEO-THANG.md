@@ -82,3 +82,23 @@ sạch · pin XSS giữ **79 chỗ / 566 giá trị** (`tools/dem-xss.mjs` đo l
 Bẫy mới (đã ghi §13.5): **file tĩnh không bump buster ⇒ sửa «không có tác dụng»** — JS có buster
 còn CSS quên buster là công thức tạo báo lỗi ảo, tốn cả session đoán sai nguyên nhân.
 
+---
+
+## Vòng 3 (2026-08-27) — MỌI cấp thẳng lề trái
+
+Ảnh chụp sau Vòng 2 còn thấy công việc / CV con / nhiệm vụ **thụt lề lệch nhau** (work +12px,
+CV con +36px, nhiệm vụ +60px, cộng `pl-4` của khối nhóm +16px). Người dùng chốt: hàng nào cũng
+thẳng lề trái, phân cấp chỉ bằng **cột mũi tên ngoài + màu icon** (nhóm tím / công việc theo
+trạng thái / CV con đỏ).
+
+| Sửa | Vị trí |
+|---|---|
+| Bỏ 3 style thụt lề inline | `createGanttSubRowHtml` (bỏ `padding-left:36px`), `createGanttTaskRowHtml` (60px), `createGanttWorkRowHtml` (12px) |
+| Bỏ `pl-4` thân nhóm | `createGanttGroupRowHtml` — body chỉ còn class ẩn/hiện |
+| Guard CSS | cuối `app.css`: `.gantt-item, .gantt-project-group > div[id^="gantt-"] { padding-left: 0 !important }` |
+| Phiên bản | banner `-74`, buster `app.js?v=20260827-74`, `app.css?v=20260827-2` |
+| Test | `gantt-ui.test.js` +2: 4 loại hàng không còn `padding-left`/`pl-4`; thân nhóm giữ toggle-slot |
+
+Kiểm chứng: **1091/1091 test · 64 file** xanh · lint + prettier sạch · pin giữ 79/566.
+
+

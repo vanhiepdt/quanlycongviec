@@ -3530,3 +3530,10 @@
     color: #6b7280;
     font-weight: 600;
 }
+
+/* MỌI hàng THẲNG LỀ TRÁI — phân cấp chỉ bằng cột mũi tên + màu icon, hết thụt dòng
+   theo cấp (phản hồi 2026-08-27: công việc / CV con / nhiệm vụ không được lệch lề). */
+.gantt-item,
+.gantt-project-group > div[id^="gantt-"] {
+    padding-left: 0 !important;
+}

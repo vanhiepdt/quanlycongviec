@@ -17,6 +17,7 @@ const EXPORTS = `;Object.assign(window, {
   datKhoangGanttTheoThang, dongBoOThangNamGantt,
   duLieuHoverGantt, buildGanttHoverCardHtml,
   createGanttSubRowHtml, createGanttTaskRowHtml,
+  createGanttWorkRowHtml, createGanttGroupRowHtml,
   formatDateForGantt, goiNutHoverGantt,
   __ganttDoc: () => ({ start: ganttStartDate, end: ganttEndDate }),
   __gantt: (ten, giaTri) => { ({ startDate: () => { ganttStartDate = giaTri; },
@@ -350,5 +351,49 @@ describe('formatDateForGantt — ngày «lăn» (30/02…) không được in ra
     expect(html).not.toContain('30/02');
     expect(html).not.toContain(' - : ');
     expect(html).toContain('10/02: Thiết kế hệ thống');
+  });
+});
+
+describe('MỌI cấp THẲNG LỀ TRÁI — hết thụt dòng theo cấp (phản hồi 2026-08-27)', () => {
+  function congViecMau() {
+    return {
+      id: '1',
+      code: 'CV001',
+      name: 'Công việc mẫu',
+      status: 'Đang thực hiện',
+      startDate: '2026-03-01',
+      endDate: '2026-03-20',
+      progress: 50,
+      supervisorName: '',
+      leaderNames: [],
+      subs: [],
+      tasks: [],
+      taskCount: 1,
+    };
+  }
+
+  it('bốn loại hàng (nhóm / công việc / CV con / nhiệm vụ) đều KHÔNG mang thụt lề', () => {
+    const sub = subMau();
+    const cacHang = [
+      window.createGanttSubRowHtml(sub),
+      window.createGanttTaskRowHtml(sub.children[0]),
+      window.createGanttWorkRowHtml(congViecMau()),
+      window.createGanttGroupRowHtml({ key: 'dept:1', name: 'Phòng A', works: [congViecMau()] }),
+    ];
+    for (const html of cacHang) {
+      expect(html, 'còn style padding-left: ' + html.slice(0, 80)).not.toContain('padding-left');
+      expect(html, 'còn class pl-4').not.toContain('pl-4');
+    }
+  });
+
+  it('thân gộp của nhóm và thân CV con không thêm class thụt lề (pl-4 cũ đã bỏ)', () => {
+    const nhomHtml = window.createGanttGroupRowHtml({
+      key: 'dept:1',
+      name: 'Phòng A',
+      works: [congViecMau()],
+    });
+    expect(nhomHtml).not.toContain('class="pl-4');
+    // Vẫn còn giữ body thu gọn + slot mũi tên để phân cấp bằng icon, không bằng lề.
+    expect(nhomHtml).toContain('gantt-toggle-slot');
   });
 });

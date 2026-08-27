@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-73");
+console.info("[QLCV] app.js 20260827-74");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -4145,7 +4145,7 @@ function createGanttSubRowHtml(sub) {
     soCon = (sub.children || []).length,
     // JSON tooltip đã qua escapeHtmlAttr MỘT lần trước khi đặt vào thuộc tính.
     duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(sub)));
-  return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '" style="padding-left: 36px;">' +
+  return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '">' +
     '<div class="gantt-item-label">' +
     createGanttToggleSlotHtml(key, soCon > 0) +
     // Icon CV con = GIỐNG icon công việc cha nhưng MÀU ĐỎ (yêu cầu 2026-08-26).
@@ -4170,7 +4170,7 @@ function createGanttTaskRowHtml(task) {
       nhan = (nhanNgay ? nhanNgay + ": " : "") + (task.name || ""),
     thanh = buildGanttCellHtml(task.startDate, task.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-task" + (quaHan ? " gantt-bar-overdue" : ""), nhan, Number(task.completion) || 0);
-  return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '" style="padding-left: 60px;">' +
+  return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '">' +
     '<div class="gantt-item-label text-sm">' +
     createGanttToggleSlotHtml("", false) +
     '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(task.name || "") + "</span></div>" +
@@ -4800,7 +4800,7 @@ function createGanttGroupRowHtml(group) {
     '<i class="fas fa-layer-group text-purple-500 mr-2"></i>' + escapeHtml(group.name) +
     '<span class="gantt-task-count ml-2">' + escapeHtml(group.works.length) + '</span></div>' +
     '<div class="gantt-item-timeline"></div></div>' +
-    '\n<div id="' + domId + '" class="pl-4' + an + '">' +
+    '\n<div id="' + domId + '" class="' + an + '">' +
     group.works.map((w) => createGanttWorkRowHtml(w)).join("") + "</div></div>";
 }
 
@@ -4820,7 +4820,7 @@ function createGanttWorkRowHtml(work) {
       "gantt-bar-project", nhan, work.progress),
     duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(work)));
   return '\n<div class="gantt-work-block">' +
-    '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '" style="padding-left: 12px;">' +
+    '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '">' +
     '<div class="gantt-item-label">' + createGanttToggleSlotHtml(key, true) +
     '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(work.status)) + ' mr-2"></i>' +
     '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(work.name || "") + "</span>" +
