@@ -125,5 +125,24 @@ cắt trái ⇒ `1 / span 15`; cắt phải 20/03 ⇒ `20 / span 12`; trọn 05�
 
 Kiểm chứng: **1095/1095 test · 64 file** xanh · lint + prettier sạch · pin giữ **79/566**.
 
+---
+
+## Vòng 4b (2026-08-27) — thủ phạm cuối: header bị ép min-width ~3060px
+
+Ảnh chụp sau Vòng 4: thanh "07/09 - 24/09" đúng 18 cột lưới **nhưng** không khớp ô ngày — đo pixel
+thấy header ~70–90px/ô trong khi timeline ~40px/ô. Nguyên nhân: luật cũ còn sống
+`#gantt-header { min-width: calc(180px + 2880px) }` + `.gantt-days/.gantt-item-timeline
+{ min-width: 2880px }` (bản 90 ngày) — sau khi các hàng co về bề rộng màn hình, **header vẫn bị
+kẹt ~3060px** ⇒ hai lưới cùng 30 cột nhưng KHÁC cỡ cột.
+
+Fix: khử min-width của `#gantt-header`/`.gantt-header-sticky`, chốt cột tên **22rem cố định cho
+cả header lẫn hàng** (`#gantt-header > :first-child`, `.gantt-label-sticky`,
+`.gantt-item .gantt-item-label`) ⇒ hai lưới cùng bề rộng, cùng số cột, cùng gốc — thanh và ô ngày
+khớp 1:1. Bump `app.css?v=20260827-4` (chỉ CSS, app.js giữ -75).
+
+Bài học §13.5: khi hai vùng phải căn nhau, ngoài cơ chế đặt vị trí (grid) phải **khử mọi
+min-width/width cứng của cả HAI vùng** — một luật cũ còn sống là đủ lệch.
+
+
 
 

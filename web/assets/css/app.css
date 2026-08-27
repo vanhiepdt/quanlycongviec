@@ -3560,3 +3560,21 @@
 .gantt-project-group > div[id^="gantt-"] {
     padding-left: 0 !important;
 }
+
+/* THỦ PHẠM LỆCH CUỐI CÙNG (2026-08-27): luật cũ ép #gantt-header tối thiểu
+   calc(180px + 2880px) và .gantt-days/.gantt-item-timeline min-width 2880px ⇒ header
+   ~90px/ô trong khi hàng co về bề rộng màn hình ~40px/ô ⇒ hai lưới khác cỡ, thanh
+   không bao giờ khớp ô ngày. Khử hết — header và hàng cùng bề rộng, cùng số cột. */
+#gantt-header,
+.gantt-header-sticky {
+    min-width: 0 !important;
+    width: auto !important;
+}
+
+#gantt-header > :first-child,
+.gantt-label-sticky,
+.gantt-item .gantt-item-label {
+    min-width: 22rem !important;
+    width: 22rem !important;
+    max-width: 22rem !important;
+}
