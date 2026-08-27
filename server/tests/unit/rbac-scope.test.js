@@ -67,6 +67,95 @@ describe('TC-RBAC-05: Phó Giám đốc chỉ trong phòng mình phụ trách', 
   });
 });
 
+// ============================================================================
+// TC-RBAC-11..14 (2026-08-27) — Phó Giám đốc là "admin trong phạm vi".
+//
+// TC-RBAC-05 đã canh phần DUYỆT. Bốn ca dưới canh phần còn lại của §6: đọc/tạo/sửa/xoá trên CẢ BA
+// cấp (công việc, công việc con, nhiệm vụ) phải mở hết ở phòng mình phụ trách và đóng hết ở phòng
+// khác — không có "nới toàn cục" như bản Apps Script cũ. Chúng đi kèm bản sửa giao diện cùng ngày
+// (Phó Giám đốc thấy tab «Quản lý công việc»): nút mở ra thì luật máy chủ phải nói rõ mở tới đâu.
+// ============================================================================
+describe('TC-RBAC-11..14: Phó Giám đốc — quyền như admin nhưng chỉ trong phòng phụ trách', () => {
+  const DEPT_A = OWN_DEPT; // phòng người này phụ trách
+  const DEPT_B = OTHER_DEPT; // phòng người khác phụ trách
+  const pgdA = principal('Phó Giám đốc', { id: 200, managedDepartmentIds: [DEPT_A] });
+
+  const dong = (entityType, department_id) => ({
+    id: 50,
+    level: entityType === 'task' ? 3 : entityType === 'subwork' ? 2 : null,
+    department_id,
+    // Cố tình để công việc do NGƯỜI KHÁC quản lý và nhiệm vụ giao cho NGƯỜI KHÁC: quyền của vai
+    // này phải đến từ phòng phụ trách, không phải từ việc tình cờ đứng tên.
+    manager_id: 999,
+    assignee_id: 998,
+  });
+
+  const HANH_DONG = ['read', 'create', 'update', 'delete', 'approve'];
+
+  it('TC-RBAC-11: 3 cấp × 5 hành động trong phòng phụ trách → được hết', () => {
+    const ket = {};
+    for (const entityType of ['work', 'subwork', 'task']) {
+      for (const action of HANH_DONG) {
+        ket[`${entityType}.${action}`] = can(pgdA, action, entityType, dong(entityType, DEPT_A)).ok;
+      }
+    }
+    expect(Object.values(ket).every(Boolean)).toBe(true);
+    expect(Object.keys(ket)).toHaveLength(15);
+  });
+
+  it('TC-RBAC-12: cùng 15 phép kiểm ở phòng KHÁC → bị chặn hết, mã FORBIDDEN', () => {
+    for (const entityType of ['work', 'subwork', 'task']) {
+      for (const action of HANH_DONG) {
+        const verdict = can(pgdA, action, entityType, dong(entityType, DEPT_B));
+        expect({ entityType, action, ...verdict }).toEqual({
+          entityType,
+          action,
+          ok: false,
+          code: 'FORBIDDEN',
+          message: verdict.message,
+        });
+        expect(verdict.message).toContain('ngoài phạm vi');
+      }
+    }
+  });
+
+  it('TC-RBAC-13: người dùng và phòng chỉ ĐỌC — không tạo/sửa/xoá dù trong phạm vi', () => {
+    for (const entityType of ['user', 'department']) {
+      expect(can(pgdA, 'read', entityType, { id: 60 }).ok).toBe(true);
+      for (const action of ['create', 'update', 'delete']) {
+        const verdict = can(pgdA, action, entityType, { id: 60 });
+        expect({ entityType, action, ok: verdict.ok }).toEqual({ entityType, action, ok: false });
+        // Chặn ở LỚP 1 (bảng quyền), nên thông điệp phải nói về vai trò, không về phạm vi.
+        expect(verdict.message).toContain('Vai trò "Phó Giám đốc"');
+      }
+    }
+  });
+
+  it('TC-RBAC-14: phòng không có Phó Giám đốc nào thì không ai mở được nó', () => {
+    // `managedDepartmentIds` sinh từ department_managers role='deputy_director'. Phòng DEPT_B ở
+    // đây không có dòng nào ⇒ không lọt vào danh sách của bất kỳ ai, kể cả người phụ trách DEPT_A.
+    const pgdB = principal('Phó Giám đốc', { id: 201, managedDepartmentIds: [] });
+    for (const entityType of ['work', 'subwork', 'task']) {
+      expect(can(pgdB, 'update', entityType, dong(entityType, DEPT_B)).ok).toBe(false);
+      expect(can(pgdA, 'update', entityType, dong(entityType, DEPT_B)).ok).toBe(false);
+    }
+    // Quyền CHUNG (row = null) vẫn có — dùng để hiện nút; phạm vi mới là chỗ chặn.
+    expect(can(pgdB, 'update', 'work', null).ok).toBe(true);
+  });
+
+  it('phụ trách nhiều phòng thì mở đúng các phòng ấy, không mở phòng thứ ba', () => {
+    const pgdAB = principal('Phó Giám đốc', { id: 202, managedDepartmentIds: [DEPT_A, DEPT_B] });
+    expect(can(pgdAB, 'delete', 'task', dong('task', DEPT_A)).ok).toBe(true);
+    expect(can(pgdAB, 'delete', 'task', dong('task', DEPT_B)).ok).toBe(true);
+    expect(can(pgdAB, 'delete', 'task', dong('task', 99)).ok).toBe(false);
+  });
+
+  it('id phòng dạng chuỗi ("10") vẫn khớp id dạng số (10) — dữ liệu REST hay trả chuỗi', () => {
+    const pgdChuoi = principal('Phó Giám đốc', { id: 203, managedDepartmentIds: ['10'] });
+    expect(can(pgdChuoi, 'update', 'work', { id: 70, department_id: 10 }).ok).toBe(true);
+  });
+});
+
 describe('TC-RBAC-07/08: so khớp vai trò CHÍNH XÁC (bẫy `includes` của bản cũ)', () => {
   it('TC-RBAC-07: "Trợ lý admin" KHÔNG được coi là admin', () => {
     const fake = principal('Trợ lý admin');

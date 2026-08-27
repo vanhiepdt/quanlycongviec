@@ -65,6 +65,9 @@ export default [
       // tasks-nhiem-vu-ui.test.js: tab Quản lý Nhiệm vụ — lọc Tháng/Năm/Cán bộ/Phòng và gom khối
       // theo công việc con (2026-08-27) — chạy app.js thật trong jsdom.
       'tests/unit/tasks-nhiem-vu-ui.test.js',
+      // pho-giam-doc-ui.test.js: Phó Giám đốc thấy tab «Quản lý công việc» + helper
+      // laQuanTriTrongPhamVi() mở nút thêm/sửa (2026-08-27) — chạy app.js thật trong jsdom.
+      'tests/unit/pho-giam-doc-ui.test.js',
     ],
     languageOptions: {
       globals: {
