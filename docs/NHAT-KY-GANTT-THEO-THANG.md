@@ -3,6 +3,9 @@
 > Ngày: **2026-08-26** · Nhánh: `vps/tinh-nang-phan-cong`
 > Commit: `3604e34` (server) · `ada4699` (giao diện + test + pin)
 > Kết quả: **938/938 test · 56 file** xanh · lint + prettier sạch · pin XSS **80 chỗ / 566 giá trị**.
+> Số của **ngày 2026-08-26**, giữ nguyên làm mốc lịch sử. Về sau Phase 7 (2026-08-27) bỏ 1 chỗ ghi
+> HTML hằng trong `loadChatMessagesAsync` ⇒ pin hiện tại là **79 chỗ / 566 giá trị**, và test tổng
+> là **1085 trong 64 file** — xem `docs/XSS-4.6.md` và `KE-HOACH-VPS.md` §13.2.
 
 ## 1. Yêu cầu người dùng (nguyên văn đã chốt)
 
