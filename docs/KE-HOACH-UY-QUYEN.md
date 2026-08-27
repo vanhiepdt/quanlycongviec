@@ -182,3 +182,53 @@ số **17–20**.
 4. **Có cần thông báo khi được ủy quyền / khi sắp hết hạn không?** Giả định: **chưa gửi** —
    `MAIL_ENABLED=false` (§13.4 mục 4), và bảng `notifications` chỉ có đường tạo cho admin (§13.4
    mục 16). Muốn có thì làm cùng lúc với chuông thông báo, không làm riêng.
+
+---
+
+## 9. Đã triển khai gì (2026-08-27)
+
+| Phần | Trạng thái | Nằm ở |
+|---|---|---|
+| Lược đồ (§3) | ✅ đã chạy trên Postgres thật | `server/src/db/migrations/006_delegations.sql` — 4 ràng buộc `delegation_{not_self,dates_ok,status_ok,no_overlap}`, `no_overlap` là `EXCLUDE USING gist` cần `btree_gist` |
+| Luật hiệu lực (§4) | ✅ | `middleware/session.js` nạp `req.user.delegations`; `middleware/rbac.js` thêm **lớp 3** cho `can()` (trả `viaDelegationId`, phạm vi mượn qua `inScopeMuon()`); `can()` **vẫn thuần**, không chạm CSDL |
+| Dấu vết | ✅ | `middleware/audit.js` chép `viaDelegationId` vào `activity_logs.details` — mỗi hành động mượn quyền đều truy được về bản ủy quyền nào |
+| REST (§5) | ✅ | `modules/delegations/{repo,service,routes}.js`; mã lỗi mới ở `utils/errors.js`, dịch lỗi ràng buộc ở `utils/pgError.js` |
+| Giao diện (§6) | ✅ | `web/assets/js/app.js` (banner `20260827-78`) + `web/index.html`: nút «Ủy quyền của tôi» dưới khối người dùng, modal 2 bảng, nhãn «đang được ủy quyền». Ghi qua `restGhi` (tự lấy CSRF) — **không** thêm tên RPC thứ 38, cầu giữ **37/37** |
+| Test (§7) | ✅ 36 test mới | `tests/unit/delegation-can.test.js`, `tests/integration/delegations-api.test.js` (20), `tests/unit/uy-quyen-ui.test.js` (16) — TC-UQ-01..15 xanh; tổng bộ **1185 test / 69 file** |
+| Pin XSS | ✅ 79/566 → **83/588** | `tests/unit/xss-guard.test.js` (TC-SEC-17 + sink `""` 7 → 8) và `docs/XSS-4.6.md` |
+
+Hai điều **cố ý không làm**: (a) client không có ô chọn phòng — phạm vi do máy chủ suy từ
+`department_managers`, client chỉ hiện lại và in nguyên văn lỗi `DELEGATION_SCOPE_TOO_WIDE` /
+`DELEGATION_OVERLAP`; (b) chưa gửi thông báo cho người được ủy quyền (§8 câu 4).
+
+---
+
+## 10. Test tay giao diện — làm theo đúng thứ tự
+
+Chuẩn bị: `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (CSDL khói **không** tự lên
+migration 006 — bẫy đã ghi ở `docs/BAT-DAU-SESSION.md` mục 1), rồi đồng bộ `web/` + `server/src/`
+lên chỗ đang chạy và khởi động lại Node.
+
+1. **Ctrl+Shift+R** (nạp lại bỏ cache) → mở Console → phải thấy đúng `[QLCV] app.js 20260827-78`.
+   Thấy số khác là trình duyệt/Nginx còn giữ file cũ, mọi bước dưới đều vô nghĩa.
+2. Đăng nhập bằng **Phó Giám đốc** hoặc **Trưởng phòng** (§13.7, mật khẩu `Test@12345`) → khối
+   người dùng góc trên có nút **«Ủy quyền của tôi»** (icon `fa-user-shield`). Đăng nhập bằng
+   **Nhân viên** thì nút vẫn hiện nhưng tạo sẽ bị máy chủ trả **403** — đúng thiết kế (máy chủ là
+   rào chặn cuối, không ẩn nút để giả vờ an toàn).
+3. Bấm nút → modal có **hai bảng**: «Tôi ủy quyền cho» và «Tôi được ủy quyền», ban đầu cả hai nói
+   rõ là rỗng («Bạn chưa ủy quyền cho ai.» / «Chưa ai ủy quyền cho bạn.»).
+4. Tạo một bản: chọn email người nhận trong danh sách gợi ý, **Từ ngày** = hôm nay, **Đến ngày** =
+   hôm nay + 7 → Lưu. Bảng «Tôi ủy quyền cho» hiện một dòng: người nhận, khoảng ngày `dd/mm/yyyy`,
+   phòng («Tất cả phòng tôi phụ trách» nếu để trống), trạng thái **Đang hiệu lực**, nút **Huỷ**.
+5. Tạo lại **đúng cặp người và khoảng ngày trùng** → phải thấy câu lỗi đỏ ngay trong modal (mã
+   `DELEGATION_OVERLAP`), không tạo thêm dòng. Tự ủy quyền cho chính mình cũng bị chặn.
+6. **Đăng xuất, đăng nhập bằng người nhận** → cạnh tên có nhãn vàng **«đang được ủy quyền»**; trỏ
+   chuột vào nhãn thấy tooltip *«Bạn đang dùng quyền của \<tên người giao\> đến \<dd/mm/yyyy\>»*.
+   Người này giờ sửa/duyệt được đúng phần việc của phòng người giao phụ trách, **không** rộng hơn.
+7. Kiểm dấu vết: người nhận sửa một công việc trong phạm vi mượn, rồi xem **Nhật ký hoạt động** —
+   dòng `works.update` phải có `viaDelegationId` trong `details` (xem nhanh bằng SQL:
+   `SELECT details FROM activity_logs ORDER BY id DESC LIMIT 5;`).
+8. Quay lại người giao → **Huỷ** bản ủy quyền → xác nhận → dòng đổi sang **Đã huỷ** và **mất nút
+   Huỷ**; đăng nhập lại bằng người nhận thì nhãn vàng **tắt** và quyền mượn hết ngay lập tức.
+9. Thử XSS: đặt ghi chú `<img src=x onerror=alert(1)>` → phải hiện **nguyên văn chữ**, không có
+   hộp thoại nào (TC-UQ-15 đã canh, đây chỉ là xác nhận bằng mắt).
