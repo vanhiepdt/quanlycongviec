@@ -13,6 +13,8 @@
 import { AppError } from '../utils/errors.js';
 import {
   activityToLegacy,
+  appFromLegacy,
+  appToLegacy,
   departmentFromLegacy,
   departmentToLegacy,
   projectFromLegacy,
@@ -52,8 +54,8 @@ function required(value, name) {
  * Gói REST của việc 5.10 → hình dạng mà `handleSuccessfulLogin` đọc
  * (`data.user`, `data.projects`, `data.tasks`, `data.staff`, …).
  *
- * `apps` cố ý mảng rỗng: module còn Phase 7 việc 7.2, nhưng thiếu khoá thì UI gán `[]` im lặng
- * còn 501 thì toast đỏ chặn cả trang.
+ * `proposals` và `apps` chỉ đi qua đường này: giao diện cũ không có tên RPC nào lấy danh sách app,
+ * còn `allProposals` được gán một lần lúc đăng nhập rồi mới `renderProposals()`.
  */
 function legacyBundleFromRest(data) {
   const deptNameById = new Map((data.departments ?? []).map((d) => [d.id, d.name]));
@@ -81,7 +83,7 @@ function legacyBundleFromRest(data) {
     proposals: (data.proposals ?? []).map((row) => proposalToLegacy(row)),
     // 4 thẻ đếm của trang Đề nghị (G3). Đếm trên phần THẤY ĐƯỢC, đã lọc phạm vi ở service.
     proposalCounts: data.proposalCounts ?? {},
-    apps: [],
+    apps: (data.apps ?? []).map((row) => appToLegacy(row)),
   };
 }
 
@@ -517,13 +519,49 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
+  // --- Quản lý App (việc 7.2) ----------------------------------------------------------------
+  //
+  // Ba tên này nhận / trả **mã** `APP001`: `data-id` của nút Sửa/Xoá trong `renderApps` lấy từ
+  // `COL.A_ID`, nên `updateApp(id, data)` và `deleteApp(id)` đều đi vào bằng mã.
+  //
+  // Không có `getApps`: giao diện cũ lấy danh sách app trong gói dữ liệu đầu (`allApps`) rồi tự
+  // `renderApps()` lại sau mỗi lần ghi — xem `legacyBundleFromRest`.
+  addApp: {
+    rest: 'POST /apps',
+    fromLegacy: appFromLegacy,
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/apps', appFromLegacy(data ?? {}));
+      // `handleAdd` gán `allApps[i][COL.A_ID] = response.id` để thay mã tạm.
+      return { success: true, id: created.app.code, appId: created.app.code };
+    },
+  },
+
+  updateApp: {
+    rest: 'PATCH /apps/:idOrCode',
+    fromLegacy: appFromLegacy,
+    async handler([id, data], ctx) {
+      required(id, 'Mã ứng dụng');
+      const updated = await ctx.call(
+        'PATCH',
+        `/apps/${encodeURIComponent(id)}`,
+        appFromLegacy(data ?? {})
+      );
+      return { success: true, id: updated.app.code, appId: updated.app.code };
+    },
+  },
+
+  deleteApp: {
+    rest: 'DELETE /apps/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã ứng dụng');
+      const result = await ctx.call('DELETE', `/apps/${encodeURIComponent(id)}`);
+      return { success: true, deletedApp: result.deletedApp };
+    },
+  },
+
   // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
   // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
   // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-
-  addApp: pending('Thêm ứng dụng', 'POST /apps'),
-  updateApp: pending('Sửa ứng dụng', 'PATCH /apps/:id'),
-  deleteApp: pending('Xoá ứng dụng', 'DELETE /apps/:id'),
 
   getChatMessages: pending('Tin nhắn nội bộ', 'GET /chat'),
   sendChatMessage: pending('Gửi tin nhắn nội bộ', 'POST /chat'),

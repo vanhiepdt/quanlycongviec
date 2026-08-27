@@ -17,6 +17,7 @@ import { pool } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as approvalsService from '../approvals/service.js';
+import * as appsService from '../apps/service.js';
 import { publicUser } from '../auth/service.js';
 import * as deptRepo from '../departments/repo.js';
 import { groupManagerEmails, toPublic as departmentRest } from '../departments/service.js';
@@ -162,7 +163,7 @@ export async function departmentContext(user) {
  * bắt buộc phải vẽ cây từ bootstrap.
  */
 export async function getBundle(user) {
-  const [works, people, departments, managers, pending, activities, countable, proposals] =
+  const [works, people, departments, managers, pending, activities, countable, proposals, apps] =
     await Promise.all([
       worksService.list(user),
       usersRepo.listAll(),
@@ -177,6 +178,8 @@ export async function getBundle(user) {
       // Phase 7: đề nghị đi cùng gói đăng nhập vì `handleSuccessfulLogin` gán
       // `allProposals = data.proposals` một lần rồi mới `renderProposals()` (app.js:198).
       proposalsService.list(user),
+      // App cũng vậy: `allApps` chỉ được nạp từ gói này, không có tên RPC nào lấy danh sách app.
+      appsService.list(user),
     ]);
   const stats = summaryFrom(countable.works, countable.items);
   const chartData = chartFrom(countable.items);
@@ -196,6 +199,7 @@ export async function getBundle(user) {
     activities,
     proposals: proposals.proposals,
     proposalCounts: proposals.counts,
+    apps: apps.apps,
   };
 }
 

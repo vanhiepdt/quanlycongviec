@@ -11,6 +11,7 @@ import { issueCsrfCookie, verifyCsrf } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler, ok } from './middleware/errorHandler.js';
 import { attachSession, requirePasswordChanged } from './middleware/session.js';
 import { approvalsRouter } from './modules/approvals/routes.js';
+import { appsRouter } from './modules/apps/routes.js';
 import { authRouter } from './modules/auth/routes.js';
 import { bootstrapRouter } from './modules/bootstrap/routes.js';
 import { departmentsRouter } from './modules/departments/routes.js';
@@ -109,6 +110,7 @@ export function createV1Router() {
   v1.use('/gantt', ganttRouter);
   // Phase 7 — Đề nghị, Quản lý App, Chat, Thông báo, xuất Excel.
   v1.use('/proposals', proposalsRouter);
+  v1.use('/apps', appsRouter);
   return v1;
 }
 

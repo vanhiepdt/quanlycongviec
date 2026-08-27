@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260826-70");
+console.info("[QLCV] app.js 20260827-71");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -3933,6 +3933,11 @@ function formatDate(date) {
     year: "numeric"
   });
 }
+/** Chuẩn hoá tên vai trò để so khớp: bỏ hoa/thường, nhận cả hai nhãn cũ («Admin», «Quản lý»). */
+function chuanHoaVaiTroApp(value) {
+  const lower = String(value || "").trim().toLowerCase();
+  return lower === "quản lý" ? "quản lý công việc" : lower;
+}
 function renderApps() {
   const appsGridEl = document.getElementById("apps-grid");
   if (!appsGridEl) return;
@@ -3940,14 +3945,16 @@ function renderApps() {
     appsGridEl.innerHTML = "<div class=\"col-span-full text-center text-gray-500 py-8\">Chưa có ứng dụng nào</div>";
     return;
   }
-  const currentUserName = currentUser ? currentUser.name : "",
+  const vaiTroHienTai = chuanHoaVaiTroApp(currentUser ? currentUser.role : ""),
     isAdmin2 = isAdmin(),
     filteredApps = allApps.filter(app => {
       if (isAdmin2) return true;
+      // «Phân quyền» của app là danh sách VAI TRÒ (allowed_roles), không phải tên người.
+      // RỖNG = mọi vai trò đều thấy — đúng một luật với modules/apps/service.js (việc 7.2).
       const appPermissions = app[COL.A_PERMISSIONS] || "";
-      if (!appPermissions) return false;
-      const mapped = appPermissions.split(",").map(item => item.trim());
-      return mapped.includes(currentUserName);
+      if (!appPermissions.trim()) return true;
+      const mapped = appPermissions.split(",").map(item => chuanHoaVaiTroApp(item));
+      return mapped.includes(vaiTroHienTai);
     });
   if (filteredApps.length === 0) {
     appsGridEl.innerHTML = "<div class=\"col-span-full text-center text-gray-500 py-8\">Bạn chưa được phân quyền xem ứng dụng nào</div>";
@@ -4013,14 +4020,14 @@ function createAppModal(isEdit, app) {
     appCategory = isEdit ? app[COL.A_CATEGORY] || "" : "",
     appId = isEdit ? app[COL.A_ID] || "" : "",
     appPermissions = isEdit ? app[COL.A_PERMISSIONS] || "" : "",
-    filteredStaff = allStaff.filter(staff => staff[COL.S_OBJECT_TYPE] === "Người dùng" && staff[COL.S_ROLE] !== "Admin"),
+    vaiTroApp = [["admin", "Toàn quyền"], ["Phó Giám đốc", "Phòng phụ trách"], ["Trưởng phòng", "Cả phòng"], ["Phó phòng", "Cả phòng"], ["Quản lý công việc", "Việc mình quản lý"], ["Nhân viên", "Việc của mình"]],
     mapped = appPermissions ? appPermissions.split(",").map(item => item.trim()) : [],
-    joined = filteredStaff.map(filteredStaff2 => {
-      const staffName = filteredStaff2[COL.S_NAME],
-        hasMatch = mapped.includes(staffName);
-      return "\n                <label class=\"flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg cursor-pointer\">\n                    <input type=\"checkbox\" name=\"app-permissions\" value=\"" + escapeHtml(staffName) + "\" " + (hasMatch ? "checked" : "") + " \n                           class=\"form-checkbox text-blue-500 rounded\">\n                    <span class=\"text-sm text-gray-700\">" + escapeHtml(staffName) + "</span>\n                    <span class=\"text-xs text-gray-400\">" + (escapeHtml(filteredStaff2[COL.S_POS]) || "") + "</span>\n                </label>\n            ";
+    joined = vaiTroApp.map(vaiTro => {
+      const tenVaiTro = vaiTro[0],
+        hasMatch = mapped.includes(tenVaiTro);
+      return "\n                <label class=\"flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg cursor-pointer\">\n                    <input type=\"checkbox\" name=\"app-permissions\" value=\"" + escapeHtml(tenVaiTro) + "\" " + (hasMatch ? "checked" : "") + " \n                           class=\"form-checkbox text-blue-500 rounded\">\n                    <span class=\"text-sm text-gray-700\">" + escapeHtml(tenVaiTro) + "</span>\n                    <span class=\"text-xs text-gray-400\">" + escapeHtml(vaiTro[1]) + "</span>\n                </label>\n            ";
     }).join("");
-  return "\n    <div id=\"app-modal\" class=\"modal\">\n      <div class=\"modal-content max-w-lg\">\n        <div class=\"flex items-center justify-between mb-6\">\n          <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n          <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n            <i class=\"fas fa-times\"></i>\n          </button>\n        </div>\n        \n        <form id=\"app-form\">\n          " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(appId) + "\">" : "") + "\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Danh mục <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_CATEGORY) + "\" class=\"form-input\" required placeholder=\"Ví dụ: NHÂN SỰ, KẾ TOÁN\" value=\"" + escapeHtml(appCategory) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Sẽ tự động viết hoa khi lưu.</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Tên Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_NAME) + "\" class=\"form-input\" required placeholder=\"Nhập tên ứng dụng\" value=\"" + escapeHtml(appName) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_URL) + "\" class=\"form-input\" required placeholder=\"Nhập link ứng dụng\" value=\"" + escapeHtml(appUrl) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Icon (Ảnh)</label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_ICON) + "\" class=\"form-input\" placeholder=\"Nhập link Icon\" value=\"" + escapeHtml(appIcon) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Nên dùng ảnh vuông, trong suốt (PNG).</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Mô tả</label>\n            <textarea name=\"" + escapeHtml(COL.A_DESC) + "\" class=\"form-textarea h-24\" placeholder=\"Mô tả ngắn về ứng dụng...\">" + escapeHtml(appDesc) + "</textarea>\n          </div>\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Phân quyền <span class=\"text-xs text-gray-400\">(Chọn người được xem app này)</span></label>\n            <div class=\"border border-gray-200 rounded-lg max-h-40 overflow-y-auto p-2 bg-gray-50\">\n              " + (filteredStaff.length > 0 ? joined : "<p class=\"text-sm text-gray-500 text-center py-2\">Không có người dùng nào</p>") + "\n            </div>\n            <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Admin luôn thấy tất cả app. Nếu không chọn ai, chỉ Admin mới thấy app này.</p>\n          </div>\n          \n          <div class=\"flex justify-end space-x-3 mt-6\">\n            <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n            <button type=\"submit\" class=\"btn-primary\">\n                " + escapeHtml(text2) + "\n            </button>\n          </div>\n        </form>\n      </div>\n    </div>\n    ";
+  return "\n    <div id=\"app-modal\" class=\"modal\">\n      <div class=\"modal-content max-w-lg\">\n        <div class=\"flex items-center justify-between mb-6\">\n          <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n          <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n            <i class=\"fas fa-times\"></i>\n          </button>\n        </div>\n        \n        <form id=\"app-form\">\n          " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(appId) + "\">" : "") + "\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Danh mục <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_CATEGORY) + "\" class=\"form-input\" required placeholder=\"Ví dụ: NHÂN SỰ, KẾ TOÁN\" value=\"" + escapeHtml(appCategory) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Sẽ tự động viết hoa khi lưu.</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Tên Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"text\" name=\"" + escapeHtml(COL.A_NAME) + "\" class=\"form-input\" required placeholder=\"Nhập tên ứng dụng\" value=\"" + escapeHtml(appName) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Ứng dụng <span class=\"text-red-500\">*</span></label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_URL) + "\" class=\"form-input\" required placeholder=\"Nhập link ứng dụng\" value=\"" + escapeHtml(appUrl) + "\">\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">URL Icon (Ảnh)</label>\n            <input type=\"url\" name=\"" + escapeHtml(COL.A_ICON) + "\" class=\"form-input\" placeholder=\"Nhập link Icon\" value=\"" + escapeHtml(appIcon) + "\">\n            <p class=\"text-xs text-gray-500 mt-1\">Nên dùng ảnh vuông, trong suốt (PNG).</p>\n          </div>\n\n          <div class=\"form-group\">\n            <label class=\"form-label\">Mô tả</label>\n            <textarea name=\"" + escapeHtml(COL.A_DESC) + "\" class=\"form-textarea h-24\" placeholder=\"Mô tả ngắn về ứng dụng...\">" + escapeHtml(appDesc) + "</textarea>\n          </div>\n          \n          <div class=\"form-group\">\n            <label class=\"form-label\">Phân quyền <span class=\"text-xs text-gray-400\">(Chọn vai trò được xem app này)</span></label>\n            <div class=\"border border-gray-200 rounded-lg max-h-40 overflow-y-auto p-2 bg-gray-50\">\n              " + joined + "\n            </div>\n            <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Admin luôn thấy tất cả app. Không chọn vai trò nào = mọi người đều thấy app này.</p>\n          </div>\n          \n          <div class=\"flex justify-end space-x-3 mt-6\">\n            <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n            <button type=\"submit\" class=\"btn-primary\">\n                " + escapeHtml(text2) + "\n            </button>\n          </div>\n        </form>\n      </div>\n    </div>\n    ";
 }
 window.renderApps = renderApps, window.handleAppRedirect = handleAppRedirect, window.createAppModal = createAppModal;
 

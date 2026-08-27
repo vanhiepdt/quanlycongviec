@@ -311,6 +311,44 @@ export function proposalToLegacy(row) {
 }
 
 /**
+ * Payload GHI của `#app-form` → thân request `/api/v1/apps`.
+ *
+ * Cùng kiểu với đề nghị: `handleAdd('app')` dựng object bằng **khoá `COL.A_*`**, và ô phân quyền là
+ * chuỗi ngăn bằng dấu phẩy (`checked.map(v => v.value).join(", ")`), nên `allowedRoles` nhận chuỗi
+ * — service tách và kiểm từng tên vai trò.
+ *
+ * `A_ID` / `A_CREATED` không dịch: mã do máy chủ sinh, người tạo lấy từ phiên đăng nhập.
+ */
+export function appFromLegacy(data = {}) {
+  return dropUndefined({
+    name: pick(data, COL.A_NAME),
+    url: pick(data, COL.A_URL),
+    iconUrl: pick(data, COL.A_ICON),
+    description: pick(data, COL.A_DESC),
+    category: pick(data, COL.A_CATEGORY),
+    allowedRoles: pick(data, COL.A_PERMISSIONS),
+  });
+}
+
+/**
+ * Dòng `apps` → khoá `COL.A_*` mà `renderApps` đọc.
+ *
+ * `A_ID` là **mã** (`APP001`): `data-id` của nút Sửa/Xoá lấy từ đây rồi đem đi gọi `updateApp` /
+ * `deleteApp`. `A_PERMISSIONS` ghép lại thành chuỗi vì `renderApps` `split(",")` chính ô này.
+ */
+export function appToLegacy(row) {
+  return {
+    [COL.A_ID]: row.code,
+    [COL.A_NAME]: row.name ?? '',
+    [COL.A_URL]: row.url ?? '',
+    [COL.A_ICON]: row.icon_url ?? '',
+    [COL.A_DESC]: row.description ?? '',
+    [COL.A_CATEGORY]: row.category ?? '',
+    [COL.A_PERMISSIONS]: (row.allowed_roles ?? []).join(', '),
+  };
+}
+
+/**
  * Ô "Link kết quả" của bản cũ là một `<textarea>` MỖI DÒNG MỘT LINK, dạng `[Tên] https://…`
  * hoặc chỉ `https://…` (xem `parseLinks` dòng 2203 của `app.js`). REST lưu mảng chuỗi, nên mỗi
  * dòng giữ NGUYÊN VĂN cả phần `[Tên]` — tách theo dấu phẩy sẽ cắt đôi những URL có dấu phẩy.
@@ -534,4 +572,6 @@ export default {
   activityToLegacy,
   proposalToLegacy,
   proposalFromLegacy,
+  appToLegacy,
+  appFromLegacy,
 };
