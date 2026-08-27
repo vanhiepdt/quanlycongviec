@@ -17,6 +17,8 @@ import {
   departmentToLegacy,
   projectFromLegacy,
   projectToLegacy,
+  proposalFromLegacy,
+  proposalToLegacy,
   remindersToLegacy,
   staffFromLegacy,
   staffToLegacy,
@@ -50,8 +52,8 @@ function required(value, name) {
  * Gói REST của việc 5.10 → hình dạng mà `handleSuccessfulLogin` đọc
  * (`data.user`, `data.projects`, `data.tasks`, `data.staff`, …).
  *
- * `proposals` / `apps` cố ý mảng rỗng: module còn Phase 7, nhưng thiếu khoá thì UI gán `[]`
- * im lặng còn 501 thì toast đỏ chặn cả trang.
+ * `apps` cố ý mảng rỗng: module còn Phase 7 việc 7.2, nhưng thiếu khoá thì UI gán `[]` im lặng
+ * còn 501 thì toast đỏ chặn cả trang.
  */
 function legacyBundleFromRest(data) {
   const deptNameById = new Map((data.departments ?? []).map((d) => [d.id, d.name]));
@@ -76,7 +78,9 @@ function legacyBundleFromRest(data) {
     recentActivities: (data.activities ?? []).map((row) => activityToLegacy(row)),
     summaryStats: data.summaryStats ?? {},
     pendingCount: data.pendingCount ?? { works: 0, items: 0, total: 0 },
-    proposals: [],
+    proposals: (data.proposals ?? []).map((row) => proposalToLegacy(row)),
+    // 4 thẻ đếm của trang Đề nghị (G3). Đếm trên phần THẤY ĐƯỢC, đã lọc phạm vi ở service.
+    proposalCounts: data.proposalCounts ?? {},
     apps: [],
   };
 }
@@ -458,14 +462,64 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
+  // --- Đề nghị (việc 7.1) --------------------------------------------------------------------
+  //
+  // `getProposals` trả MẢNG THUẦN khoá `COL.PR_*`: luồng xoá của `app.js` (~2240) nạp lại bằng
+  // `getProposals()` rồi gán thẳng `allProposals = response2`. Bọc `{success:true, proposals:[…]}`
+  // vào đây là danh sách đề nghị biến thành một object và bảng trống trơn.
+  //
+  // 4 số đếm trạng thái (G3) KHÔNG đi qua đường này: `updateProposalCounts` bản cũ tự đếm trên
+  // `allProposals`. REST vẫn trả `counts` cho giao diện mới dùng — xem `GET /api/v1/proposals`.
+  getProposals: {
+    rest: 'GET /proposals',
+    async handler(args, ctx) {
+      const data = await ctx.call('GET', '/proposals');
+      return (data.proposals ?? []).map((row) => proposalToLegacy(row));
+    },
+  },
+
+  addProposalWithAuth: {
+    rest: 'POST /proposals',
+    fromLegacy: proposalFromLegacy,
+    async handler([data], ctx) {
+      const created = await ctx.call('POST', '/proposals', proposalFromLegacy(data ?? {}));
+      // `handleAdd` đọc `response.id || response.proposalId` để thay mã tạm `TEMP_…`, và
+      // `response.date` để hiện ngày ngay mà không phải nạp lại — trả cả ba.
+      return {
+        success: true,
+        id: created.proposal.code,
+        proposalId: created.proposal.code,
+        date: created.proposal.proposal_date ?? null,
+      };
+    },
+  },
+
+  updateProposalWithAuth: {
+    rest: 'PATCH /proposals/:idOrCode',
+    fromLegacy: proposalFromLegacy,
+    async handler([id, data], ctx) {
+      required(id, 'Mã đề nghị');
+      const updated = await ctx.call(
+        'PATCH',
+        `/proposals/${encodeURIComponent(id)}`,
+        proposalFromLegacy(data ?? {})
+      );
+      return { success: true, id: updated.proposal.code, proposalId: updated.proposal.code };
+    },
+  },
+
+  deleteProposalWithAuth: {
+    rest: 'DELETE /proposals/:idOrCode',
+    async handler([id], ctx) {
+      required(id, 'Mã đề nghị');
+      const result = await ctx.call('DELETE', `/proposals/${encodeURIComponent(id)}`);
+      return { success: true, deletedProposal: result.deletedProposal };
+    },
+  },
+
   // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
   // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
   // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-
-  getProposals: pending('Danh sách đề nghị', 'GET /proposals'),
-  addProposalWithAuth: pending('Thêm đề nghị', 'POST /proposals'),
-  updateProposalWithAuth: pending('Sửa đề nghị', 'PATCH /proposals/:id'),
-  deleteProposalWithAuth: pending('Xoá đề nghị', 'DELETE /proposals/:id'),
 
   addApp: pending('Thêm ứng dụng', 'POST /apps'),
   updateApp: pending('Sửa ứng dụng', 'PATCH /apps/:id'),

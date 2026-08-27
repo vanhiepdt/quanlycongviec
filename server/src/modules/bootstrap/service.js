@@ -20,6 +20,7 @@ import * as approvalsService from '../approvals/service.js';
 import { publicUser } from '../auth/service.js';
 import * as deptRepo from '../departments/repo.js';
 import { groupManagerEmails, toPublic as departmentRest } from '../departments/service.js';
+import * as proposalsService from '../proposals/service.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import { publicStaff } from '../users/service.js';
@@ -161,18 +162,22 @@ export async function departmentContext(user) {
  * bắt buộc phải vẽ cây từ bootstrap.
  */
 export async function getBundle(user) {
-  const [works, people, departments, managers, pending, activities, countable] = await Promise.all([
-    worksService.list(user),
-    usersRepo.listAll(),
-    deptRepo.listAll(),
-    deptRepo.listAllManagers(),
-    approvalsService.pendingCount(user),
-    logsRepo.listRecent({
-      limit: 22,
-      actorId: user.role === 'admin' ? null : user.id,
-    }),
-    hangThongKe(user),
-  ]);
+  const [works, people, departments, managers, pending, activities, countable, proposals] =
+    await Promise.all([
+      worksService.list(user),
+      usersRepo.listAll(),
+      deptRepo.listAll(),
+      deptRepo.listAllManagers(),
+      approvalsService.pendingCount(user),
+      logsRepo.listRecent({
+        limit: 22,
+        actorId: user.role === 'admin' ? null : user.id,
+      }),
+      hangThongKe(user),
+      // Phase 7: đề nghị đi cùng gói đăng nhập vì `handleSuccessfulLogin` gán
+      // `allProposals = data.proposals` một lần rồi mới `renderProposals()` (app.js:198).
+      proposalsService.list(user),
+    ]);
   const stats = summaryFrom(countable.works, countable.items);
   const chartData = chartFrom(countable.items);
 
@@ -189,6 +194,8 @@ export async function getBundle(user) {
     works,
     items,
     activities,
+    proposals: proposals.proposals,
+    proposalCounts: proposals.counts,
   };
 }
 

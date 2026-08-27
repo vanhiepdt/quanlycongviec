@@ -83,6 +83,33 @@ export const COL = Object.freeze({
   A_ACTION: 'Hành động',
   A_USER: 'Người thực hiện',
   A_DETAILS: 'Chi tiết',
+  N_ID: 'Mã thông báo',
+  N_TIME: 'Thời gian',
+  N_USER: 'Người nhận',
+  N_CONTENT: 'Nội dung',
+  // Đề nghị (§2.7 nhóm G) — 11 trường, đúng thứ tự bảng Sheets cũ.
+  PR_ID: 'Mã đề nghị',
+  PR_TYPE: 'Loại',
+  PR_PID: 'Mã dự án',
+  PR_TID: 'Mã nhiệm vụ',
+  PR_CONTENT: 'Nội dung đề nghị',
+  PR_URL: 'URL đề nghị',
+  PR_SUPPLIER: 'Nhà cung cấp',
+  PR_CREATOR: 'Người đề nghị',
+  PR_DATE: 'Ngày đề nghị',
+  PR_STATUS: 'Trạng thái',
+  PR_NOTE: 'Ghi chú duyệt',
+  // Quản lý App (§2.9 nhóm I) — 8 trường. Chú ý tiền tố `A_` ở đây KHÁC nhóm `A_TIME/A_ACTION…`
+  // của nhật ký: bảng `COL` bản cũ dùng chung tiền tố cho hai bảng khác nhau, đổi tên là lệch
+  // với client và test col-parity đỏ.
+  A_ID: 'Mã App',
+  A_NAME: 'Tên App',
+  A_URL: 'URL',
+  A_ICON: 'Icon URL',
+  A_DESC: 'Mô tả',
+  A_CREATED: 'Người tạo',
+  A_CATEGORY: 'Danh mục',
+  A_PERMISSIONS: 'Phân quyền',
 });
 
 /** Trả về `undefined` (không phải `null`) để khoá không xuất hiện trong payload gửi cho route. */
@@ -222,6 +249,65 @@ export function departmentFromLegacy(data = {}) {
     sortOrder: numberOrUndefined(pick(data, 'order')),
     notes: pick(data, 'notes'),
   });
+}
+
+/** Bỏ khoá khi giá trị là chuỗi rỗng — dùng cho các ô `<select>` có enum ở server (loại, trạng
+ *  thái đề nghị): `""` không phải giá trị hợp lệ của enum, gửi lên là 400 vô cớ. */
+const enumOrUndefined = (value) => {
+  const text = String(value ?? '').trim();
+  return text === '' ? undefined : text;
+};
+
+/**
+ * Payload GHI của `#proposal-form` → thân request `/api/v1/proposals`.
+ *
+ * Khác các form khác: đề nghị và App là hai chỗ mà giao diện cũ gửi **khoá tiếng Việt của `COL`**
+ * chứ không phải `name` của `<input>` — `handleAdd('proposal')` dựng object `{[COL.PR_TYPE]: …}`
+ * bằng tay (app.js ~2035). Vì vậy bảng dịch ở đây đọc từ `COL.PR_*`.
+ *
+ * `PR_PID` / `PR_TID` là **mã** (`CV001`, `CV001-003`) nên vào `workRef` / `taskRef`. Chuỗi rỗng
+ * được GIỮ (không bỏ khoá): "" nghĩa là bỏ liên kết công việc, còn thiếu khoá nghĩa là không đổi.
+ */
+export function proposalFromLegacy(data = {}) {
+  return dropUndefined({
+    type: enumOrUndefined(pick(data, COL.PR_TYPE)),
+    workRef: pick(data, COL.PR_PID),
+    taskRef: pick(data, COL.PR_TID),
+    content: pick(data, COL.PR_CONTENT),
+    url: pick(data, COL.PR_URL),
+    supplier: pick(data, COL.PR_SUPPLIER),
+    proposalDate: Object.hasOwn(data, COL.PR_DATE)
+      ? dateOrNull(dayOf(data[COL.PR_DATE]))
+      : undefined,
+    // Hai ô của người duyệt: giao diện cũ chỉ hiện cho admin, nhưng cứ dịch — service mới là chỗ
+    // quyết định có ghi hay không (`duyetDuoc`).
+    status: enumOrUndefined(pick(data, COL.PR_STATUS)),
+    reviewNote: pick(data, COL.PR_NOTE),
+  });
+}
+
+/**
+ * Dòng `proposals` → khoá `COL.PR_*` mà `renderProposals` đọc.
+ *
+ * `PR_ID` là **mã** (`DN001`): `handleEdit`/`handleDelete` đem chính giá trị này đi gọi
+ * `updateProposalWithAuth(id, …)`, trả id số vào đây là làm hỏng mọi lời gọi sau.
+ * `PR_PID`/`PR_TID` cũng là mã công việc / mã nhiệm vụ, lấy từ LEFT JOIN của repo — công việc bị
+ * xoá thì hai ô này rỗng mà dòng đề nghị vẫn còn (TC-MISC-04).
+ */
+export function proposalToLegacy(row) {
+  return {
+    [COL.PR_ID]: row.code,
+    [COL.PR_TYPE]: row.type ?? '',
+    [COL.PR_PID]: row.work_code ?? '',
+    [COL.PR_TID]: row.item_code ?? '',
+    [COL.PR_CONTENT]: row.content ?? '',
+    [COL.PR_URL]: row.url ?? '',
+    [COL.PR_SUPPLIER]: row.supplier ?? '',
+    [COL.PR_CREATOR]: row.creator_name ?? '',
+    [COL.PR_DATE]: dayOf(row.proposal_date),
+    [COL.PR_STATUS]: row.status ?? '',
+    [COL.PR_NOTE]: row.review_note ?? '',
+  };
 }
 
 /**
@@ -446,4 +532,6 @@ export default {
   departmentToLegacy,
   departmentFromLegacy,
   activityToLegacy,
+  proposalToLegacy,
+  proposalFromLegacy,
 };
