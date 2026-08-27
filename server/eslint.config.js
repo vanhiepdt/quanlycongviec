@@ -78,6 +78,8 @@ export default [
         DOMParser: 'readonly',
         // Event: project-form-phan-cong.test.js bắn sự kiện change lên ô chọn phòng.
         Event: 'readonly',
+        // MouseEvent: gantt-ui.test.js bắn mouseover/mouseout lên tên dòng Gantt để test tooltip.
+        MouseEvent: 'readonly',
         // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.
         Proxy: 'readonly',
         // localStorage: gantt-ui.test.js khẳng định trạng thái thu gọn Gantt được ghi vào đây

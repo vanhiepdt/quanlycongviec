@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-72");
+console.info("[QLCV] app.js 20260827-73");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2498,7 +2498,7 @@ function renderGanttChartLegacy() {
             const project2 = project && project[COL.P_MANAGER] === currentUser.name,
               isAdmin2 = isAdmin() || project2;
             return "\n                              " + createTaskFromSubworkButtonHtml(filteredTask, "action-btn action-btn-edit mr-1") + "\n                              " + (isAdmin2 ? "<button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n                              <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n                              " + (isAdmin2 ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n                              ";
-          })() + "\n                        </div>\n                      </div>\n                      \n                      <div class=\"gantt-item-timeline\">\n                          " + (isDateInRange(taskStartDate, ganttStartDate, ganttEndDate) || isDateInRange(taskDueDate, ganttStartDate, ganttEndDate) || taskStartDate < ganttStartDate && taskDueDate > ganttEndDate ? "<div class=\"gantt-bar gantt-bar-task " + (isTaskOverdue2 ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(taskBarStyle) + "\" data-tooltip=\"" + escapeHtml(filteredTask[COL.T_NAME]) + ": " + escapeHtml(taskDesc) + "\">\n                              <div class=\"gantt-bar-label\">" + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": " + escapeHtml(taskDesc) + "</div>\n                              <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num2) + "%\"></div>\n                          </div>" : "<div class=\"gantt-non-visible-task\" style=\"height: 20px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;\">\n                              " + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": Không hiển thị trong khoảng này\n                          </div>") + "\n                      </div>\n                    </div>\n                  ";
+          })() + "\n                        </div>\n                      </div>\n                      \n                      <div class=\"gantt-item-timeline\">\n                          " + (isDateInRange(taskStartDate, ganttStartDate, ganttEndDate) || isDateInRange(taskDueDate, ganttStartDate, ganttEndDate) || taskStartDate < ganttStartDate && taskDueDate > ganttEndDate ? "<div class=\"gantt-bar gantt-bar-task " + (isTaskOverdue2 ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(taskBarStyle) + "\" data-tooltip=\"" + escapeHtml(filteredTask[COL.T_NAME]) + ": " + escapeHtml(taskDesc) + "\">\n                              <div class=\"gantt-bar-label\">" + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": " + escapeHtml(taskDesc) + "</div>\n                              <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num2) + "%\"></div>\n                          </div>" : "<div class=\"gantt-non-visible-task\" style=\"height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;\">\n                              " + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": Không hiển thị trong khoảng này\n                          </div>") + "\n                      </div>\n                    </div>\n                  ";
         }
         return "";
       }).join("") + "\n      </div>\n    </div>\n  ";
@@ -2788,6 +2788,21 @@ function formatDateForGantt(value) {
   try {
     const date = parseDateString(value);
     if (isNaN(date.getTime())) return "";
+    // Ngày "lăn" (30/02/2026 → 02/03/2026) coi như KHÔNG hợp lệ: không in ra nhãn sai ngày.
+    if (typeof value === "string") {
+      const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/),
+        vn = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),
+        hopLe = iso
+          ? Number(iso[1]) === date.getFullYear() &&
+            Number(iso[2]) === date.getMonth() + 1 &&
+            Number(iso[3]) === date.getDate()
+          : vn
+            ? Number(vn[3]) === date.getFullYear() &&
+              Number(vn[2]) === date.getMonth() + 1 &&
+              Number(vn[1]) === date.getDate()
+            : true;
+      if (!hopLe) return "";
+    }
     const padded = String(date.getDate()).padStart(2, "0"),
       padded2 = String(date.getMonth() + 1).padStart(2, "0");
     return padded + "/" + padded2;
@@ -4121,7 +4136,10 @@ function createGanttSubRowHtml(sub) {
     key = "sub:" + sub.id,
     bodyId = escapeHtml("gantt-subs-" + ganttDomKey(String(sub.id))),
     an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
-    nhan = formatDateForGantt(sub.startDate) + " - " + formatDateForGantt(sub.dueDate) + ": " + (sub.name || ""),
+    nhanNgay = [formatDateForGantt(sub.startDate), formatDateForGantt(sub.dueDate)]
+        .filter(Boolean)
+        .join(" - "),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + (sub.name || ""),
     thanh = buildGanttCellHtml(sub.startDate, sub.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-subwork", nhan, Number(sub.completion) || 0),
     soCon = (sub.children || []).length,
@@ -4146,7 +4164,10 @@ function createGanttTaskRowHtml(task) {
     totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
     quaHan = isTaskOverdue(task.dueDate) && !(task.status || "").toLowerCase().includes("hoàn thành"),
     duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(task))),
-    nhan = formatDateForGantt(task.startDate) + " - " + formatDateForGantt(task.dueDate) + ": " + (task.name || ""),
+    nhanNgay = [formatDateForGantt(task.startDate), formatDateForGantt(task.dueDate)]
+        .filter(Boolean)
+        .join(" - "),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + (task.name || ""),
     thanh = buildGanttCellHtml(task.startDate, task.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-task" + (quaHan ? " gantt-bar-overdue" : ""), nhan, Number(task.completion) || 0);
   return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '" style="padding-left: 60px;">' +
@@ -4791,8 +4812,10 @@ function createGanttWorkRowHtml(work) {
     key = "work:" + work.code,
     bodyId = escapeHtml("gantt-tasks-" + ganttDomKey(work.code)),
     an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
-    nhan = formatDateForGantt(work.startDate) + " - " + formatDateForGantt(work.endDate) + ": " +
-      (work.name || ""),
+    nhanNgay = [formatDateForGantt(work.startDate), formatDateForGantt(work.endDate)]
+        .filter(Boolean)
+        .join(" - "),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + (work.name || ""),
     thanh = buildGanttCellHtml(work.startDate, work.endDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-project", nhan, work.progress),
     duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(work)));

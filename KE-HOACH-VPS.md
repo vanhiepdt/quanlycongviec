@@ -1619,6 +1619,8 @@ Trạng thái: ⬜ chưa làm · 🟡 đang làm · ✅ xong (đã có test xanh
 
 
 
+| 2026-08-27 | **Gantt vòng 2 — vá «sửa không có tác dụng» + to hơn 1,5 lần.** Nguyên nhân gốc: `app.css` chưa từng có cache-buster (vẫn `?v=20260825`) ⇒ Nginx cache 30 ngày + trình duyệt kẹt CSS cũ trong khi app.js đã -70/-72 — toàn bộ override ngày giãn/thanh dày/tooltip-fixed chưa từng tới máy người dùng. Fix: bump `app.css?v=20260827-1` (**quy tắc mới: đổi file tĩnh nào bump file đó**) + `app.js?v=20260827-73` (banner -73); `.gantt-item` 48px / `.gantt-bar` 38px / ngày ≥34px số 16px; `overflow:hidden` cho timeline chống tràn; `formatDateForGantt` từ chối ngày «lăn» (30/02…) và nhãn thanh dựng `.filter(Boolean).join(" - ")` — hết «24/08 - 30/02»; test jsdom thêm 4 (bắn MouseEvent thật cho tooltip hiện/ẩn + ngày vô lý) ⇒ **1089/1089 test · 64 file** xanh; lint + prettier sạch; pin giữ 79/566. Nhật ký: `docs/NHAT-KY-GANTT-THEO-THANG.md` mục Vòng 2 | `web/assets/js/app.js`, `web/assets/css/app.css`, `web/index.html`, `server/tests/unit/gantt-ui.test.js`, `server/eslint.config.js` (thêm global MouseEvent), `docs/NHAT-KY-GANTT-THEO-THANG.md` | Phase 8 — hạ tầng (prompt dán sẵn BAT-DAU-SESSION mục 3); NHỚ deploy sync `web/` lên VPS thì user mới thấy |
+
 ### 13.4 Quyết định đang chờ người dùng — KHÔNG TỰ ĐOÁN
 
 | # | Câu hỏi | Chặn | Trạng thái |

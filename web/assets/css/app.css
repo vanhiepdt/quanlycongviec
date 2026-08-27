@@ -3416,19 +3416,19 @@
 /* Ngày/thứ to ra và chiếm đều bề ngang (tháng 28–31 ngày vẫn full màn hình). */
 .gantt-day {
     flex: 1 1 0 !important;
-    min-width: 30px !important;
+    min-width: 34px !important;
     max-width: none !important;
-    padding-top: 2px;
+    padding-top: 3px;
 }
 
 .gantt-day-number {
-    font-size: 15px !important;
+    font-size: 16px !important;
     font-weight: 700 !important;
     line-height: 1.15;
 }
 
 .gantt-day-label {
-    font-size: 12px !important;
+    font-size: 12.5px !important;
     color: #4b5563 !important;
 }
 
@@ -3437,16 +3437,29 @@
     min-width: 0 !important; /* bỏ khoá 2160px của bản 90 ngày — tự co dãn theo bề rộng */
 }
 
-.gantt-item {
-    min-width: 0 !important;
+/* Thanh không bao giờ tràn ra ngoài lưới ngày — cắt đúng ranh ô ngày cuối. */
+.gantt-item-timeline {
+    overflow: hidden !important;
 }
 
-/* Thanh thời gian DÀY hơn, căn giữa theo chiều cao dòng. */
+/* Hàng CAO HƠN 1,5 LẦN (32px cũ → 48px) cho cả nhóm / công việc / CV con / nhiệm vụ. */
+.gantt-item {
+    min-width: 0 !important;
+    min-height: 48px !important;
+}
+
+.gantt-item-label {
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    font-size: 14px !important;
+}
+
+/* Thanh thời gian dày tương ứng (~38px), căn giữa theo chiều cao dòng. */
 .gantt-bar {
-    height: 26px !important;
+    height: 38px !important;
     top: 50% !important;
     transform: translateY(-50%);
-    border-radius: 6px !important;
+    border-radius: 7px !important;
     display: flex;
     align-items: center;
 }
@@ -3455,12 +3468,12 @@
 .gantt-bar-label {
     position: static !important;
     transform: none !important;
-    font-size: 11px !important;
+    font-size: 12px !important;
     max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    padding: 0 8px !important;
+    padding: 0 10px !important;
 }
 
 /* Cột mũi tên riêng — mũi tên NẰM NGOÀI khối icon+tên nên mọi cấp thẳng hàng từ icon. */

@@ -61,3 +61,24 @@ Không đụng: schema/migration, view, luật nguồn `assignments`, RPC bridge
 | **Editor truncate `new_text` giữa chừng** khi chèn khối dài: diff hiển thị dòng cuối bị cụt (`.setH`) mà tưởng chỉ là hiển thị ⇒ file vỡ cú pháp ngay tại chỗ chèn | SAU MỖI lần sửa app.js/subwork lớn phải `node --check` NGAY trước khi sang việc khác; chèn khối dài thì tách nhiều lần nhỏ (<60 dòng/lần) như bài học cũ, đừng tin diff thoáng qua |
 | Helper tự viết chứa escape bên trong (vd `hang()`, `hoverJsonAttr()`) khiến bộ soát XSS coi mọi gọi là CHƯA thoát (nó chỉ nhận diện `escapeHtml*`/`safeUrl` chuẩn) | Đừng bọc logic escape vào hàm lạ khi dựng HTML: escape TRỰC TIẾP tại call-site hoặc tính ra biến đã-thoát có tên rõ nghĩa rồi ghép chuỗi |
 | id bị xoá khỏi index.html nhưng code LEGACY còn `getElementById` đọc ⇒ dom-contract đỏ dù listener đã gỡ sạch | Khi bỏ element, grep lại TOÀN bộ app.js cả vùng dead-code để xoá luôn chỗ đọc id |
+
+---
+
+## Vòng 2 (2026-08-27) — chỉnh theo phản hồi ảnh chụp
+
+| Phản hồi | Nguyên nhân thật | Đã sửa |
+|---|---|---|
+| Ngày vẫn 24px, thanh tràn khung, tooltip «không thấy» | KHÔNG phải code — **cache**: `index.html` vẫn trỏ `app.css?v=20260825` (chưa từng bump) ⇒ Nginx cache asset 30 ngày + browser kẹt CSS cũ; JS có buster (-70/-72) nên chạy bản mới, tạo ảo «sửa rồi mà vẫn vậy» | Bump lần đầu `app.css?v=20260827-1`; quy tắc mới ghi §13.5: **đổi file tĩnh nào phải bump file đó** |
+| Thanh tràn qua ngoài ngày 30 | CSS cũ giữ `min-width:2160px`, timeline không cắt | `.gantt-item-timeline { overflow: hidden !important }`; thanh tính % tự cắt hai biên (TC-STAT-13 giữ nguyên) |
+| Hàng/thanh to hơn ~1,5 lần | — | `.gantt-item` 32→**48px**, `.gantt-bar` 26→**38px**, tên 14px, ngày ≥34px (số 16px đậm, thứ 12.5px) |
+| Nhãn «24/08 - 30/02» (ngày vô lý) | `parseDateString('30/02/2026')` LĂN sang 02/03 (không trả Invalid như ISO) ⇒ in nhãn sai ngày | `formatDateForGantt` từ chối ngày lăn (so khớp y/m/d sau parse với nguyên văn chuỗi); nhãn thanh dựng bằng `.filter(Boolean).join(" - ")` — hết dấu «-» treo khi một đầu vô hạn |
+| Tooltip không hiện | Cùng gốc cache CSS: thiếu `position:fixed` ⇒ thẻ trôi đáy trang, người dùng không thấy | Sau buster, thẻ hiện cạnh con trỏ; thêm test jsdom **bắn MouseEvent thật**: mouseover ⇒ `#tooltip-gantt` display:block đủ nội dung, mouseout ⇒ ẩn, gọi gắn listener nhiều lần vẫn 1 thẻ |
+
+Kiểm chứng: **1089/1089 test · 64 file** xanh (một lượt đỏ 2 test `stats-parity` do worker chạy
+song song đụng chung CSDL — chạy riêng hai lượt đều 3/3 và chạy lại full xanh) · lint + prettier
+sạch · pin XSS giữ **79 chỗ / 566 giá trị** (`tools/dem-xss.mjs` đo lại sau sửa) · banner
+`[QLCV] app.js 20260827-73` + buster `app.js?v=20260827-73`, `app.css?v=20260827-1`.
+
+Bẫy mới (đã ghi §13.5): **file tĩnh không bump buster ⇒ sửa «không có tác dụng»** — JS có buster
+còn CSS quên buster là công thức tạo báo lỗi ảo, tốn cả session đoán sai nguyên nhân.
+

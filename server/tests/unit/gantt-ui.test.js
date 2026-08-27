@@ -17,6 +17,7 @@ const EXPORTS = `;Object.assign(window, {
   datKhoangGanttTheoThang, dongBoOThangNamGantt,
   duLieuHoverGantt, buildGanttHoverCardHtml,
   createGanttSubRowHtml, createGanttTaskRowHtml,
+  formatDateForGantt, goiNutHoverGantt,
   __ganttDoc: () => ({ start: ganttStartDate, end: ganttEndDate }),
   __gantt: (ten, giaTri) => { ({ startDate: () => { ganttStartDate = giaTri; },
     endDate: () => { ganttEndDate = giaTri; },
@@ -292,5 +293,62 @@ describe('thẻ tooltip tự vẽ cho tên dòng (yêu cầu #2/#2b)', () => {
     );
     expect(html).toContain('Công việc con');
     expect(html.match(/—/g).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('tooltip gắn SỰ KIỆN THẬT — rê chuột hiện thẻ, rời chuột ẩn', () => {
+  it('mouseover lên tên ⇒ #tooltip-gantt display:block đủ nội dung; mouseout ⇒ ẩn', () => {
+    document.body.innerHTML = '<div id="gantt-items"></div>';
+    window.goiNutHoverGantt();
+    const vung = document.getElementById('gantt-items');
+    vung.innerHTML = window.createGanttTaskRowHtml(subMau().children[0]);
+    const tenEl = vung.querySelector('.gantt-hover-name');
+    const bungSuKien = (loai, init) =>
+      new MouseEvent(loai, { bubbles: true, cancelable: true, ...init });
+    tenEl.dispatchEvent(bungSuKien('mouseover', { clientX: 120, clientY: 80 }));
+    const the = document.getElementById('tooltip-gantt');
+    expect(the).toBeTruthy();
+    expect(the.style.display).toBe('block');
+    expect(the.textContent).toContain('Nhiệm vụ');
+    expect(the.textContent).toContain('Vẽ sơ đồ');
+    expect(the.textContent).toContain('Kết quả đầu ra');
+    expect(the.textContent).toContain('70%');
+    tenEl.dispatchEvent(bungSuKien('mouseout'));
+    expect(the.style.display).toBe('none');
+  });
+
+  it('gọi goiNutHoverGantt nhiều lần vẫn chỉ gắn MỘT bộ listener (không nhân đôi thẻ)', () => {
+    document.body.innerHTML = '<div id="gantt-items"></div>';
+    window.goiNutHoverGantt();
+    window.goiNutHoverGantt();
+    const vung = document.getElementById('gantt-items');
+    vung.innerHTML = window.createGanttTaskRowHtml(subMau().children[0]);
+    vung
+      .querySelector('.gantt-hover-name')
+      .dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(document.querySelectorAll('#tooltip-gantt').length).toBe(1);
+  });
+});
+
+describe('formatDateForGantt — ngày «lăn» (30/02…) không được in ra nhãn', () => {
+  it('ngày vô lý ⇒ rỗng; ngày thật vẫn dd/mm; thiếu ⇒ rỗng', () => {
+    expect(window.formatDateForGantt('30/02/2026')).toBe('');
+    expect(window.formatDateForGantt('2026-02-30')).toBe('');
+    expect(window.formatDateForGantt('2026-03-05')).toBe('05/03');
+    expect(window.formatDateForGantt('5/3/2026')).toBe('05/03');
+    expect(window.formatDateForGantt('31/04/2026')).toBe('');
+    expect(window.formatDateForGantt(null)).toBe('');
+    expect(window.formatDateForGantt('')).toBe('');
+  });
+
+  it('nhãn thanh KHÔNG còn dấu "-" treo khi một đầu ngày vô hạn (lỗi 30/02 trong ảnh chụp)', () => {
+    const html = window.createGanttSubRowHtml({
+      ...subMau(),
+      startDate: '2026-02-10',
+      dueDate: '30/02/2026',
+    });
+    expect(html).not.toContain('30/02');
+    expect(html).not.toContain(' - : ');
+    expect(html).toContain('10/02: Thiết kế hệ thống');
   });
 });
