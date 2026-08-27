@@ -318,7 +318,7 @@ quanlycongviec/
 | Phiên | Cookie httpOnly + bảng `sessions` | Thu hồi được ngay, không như JWT |
 | Ghi log | `pino` + `pino-http` | JSON, nhanh, ghép được với `docker logs` |
 | Lịch chạy | `node-cron` | Thay `setupDailyTrigger` của Apps Script |
-| Excel | `exceljs` | Ghi `.xlsx` thật, có định dạng, không phải CSV đổi tên |
+| Excel | `exceljs@4.4.0` (ghim chính xác) | Ghi `.xlsx` thật, có định dạng, không phải CSV đổi tên. Cài `--save-exact` ngày 2026-08-27 (việc 7.5): bản `.xlsx` viết ra là **hợp đồng với Excel**, nâng phiên bản giữa đường mà đổi cách ghi ngày/định dạng thì lỗi chỉ hiện khi người dùng mở file |
 | Email | ~~`nodemailer`~~ **không dùng** | Chốt 2026-08-24 (§13.4 mục 4): không gửi email. Thông báo chỉ nằm trong bảng `notifications` + badge trên giao diện. `MAIL_ENABLED=false`, không cài gói, không viết `services/mailer.js` |
 | Test | `vitest` + `supertest` + `@playwright/test` | Nhanh, cùng cú pháp cho unit và integration |
 
@@ -693,7 +693,7 @@ một đường. `getDataForUser` và `getInitialDataWithAuth` cùng ánh xạ v
 | Dữ liệu Gantt đã nhóm | `GET /api/v1/gantt?from=&to=&groupBy=department\|deputy\|assignee` |
 | Ứng viên phân công (Ban kiểm soát / Lãnh đạo phòng) — thêm 2026-08-26 | `GET /api/v1/departments/assignment-options?departmentId=&parentRef=` |
 | Hoạt động gần đây có phân trang | `GET /api/v1/stats/activities?page=` |
-| Xuất Excel | `GET /api/v1/export/works.xlsx?…` |
+| Xuất Excel — 3 mẫu (việc 7.5) | `GET /api/v1/export/works.xlsx?month=`, `/export/tasks.xlsx?month=`, `/export/stats.xlsx?from=&to=` |
 | Sức khoẻ hệ thống | `GET /healthz` |
 
 **Hình dáng phần nguồn gốc và nhật ký** (B7/B8, C16/C17). Mọi phản hồi trả về *một* đầu việc —

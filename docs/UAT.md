@@ -164,6 +164,10 @@ Tổng: **88 mã** / 13 nhóm (+ **8 mã PA** nhóm N bổ sung 2026-08-26).
 
 - [ ] **M1** Xuất Excel: danh sách công việc 3 tầng, nhiệm vụ theo người, thống kê theo phòng.
       Mở file bằng Excel thật, kiểm tiếng Việt không lỗi phông.
+      *(Phase 7 việc 7.5–7.6 đã xong phần máy: 3 đường `GET /api/v1/export/*.xlsx` trả `200` +
+      chữ ký `PK`, tiêu đề · đóng băng 2 hàng đầu · ngày là NGÀY thật có test canh, phạm vi xuất
+      dùng đúng hàm lọc của API danh sách — R12/R12b của checklist §8.5. **Ô này còn để trống vì
+      phải có người mở bằng Excel thật mới ký được**, máy chỉ đọc lại file bằng `exceljs`.)*
 - [ ] **M2** `npm run seed:dev` nạp dữ liệu mẫu; **chạy lại lần 2 không nhân đôi** bất kỳ bảng nào
       (đếm lại 12 bảng trước và sau). Thử đặt `NODE_ENV=production` ⇒ phải **từ chối và thoát**,
       không ghi một dòng nào.
@@ -204,33 +208,35 @@ migration `005_phan_cong.sql`.
 
 ## Checklist khói §8.5 — 6 nhóm / 60 điểm
 
-**Lượt chạy lại: 2026-08-25 · Phase 6 · nhánh `vps/phase-6-stats` · HEAD `3df2e44`.**
-(Lượt trước: Phase 5 · `57cfa89` · 36 ✅ · 23 ⏳.)
+**Lượt chạy lại: 2026-08-27 · Phase 7 · nhánh `vps/phase-7-misc` · HEAD `cfb55dc`.**
+(Lượt trước: Phase 6 · `3df2e44` · 49 ✅ · 10 ⏳ · 1 —.)
 
-Môi trường lượt này: Node trên máy thật cổng 3000 với `DATABASE_URL=…/quanlycongviec_uat`
-(`BASE=http://127.0.0.1:3000`, không cần Nginx cho phần API; migration đã đứng ở 004 từ
-Phase 5 nên không phải migrate thêm). Bộ khói **đã mở rộng** theo đúng ghi nợ §13.5: thêm
-helper `rest` (GET `/api/v1/*` bằng cookie phiên) và các điểm mới — T5–T10 gọi thẳng
-`/stats/charts?type=` ×6 + `/stats/summary` + `/stats/activities`; R1–R7 gọi
-`/gantt?groupBy=department|deputy|assignee` + cửa sổ from/to. Chữ lạc hậu «cả 7 còn 501» (N1)
-và «getTasks N+1» (C6) cũng đã sửa.
+Môi trường lượt này: Node trên máy thật cổng 3000 với `DATABASE_URL=…/quanlycongviec_uat`, **đi
+qua Nginx thật** (`BASE=http://127.0.0.1:8099`, container `qlcv-uat-nginx` + cầu `app` socat).
+Phase 7 **không thêm migration** nên CSDL UAT vẫn đứng ở 005, chỉ `npm run seed:dev` lại cho sạch.
+Bộ khói mở rộng thêm: helper `xlsx` (tải file, in kiểu nội dung + số byte + 2 byte đầu phải là
+`PK`) và `dongxlsx` (đọc lại file bằng chính `exceljs` của server, in số dòng + cột A) — hai helper
+này là cách R12/R12b chứng minh phạm vi xuất chứ không đoán theo số byte. Điểm mới: **R11** gọi
+CRUD app thật, **R12** tải cả 3 mẫu, **R12b** so tệp của admin với tệp của Nhân viên, **R13** đọc
+`GET /api/rpc` để đếm tên chạy thật.
 
 Mọi điểm đi đúng đường thật của người dùng: `google.script.run.<tên cũ>` →
 `web/assets/js/api-bridge.js` → `POST /api/rpc/<tên>` (kèm `X-CSRF-Token`) → `/api/v1` → CSDL.
-Từ Phase 6, Tổng quan/Gantt còn đi đường REST MỚI: `GET /api/v1/stats|gantt`.
+Từ Phase 6, Tổng quan/Gantt còn đi đường REST MỚI: `GET /api/v1/stats|gantt`; từ Phase 7 nút
+«Xuất Excel» tải thẳng `GET /api/v1/export/*.xlsx` (thẻ `<a href>` trong `index.html`, không qua cầu RPC).
 
 Chạy lại: `bash tools/smoke-8.5.sh` — in mã HTTP từng điểm, tự dọn các dòng nó tạo ra và
-kết thúc bằng số dòng còn lại để đối chiếu với seed (**9 công việc / 30 đầu việc**).
+kết thúc bằng số dòng còn lại để đối chiếu với seed (**14 công việc / 36 đầu việc**).
 
 Ký hiệu: ✅ xanh · ❌ **đỏ** (đã chuyển mà sai) · ⏳ chưa chuyển / chưa kiểm hết trên đường khói
 · — bản cũ không có điểm này.
 
-**Tổng: 49 ✅ · 0 ❌ · 10 ⏳ · 1 —** (đếm theo 60 ô checklist, không đếm hai lần)
+**Tổng: 54 ✅ · 0 ❌ · 6 ⏳ · 0 —** (đếm theo 60 ô checklist, không đếm hai lần)
 
-- 49 ✅ = Đ1–Đ6 (6) + T1–T10 (**đủ 4 thẻ có số thật + 6 biểu đồ vẽ từ server + hoạt động có phân trang**, 10) + C1–C14 (14) + D1–D2 (2) + N1–N10 (10) + R1–R7 (**Gantt cây 4 mức nhóm 3 kiểu + cửa sổ ngày**, 7).
+- 54 ✅ = Đ1–Đ6 (6) + T1–T10 (**đủ 4 thẻ có số thật + 6 biểu đồ vẽ từ server + hoạt động có phân trang**, 10) + C1–C14 (14) + D1–D2 (2) + N1–N10 (10) + R1–R7 (**Gantt cây 4 mức nhóm 3 kiểu + cửa sổ ngày**, 7) + R8–R11 (**đề nghị / chat / app chạy thật**, 4) + R12 (**xuất Excel 3 mẫu**, 1).
 - 0 ❌ — không phát hiện hồi quy mới trong phase này.
-- 10 ⏳ = D3–D8 nút/badge UI duyệt trên cây (6) + R8–R11 đề nghị/chat/app (4) — cả hai nhóm là Phase 7/UI sau.
-- 1 — = R12 xuất Excel (Phase 7, bản cũ không có).
+- 6 ⏳ = D3–D8 nút/badge UI duyệt trên cây — **cố ý để lại**: 37 tên RPC không có tên nào cho duyệt/từ chối, thêm nút là mở rộng phạm vi ngoài §5.2.
+- 0 — : R12 không còn là «bản cũ không có» mà đã là tính năng chạy thật của bản VPS.
 
 Đối chiếu số liệu Apps Script ↔ VPS (việc **6.9**, TC-STAT-16): hai thuật toán cũ được port 1:1
 (`getSummaryStats` của Code.clean.gs và `renderStats`/`render*Chart` của app.js — **UI tự tính
@@ -295,7 +301,7 @@ kèm `parentRef`; «+ Thêm» đứng riêng vẫn cấp 3. Test: `dom-contract.
 | D4 | Phó GĐ thấy nút Duyệt | ⏳ UI | REST `POST /api/v1/approvals/:entity/:id/{submit,approve,reject}` **đã có** (việc 5.2–5.3, test `approvals-api.test.js`). **Không** có tên RPC tương ứng trong 37 tên. `app.js` **không** có nút Duyệt/Từ chối trên hàng công việc / công việc con — chỉ còn chỗ duyệt **đề nghị** (Phase 7). |
 | D5 | Duyệt | ⏳ UI | Như D4. Khói không gọi REST approve. Đừng tô xanh chỉ vì test máy chủ xanh. |
 | D6 | Từ chối (lý do ≥ 10 ký tự) | ⏳ UI | Như D4. Service chặn lý do rỗng / ngắn; XSS lý do từ chối có test. |
-| D7 | Thông báo tới | ⏳ UI | Việc 5.7 ghi bảng `notifications` khi có mục mới chờ / được duyệt / bị từ chối. Khói không đọc bảng này. Badge thông báo trên UI chưa nối lại sau mỗi lần duyệt. |
+| D7 | Thông báo tới | ⏳ UI | Việc 5.7 ghi bảng `notifications` khi có mục mới chờ / được duyệt / bị từ chối. Khói không đọc bảng này. Badge thông báo trên UI chưa nối lại sau mỗi lần duyệt. **Từ Phase 7** có đường TẠO thật (`POST /api/v1/notifications`, tên cũ `addNotificationWithAuth`, chỉ admin) — nhưng **chưa có đường ĐỌC** (`GET /notifications`) và giao diện cũ chưa có chuông, nên D7 vẫn ⏳. |
 | D8 | Thống kê không đổi khi chờ duyệt | ⏳ đối chiếu | Việc 5.4: hai view + test EXPLAIN. Bootstrap thống kê đọc view. Đối chiếu **4 thẻ + 6 biểu đồ không đổi một đơn vị** trên UI là việc **6.1/6.2/6.9**. |
 
 Script khói D3–D8 vẫn in «không có tên hàm cũ» + `grep` = 0 — đó là **nợ của bộ khói**, không
@@ -315,27 +321,29 @@ là **nút trên cây + badge đọc `pendingCount`**. Việc này **không** th
 | N9 | Xoá phòng còn người ⇒ bị chặn | ✅ RPC | `deleteDepartmentWithAuth` đã nối; nghiệp vụ chặn phòng còn người nằm ở service (test `users-departments-crud.test.js`). Khói không gửi mã phòng thật. |
 | N10 | Xoá phòng rỗng ⇒ được | ✅ RPC | như trên; seed có `PH05` rỗng. |
 
-Cả 7 tên **không còn `pending()`**. Bộ khói vẫn ghi chú «cả 7 còn 501» — **nợ comment**, không
-phải trạng thái thật. Happy-path (thêm nhân sự đủ trường, xoá PH05) **chưa** nằm trong
-`smoke-8.5.sh`; đã kiểm tay `addStaffWithAuth` thiếu tên → 400 đúng. Đừng báo N* «xong UAT tay»
-chỉ vì hết 501.
+Cả 7 tên **không còn `pending()`**; ghi chú lạc hậu «cả 7 còn 501» trong bộ khói đã sửa từ Phase 6.
+Happy-path (thêm nhân sự đủ trường, xoá PH05) **chưa** nằm trong `smoke-8.5.sh`; đã kiểm tay
+`addStaffWithAuth` thiếu tên → 400 đúng. Đừng báo N* «xong UAT tay» chỉ vì hết 501.
 
-### 6. Còn lại — R1–R7 ✅ Phase 6; R8–R11 ⏳ Phase 7; R12 —
+### 6. Còn lại — R1–R7 ✅ Phase 6; R8–R12 ✅ Phase 7
 
 | Mã | Điểm kiểm | KQ | Bằng chứng |
 |---|---|---|---|
 | R1–R3 | Gantt 1 / 2 / 3 tháng | ✅ Phase 6 | `GET /api/v1/gantt?from=&to=` — bộ khói gọi cửa sổ 30→90 ngày `[200]` trả cây đúng khoảng (việc ngoài hẳn biến mất, việc vắt qua còn). Ô «Xem: 1/2/3 tháng» đặt `ganttEndDate = start + n×30 − 1` (n=3 đúng 90 ngày như mặc định cũ); thanh **cắt hai đầu** / **ẩn khi ngoài khoảng** do `tests/unit/gantt-ui.test.js` canh (TC-STAT-13/14). |
 | R4–R6 | Nhóm theo 3 kiểu | ✅ Phase 6 | Ba lượt khói `[200] GET gantt?groupBy=department / deputy / assignee`. Thứ tự phòng theo `sort_order` (TC-STAT-11); Phó GĐ phụ trách 2 phòng gộp MỘT nhóm (TC-STAT-12) — cả hai có test riêng trong `gantt-api.test.js`. |
 | R7 | Thu gọn | ✅ Phase 6 | Việc **6.8**: nút thu gọn ở cả 3 mức Nhóm/Công việc/Công việc con, khoá lưu `localStorage` (`qlcv_gantt_collapsed`), tải lại trang vẫn giữ — TC-STAT-15 trong `gantt-ui.test.js`. |
-| R8 | Đề nghị — tạo | ⏳ | `[501] getProposals`, `[501] addProposalWithAuth` — Phase 7 |
-| R9 | Đề nghị — sửa | ⏳ | `[501] updateProposalWithAuth` — Phase 7 |
-| R10 | Chat gửi / nhận | ⏳ | `[501] getChatMessages`, `[501] sendChatMessage` — Phase 7 |
-| R11 | App mở được | ⏳ | `[501] addApp` — Phase 7. Còn `updateApp`/`deleteApp`/`addNotificationWithAuth` cũng 501. |
-| R12 | Xuất 3 file Excel | — | `app.js` **không có** hàm xuất nào. Tính năng mới §2.13 / UAT **M1**, lịch Phase 7. |
+| R8 | Đề nghị — tạo | ✅ Phase 7 | `[200] getProposals` (mảng thô 5 dòng seed), `[200] addProposalWithAuth` → `DN006`. Việc **7.1**: CRUD `/api/v1/proposals`, quyền theo §6 (người tạo sửa của mình, Phó GĐ/admin duyệt), test `proposals-api.test.js`. |
+| R9 | Đề nghị — sửa | ✅ Phase 7 | `[200] updateProposalWithAuth` trên `DN001`. |
+| R10 | Chat gửi / nhận | ✅ Phase 7 | `[200] getChatMessages` (12 tin seed, đủ 5 khoá `user/avatar/timestamp/chatDate/message`), `[200] sendChatMessage`. Việc **7.3**: REST `/chat` + giao diện tự nạp lại mỗi **10 giây**; việc **7.4**: cron hằng tuần xoá tin quá **90 ngày** (`CRON_CHAT_CLEANUP`, `CHAT_KEEP_DAYS`), có test. |
+| R11 | App mở được | ✅ Phase 7 | Việc **7.2**: `[200] addApp` → `APP005`, `[200] updateApp`, `[200] deleteApp`; thiếu tên → `[400]` field `name`. Khoá gửi lên là **nhãn cột bản cũ** (`Tên App`, `URL`, `Danh mục`), cầu RPC dịch sang `name/url/category` — gửi `name` trực tiếp sẽ 400 «Tên ứng dụng không được để trống». Chỉ admin sửa được (`assertAdmin`). |
+| R12 | Xuất 3 file Excel | ✅ Phase 7 | Việc **7.5**: `[200]` cả ba `GET /api/v1/export/{works,tasks,stats}.xlsx`, kiểu `…spreadsheetml.sheet`, 2 byte đầu `PK` (Excel mở không cảnh báo), 3 thẻ `<a href>` trong `index.html`. Tiêu đề + đóng băng 2 hàng đầu + ngày `dd/mm/yyyy` là **ngày thật** trong Excel — canh bằng `export-xlsx.test.js`. |
+| R12b | Xuất đúng phạm vi | ✅ Phase 7 | Việc **7.6** (rủi ro lớn nhất của phase): cùng đường `export/works.xlsx`, admin nhận **67 dòng / 17 công việc**, Nhân viên `nv01` nhận **44 dòng / đúng 8 công việc của phòng Quản lý Đào tạo** — tập mã của Nhân viên là tập con thật sự, không có mã phòng khác. Xuất dùng **đúng** `getTree`/`stats service` của API danh sách, không có truy vấn riêng; TC-MISC-11 canh trong test. |
+| R13 | Cầu RPC 37/37 | ✅ Phase 7 | `GET /api/rpc`: **tổng 37 · chạy thật 37 · còn treo 0**. `[200] addNotificationWithAuth` (người nhận trống ⇒ fan-out **15** dòng `notifications`, nhãn «Khẩn cấp» → `warning`). Chỉ admin tạo được (`assertAdmin` trong service, một cổng cho cả REST và RPC). |
 
-RPC còn `pending()` **đúng 10 tên**: `getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`,
-`deleteProposalWithAuth`, `addApp`, `updateApp`, `deleteApp`, `getChatMessages`, `sendChatMessage`,
-`addNotificationWithAuth`. **27/37** đã chạy thật.
+RPC **không còn tên `pending()` nào**: **37/37** chạy thật từ 2026-08-27 (mười tên cuối lần lượt là
+`getProposals`, `addProposalWithAuth`, `updateProposalWithAuth`, `deleteProposalWithAuth`, `addApp`,
+`updateApp`, `deleteApp`, `getChatMessages`, `sendChatMessage`, `addNotificationWithAuth`). Khuôn
+`pending()` đã bỏ khỏi `src/rpc/table.js` vì không còn chỗ gọi — cách khai lại nằm ở đầu file đó.
 
 ### Kiểm lại tài sản tĩnh qua Nginx thật (việc 4.3 + 4.8) — giữ từ Phase 4
 
@@ -360,13 +368,35 @@ Phó GĐ phụ trách phòng; CHECK `task_leader_single` chặn cả SQL trực 
 cũ đã xác minh trên UAT: công việc có phòng nhận Phó GĐ phụ trách + `{head,vice}`, việc chung
 nhận admin.
 
+### Lượt khói Phase 7 (2026-08-27, nhánh `vps/phase-7-misc`, HEAD `cfb55dc`)
+
+Chạy trọn bộ qua Nginx thật trên CSDL UAT (vẫn migration **005**, Phase 7 không thêm migration):
+phân bố mã **`65×200 · 5×400 · 4×401 · 1×403 · 5×404`** — **hết hẳn `501`**, không một `500`.
+Các điểm âm đều là điểm kiểm chủ đích: thiếu tham số (400), chưa đăng nhập / sau khi đăng xuất
+(401), bắt đổi mật khẩu lần đầu (403), mã lạ (404). Bộ tự dọn về đúng dữ liệu seed
+(**14 công việc / 36 đầu việc**).
+
+Ba cái bẫy đã gặp khi dựng lại môi trường khói, ghi ra để lần sau không mất thời gian:
+
+1. `curl http://127.0.0.1:8099/api/csrf` trả **502** = hai container còn sống nhưng **Node trên máy
+   thật đã tắt**; `tools/uat-server.pid` là pid cũ. Bật lại rồi mới chạy khói.
+2. Chạy khói trên CSDL UAT **đã bị lượt trước sửa dở** thì Đ1 trượt `INVALID_CREDENTIALS` → 5 lần
+   sai liên tiếp làm `admin@test.local` bị **khoá 15 phút** (`423 ACCOUNT_LOCKED`) và mọi điểm sau
+   đó đỏ theo. Cách sửa: `npm run seed:dev` lại (đặt lại mật khẩu + vai trò theo `ON CONFLICT DO
+   UPDATE`) **rồi** `UPDATE users SET locked_until = NULL, failed_logins = 0` — seed **không** dọn
+   hai cột khoá này.
+3. Bộ khói phải chạy **từ gốc repo** (`cd /e/quanlycongviec` trước), vì nó đọc `web/index.html` và
+   gọi `cd server` cho `dongxlsx`.
+
 ### Việc tiếp theo (không còn điểm đỏ)
 
-1. **Phase 7** — đề nghị / quản lý app / chat / xuất Excel: §7 việc 7.1–7.6; 10 tên RPC còn 501;
-   quyền xuất chỉ trong phạm vi được thấy (**7.6** dễ thành lỗ rò). `addNotificationWithAuth` cũng để đó.
+1. **Phase 8** — hạ tầng VPS thật: Docker Compose production, HTTPS, sao lưu + phục hồi, kiểm
+   bảo mật (§11 mục 1–4). Chưa có VPS thật nên chưa chạy được điểm nào của nhóm này.
 2. **D3–D8 UI** — nút Duyệt/Từ chối trên cây + badge đọc `pendingCount`. Máy chủ REST xong từ
    Phase 5, không có tên RPC; vẫn chưa ai yêu cầu làm.
-3. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt**
+3. **Chuông thông báo** — Phase 7 đã có đường TẠO (`POST /notifications`) nhưng chưa có đường ĐỌC.
+   `repo.listByUser` / `countUnread` / `markRead` đã sẵn; mở `GET /notifications` khi nào vẽ chuông.
+4. **Nợ nhỏ để lại của Phase 6**: modal «bấm số mở danh sách» lọc tháng/phòng **ở trình duyệt**
    trên mảng đã do máy chủ chạm phạm vi (không có đường rò); nếu muốn lọc qua server thì thêm
    `GET /stats/items` ở một session sau. Gantt nhóm `assignee` hiện đưa công việc vào nhóm của
    MỖI người có nhiệm vụ trong đó và hiện toàn cây con — nếu muốn chỉ hiện nhánh của người đó

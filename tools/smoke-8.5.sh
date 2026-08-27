@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bộ chạy checklist khói §8.5 qua ĐÚNG đường người dùng thật đi: Nginx → cầu RPC → API v1.
 #
-# Không phải test tự động (đã có 673 test riêng). Đây là bộ gõ tay có ghi lại: mỗi điểm kiểm
+# Không phải test tự động (đã có 1.085 test riêng). Đây là bộ gõ tay có ghi lại: mỗi điểm kiểm
 # in ra tên hàm cũ mà giao diện gọi + mã HTTP + phần đầu thân phản hồi, để chép kết quả vào
 # docs/UAT.md mà không phải nhớ bằng đầu.
 #
@@ -44,6 +44,36 @@ rest() {
   code=${out##*$'\n'}
   LAST=${out%$'\n'*}
   printf '   [%s] %-24s %s\n' "$code" "GET $path" "$(printf '%s' "$LAST" | head -c 300)"
+}
+
+# xlsx <đường dưới /api/v1> [tệp lưu]  → tải file xuất: in mã HTTP, kiểu nội dung, số byte và 2
+# byte đầu. Thân KHÔNG in ra: file .xlsx là một cái zip, in ra chỉ làm rác màn hình. "PK" ở 2 byte
+# đầu là chữ ký zip — thiếu nó thì Excel sẽ báo "file bị hỏng" khi mở.
+XUAT=/tmp/smoke-xuat.xlsx
+xlsx() {
+  local path=$1 tep=${2:-$XUAT} out code ctype bytes dau
+  out=$(curl -s -b "$JAR" -c "$JAR" -o "$tep" \
+    -w '%{http_code} %{content_type} %{size_download}' "$BASE/api/v1/$path")
+  code=${out%% *}
+  ctype=$(printf '%s' "$out" | cut -d' ' -f2)
+  bytes=$(printf '%s' "$out" | cut -d' ' -f3)
+  dau=$([ "$code" = 200 ] && head -c 2 "$tep" || printf '%s' '—')
+  printf '   [%s] %-24s %s · %s byte · đầu tệp=%s\n' \
+    "$code" "GET ${path%%\?*}" "${ctype##*.}" "$bytes" "$dau"
+}
+
+# dongxlsx <tệp>  → "trang | số dòng | các ô cột A" của trang đầu. Đọc bằng chính exceljs của
+# server/ (§3.3), không đoán từ số byte: điểm R12b cần biết file có DÒNG của phòng khác hay không.
+dongxlsx() {
+  (cd server && node --input-type=module -e "
+    import ExcelJS from 'exceljs';
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(process.argv[1]);
+    const ws = wb.worksheets[0];
+    const cotA = [];
+    ws.eachRow((r, i) => { if (i > 2) cotA.push(String(r.getCell(1).value ?? '').trim()); });
+    console.log(ws.name + ' | ' + ws.rowCount + ' dòng | cột A: ' + cotA.join(','));
+  " "$1" 2>&1 | tail -1)
 }
 
 # psql <câu SQL>  — SQL cũng đi qua STDIN, cùng một lý do bảng mã như trên.
@@ -232,19 +262,63 @@ rpc updateProposalWithAuth '{"args":["DN001",{"content":"thử sửa"}]}'
 diem 'R10 chat gửi/nhận'
 rpc getChatMessages
 rpc sendChatMessage '{"args":["xin chào từ bộ khói"]}'
-diem 'R11 app mở được (lưới app + thêm/sửa/xoá)'
-rpc addApp '{"args":[{"name":"App thử"}]}'
-diem 'R12 xuất 3 file Excel'
-echo '   -- app.js KHÔNG có hàm xuất Excel nào (không có XLSX, không có export*): đây là tính năng'
-echo '      MỚI của bản VPS (§2.13 M1), Phase 7. Không phải điểm đỏ của Phase 4.'
+diem 'R11 app mở được (lưới app + thêm/sửa/xoá) — CRUD thật từ việc 7.2'
+# Khoá gửi lên là TÊN CỘT bản cũ (`COL.A_*` trong rpc/legacyFields.js), không phải tên cột CSDL:
+# giao diện cũ đóng gói FormData theo nhãn tiếng Việt, cầu RPC mới dịch sang `name/url/category`.
+rpc addApp '{"args":[{"Tên App":"KHÓI 8.5 — app thử","URL":"https://example.com","Danh mục":"Khác"}]}'
+MA_APP=$(truong 'appId')
+echo "   mã app vừa tạo: ${MA_APP:-KHÔNG DÒ RA}"
+rpc updateApp "{\"args\":[\"$MA_APP\",{\"Tên App\":\"KHÓI 8.5 — app thử (đã sửa)\"}]}"
+rpc deleteApp "{\"args\":[\"$MA_APP\"]}"
+echo '   -- thiếu tên ứng dụng phải 400, không tạo dòng rỗng:'
+rpc addApp '{"args":[{}]}'
+
+diem 'R12 xuất 3 file Excel — nút «Xuất Excel» tải thẳng 3 đường GET (việc 7.5)'
+xlsx 'export/works.xlsx'
+xlsx 'export/tasks.xlsx'
+xlsx "export/stats.xlsx?from=$TU&to=$DEN"
+grep -c '/api/v1/export/' web/index.html |
+  sed 's/^/   số chỗ index.html trỏ tới đường xuất (phải ≥ 3): /'
+
+diem 'R13 cầu RPC — 37/37 tên chạy thật, không còn tên treo (việc 7.7)'
+curl -s -b "$JAR" "$BASE/api/rpc" >/tmp/smoke-rpc.json
+printf '   tổng tên: %s · chạy thật: %s · còn treo: %s\n' \
+  "$(grep -o '"name":' /tmp/smoke-rpc.json | wc -l)" \
+  "$(grep -o '"implemented":true' /tmp/smoke-rpc.json | wc -l)" \
+  "$(grep -o '"implemented":false' /tmp/smoke-rpc.json | wc -l)"
+rpc addNotificationWithAuth \
+  '{"args":[{"content":"KHÓI 8.5 — thông báo thử","recipient":"","type":"Khẩn cấp"}]}'
+psqlq "SELECT count(*)||' thông báo vừa tạo, loại='||coalesce(max(type),'?')
+         FROM notifications WHERE content LIKE 'KHÓI 8.5%';" | sed 's/^/   csdl: /'
+
+diem 'R12b xuất CHỈ TRONG PHẠM VI ĐƯỢC THẤY (việc 7.6) — rủi ro lớn nhất của Phase 7'
+xlsx 'export/works.xlsx' /tmp/smoke-xuat-admin.xlsx
+echo "   admin  : $(dongxlsx /tmp/smoke-xuat-admin.xlsx)"
+# Nhân viên: phải đổi mật khẩu lần đầu mới gọi được nghiệp vụ, đổi đi rồi đổi về như D1.
+login 'nv01@test.local' 'Test@12345'
+rpc changePassword '{"args":["Test@12345","Khoi85@Tam","Khoi85@Tam"]}'
+prime
+xlsx 'export/works.xlsx' /tmp/smoke-xuat-nv.xlsx
+echo "   nhân viên: $(dongxlsx /tmp/smoke-xuat-nv.xlsx)"
+psqlq "SELECT 'nv01 thuộc phòng '||coalesce(d.name,'(không có)')||
+              ', công việc của phòng này: '||(SELECT count(*) FROM works w
+                                              WHERE w.department_id = u.department_id)||
+              ' / toàn hệ thống: '||(SELECT count(*) FROM works)
+         FROM users u LEFT JOIN departments d ON d.id = u.department_id
+        WHERE u.email = 'nv01@test.local';" | sed 's/^/   csdl: /'
+rpc changePassword '{"args":["Khoi85@Tam","Test@12345","Test@12345"]}'
+psqlq "UPDATE users SET must_change_password = true WHERE email = 'nv01@test.local';" |
+  sed 's/^/   psql: /'
 
 # ---------------------------------------------------------------- DỌN DỮ LIỆU THỬ
 diem 'Dọn các dòng do bộ khói tạo ra (để chạy lại lần sau vẫn từ dữ liệu seed sạch)'
 psqlq "DELETE FROM work_items WHERE name LIKE 'KHÓI 8.5%';
        DELETE FROM works WHERE name LIKE 'KHÓI 8.5%';
+       DELETE FROM notifications WHERE content LIKE 'KHÓI 8.5%';
+       DELETE FROM apps WHERE name LIKE 'KHÓI 8.5%';
        UPDATE users SET must_change_password = true WHERE email = 'admin@test.local';
        SELECT (SELECT count(*) FROM works)||' công việc / '||
-              (SELECT count(*) FROM work_items)||' đầu việc còn lại (sau seed: 9 / 30)';" |
+              (SELECT count(*) FROM work_items)||' đầu việc còn lại (sau seed: 14 / 36)';" |
   sed 's/^/   psql: /'
 
 
