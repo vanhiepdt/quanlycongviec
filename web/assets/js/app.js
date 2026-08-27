@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-74");
+console.info("[QLCV] app.js 20260827-75");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -4201,8 +4201,12 @@ async function renderGanttChart() {
   datKhoangGanttTheoThang(ganttXemThang, ganttXemNam);
   dongBoOThangNamGantt();
   const totalDays = Math.ceil((ganttEndDate - ganttStartDate) / 86400000) + 1,
-    daysEl = document.querySelector(".gantt-days");
-  daysEl && ((daysEl.style.display = "flex"), (daysEl.style.flexDirection = "row"), (daysEl.innerHTML = renderGanttDaysHtml(totalDays)));
+    daysEl = document.querySelector(".gantt-days"),
+    khungEl = document.getElementById("gantt-container");
+  // Header ngày LẪN mọi thanh thời gian dùng chung lưới repeat(--gantt-so-ngay) —
+  // thanh đặt bằng grid-column theo ngày nên luôn dóng đúng ô (không còn phép tính %).
+  khungEl && khungEl.style.setProperty("--gantt-so-ngay", String(totalDays));
+  daysEl && (daysEl.innerHTML = renderGanttDaysHtml(totalDays));
 
   ganttItemsEl.innerHTML =
     '\n<div class="text-center py-16 text-gray-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
@@ -4759,18 +4763,27 @@ function docNgayGantt(value) {
  */
 function buildGanttCellHtml(startDate, endDate, rangeStart, rangeEnd, totalDays, cls, nhanText, pct) {
   const s = docNgayGantt(startDate),
-    e = docNgayGantt(endDate),
-    coBatDau = !!s,
-    coKetThuc = !!e;
+    e = docNgayGantt(endDate);
+  // Đổi ngày → SỐ THỨ TỰ ngày (0-based) tính từ đầu khoảng. Math.floor ăn nốt chênh múi giờ:
+  // chuỗi 'yyyy-mm-dd' parse thành 00:00 UTC (= 07:00 ICT) vẫn rơi ĐÚNG ô của ngày đó, kể cả
+  // ngày CUỐI tháng (trước đây so Date thô làm việc 31/08 bị coi là ngoài khoảng — bẫy 2026-08-27).
+  const soThuTu = (d) => (d ? Math.floor((d - rangeStart) / 86400000) : null);
+  const tu = soThuTu(s),
+    den = soThuTu(e ?? s);
   const trong =
-    isDateInRange(s, rangeStart, rangeEnd) ||
-    isDateInRange(e, rangeStart, rangeEnd) ||
-    (coBatDau && coKetThuc && s < rangeStart && e > rangeEnd);
+    (tu != null && tu >= 0 && tu <= totalDays - 1) ||
+    (den != null && den >= 0 && den <= totalDays - 1) ||
+    (tu != null && den != null && tu < 0 && den > totalDays - 1);
   if (!trong) {
-    return '<div class="gantt-non-visible-task" style="height: 20px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;">' +
+    return '<div class="gantt-non-visible-task" style="height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;">' +
       "Không hiển thị trong khoảng này</div>";
   }
-  const style = calculateGanttBarStyleRange(s, e || rangeEnd, rangeStart, rangeEnd, totalDays);
+  // VỊ TRÍ THANH = Ô LƯỚI NGÀY (grid-column 1-based), kẹp biên [1, totalDays]:
+  // thanh chiếm đúng từ cột (ngày bắt đầu giao) dài (số ngày giao) — trùng khít header ngày.
+  const batDauO = Math.min(Math.max(tu ?? 0, 0), totalDays - 1) + 1,
+    ketThucO = Math.min(Math.max(den ?? totalDays - 1, 0), totalDays - 1) + 1,
+    style =
+      "grid-column: " + batDauO + " / span " + Math.max(ketThucO - batDauO + 1, 1);
   return '<div class="gantt-bar ' + escapeHtml(cls) + '" style="' + escapeHtml(style) +
     '" data-tooltip="' + escapeHtml(nhanText) + '">' +
     '<div class="gantt-bar-label">' + escapeHtml(nhanText) + "</div>" +

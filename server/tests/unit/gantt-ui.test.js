@@ -18,7 +18,7 @@ const EXPORTS = `;Object.assign(window, {
   duLieuHoverGantt, buildGanttHoverCardHtml,
   createGanttSubRowHtml, createGanttTaskRowHtml,
   createGanttWorkRowHtml, createGanttGroupRowHtml,
-  formatDateForGantt, goiNutHoverGantt,
+  formatDateForGantt, goiNutHoverGantt, renderGanttDaysHtml,
   __ganttDoc: () => ({ start: ganttStartDate, end: ganttEndDate }),
   __gantt: (ten, giaTri) => { ({ startDate: () => { ganttStartDate = giaTri; },
     endDate: () => { ganttEndDate = giaTri; },
@@ -42,35 +42,61 @@ beforeEach(() => {
   window.__gantt('endDate', DEN);
 });
 
-describe('TC-STAT-13 — thanh bị cắt hai đầu, không mất', () => {
+describe('TC-STAT-13 — thanh đặt bằng Ô LƯỚI NGÀY (grid-column), cắt hai đầu đúng ranh', () => {
   const o = (start, end) =>
     window.buildGanttCellHtml(start, end, TU, DEN, SO_NGAY, 'gantt-bar-task', 'nhãn', 0);
+  const iso = (d) => '2026-03-' + String(d).padStart(2, '0');
 
-  it('việc vắt qua CẢ HAI đầu ⇒ thanh full width', () => {
+  it('việc vắt qua CẢ HAI đầu ⇒ chiếm trọn lưới (cột 1, dài 31 ô)', () => {
     const html = o('2026-02-01', '2026-04-30');
     expect(html).toContain('gantt-bar');
-    expect(html).toContain('left: 0');
-    expect(html).toContain('width: 100%');
+    expect(html).toContain('grid-column: 1 / span 31');
   });
 
-  it('việc bắt đầu TRƯỚC khoảng, kết thúc trong khoảng ⇒ cắt đầu trái (left: 0)', () => {
+  it('bắt đầu TRƯỚC khoảng, kết thúc 15/03 ⇒ từ ô 1, dài 15 ô (cắt đầu trái)', () => {
     const html = o('2026-02-10', '2026-03-15');
-    expect(html).toContain('gantt-bar');
-    expect(html).toContain('left: 0');
-    expect(html).not.toContain('width: 100%');
+    expect(html).toContain('grid-column: 1 / span 15');
   });
 
-  it('việc bắt đầu trong khoảng, kết thúc SAU khoảng ⇒ cắt đầu phải (mẫu tháng dài hơn)', () => {
+  it('bắt đầu 20/03, kết thúc SAU khoảng ⇒ ô 20, dài 12 ô tới hết tháng (cắt đầu phải)', () => {
     const html = o('2026-03-20', '2026-04-20');
-    expect(html).toContain('gantt-bar');
-    expect(html).not.toContain('left: 0;');
-    expect(html).not.toContain('width: 100%');
+    expect(html).toContain('grid-column: 20 / span 12');
   });
 
-  it('việc nằm trọn trong khoảng ⇒ thanh nguyên vẹn, không cắt', () => {
+  it('nằm trọn 05→10/03 ⇒ ô 5, dài 6 ô — nguyên vẹn', () => {
     const html = o('2026-03-05', '2026-03-10');
-    expect(html).toContain('gantt-bar');
-    expect(html).not.toContain('left: 0;');
+    expect(html).toContain('grid-column: 5 / span 6');
+  });
+
+  it('DÓNG BIÊN TỪNG NGÀY: việc 1 ngày bắt đầu ngày d ⇒ đứng đúng ô d (d = 1…31)', () => {
+    for (let d = 1; d <= 31; d++) {
+      const html = o(iso(d), iso(d));
+      expect(html, 'ngày ' + d).toContain(`grid-column: ${d} / span 1`);
+    }
+  });
+
+  it('việc ngoài hẳn khoảng vẫn chỉ hiện ghi chú mờ (không có thanh)', () => {
+    const html = o('2026-05-01', '2026-06-30');
+    expect(html).toContain('Không hiển thị trong khoảng này');
+    expect(html).not.toContain('gantt-bar ');
+  });
+});
+
+describe('header ngày — đủ ô, đúng thứ tự để khớp lưới của thanh', () => {
+  it('Tháng 8/2026 (31 ngày) ⇒ đúng 31 ô, số chạy 1→31', () => {
+    window.__gantt('startDate', new Date(2026, 7, 1));
+    window.__gantt('endDate', new Date(2026, 7, 31));
+    const html = window.renderGanttDaysHtml(31);
+    const so = [...html.matchAll(/gantt-day-number">(\d+)</g)].map((m) => Number(m[1]));
+    expect(so).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
+  });
+
+  it('Tháng 2/2028 (năm nhuận) ⇒ 29 ô chạy 1→29', () => {
+    window.__gantt('startDate', new Date(2028, 1, 1));
+    window.__gantt('endDate', new Date(2028, 1, 29));
+    const html = window.renderGanttDaysHtml(29);
+    const so = [...html.matchAll(/gantt-day-number">(\d+)</g)].map((m) => Number(m[1]));
+    expect(so).toEqual(Array.from({ length: 29 }, (_, i) => i + 1));
   });
 });
 

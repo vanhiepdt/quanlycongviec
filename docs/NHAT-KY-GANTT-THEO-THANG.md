@@ -101,4 +101,29 @@ trạng thái / CV con đỏ).
 
 Kiểm chứng: **1091/1091 test · 64 file** xanh · lint + prettier sạch · pin giữ 79/566.
 
+---
+
+## Vòng 4 (2026-08-27) — thanh đặt bằng Ô LƯỚI NGÀY (grid), triệt tiêu lệch vị trí
+
+Ảnh chụp tiếp theo: thanh vẫn lệch so với lưới ngày (việc 24/08–20/12 vẽ ở khoảng ngày 16–22).
+Định vị bằng **%** trên `.gantt-item-timeline` quá dễ lệch khi container/sticky/%-width đụng nhau
+⇒ thay cơ chế:
+
+| Thay đổi | Chi tiết |
+|---|---|
+| **Lưới chung** | `.gantt-days` và `.gantt-item-timeline` cùng `display:grid; grid-template-columns: repeat(var(--gantt-so-ngay), minmax(0,1fr))` — số ngày do `renderGanttChart` đặt lên `#gantt-container` mỗi lần vẽ (`--gantt-so-ngay`) |
+| **Thanh = ô lưới** | `buildGanttCellHtml` tính `grid-column: <ngày-bắt-đầu> / span <số-ngày>` (1-based, kẹp biên [1, N]) thay cho `left/width %`. Thanh nằm TRONG các cột ngày của header ⇒ lệch là không thể |
+| **Bẫy múi giờ Fix** | `parseDateString('yyyy-mm-dd')` trả 00:00 **UTC** = 07:00 ICT ⇒ so thô với `rangeEnd` 00:00 local làm **việc rơi đúng ngày cuối tháng bị coi là ngoài khoảng** (đây cũng là một nguồn lệch thật). Giờ đổi sang **số thứ tự ngày 0-based** bằng `Math.floor` rồi so/kẹp theo chỉ số — múi giờ tự đúng |
+| Ghi chú ngoài khoảng | `.gantt-non-visible-task { grid-column: 1 / -1 }` trải trọn hàng, cao 100% |
+| Thanh tiến độ | `.gantt-bar` đổi `position:relative` (hết absolute/top/transform) để fill `%` bên trong neo đúng thanh |
+| Phiên bản | banner `-75`, `app.js?v=20260827-75`, `app.css?v=20260827-3` |
+
+Test: `gantt-ui.test.js` 30 test — TC-STAT-13 viết lại theo `grid-column` (vắt tháng ⇒ `1 / span 31`;
+cắt trái ⇒ `1 / span 15`; cắt phải 20/03 ⇒ `20 / span 12`; trọn 05→10 ⇒ `5 / span 6`);
+**dóng biên từng ngày d = 1…31 ⇒ `grid-column: d / span 1`**; header đủ ô đúng thứ tự (31 ô,
+29 ô nhuận); giữ nguyên tooltip/flatten/red-folder tests.
+
+Kiểm chứng: **1095/1095 test · 64 file** xanh · lint + prettier sạch · pin giữ **79/566**.
+
+
 

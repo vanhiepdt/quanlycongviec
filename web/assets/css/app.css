@@ -3432,14 +3432,27 @@
     color: #4b5563 !important;
 }
 
+/* Header ngày và timeline của MỌI hàng dùng CHUNG MỘT định nghĩa lưới cột:
+   repeat(var(--gantt-so-ngay), minmax(0,1fr)) — số ngày do renderGanttChart đặt lên
+   #gantt-container mỗi lần vẽ. Thanh đặt bằng grid-column nên KHÔNG THỂ lệch ô ngày. */
 .gantt-days,
 .gantt-item-timeline {
-    min-width: 0 !important; /* bỏ khoá 2160px của bản 90 ngày — tự co dãn theo bề rộng */
+    display: grid !important;
+    grid-template-columns: repeat(var(--gantt-so-ngay, 31), minmax(0, 1fr)) !important;
+    min-width: 0 !important;
+    align-items: stretch;
 }
 
 /* Thanh không bao giờ tràn ra ngoài lưới ngày — cắt đúng ranh ô ngày cuối. */
 .gantt-item-timeline {
     overflow: hidden !important;
+}
+
+/* Ô ngày: kích thước do LƯỚI quyết định (1fr), hết flex/min-width cũ gây lệch. */
+.gantt-day {
+    min-width: 0 !important;
+    max-width: none !important;
+    padding-top: 3px;
 }
 
 /* Hàng CAO HƠN 1,5 LẦN (32px cũ → 48px) cho cả nhóm / công việc / CV con / nhiệm vụ. */
@@ -3454,14 +3467,19 @@
     font-size: 14px !important;
 }
 
-/* Thanh thời gian dày tương ứng (~38px), căn giữa theo chiều cao dòng. */
+/* Thanh thời gian dày (~38px): là MỘT Ô của lưới (grid-column do JS tính theo ngày),
+   position:relative để thanh tiến độ % bên trong neo đúng vào thanh. */
 .gantt-bar {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
     height: 38px !important;
-    top: 50% !important;
-    transform: translateY(-50%);
     border-radius: 7px !important;
     display: flex;
     align-items: center;
+    align-self: center;
+    overflow: hidden;
 }
 
 .gantt-bar .gantt-bar-label,
@@ -3494,6 +3512,11 @@
 .gantt-item[data-type="task"] .gantt-item-label,
 .gantt-item-subwork .gantt-item-label {
     padding-left: 0 !important;
+}
+
+/* Ghi chú «Không hiển thị trong khoảng này» trải trọn bề ngang lưới của hàng. */
+.gantt-non-visible-task {
+    grid-column: 1 / -1 !important;
 }
 
 /* Tên hover được gạch chấm nhạt gợi ý có thông tin thêm. */
