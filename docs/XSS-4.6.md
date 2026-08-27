@@ -90,6 +90,15 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > nhúng JSON tooltip đã qua `escapeHtmlAttr` một lần (bộ soát ghi 3 giá trị cờ "trong-the" như
 > cờ selected) ⇒ **80 chỗ / 566 giá trị** (TC-SEC-17). Bộ Legacy còn lại của Gantt không còn đọc
 > hai ô ngày đã bỏ — dom-contract TC-DEAD-02 về trạng thái sạch.
+>
+> **Cập nhật 2026-08-27 (việc 7.3 — chat qua REST, hỏi lại 10 giây).** `loadChatMessagesAsync`
+> chuyển sang `napChatTuServer()` và BỎ nhánh `withFailureHandler` từng ghi "Lỗi tải tin nhắn" vào
+> `#chat-messages`: một lượt mạng chập chờn trong vòng hỏi lại 10 giây không được phép xoá khung
+> chat người dùng đang đọc (lỗi giờ trả `null` im lặng qua `restGetIm`). Chỗ ghi bỏ đi là HTML
+> hằng, không có nội suy ⇒ **79 chỗ / 566 giá trị** (TC-SEC-17). Nội dung tin nhắn vẫn đi qua
+> `escapeHtml(formatChatMessage(...))` trong `renderChatMessages` — máy chủ lưu nguyên văn thẻ
+> người gõ (TC-MISC-08), nên chỗ thoát duy nhất là chỗ vẽ này; test
+> `tests/unit/chat-ui.test.js` chạy app.js thật trong jsdom để chốt.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

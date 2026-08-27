@@ -349,6 +349,45 @@ export function appToLegacy(row) {
 }
 
 /**
+ * Chữ viết tắt cho vòng tròn avatar chat: hai chữ cái đầu của tên.
+ *
+ * Bản cũ tính ở TRÌNH DUYỆT lúc gửi rồi lưu vào JSON của ô chat. Máy chủ mới tính lại từ
+ * `user_name` mỗi lần đọc: tin của người đã nghỉ (`user_id` NULL) vẫn có avatar (TC-SEED-19), và
+ * không phải tin cậy dữ liệu do client gửi lên.
+ */
+export function chuVietTat(name) {
+  return String(name ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((tu) => tu[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+/**
+ * Dòng `chat_messages` → hình dạng `renderChatMessages` đọc (việc 7.3).
+ *
+ * Năm khoá `{user, avatar, timestamp, chatDate, message}` là hợp đồng với giao diện cũ:
+ *   · `timestamp` "HH:MM" giờ địa phương — `formatChatTime` nhận đúng dạng này (có regex kiểm).
+ *   · `chatDate` PHẢI đúng `Date.prototype.toDateString()` ("Thu Aug 27 2026") vì `formatChatTime`
+ *     so chuỗi đó với hôm nay / hôm qua để in nhãn "Hôm qua" hay "27/8". Đổi dạng là mất nhãn ngày.
+ */
+export function chatToLegacy(row) {
+  const d = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
+  const hai = (n) => String(n).padStart(2, '0');
+  return {
+    id: row.id,
+    user: row.user_name ?? '',
+    avatar: chuVietTat(row.user_name),
+    timestamp: `${hai(d.getHours())}:${hai(d.getMinutes())}`,
+    chatDate: d.toDateString(),
+    message: row.message ?? '',
+  };
+}
+
+/**
  * Ô "Link kết quả" của bản cũ là một `<textarea>` MỖI DÒNG MỘT LINK, dạng `[Tên] https://…`
  * hoặc chỉ `https://…` (xem `parseLinks` dòng 2203 của `app.js`). REST lưu mảng chuỗi, nên mỗi
  * dòng giữ NGUYÊN VĂN cả phần `[Tên]` — tách theo dấu phẩy sẽ cắt đôi những URL có dấu phẩy.
@@ -574,4 +613,5 @@ export default {
   proposalFromLegacy,
   appToLegacy,
   appFromLegacy,
+  chatToLegacy,
 };

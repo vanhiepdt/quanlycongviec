@@ -72,8 +72,8 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
 
   it('TC-RPC-03: mỗi tên đã làm được đều khai đúng method + route REST', () => {
     const implemented = Object.entries(RPC_TABLE).filter(([, e]) => !e.notImplemented);
-    // Phase 7: việc 7.1 nối 4 tên đề nghị, việc 7.2 nối 3 tên app ⇒ 27 + 4 + 3 = 34.
-    expect(implemented).toHaveLength(34);
+    // Phase 7: 7.1 nối 4 tên đề nghị, 7.2 nối 3 tên app, 7.3 nối 2 tên chat ⇒ 27 + 4 + 3 + 2 = 36.
+    expect(implemented).toHaveLength(36);
     for (const [name, entry] of implemented) {
       expect(entry.rest, name).toMatch(/^(GET|POST|PATCH|DELETE) \//);
       expect(typeof entry.handler, name).toBe('function');
@@ -85,11 +85,14 @@ describe('bảng ánh xạ 37 tên hàm cũ', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(37);
     const pending = res.body.data.functions.filter((f) => !f.implemented);
-    expect(pending).toHaveLength(3);
-    expect(pending.map((f) => f.name)).toContain('getChatMessages');
-    // Đề nghị (7.1) và Quản lý App (7.2) đã nối vào nghiệp vụ — không còn nằm trong nhóm chờ.
+    expect(pending).toHaveLength(1);
+    expect(pending.map((f) => f.name)).toContain('addNotificationWithAuth');
+    // Đề nghị (7.1), Quản lý App (7.2) và Chat (7.3) đã nối vào nghiệp vụ — không còn nằm trong
+    // nhóm chờ.
     expect(pending.map((f) => f.name)).not.toContain('getProposals');
     expect(pending.map((f) => f.name)).not.toContain('addApp');
+    expect(pending.map((f) => f.name)).not.toContain('getChatMessages');
+    expect(pending.map((f) => f.name)).not.toContain('sendChatMessage');
     expect(pending.map((f) => f.name)).not.toContain('getStaffList');
     expect(pending.map((f) => f.name)).not.toContain('addDepartmentWithAuth');
     expect(pending.map((f) => f.name)).not.toContain('getDataForUser');
@@ -114,14 +117,14 @@ describe('cửa vào: CSRF, tên lạ, tên chưa làm', () => {
   });
 
   it('TC-RPC-07: tên chưa có nghiệp vụ ⇒ 501 + câu tiếng Việt gọi đúng tên chức năng', async () => {
-    const res = await rpc('getChatMessages', []);
+    const res = await rpc('addNotificationWithAuth', [{}]);
     expect(res.status).toBe(501);
     expect(res.body.ok).toBe(false);
     expect(res.body.error.code).toBe('NOT_IMPLEMENTED');
-    expect(res.body.error.message).toContain('Tin nhắn nội bộ');
+    expect(res.body.error.message).toContain('Tạo thông báo');
   });
 
-  it('TC-RPC-08: cả 3 tên chưa làm đều trả 501, không tên nào lọt thành 200', async () => {
+  it('TC-RPC-08: tên chưa làm còn lại trả 501, không tên nào lọt thành 200', async () => {
     const pendingNames = Object.entries(RPC_TABLE)
       .filter(([, e]) => e.notImplemented)
       .map(([name]) => name);

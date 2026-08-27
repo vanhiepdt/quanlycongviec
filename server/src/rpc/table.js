@@ -15,6 +15,7 @@ import {
   activityToLegacy,
   appFromLegacy,
   appToLegacy,
+  chatToLegacy,
   departmentFromLegacy,
   departmentToLegacy,
   projectFromLegacy,
@@ -559,12 +560,39 @@ export const RPC_TABLE = Object.freeze({
     },
   },
 
+  // --- Chat nội bộ (việc 7.3) ------------------------------------------------------------------
+  //
+  // `getChatMessages` trả **MẢNG THÔ** (không bọc `{messages:[…]}`): `loadChatMessages` gọi
+  // `renderChatMessages(response)` rồi `updateChatBadge(response.length)` ngay trên giá trị trả về.
+  //
+  // Mỗi phần tử phải đủ 5 khoá `{user, avatar, timestamp, chatDate, message}` — `chatDate` đúng
+  // dạng `Date.prototype.toDateString()` vì `formatChatTime` so chuỗi đó với hôm nay/hôm qua.
+  //
+  // Giao diện cũ KHÔNG gửi `since`: nó tải lại cả khung mỗi lần. Tham số `since` là của REST mới
+  // (hỏi lại mỗi 10 giây), nên ở đây vẫn nhận nếu ai đó truyền vào.
+  getChatMessages: {
+    rest: 'GET /chat',
+    async handler([since], ctx) {
+      // Tham số truy vấn phải đi qua ĐỐI TƯỢNG `query` của lời gọi con, không ghép vào chuỗi đường:
+      // `callV1` đè hẳn `req.query` bằng đối tượng này, nên `?since=…` viết trong path bị bỏ im lặng.
+      const data = await ctx.call('GET', '/chat', {}, since ? { since: String(since) } : {});
+      return (data.messages ?? []).map((row) => chatToLegacy(row));
+    },
+  },
+
+  sendChatMessage: {
+    rest: 'POST /chat',
+    async handler([message], ctx) {
+      // `sendChatMessage` phía giao diện đọc `response.success` rồi `response.error` — hình dạng
+      // này giữ nguyên, kèm tin vừa gửi để chỗ gọi mới không phải hỏi lại ngay.
+      const created = await ctx.call('POST', '/chat', { message: message ?? '' });
+      return { success: true, message: chatToLegacy(created.message) };
+    },
+  },
+
   // --- Chưa chuyển sang máy chủ mới -----------------------------------------------------------
   // Mỗi dòng dưới đây vẫn PHẢI có mặt: giao diện cũ gọi chúng qua biến (`runner[text2](data)`),
   // thiếu tên là `undefined is not a function` giữa lúc người dùng đang bấm Lưu.
-
-  getChatMessages: pending('Tin nhắn nội bộ', 'GET /chat'),
-  sendChatMessage: pending('Gửi tin nhắn nội bộ', 'POST /chat'),
 
   addNotificationWithAuth: pending('Tạo thông báo', 'POST /notifications'),
 });

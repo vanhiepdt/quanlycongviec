@@ -14,6 +14,7 @@ import { approvalsRouter } from './modules/approvals/routes.js';
 import { appsRouter } from './modules/apps/routes.js';
 import { authRouter } from './modules/auth/routes.js';
 import { bootstrapRouter } from './modules/bootstrap/routes.js';
+import { chatRouter } from './modules/chat/routes.js';
 import { departmentsRouter } from './modules/departments/routes.js';
 import { ganttRouter } from './modules/gantt/routes.js';
 import { proposalsRouter } from './modules/proposals/routes.js';
@@ -111,6 +112,7 @@ export function createV1Router() {
   // Phase 7 — Đề nghị, Quản lý App, Chat, Thông báo, xuất Excel.
   v1.use('/proposals', proposalsRouter);
   v1.use('/apps', appsRouter);
+  v1.use('/chat', chatRouter);
   return v1;
 }
 

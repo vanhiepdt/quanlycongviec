@@ -57,6 +57,9 @@ export default [
       // project-details-phan-cong.test.js: hàng phân công 1 hàng + khung tên CV con + icon bút
       // chì theo quyền trong modal chi tiết — chạy app.js thật + project-details.js thật trong jsdom.
       'tests/unit/project-details-phan-cong.test.js',
+      // chat-ui.test.js: vòng hỏi lại 10 giây + thoát HTML của khung chat (việc 7.3) — chạy app.js
+      // thật trong jsdom, fetch giả.
+      'tests/unit/chat-ui.test.js',
     ],
     languageOptions: {
       globals: {

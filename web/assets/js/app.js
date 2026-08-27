@@ -222,11 +222,10 @@ function loadDepartmentContext(callback) {
 function loadChatMessagesAsync() {
   const chatMessagesEl = document.getElementById("chat-messages");
   if (!chatMessagesEl) return;
-  chatMessagesEl.innerHTML = "<div class=\"text-center text-gray-500 text-sm py-4\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải tin nhắn...</div>", google.script.run.withSuccessHandler(function (response) {
-    renderChatMessages(response), updateChatBadge(response.length);
-  }).withFailureHandler(function (error) {
-    console.error("Error loading chat:", error), chatMessagesEl.innerHTML = "<div class=\"text-center text-red-500 text-sm\">Lỗi tải tin nhắn</div>";
-  }).getChatMessages();
+  chatMessagesEl.innerHTML = "<div class=\"text-center text-gray-500 text-sm py-4\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải tin nhắn...</div>";
+  // REST mới (việc 7.3) thay `google.script.run.getChatMessages()`: cần mốc `since` mà máy chủ trả
+  // kèm để vòng hỏi lại 10 giây chỉ lấy phần mới. Cầu RPC vẫn còn tên đó cho bản giao diện cũ.
+  napChatTuServer({ dauTien: true }).then(() => batDauHoiLaiChat());
 }
 function updateUIForUser(user) {
   const isAdmin2 = isAdmin(),
@@ -3407,11 +3406,56 @@ function renderProjectStats() {
   document.getElementById("projects-pending-count").innerHTML = "<i class=\"fas fa-pause-circle text-sm\"></i>" + escapeHtml(data.pending), document.getElementById("projects-active-count").innerHTML = "<i class=\"fas fa-play-circle text-sm\"></i>" + escapeHtml(data.active), document.getElementById("projects-completed-count").innerHTML = "<i class=\"fas fa-check-circle text-sm\"></i>" + escapeHtml(data.completed), document.getElementById("projects-paused-count").innerHTML = "<i class=\"fas fa-pause text-sm\"></i>" + escapeHtml(data.paused), document.getElementById("projects-canceled-count").innerHTML = "<i class=\"fas fa-times-circle text-sm\"></i>" + escapeHtml(data.canceled);
 }
 function loadChatMessages() {
-  google.script.run.withSuccessHandler(function (response) {
-    renderChatMessages(response), updateChatBadge(response.length);
-  }).withFailureHandler(function (error) {
-    console.error("Error loading chat:", error);
-  }).getChatMessages();
+  return napChatTuServer();
+}
+// --- Chat: hỏi lại mỗi 10 giây (việc 7.3) ------------------------------------------------------
+// Mốc `since` do MÁY CHỦ cấp trong mỗi phản hồi, client không tự tính từ đồng hồ của mình: lệch
+// vài giây giữa máy trạm và máy chủ là mất tin (mốc quá mới) hoặc lặp tin (mốc quá cũ).
+// Khoảng 3 ngày / 50 tin do máy chủ canh; ở đây chỉ cắt lại 50 cho danh sách đang giữ trong bộ nhớ.
+const CHAT_POLL_MS = 10000, CHAT_TOI_DA = 50;
+let chatTinNhan = [], chatSince = null, chatPollTimer = null;
+
+/** Dòng REST (`created_at`) → hình dạng renderChatMessages đọc. Cùng luật với chatToLegacy ở máy chủ. */
+function chatTuRest(row) {
+  const date = new Date(row.created_at), hai = n => String(n).padStart(2, "0"),
+    userName = row.user_name || "";
+  return {
+    id: row.id,
+    user: userName,
+    avatar: userName.trim().split(/\s+/).filter(Boolean).map(item => item[0]).join("").toUpperCase().slice(0, 2),
+    timestamp: hai(date.getHours()) + ":" + hai(date.getMinutes()),
+    chatDate: date.toDateString(),
+    message: row.message || ""
+  };
+}
+
+/** Gộp tin mới, bỏ trùng theo id — lượt hỏi lại và lần vừa gửi có thể trả cùng một tin. */
+function gopTinChat(moi) {
+  if (!Array.isArray(moi) || moi.length === 0) return 0;
+  const daCo = new Set(chatTinNhan.map(item => item.id)),
+    them = moi.filter(item => item && !daCo.has(item.id));
+  return chatTinNhan = chatTinNhan.concat(them).slice(-CHAT_TOI_DA), them.length;
+}
+
+/** Một lượt nạp. `dauTien` = mở lại khung: bỏ mốc cũ, lấy trọn 3 ngày gần nhất và vẽ lại dù rỗng. */
+async function napChatTuServer(options) {
+  const dauTien = !!(options && options.dauTien);
+  if (dauTien) chatTinNhan = [], chatSince = null;
+  const duLieu = await restGetIm("/api/v1/chat" + (chatSince ? "?since=" + encodeURIComponent(chatSince) : ""));
+  if (!duLieu) return 0;
+  chatSince = duLieu.since || chatSince;
+  const soMoi = gopTinChat((duLieu.messages || []).map(row => chatTuRest(row)));
+  return (soMoi > 0 || dauTien) && (renderChatMessages(chatTinNhan), updateChatBadge(chatTinNhan.length)), soMoi;
+}
+
+/** Bật vòng hỏi lại. Chỉ hỏi khi đang xem Tổng quan — tab để mở ở trang khác không cần tin mới. */
+function batDauHoiLaiChat() {
+  dungHoiLaiChat(), chatPollTimer = setInterval(() => {
+    currentSection === "overview" && document.getElementById("chat-messages") && napChatTuServer();
+  }, CHAT_POLL_MS);
+}
+function dungHoiLaiChat() {
+  chatPollTimer && (clearInterval(chatPollTimer), chatPollTimer = null);
 }
 function updateChatBadge(count) {
   const chatBadgeEl = document.getElementById("chat-badge");
@@ -4591,6 +4635,20 @@ async function restGet(path) {
     return json && json.data ? json.data : null;
   } catch (err) {
     showToast("Không tải được dữ liệu từ máy chủ: " + err.message, "error");
+    return null;
+  }
+}
+
+/** GET IM LẶNG: lỗi thì trả `null`, KHÔNG toast, KHÔNG bật modal đăng nhập.
+ *  Dùng cho vòng hỏi lại 10 giây của chat — một lượt mạng chập chờn không được phép nổ toast liên
+ *  tục hay đá người dùng ra modal đăng nhập giữa lúc họ đang gõ. */
+async function restGetIm(path) {
+  try {
+    const res = await fetch(path, { credentials: "same-origin", headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json && json.data ? json.data : null;
+  } catch (err) {
     return null;
   }
 }

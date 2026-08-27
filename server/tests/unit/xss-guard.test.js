@@ -140,9 +140,13 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // (builder thoát đủ) và +1 sink xoá rỗng option Năm; hàng Gantt thêm JSON tooltip đã qua
     // escapeHtmlAttr ×3 (giá trị "trong-the" như cờ selected) cùng các nhãn thẻ escape trực tiếp
     // ⇒ 80 chỗ / 566 giá trị.
+    // 2026-08-27 (việc 7.3 chat REST): `loadChatMessagesAsync` bỏ nhánh `withFailureHandler` vẽ
+    // "Lỗi tải tin nhắn" — vòng hỏi lại 10 giây phải im lặng khi mạng chập chờn, chứ không xoá
+    // khung chat người dùng đang đọc. Xoá 1 chỗ ghi HẰNG (không có nội suy) ⇒ 79 chỗ, giá trị
+    // giữ 566.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 80, gia_tri: 566 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 79, gia_tri: 566 });
   });
 });
 
