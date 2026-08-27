@@ -15,6 +15,7 @@ import { appsRouter } from './modules/apps/routes.js';
 import { authRouter } from './modules/auth/routes.js';
 import { bootstrapRouter } from './modules/bootstrap/routes.js';
 import { chatRouter } from './modules/chat/routes.js';
+import { delegationsRouter } from './modules/delegations/routes.js';
 import { departmentsRouter } from './modules/departments/routes.js';
 import { exportRouter } from './modules/export/routes.js';
 import { ganttRouter } from './modules/gantt/routes.js';
@@ -117,6 +118,9 @@ export function createV1Router() {
   v1.use('/chat', chatRouter);
   v1.use('/notifications', notificationsRouter);
   v1.use('/export', exportRouter);
+  // Ủy quyền có thời hạn (`docs/KE-HOACH-UY-QUYEN.md`). Đặt sau `requirePasswordChanged`: người
+  // còn phải đổi mật khẩu lần đầu thì chưa được cho ai mượn quyền của mình.
+  v1.use('/delegations', delegationsRouter);
   return v1;
 }
 

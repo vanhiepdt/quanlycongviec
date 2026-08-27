@@ -32,6 +32,12 @@ const CONSTRAINT_CODES = Object.freeze({
   departments_name_key: 'CONFLICT',
   departments_code_key: 'CONFLICT',
   users_role_valid: 'VALIDATION_ERROR',
+  // 006_delegations.sql — ba CHECK của bảng ủy quyền. Chặn ở service trước cho câu chữ đẹp, nhưng
+  // vẫn phải dịch: hai request tạo cùng lúc thì chỉ CSDL bắt được, và service không phải nơi duy
+  // nhất gọi tới bảng này.
+  delegation_not_self: 'DELEGATION_SELF',
+  delegation_dates_ok: 'VALIDATION_ERROR',
+  delegation_status_ok: 'VALIDATION_ERROR',
 });
 
 /** Câu tiếng Việt cho người dùng, thay cho thông báo kỹ thuật của CSDL. */
@@ -47,6 +53,9 @@ const MESSAGES = Object.freeze({
   DEPT_MISMATCH_WORK:
     'Công việc con và nhiệm vụ luôn thuộc phòng của công việc cha, không đặt phòng khác được',
   CONFLICT: 'Mã đã tồn tại, vui lòng thử lại',
+  DELEGATION_SELF: 'Không thể tự ủy quyền cho chính mình',
+  DELEGATION_OVERLAP:
+    'Đã có một ủy quyền đang hiệu lực cho người này trong khoảng ngày đó — hãy huỷ hoặc sửa bản ghi cũ',
 });
 
 const CONSTRAINT_MESSAGES = Object.freeze({
@@ -55,6 +64,8 @@ const CONSTRAINT_MESSAGES = Object.freeze({
   departments_name_key: 'Tên phòng đã tồn tại',
   departments_code_key: 'Mã phòng đã tồn tại, vui lòng thử lại',
   users_role_valid: 'Phân quyền không hợp lệ',
+  delegation_dates_ok: 'Ngày kết thúc không được trước ngày bắt đầu',
+  delegation_status_ok: 'Trạng thái ủy quyền không hợp lệ',
 });
 
 /**
@@ -97,6 +108,16 @@ export function translatePgError(err) {
     const byConstraint = CONSTRAINT_CODES[err.constraint] ?? 'CONFLICT';
     const message = CONSTRAINT_MESSAGES[err.constraint] ?? MESSAGES.CONFLICT;
     return new AppError(byConstraint, message);
+  }
+
+  // 23P01 exclusion_violation — chỉ có một chỗ trong lược đồ sinh mã này: EXCLUDE
+  // `delegation_no_overlap` của 006_delegations.sql (hai bản ủy quyền `active` cùng cặp người mà
+  // khoảng ngày chồng nhau). Đây cũng là lớp duy nhất chặn được hai request tạo CÙNG LÚC.
+  if (pgCode === '23P01') {
+    if (String(err.constraint ?? '').startsWith('delegation')) {
+      return new AppError('DELEGATION_OVERLAP', MESSAGES.DELEGATION_OVERLAP);
+    }
+    return new AppError('CONFLICT', 'Dữ liệu trùng với một dòng đang có');
   }
 
   // 22P02 chuỗi không đúng kiểu, 22007/22008 ngày sai định dạng hoặc ngoài miền.

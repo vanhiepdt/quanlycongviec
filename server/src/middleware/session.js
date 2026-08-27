@@ -17,6 +17,7 @@ import {
   SID_COOKIE,
 } from '../modules/auth/cookies.js';
 import * as authRepo from '../modules/auth/repo.js';
+import * as delegations from '../modules/delegations/service.js';
 
 export async function attachSession(req, res, next) {
   try {
@@ -49,7 +50,23 @@ export async function attachSession(req, res, next) {
       is_active: row.is_active,
       must_change_password: row.must_change_password,
       managedDepartmentIds: row.managedDepartmentIds ?? [],
+      // Ủy quyền có thời hạn (006_delegations.sql): các bản ghi ĐANG hiệu lực cho người này, nạp
+      // sẵn ở đây để `can()` vẫn là hàm thuần (không đọc CSDL). Một truy vấn cho mỗi request có
+      // phiên, đi cùng đường với `managedDepartmentIds`.
+      delegations: [],
+      // Nơi `can()` ghi lại id bản ủy quyền đã dùng để một hành động lọt — `middleware/audit.js`
+      // đọc mảng này và đưa vào `activity_logs.details.viaDelegationId`. Chỉ có ở req.user; bộ test
+      // đơn vị của `can()` không gắn mảng nên hàm vẫn không có tác dụng lề nào ở đó.
+      viaDelegationIds: [],
     };
+
+    // Lỗi ở bước này KHÔNG được làm đổ request: không đọc được bảng ủy quyền thì người dùng mất
+    // phần quyền MƯỢN, còn quyền tự có vẫn nguyên — hỏng một tính năng phụ, không hỏng đăng nhập.
+    try {
+      req.user.delegations = await delegations.hieuLucCho(row.id);
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Không đọc được danh sách ủy quyền');
+    }
 
     // Gia hạn khi còn hoạt động. Lỗi ở bước này KHÔNG được làm đổ request — người dùng vẫn đang
     // đăng nhập hợp lệ, chỉ là hạn phiên không được đẩy ra thêm.

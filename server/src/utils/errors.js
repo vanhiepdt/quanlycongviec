@@ -45,6 +45,15 @@ export const ERROR_STATUS = Object.freeze({
   // Nhiệm vụ chọn "Lãnh đạo phòng phụ trách" ngoài nguồn hợp lệ: không thuộc leader_ids của
   // công việc con chứa nó và không thuộc nhóm Phó GĐ phụ trách phòng khi nằm dưới cha trực tiếp.
   LEADER_NOT_IN_SOURCE: 400,
+
+  // --- Ủy quyền có thời hạn (006_delegations.sql, `docs/KE-HOACH-UY-QUYEN.md`) ---------------
+  // Bốn mã cho bốn cách người dùng có thể tạo một bản ủy quyền vô nghĩa hoặc nguy hiểm. Tách
+  // riêng khỏi VALIDATION_ERROR/FORBIDDEN chung vì giao diện cần nói đúng chuyện gì sai để người
+  // dùng sửa được, mà không phải so chuỗi tiếng Việt.
+  DELEGATION_SELF: 400, // L1 — tự ủy quyền cho chính mình
+  DELEGATION_ADMIN_FORBIDDEN: 403, // L2 — ủy quyền vai admin (quyền toàn hệ thống)
+  DELEGATION_SCOPE_TOO_WIDE: 403, // L3 — cho phòng mình không phụ trách
+  DELEGATION_OVERLAP: 409, // trùng khoảng ngày với bản ghi đang hiệu lực của cùng cặp
 });
 
 export class AppError extends Error {

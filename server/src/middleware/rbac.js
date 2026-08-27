@@ -183,6 +183,84 @@ function inScope(user, action, entityType, row) {
 }
 
 // ============================================================================
+// Lớp 3 — MƯỢN quyền qua ủy quyền có thời hạn (006_delegations.sql)
+//
+// Người đi công tác cho người khác mượn quyền của mình trong một khoảng ngày. Các bản ghi đang
+// hiệu lực được `attachSession` nạp sẵn vào `user.delegations` (mảng, mỗi phần tử:
+// `{id, fromUserId, fromRole, departmentIds}`) — `can()` VẪN không đọc CSDL, đúng nguyên tắc 2.
+//
+// Bốn giới hạn, mỗi giới hạn là một dòng mã dưới đây:
+//  - Chỉ 3 loại thực thể công việc mượn được. `user`/`department` KHÔNG (L4: mượn quyền không
+//    được biến thành đường tạo tài khoản hay ủy quyền tiếp).
+//  - Vai `admin` không mượn được, kể cả khi CSDL có dòng như thế (sửa tay / dữ liệu cũ).
+//  - Phạm vi mượn bó theo `departmentIds` của bản ghi, KHÔNG theo phòng của người mượn.
+//  - Quyền tự có xét TRƯỚC (xem `can()`), nên bật tính năng này không bao giờ làm mất quyền của ai.
+// ============================================================================
+
+/** Loại thực thể mượn được. */
+const MUON_DUOC = Object.freeze(['work', 'subwork', 'task']);
+
+/**
+ * Phạm vi của quyền mượn — cố ý KHÔNG gọi `inScope()` với một người dùng giả.
+ *
+ * `inScope()` xét `Trưởng phòng` theo `user.department_id` và xét `Quản lý công việc` theo
+ * `manager_id`; dựng người dùng giả cho hai vai đó thì hoặc mở rộng hơn quyền thật (lấy phòng của
+ * người MƯỢN), hoặc đóng hẳn (không có `department_id` để so). Nên luật mượn viết thẳng ở đây:
+ *
+ *  - `Phó Giám đốc`, `Trưởng phòng`, `Phó phòng` — phạm vi thật là THEO PHÒNG ⇒ dòng phải thuộc
+ *    một phòng có trong `departmentIds`.
+ *  - `Quản lý công việc` — phạm vi thật là các công việc mình quản lý, KHÔNG phải cả phòng ⇒ ngoài
+ *    điều kiện phòng còn phải đúng công việc của người ủy quyền. Nếu chỉ xét phòng thì người mượn
+ *    được nhiều hơn người cho, trái luật L3.
+ *  - Vai khác (`Nhân viên`, vai lạ) — không có phạm vi nào để cho mượn.
+ */
+function inScopeMuon(delegation, row) {
+  const dept = (delegation.departmentIds ?? []).some((id) => sameId(id, row.department_id));
+  switch (delegation.fromRole) {
+    case 'Phó Giám đốc':
+    case 'Trưởng phòng':
+    case 'Phó phòng':
+      return dept;
+    case 'Quản lý công việc':
+      return (
+        dept &&
+        (sameId(row.manager_id, delegation.fromUserId) ||
+          sameId(row.assignee_id, delegation.fromUserId))
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * Thử từng bản ủy quyền đang hiệu lực. Trả về `{ok: true, viaDelegationId}` khi có một bản cho
+ * lọt, ngược lại `null` để `can()` giữ nguyên câu từ chối của quyền TỰ CÓ (câu đó mới là câu người
+ * dùng cần đọc: nói "ngoài phạm vi ủy quyền" cho người chưa từng được ủy quyền là vô nghĩa).
+ *
+ * `user.viaDelegationIds` — nếu người gọi có gắn mảng này (chỉ `attachSession` gắn, xem
+ * `middleware/session.js`) thì id được ghi vào đó để `middleware/audit.js` đưa vào `activity_logs`.
+ * Hàm vẫn thuần với **quyết định**: không đọc CSDL, không biến toàn cục, và bỏ mảng đi thì kết quả
+ * không đổi. Đây là đường duy nhất biết CHẮC một hành động đã lọt nhờ mượn quyền — chỗ nào khác
+ * cũng chỉ đoán được.
+ */
+function tryDelegations(user, action, entityType, row) {
+  if (!Array.isArray(user.delegations) || user.delegations.length === 0) return null;
+  if (!MUON_DUOC.includes(entityType)) return null;
+
+  for (const d of user.delegations) {
+    if (!d || d.fromRole === 'admin') continue;
+    const table = Object.hasOwn(PERMISSIONS, d.fromRole) ? PERMISSIONS[d.fromRole] : null;
+    if (!table || !table[entityType].includes(action)) continue;
+    if (row && !inScopeMuon(d, row)) continue;
+    if (Array.isArray(user.viaDelegationIds) && !user.viaDelegationIds.includes(d.id)) {
+      user.viaDelegationIds.push(d.id);
+    }
+    return { ok: true, viaDelegationId: d.id };
+  }
+  return null;
+}
+
+// ============================================================================
 // Hàm cổng duy nhất
 // ============================================================================
 
@@ -234,6 +312,9 @@ export function can(user, action, entityType, row = null) {
   }
 
   if (!table[entityType].includes(action)) {
+    // Vai của chính mình không cho ⇒ thử quyền MƯỢN (ủy quyền có thời hạn) trước khi từ chối.
+    const muon = tryDelegations(user, action, entityType, normalizeRow(row));
+    if (muon) return muon;
     return deny(
       'FORBIDDEN',
       `Vai trò "${user.role}" không được ${ACTION_LABEL[action]} ${ENTITY_LABEL[entityType]}`
@@ -245,6 +326,9 @@ export function can(user, action, entityType, row = null) {
   if (!normalized) return { ok: true };
 
   if (!inScope(user, action, entityType, normalized)) {
+    // Đúng dòng này ngoài phạm vi của mình, nhưng có thể nằm trong phạm vi được ủy quyền.
+    const muon = tryDelegations(user, action, entityType, normalized);
+    if (muon) return muon;
     return deny(
       'FORBIDDEN',
       `${ENTITY_LABEL[entityType].replace(/^./, (c) => c.toUpperCase())} này nằm ngoài phạm vi của bạn`

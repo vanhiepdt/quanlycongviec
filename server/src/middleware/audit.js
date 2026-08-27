@@ -25,6 +25,16 @@ export function audit(req, res, next) {
   res.on('finish', () => {
     if (res.statusCode >= 400 || res.locals.skipAudit) return;
     const extra = res.locals.audit ?? {};
+    // Ủy quyền có thời hạn: `can()` ghi id bản ủy quyền đã dùng vào `req.user.viaDelegationIds`
+    // (xem middleware/rbac.js). Có id ⇒ hành động này lọt nhờ MƯỢN quyền, và yêu cầu là mỗi hành
+    // động như thế phải có `delegation_id` trong nhật ký. Mảng rỗng thì không thêm khoá nào — dòng
+    // nhật ký của hành động thường giữ đúng hình dạng cũ.
+    const viaIds = req.user?.viaDelegationIds ?? [];
+    const details = extra.details ?? {};
+    const withDelegation =
+      viaIds.length > 0 && details.viaDelegationId === undefined
+        ? { ...details, viaDelegationId: viaIds[0], viaDelegationIds: viaIds }
+        : details;
     // Người vừa đăng nhập chưa có req.user (phiên tạo trong handler) — handler đặt actorId vào
     // res.locals.audit để dòng nhật ký không bị mất chủ thể.
     writeLog({
@@ -34,7 +44,7 @@ export function audit(req, res, next) {
       entityType: extra.entityType ?? '',
       entityId: extra.entityId ?? null,
       workId: extra.workId ?? null,
-      details: extra.details ?? {},
+      details: withDelegation,
       ip: req.ip ?? null,
     }).catch((err) => logger.warn({ err: err.message }, 'Không ghi được activity_logs'));
   });

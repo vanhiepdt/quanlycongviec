@@ -10,6 +10,9 @@ const BUSINESS_TABLES = [
   'apps',
   'proposals',
   'reminders',
+  // delegations trỏ vào users nên phải xoá trước users. CASCADE của TRUNCATE cũng lo được, nhưng
+  // liệt kê thẳng thì đọc file này là biết đủ danh sách bảng nghiệp vụ.
+  'delegations',
   'work_items',
   'works',
   'department_managers',
