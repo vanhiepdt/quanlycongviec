@@ -222,7 +222,7 @@ Chuẩn bị: `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (CSDL kh�
 migration 006 — bẫy đã ghi ở `docs/BAT-DAU-SESSION.md` mục 1), rồi đồng bộ `web/` + `server/src/`
 lên chỗ đang chạy và khởi động lại Node.
 
-1. **Ctrl+Shift+R** (nạp lại bỏ cache) → mở Console → phải thấy đúng `[QLCV] app.js 20260828-82`.
+1. **Ctrl+Shift+R** (nạp lại bỏ cache) → mở Console → phải thấy đúng `[QLCV] app.js 20260828-83`.
    Thấy số khác là trình duyệt/Nginx còn giữ file cũ, mọi bước dưới đều vô nghĩa.
 2. Đăng nhập bằng **Phó Giám đốc** hoặc **Trưởng phòng** (§13.7, mật khẩu `Test@12345`) → khối
    người dùng góc trên có nút **«Ủy quyền của tôi»** (icon `fa-user-shield`). Đăng nhập bằng
@@ -321,7 +321,7 @@ xong và vẫn hiện ở trang «Ủy quyền của tôi», mất một dòng t
 động. **Vẫn KHÔNG email** (§13.4 mục 4). Chưa làm: nhắc "sắp hết hạn", và đường ĐỌC thông báo trên
 giao diện vẫn chờ §13.4 mục 16 (chuông) — hiện người dùng thấy đề nghị ở chính trang ủy quyền.
 
-### Giao diện (app.js `20260828-82`)
+### Giao diện (app.js `20260828-83`)
 
 `buildUyQuyenNut(lop, mau, icon, nhan, id, nguoi)` gom cả ba nút; năm nhãn trạng thái là chuỗi
 **HẰNG** chọn theo `row.status` (dữ liệu lạ rơi vào nhánh «Chưa/hết hiệu lực», không in ra):
@@ -379,14 +379,14 @@ chặn. Không còn ai hợp lệ thì ô bị `disabled` kèm câu nói rõ lý
 | TC-UQ-16 (jsdom) | jsdom | 5 nhãn trạng thái, hai nút của người nhận, `data-id`/`data-nguoi` phải thoát |
 | TC-UQ-18 (jsdom) | jsdom | ô phòng **chỉ** hiện với admin · option mang id thật · phòng thiếu `ID phòng (DB)` bị bỏ · tên phòng có mã tấn công không dựng được thẻ |
 | TC-UQ-18b (jsdom) | jsdom | `taoUyQuyen()` gửi `departmentIds` là mảng SỐ · admin quên chọn phòng ⇒ **không** gọi máy chủ · vai thường **không** gửi khoá đó |
-| TC-UQ-19 (jsdom) | jsdom | danh sách người nhận theo từng vai · ba cặp ngoại lệ khác phòng · loại chính mình / Nhà cung cấp / dòng thiếu email / vai lạ · xếp theo bậc rồi tên · phòng tra không ra ⇒ rỗng chứ không mở rộng |
+| TC-UQ-19 (jsdom) | jsdom | danh sách người nhận theo từng vai · ba cặp ngoại lệ khác phòng · loại chính mình / Nhà cung cấp / dòng thiếu email / vai lạ · xếp theo bậc rồi tên · phòng tra không ra ⇒ rỗng chứ không mở rộng · **cột «Đối tượng» của CSDL thật là 'Nội bộ'** (cùng 'Người dùng' và ô trống) vẫn phải hiện — lỗi ô chọn rỗng 2026-08-28 |
 | TC-UQ-19b (jsdom) | jsdom | ô người nhận là `select[name="to"] required`, **không** còn `input[name="to"]` hay datalist · option mang email chữ thường + nhãn «tên — vai · phòng» · rỗng ⇒ `disabled` + nói lý do · tên có mã tấn công không dựng được thẻ |
 
 ## 12. Test tay phần phê duyệt — làm sau §10
 
 1. `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (**bắt buộc**: 007 không tự lên ở CSDL
    khói), đồng bộ `web/` + `server/src/`, khởi động lại Node, **Ctrl+Shift+R** → Console phải in
-   đúng `[QLCV] app.js 20260828-82`.
+   đúng `[QLCV] app.js 20260828-83`.
 2. Đăng nhập **Trưởng phòng**, tạo ủy quyền cho một **Nhân viên cùng phòng** → dòng mới mang nhãn
    xanh dương **«Chờ phê duyệt»**, nút bên phải là **«Rút lại»** (không phải «Huỷ»).
 3. Thử tạo cho **Nhân viên phòng khác** → câu lỗi đỏ *«Chỉ ủy quyền được cho người cùng phòng…»*.
