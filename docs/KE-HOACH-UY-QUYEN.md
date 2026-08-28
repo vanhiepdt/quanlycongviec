@@ -386,7 +386,7 @@ chặn. Không còn ai hợp lệ thì ô bị `disabled` kèm câu nói rõ lý
 
 1. `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (**bắt buộc**: 007 không tự lên ở CSDL
    khói), đồng bộ `web/` + `server/src/`, khởi động lại Node, **Ctrl+Shift+R** → Console phải in
-   đúng `[QLCV] app.js 20260828-81`.
+   đúng `[QLCV] app.js 20260828-82`.
 2. Đăng nhập **Trưởng phòng**, tạo ủy quyền cho một **Nhân viên cùng phòng** → dòng mới mang nhãn
    xanh dương **«Chờ phê duyệt»**, nút bên phải là **«Rút lại»** (không phải «Huỷ»).
 3. Thử tạo cho **Nhân viên phòng khác** → câu lỗi đỏ *«Chỉ ủy quyền được cho người cùng phòng…»*.
