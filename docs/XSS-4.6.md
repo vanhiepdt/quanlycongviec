@@ -207,6 +207,23 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > loại chính mình + Nhà cung cấp + vai lạ, không còn `input[name="to"]` / `#uy-quyen-staff-list`, và
 > tên người chứa `<img src=x onerror=alert(1)>` không dựng được thẻ.
 
+> **Cập nhật 2026-08-28 (nhật ký từng lần chỉnh sửa, 3 cấp).** Yêu cầu nguyên văn: «lên kế hoạch và
+> làm nhật ký từng lần chỉnh sửa hoạt động của công việc, công việc con và nhiệm vụ… hiển thị ở mỗi
+> tab chỉnh sửa… có cả ở 3 cấp». Tab «Nhật ký» dựng bằng bốn builder mới — `buildThanhTabNhatKy`,
+> `buildKhungNhatKy`, `buildNhatKyDong`, `buildNhatKyChiTiet` — và một chỗ vẽ `renderNhatKy`.
+> ⇒ **89 chỗ / 632 giá trị** (TC-SEC-17), **+3 sink, +26 giá trị**: 2 chỗ ghi của `renderNhatKy`
+> (nhánh rỗng là hằng, nhánh danh sách) + 1 chỗ ghi của nhánh báo lỗi tải trong `napNhatKy`.
+>
+> Điểm cần canh: **tên người và tên đầu việc trong nhật ký là dữ liệu CŨ** — nó được ghi vào
+> `activity_logs.details` lúc sửa, nên một cái tên độc đã lưu từ trước vẫn quay lại màn hình hôm nay
+> dù form đã chặn. Vì vậy mọi trường của một dòng nhật ký đều phải qua `escapeHtml` **ở lúc vẽ**, kể
+> cả `details.changes[cột].from` (giá trị đã bị thay thế). `dinhDangGiaTriNhatKy` trả về CHUỖI cho
+> mọi kiểu (mảng nối dấu phẩy, object qua `JSON.stringify`, rỗng thành «(trống)») nên không có lối
+> nào tuồn object thẳng vào chuỗi HTML. Hai nút tab truyền tham số qua `escapeForInlineHandler`, còn
+> mã đầu việc đi bằng `data-ma` (`escapeHtmlAttr`) chứ KHÔNG nhồi vào `onclick` — bớt một chỗ phải
+> thoát JS. `tests/unit/nhat-ky-ui.test.js` (TC-NKUI-07) chốt: tên `<img src=x onerror=alert(1)>`
+> của một nhiệm vụ ĐÃ XOÁ vẫn hiện thành chữ, không dựng được thẻ.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

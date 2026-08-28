@@ -77,6 +77,9 @@ export default [
       // tai-khoan-ui.test.js: trang «Quản lý tài khoản» — thông tin tài khoản + đổi mật khẩu
       // ngay trong trang (TC-TK, 2026-08-28) — chạy app.js thật trong jsdom.
       'tests/unit/tai-khoan-ui.test.js',
+      // nhat-ky-ui.test.js: tab «Nhật ký» trong modal chỉnh sửa cả 3 cấp (TC-NKUI, 2026-08-28) —
+      // chạy app.js thật trong jsdom, fetch giả.
+      'tests/unit/nhat-ky-ui.test.js',
     ],
     languageOptions: {
       globals: {

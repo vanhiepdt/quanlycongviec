@@ -176,9 +176,19 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // builder mới, +2 chỗ thoát của nhánh rỗng (câu giải thích) và +2 chỗ thoát của mỗi option
     // (email + nhãn tên/vai/phòng) ⇒ +4 giá trị nội suy, KHÔNG thêm chỗ ghi HTML nào
     // ⇒ 86 chỗ / 606 giá trị.
+    // 2026-08-28 (nhật ký từng lần chỉnh sửa 3 cấp, docs/KE-HOACH-NHAT-KY.md): tab «Nhật ký» trong
+    // modal chỉnh sửa. +3 chỗ ghi HTML: `renderNhatKy` (nhánh rỗng — hằng — và nhánh danh sách) và
+    // nhánh báo lỗi tải của `napNhatKy`. +26 giá trị nội suy: `buildNhatKyDong` thoát 8 (icon, màu,
+    // nhãn hành động, thời điểm, người, cấp, mã, tên) + 1 lỗ cho `buildNhatKyChiTiet(...)`;
+    // `buildNhatKyChiTiet` thoát 4 (câu phụ, nhãn cột, giá trị cũ, giá trị mới) + 1 lỗ cho
+    // `dong.join("")`; `buildThanhTabNhatKy` 4 (hai id + hai lời gọi `escapeForInlineHandler(kieu)`
+    // viết THẲNG trong onclick — qua biến trung gian là TC-SEC-18 đánh trượt) và `buildKhungNhatKy`
+    // 3 (2 id + `data-ma`); hai chỗ gọi
+    // `buildThanhTabNhatKy`/`buildKhungNhatKy` trong hai modal là 4 lỗ nữa; 1 lỗ cho
+    // `list.slice().reverse().map(...).join("")` ⇒ 89 chỗ / 632 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 606 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 89, gia_tri: 632 });
   });
 });
 
