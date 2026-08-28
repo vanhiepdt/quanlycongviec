@@ -165,6 +165,27 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > chốt cả hai: đúng 5 chỗ thoát cho một dòng `pending` nhận được, và `data-id`/`data-nguoi` phải
 > thoát khi tên chứa `"><img src=x onerror=alert(1)>`.
 
+> **Cập nhật 2026-08-28 (ô chọn phòng cho Giám đốc — §13.4 mục 18).** Form «Ủy quyền mới» thêm hàm
+> dựng `buildUyQuyenPhamVi()`: một ô `<select name="departmentIds" multiple required>` **chỉ hiện với
+> `currentUser.role === "admin"`**, mỗi phòng một `<option>` với `escapeHtmlAttr(id)` +
+> `escapeHtml(tên)`, cùng `escapeHtmlAttr` cho `size`.
+> ⇒ **86 chỗ / 602 giá trị** (TC-SEC-17), **+5 giá trị, 0 sink mới**: 1 lời gọi
+> `buildUyQuyenPhamVi()` trong `createUyQuyenModal`, 1 chỗ `escapeHtmlAttr` cho `size`, 1 lỗ cho cả
+> biểu thức `list.map(...)` (bản đếm coi một `.map()` dựng HTML là một lỗ) và 2 chỗ thoát bên trong
+> nó (id, tên phòng).
+>
+> Vì sao chỉ Giám đốc thấy ô này: người thường để phạm vi rỗng thì máy chủ tự suy ra các phòng họ
+> đang phụ trách (`department_managers`), nên thêm ô chọn chỉ mời họ đoán RỘNG hơn quyền thật — mà
+> máy chủ vẫn chặn (`DELEGATION_SCOPE_TOO_WIDE`), tức đổi một lời từ chối rõ ràng thành một ô nhập
+> gây nhầm. Giám đốc thì ngược lại: họ không có dòng `department_managers` nào, nên máy chủ BẮT liệt
+> kê phòng (`DELEGATION_ADMIN_SCOPE_REQUIRED`) và không có ô này thì họ không tạo được bản ủy quyền
+> nào từ giao diện. Danh sách option là toàn bộ `allDepartments` vì Giám đốc phụ trách mọi phòng;
+> phòng nào máy chủ không gửi `ID phòng (DB)` thì bỏ hẳn thay vì sinh `value=""` — cùng cái bẫy COL
+> đã gặp ở `buildDeptIdOptions`. `tests/unit/uy-quyen-ui.test.js` (TC-UQ-18, TC-UQ-18b) chốt: vai
+> thường không có `name="departmentIds"`; Giám đốc có `multiple` + `required` và option mang id thật;
+> tên phòng chứa `<img src=x onerror=alert(1)>` không dựng được thẻ; `taoUyQuyen()` gửi
+> `departmentIds` là mảng SỐ, và KHÔNG gửi khoá đó khi form không có ô phòng.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

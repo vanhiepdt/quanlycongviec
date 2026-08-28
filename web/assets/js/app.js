@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-80");
+console.info("[QLCV] app.js 20260828-81");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -5520,10 +5520,38 @@ function buildUyQuyenBang(rows, laGiao) {
 }
 
 /**
- * Modal «Ủy quyền của tôi». Form tạo mới CHỈ hỏi người nhận, khoảng ngày và ghi chú: phạm vi để
- * máy chủ suy ra từ các phòng người ủy quyền đang phụ trách (`department_managers`) — giao diện
- * không tự chọn phòng, vì đoán rộng hơn máy chủ chỉ đổi một lời từ chối rõ ràng thành một ô nhập
- * gây nhầm.
+ * Ô chọn PHẠM VI PHÒNG của form ủy quyền — chỉ hiện với Giám đốc, rỗng với mọi vai khác.
+ *
+ * Lý do phân biệt: người thường để phạm vi rỗng thì máy chủ tự suy ra các phòng họ đang phụ trách
+ * (`department_managers`), nên thêm ô chọn chỉ mời họ đoán rộng hơn quyền thật. Còn Giám đốc KHÔNG
+ * có dòng `department_managers` nào, nên máy chủ BẮT liệt kê phòng (`DELEGATION_ADMIN_SCOPE_REQUIRED`
+ * — §13.4 mục 18: «giám đốc có thể ủy quyền cho phó giám đốc»): không có ô này thì Giám đốc không
+ * tạo được bản ủy quyền nào từ giao diện.
+ *
+ * Danh sách phòng ở đây là toàn bộ `allDepartments` vì Giám đốc phụ trách mọi phòng; máy chủ vẫn
+ * kiểm lại từng id (`DELEGATION_SCOPE_TOO_WIDE`), giao diện không tự nới rộng gì.
+ */
+function buildUyQuyenPhamVi() {
+  if (!currentUser || currentUser.role !== "admin") return "";
+  const list = (Array.isArray(allDepartments) ? allDepartments : []).filter(d => String(d[COL.D_DB_ID] == null ? "" : d[COL.D_DB_ID]).trim() !== "");
+  return (
+    "<div class=\"form-group\">\n" +
+    "                  <label class=\"form-label required\">Phòng được mượn quyền</label>\n" +
+    "                  <select name=\"departmentIds\" class=\"form-input\" multiple size=\"" +
+    escapeHtmlAttr(String(Math.min(Math.max(list.length, 3), 6))) +
+    "\" required>" +
+    list.map(d => "<option value=\"" + escapeHtmlAttr(d[COL.D_DB_ID]) + "\">" + escapeHtml(d[COL.D_NAME]) + "</option>").join("") +
+    "</select>\n" +
+    "                  <p class=\"text-xs text-gray-500 mt-1\">Giữ Ctrl (hoặc Cmd trên máy Mac) để chọn nhiều phòng. Quyền toàn hệ thống không cho mượn được, nên phải ghi rõ phòng nào.</p>\n" +
+    "              </div>\n              "
+  );
+}
+
+/**
+ * Modal «Ủy quyền của tôi». Form tạo mới hỏi người nhận, khoảng ngày và ghi chú; ô phạm vi phòng
+ * chỉ hiện với Giám đốc (xem `buildUyQuyenPhamVi`) — vai khác để máy chủ suy ra từ các phòng họ
+ * đang phụ trách (`department_managers`), vì đoán rộng hơn máy chủ chỉ đổi một lời từ chối rõ ràng
+ * thành một ô nhập gây nhầm.
  */
 function createUyQuyenModal(dsGiao, dsNhan) {
   return (
@@ -5556,8 +5584,9 @@ function createUyQuyenModal(dsGiao, dsNhan) {
     "                      <input type=\"date\" name=\"toDate\" class=\"form-input\" required value=\"" +
     escapeHtmlAttr(homNayISO()) +
     "\">\n                  </div>\n" +
-    "              </div>\n" +
-    "              <div class=\"form-group\">\n" +
+    "              </div>\n              " +
+    buildUyQuyenPhamVi() +
+    "<div class=\"form-group\">\n" +
     "                  <label class=\"form-label\">Ghi chú</label>\n" +
     "                  <input type=\"text\" name=\"note\" class=\"form-input\" maxlength=\"1000\" placeholder=\"Đi công tác, họp ngoài cơ quan...\">\n" +
     "              </div>\n" +
@@ -5625,16 +5654,30 @@ async function moModalUyQuyen() {
   });
 }
 
-/** Tạo bản ủy quyền. Ngày gửi lên đúng `YYYY-MM-DD` của `<input type="date">`, không tự đổi định dạng. */
+/**
+ * Tạo bản ủy quyền. Ngày gửi lên đúng `YYYY-MM-DD` của `<input type="date">`, không tự đổi định dạng.
+ *
+ * `departmentIds` CHỈ gửi khi có phòng được chọn (ô này chỉ Giám đốc thấy): mảng rỗng và không gửi
+ * gì đều được máy chủ đọc là "theo phòng người ủy quyền đang phụ trách", nên không gửi khoá rỗng
+ * cho đỡ một chỗ hiểu sai.
+ */
 async function taoUyQuyen() {
   const form = document.getElementById("uy-quyen-form");
   if (!form) return;
   const submitButton = form.querySelector("button[type=\"submit\"]"),
     formData = new FormData(form),
     read = key => String(formData.get(key) || "").trim(),
+    phongIds = formData.getAll("departmentIds").map(v => Number(String(v).trim())).filter(v => Number.isInteger(v) && v > 0),
     than = { toUserId: read("to").toLowerCase(), fromDate: read("fromDate"), toDate: read("toDate"), note: read("note") };
+  if (phongIds.length > 0) than.departmentIds = phongIds;
   if (!than.toUserId || !than.fromDate || !than.toDate) {
     showUyQuyenError("Cần đủ email người nhận và hai mốc ngày.");
+    return;
+  }
+  // Chặn sớm ĐÚNG bằng luật máy chủ (`DELEGATION_ADMIN_SCOPE_REQUIRED`), không rộng hơn: đỡ một vòng
+  // gọi cho trường hợp Giám đốc quên chọn phòng.
+  if (form.querySelector("select[name=\"departmentIds\"]") && phongIds.length === 0) {
+    showUyQuyenError("Giám đốc phải ghi rõ (các) phòng khi ủy quyền — quyền toàn hệ thống không cho mượn được.");
     return;
   }
   if (than.toDate < than.fromDate) {

@@ -16,12 +16,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, buildUyQuyenRow, buildUyQuyenBang, createUyQuyenModal, veNhanUyQuyen, tenPhongTheoIds,
-  ngayVN, laCuaToi, showUyQuyenError, docCookieCsrf, buildUyQuyenNut,
+  ngayVN, laCuaToi, showUyQuyenError, docCookieCsrf, buildUyQuyenNut, buildUyQuyenPhamVi,
+  taoUyQuyen,
   __uq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
     allStaff: () => { allStaff = giaTri; },
     allDepartments: () => { allDepartments = giaTri; },
     uyQuyenNhan: () => { uyQuyenNhan = giaTri; },
+    restGhi: () => { restGhi = giaTri; },
+    showToast: () => { showToast = giaTri; },
   })[ten](); }
 });`;
 
@@ -243,6 +246,108 @@ describe('TC-UQ-16: trạng thái «Chờ phê duyệt» và hai nút của ngư
     expect(html).toContain('data-id="7&quot; onclick=&quot;alert(1)"');
     expect(html).toContain('data-nguoi="A&quot; onmouseover=&quot;alert(1)"');
     expect(html).not.toMatch(/onclick="alert\(1\)"/);
+  });
+});
+
+// §13.4 mục 18 — «giám đốc có thể ủy quyền cho phó giám đốc». Máy chủ BẮT Giám đốc liệt kê phòng
+// (`DELEGATION_ADMIN_SCOPE_REQUIRED`), nên nếu form không có ô chọn phòng thì Giám đốc không tạo
+// được bản nào từ giao diện — đúng cái lỗi bộ test này canh.
+describe('TC-UQ-18: ô chọn phòng của form ủy quyền chỉ dành cho Giám đốc', () => {
+  const PHONG = [
+    { 'ID phòng (DB)': 11, 'Tên phòng': 'Phòng Kỹ thuật' },
+    { 'ID phòng (DB)': 12, 'Tên phòng': 'Phòng Kế hoạch' },
+  ];
+
+  it('vai thường KHÔNG thấy ô phòng — phạm vi để máy chủ suy ra từ phòng đang phụ trách', () => {
+    window.__uq('allDepartments', PHONG);
+    expect(window.buildUyQuyenPhamVi()).toBe('');
+    expect(window.createUyQuyenModal([], [])).not.toContain('name="departmentIds"');
+  });
+
+  it('Giám đốc thấy ô chọn nhiều phòng, mỗi phòng một option mang id thật', () => {
+    window.__uq('currentUser', { id: 1, name: 'Giám đốc', role: 'admin' });
+    window.__uq('allDepartments', PHONG);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = window.createUyQuyenModal([], []);
+    const select = wrapper.querySelector('select[name="departmentIds"]');
+    expect(select).not.toBeNull();
+    expect(select.multiple).toBe(true);
+    expect(select.required).toBe(true);
+    expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['11', 'Phòng Kỹ thuật'],
+      ['12', 'Phòng Kế hoạch'],
+    ]);
+  });
+
+  it('phòng máy chủ không gửi id thì bỏ hẳn, không sinh option value rỗng', () => {
+    window.__uq('currentUser', { id: 1, role: 'admin' });
+    window.__uq('allDepartments', [{ 'Tên phòng': 'Phòng thiếu id' }, ...PHONG]);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = window.buildUyQuyenPhamVi();
+    expect([...wrapper.querySelectorAll('option')].map((o) => o.value)).toEqual(['11', '12']);
+  });
+
+  it('tên phòng có mã tấn công vẫn là chữ, không dựng được thẻ', () => {
+    window.__uq('currentUser', { id: 1, role: 'admin' });
+    window.__uq('allDepartments', [{ 'ID phòng (DB)': `11" onfocus="alert(1)`, 'Tên phòng': DON }]);
+    const html = window.buildUyQuyenPhamVi();
+    expect(html).toContain('value="11&quot; onfocus=&quot;alert(1)"');
+    expect(html).not.toContain('<img src=x');
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    expect(wrapper.querySelectorAll('img').length).toBe(0);
+  });
+});
+
+describe('TC-UQ-18b: taoUyQuyen gửi phạm vi phòng lên máy chủ', () => {
+  /** Dựng form thật trong DOM rồi thay `restGhi` bằng ống ghi lại thân yêu cầu. */
+  function moForm(vai) {
+    window.__uq('currentUser', { id: 1, name: 'Người tạo', role: vai });
+    window.__uq('allDepartments', [
+      { 'ID phòng (DB)': 11, 'Tên phòng': 'Phòng Kỹ thuật' },
+      { 'ID phòng (DB)': 12, 'Tên phòng': 'Phòng Kế hoạch' },
+    ]);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = window.createUyQuyenModal([], []);
+    document.body.appendChild(wrapper.firstElementChild);
+    const goi = [];
+    // Trả `ok:false` để hàm dừng ngay sau lời gọi: mọi nhánh sau đó (toast, nạp lại danh sách)
+    // đều gọi mạng, mà bộ test này chỉ hỏi "thân yêu cầu có đúng không".
+    window.__uq('restGhi', (method, path, body) => {
+      goi.push({ method, path, body });
+      return Promise.resolve({ ok: false, error: 'dừng ở đây' });
+    });
+    const form = document.getElementById('uy-quyen-form');
+    form.querySelector('[name="to"]').value = 'pgd@congty.vn';
+    form.querySelector('[name="fromDate"]').value = '2026-09-01';
+    form.querySelector('[name="toDate"]').value = '2026-09-10';
+    return { form, goi };
+  }
+
+  it('Giám đốc chọn hai phòng ⇒ thân có departmentIds là mảng SỐ', async () => {
+    const { form, goi } = moForm('admin');
+    form.querySelector('option[value="11"]').selected = true;
+    form.querySelector('option[value="12"]').selected = true;
+    await window.taoUyQuyen();
+    expect(goi.length).toBe(1);
+    expect(goi[0].method).toBe('POST');
+    expect(goi[0].path).toBe('/api/v1/delegations');
+    expect(goi[0].body.departmentIds).toEqual([11, 12]);
+    expect(goi[0].body.toUserId).toBe('pgd@congty.vn');
+  });
+
+  it('Giám đốc quên chọn phòng ⇒ chặn ngay, KHÔNG gọi máy chủ', async () => {
+    const { goi } = moForm('admin');
+    await window.taoUyQuyen();
+    expect(goi.length).toBe(0);
+    expect(document.getElementById('uy-quyen-error').textContent).toContain('phải ghi rõ');
+  });
+
+  it('vai thường: không có ô phòng nên KHÔNG gửi khoá departmentIds', async () => {
+    const { goi } = moForm('Trưởng phòng');
+    await window.taoUyQuyen();
+    expect(goi.length).toBe(1);
+    expect('departmentIds' in goi[0].body).toBe(false);
   });
 });
 

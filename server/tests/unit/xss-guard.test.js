@@ -164,9 +164,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // escape 5 giá trị + 1 nhãn, và ba chỗ gọi nó là 3 lỗ HTML-BIEN trong `buildUyQuyenRow`, trong
     // khi hai chỗ escape cũ của nút Huỷ biến mất ⇒ +7 giá trị nội suy, KHÔNG thêm chỗ ghi HTML nào
     // ⇒ 86 chỗ / 597 giá trị.
+    // 2026-08-28 (ô chọn phòng cho Giám đốc, §13.4 mục 18): form ủy quyền thêm builder
+    // `buildUyQuyenPhamVi()` — chỉ hiện với admin. +5 giá trị: 1 lời gọi nó trong
+    // `createUyQuyenModal`, 1 chỗ thoát `size` của thẻ select, 1 lỗ cho cả biểu thức `list.map(...)`
+    // và 2 chỗ thoát bên trong (id + tên phòng). KHÔNG thêm chỗ ghi HTML nào (vẫn dựng trong chuỗi
+    // của modal cũ) ⇒ 86 chỗ / 602 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 597 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 602 });
   });
 });
 
