@@ -71,6 +71,12 @@ export default [
       // uy-quyen-ui.test.js: modal «Ủy quyền của tôi» + nhãn «đang được ủy quyền» (TC-UQ-15) —
       // chạy app.js thật trong jsdom, đọc `document.cookie` để kiểm hàm lấy token CSRF.
       'tests/unit/uy-quyen-ui.test.js',
+      // bo-loc-cong-viec.test.js: tab Công việc — ô Tháng/Năm giống Gantt + lọc nhóm phòng
+      // (TC-CV-BL, 2026-08-28) — chạy app.js thật trong jsdom.
+      'tests/unit/bo-loc-cong-viec.test.js',
+      // tai-khoan-ui.test.js: trang «Quản lý tài khoản» — thông tin tài khoản + đổi mật khẩu
+      // ngay trong trang (TC-TK, 2026-08-28) — chạy app.js thật trong jsdom.
+      'tests/unit/tai-khoan-ui.test.js',
     ],
     languageOptions: {
       globals: {

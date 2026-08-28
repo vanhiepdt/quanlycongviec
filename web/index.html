@@ -18,7 +18,7 @@
     <!-- ?v= là dấu vết phiên bản: Nginx cache assets/ 30 ngày (§7 việc 4.8) nhưng KHÔNG cache
          trang này, nên đổi số này là người dùng nhận bản mới ngay lần tải sau. SỬA app.css /
          app.js / api-bridge.js thì PHẢI bump. -->
-    <link rel="stylesheet" href="assets/css/app.css?v=20260827-4">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260828-5">
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen font-inter">
@@ -191,6 +191,21 @@
                 <span>Cấu hình phòng</span>
                 <div
                     class="ml-auto w-2 h-2 rounded-full bg-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                </div>
+            </a>
+
+            <!-- 2026-08-28: trang tài khoản cá nhân — ai đăng nhập cũng thấy (thông tin của
+                 CHÍNH mình + đổi mật khẩu ngay trong trang). -->
+            <a href="#" data-section="account"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200"
+                id="account-nav">
+                <div
+                    class="w-8 h-8 rounded-lg bg-cyan-100 group-hover:bg-cyan-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-id-card text-cyan-600 text-sm"></i>
+                </div>
+                <span>Quản lý tài khoản</span>
+                <div
+                    class="ml-auto w-2 h-2 rounded-full bg-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 </div>
             </a>
         </nav>
@@ -626,32 +641,36 @@
 
             <!-- Projects Section -->
             <div id="projects-section" class="section">
-                <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-2xl font-bold text-gray-900">Quản lý công việc</h3>
-                    <div class="flex items-center space-x-3">
-                        <!-- Search input mới -->
-                        <div class="relative">
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900 tieu-de-thanh-loc">Quản lý công việc</h3>
+                    <!-- 2026-08-28: MỘT hàng bộ lọc (.thanh-loc ở app.css) — trước đây các ô rớt
+                         xuống 2–3 dòng và chữ trong nút bị xếp dọc. -->
+                    <div class="thanh-loc">
+                        <div class="relative thanh-loc-tim">
                             <input type="text" id="projects-search" placeholder="Tìm kiếm công việc..."
-                                class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
+                                class="pl-10 pr-4 py-2 w-full bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
                         </div>
-                        <select id="projects-status-filter" class="form-select w-40">
+                        <!-- Lọc tháng GIỐNG Sơ đồ Gantt: hai ô chọn Tháng + Năm (option nạp bằng JS:
+                             dongBoOThangNamProjects). «Tất cả tháng» giữ lại khả năng xem trọn danh sách. -->
+                        <i class="fas fa-calendar-day text-blue-500 thanh-loc-icon"></i>
+                        <select id="projects-month-select" class="form-select py-2 px-2 text-sm"
+                            aria-label="Chọn tháng lọc công việc"></select>
+                        <select id="projects-year-select" class="form-select py-2 px-2 text-sm"
+                            aria-label="Chọn năm lọc công việc"></select>
+                        <select id="projects-dept-filter" class="form-select py-2 px-3 text-sm"
+                            aria-label="Lọc công việc theo phòng">
+                            <option value="">Tất cả phòng</option>
+                        </select>
+                        <select id="projects-status-filter" class="form-select py-2 px-3 text-sm"
+                            aria-label="Lọc công việc theo trạng thái">
                             <option value="">Tất cả</option>
                             <option value="Chưa bắt đầu">Chưa bắt đầu</option>
                             <option value="Đang thực hiện">Đang thực hiện</option>
                             <option value="Hoàn thành">Hoàn thành</option>
                             <option value="Tạm dừng">Tạm dừng</option>
                         </select>
-                        <!-- Bộ lọc theo tháng (yêu cầu 4): chỉ hiện công việc PHỦ QUA tháng chọn -->
-                        <input type="month" id="projects-month-filter"
-                            class="px-3 py-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200"
-                            title="Chỉ hiện công việc phủ qua tháng này">
-                        <button id="projects-month-clear"
-                            class="px-3 py-2 text-sm text-gray-600 bg-white/70 border border-gray-200/50 rounded-xl hover:bg-gray-100 transition-colors duration-200"
-                            title="Bỏ lọc theo tháng">
-                            <i class="fas fa-eraser mr-1"></i>Bỏ lọc
-                        </button>
-                        <button id="add-project-standalone" class="btn-primary">
+                        <button id="add-project-standalone" class="btn-primary thanh-loc-nut">
                             <i class="fas fa-plus mr-2"></i>Tạo công việc mới
                         </button>
                     </div>
@@ -701,35 +720,40 @@
 
             <!-- Tasks Section -->
             <div id="tasks-section" class="section">
-                <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-2xl font-bold text-gray-900">Quản lý nhiệm vụ</h3>
-                    <div class="flex items-center flex-wrap gap-3">
-                        <div class="relative">
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900 tieu-de-thanh-loc">Quản lý nhiệm vụ</h3>
+                    <!-- 2026-08-28: TẤT CẢ bộ lọc trên MỘT dòng (.thanh-loc ở app.css). Không dùng
+                         flex-wrap nữa; nếu màn hình hẹp thì thanh lọc tự cuộn ngang. -->
+                    <div class="thanh-loc">
+                        <div class="relative thanh-loc-tim">
                             <input type="text" id="tasks-search" placeholder="Tìm kiếm nhiệm vụ..."
-                                class="pl-10 pr-4 py-2 w-64 bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
+                                class="pl-10 pr-4 py-2 w-full bg-gray-50/80 backdrop-blur-sm border border-gray-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all duration-200">
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
                         </div>
                         <!-- 2026-08-27: bỏ ô «ngày» đơn lẻ, lọc theo THÁNG + NĂM (nhiệm vụ có khoảng
                              [bắt đầu, hạn] GIAO với tháng đã chọn). Option nạp bằng JS: dongBoOThangNamTasks. -->
-                        <div class="flex items-center gap-2">
-                          <i class="fas fa-calendar-day text-blue-500"></i>
-                          <select id="tasks-month-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn tháng lọc nhiệm vụ"></select>
-                          <select id="tasks-year-select" class="form-select py-2 px-2 text-sm w-28" aria-label="Chọn năm lọc nhiệm vụ"></select>
-                        </div>
-                        <select id="tasks-staff-filter" class="form-select py-2 px-3 text-sm w-44" aria-label="Lọc nhiệm vụ theo người thực hiện">
+                        <i class="fas fa-calendar-day text-blue-500 thanh-loc-icon"></i>
+                        <select id="tasks-month-select" class="form-select py-2 px-2 text-sm"
+                            aria-label="Chọn tháng lọc nhiệm vụ"></select>
+                        <select id="tasks-year-select" class="form-select py-2 px-2 text-sm"
+                            aria-label="Chọn năm lọc nhiệm vụ"></select>
+                        <select id="tasks-staff-filter" class="form-select py-2 px-3 text-sm"
+                            aria-label="Lọc nhiệm vụ theo người thực hiện">
                             <option value="">Tất cả cán bộ</option>
                         </select>
-                        <select id="tasks-dept-filter" class="form-select py-2 px-3 text-sm w-44" aria-label="Lọc nhiệm vụ theo phòng">
+                        <select id="tasks-dept-filter" class="form-select py-2 px-3 text-sm"
+                            aria-label="Lọc nhiệm vụ theo phòng">
                             <option value="">Tất cả phòng</option>
                         </select>
-                        <select id="tasks-status-filter" class="form-select w-40">
+                        <select id="tasks-status-filter" class="form-select py-2 px-3 text-sm"
+                            aria-label="Lọc nhiệm vụ theo trạng thái">
                             <option value="">Tất cả</option>
                             <option value="Chưa bắt đầu">Chưa bắt đầu</option>
                             <option value="Đang thực hiện">Đang thực hiện</option>
                             <option value="Hoàn thành">Hoàn thành</option>
                             <option value="Tạm dừng">Tạm dừng</option>
                         </select>
-                        <button id="add-task-standalone" class="btn-secondary">
+                        <button id="add-task-standalone" class="btn-secondary thanh-loc-nut">
                             <i class="fas fa-plus mr-2"></i>Tạo nhiệm vụ mới
                         </button>
                     </div>
@@ -1154,6 +1178,71 @@
                     <div class="loading-card">Đang tải đề nghị...</div>
                 </div>
             </div>
+
+            <!-- ================================================================
+                 QUẢN LÝ TÀI KHOẢN (2026-08-28) — thông tin tài khoản của CHÍNH
+                 người đang đăng nhập + đổi mật khẩu ngay tại trang.
+                 Ô thông tin do app.js dựng (renderTrangTaiKhoan) để luôn đi qua
+                 escapeHtml; form đổi mật khẩu là markup tĩnh ở đây.
+                 ================================================================ -->
+            <div id="account-section" class="section">
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Quản lý tài khoản</h3>
+                    <button id="account-refresh-btn" class="btn-secondary thanh-loc-nut">
+                        <i class="fas fa-sync-alt mr-2"></i>Tải lại
+                    </button>
+                </div>
+
+                <div class="glass-card p-6 mb-6">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-id-card text-cyan-600 mr-2"></i>Thông tin tài khoản
+                    </h4>
+                    <div id="account-info" class="the-tai-khoan">
+                        <div class="text-sm text-gray-500">Đang tải thông tin tài khoản...</div>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-key text-blue-600 mr-2"></i>Đổi mật khẩu
+                    </h4>
+                    <form id="account-password-form" class="khoi-doc" autocomplete="off">
+                        <div id="account-password-error"
+                            class="hidden px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+                        </div>
+                        <div id="account-password-ok"
+                            class="hidden px-4 py-3 rounded-xl bg-green-50 border border-green-100 text-sm text-green-700">
+                        </div>
+                        <div class="the-tai-khoan">
+                            <div>
+                                <label for="account-current-password"
+                                    class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                                <input type="password" id="account-current-password" name="currentPassword"
+                                    class="form-input" autocomplete="current-password" required>
+                            </div>
+                            <div>
+                                <label for="account-new-password"
+                                    class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                                <input type="password" id="account-new-password" name="newPassword" class="form-input"
+                                    autocomplete="new-password" minlength="6" required>
+                            </div>
+                            <div>
+                                <label for="account-confirm-password"
+                                    class="block text-sm font-medium text-gray-700 mb-1">Nhập lại mật khẩu mới</label>
+                                <input type="password" id="account-confirm-password" name="confirmPassword"
+                                    class="form-input" autocomplete="new-password" minlength="6" required>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500">Mật khẩu mới tối thiểu 6 ký tự và phải khác mật khẩu hiện tại.
+                        </p>
+                        <div class="flex justify-end">
+                            <button type="submit" id="account-password-submit" class="btn-primary thanh-loc-nut">
+                                <i class="fas fa-save mr-2"></i>Cập nhật mật khẩu
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -1193,7 +1282,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260827-78"></script>
+    <script src="assets/js/app.js?v=20260828-79"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260826-4"></script>
 

@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260827-78");
+console.info("[QLCV] app.js 20260828-79");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -27,6 +27,11 @@ let chartInstance = null,
   tasksXemNam = new Date().getFullYear(),
   tasksLocCanBo = "",
   tasksLocPhong = "",
+  // 2026-08-28: tab Công việc lọc tháng GIỐNG Sơ đồ Gantt (Tháng + Năm) + lọc phòng.
+  // projectsXemThang = 0 nghĩa là «Tất cả tháng» (không lọc theo thời gian).
+  projectsXemThang = 0,
+  projectsXemNam = new Date().getFullYear(),
+  projectsLocPhong = "",
   allAdminNames = [],
   currentGanttDate = new Date(),
   ganttStartDate = new Date();
@@ -531,11 +536,6 @@ function setupEventListeners() {
     }
   }), document.getElementById("projects-search")?.addEventListener("input", event => {
     filterCards(".project-card", event.target.value.toLowerCase());
-  }), document.getElementById("projects-month-filter")?.addEventListener("change", () => {
-    renderProjects(), filterProjects(), capNhatLinkXuatExcel();
-  }), document.getElementById("projects-month-clear")?.addEventListener("click", () => {
-    const monthEl = document.getElementById("projects-month-filter");
-    monthEl && (monthEl.value = ""), renderProjects(), filterProjects(), capNhatLinkXuatExcel();
   }), document.getElementById("export-btn")?.addEventListener("click", capNhatLinkXuatExcel),document.getElementById("tasks-search")?.addEventListener("input", event => {
     filterTaskRows(event.target.value.toLowerCase());
   }), document.getElementById("tasks-status-filter")?.addEventListener("change", filterTasks), document.getElementById("projects-status-filter")?.addEventListener("change", filterProjects), document.addEventListener("click", function (event) {
@@ -625,6 +625,9 @@ function setupEventListeners() {
   // 2026-08-27: tab Nhiệm vụ dùng Tháng/Năm + Cán bộ + Phòng (không còn ô «ngày» đơn lẻ),
   // và mỗi công việc con là một khối tự thu gọn được.
   setupTasksFilterControls();
+  // 2026-08-28: tab Công việc cũng dùng Tháng/Năm (giống Gantt) + lọc theo nhóm phòng.
+  setupProjectsFilterControls();
+  setupTrangTaiKhoan();
   document.addEventListener("click", function (event) {
     const toggleBtn = event.target.closest(".tasks-subwork-toggle");
     if (!toggleBtn) return;
@@ -858,7 +861,8 @@ function switchSection(sectionName) {
     staff: "Quản lý đối tượng",
     departments: "Cấu hình phòng",
     gantt: "Sơ đồ Gantt",
-    proposals: "Quản lý Đề nghị"
+    proposals: "Quản lý Đề nghị",
+    account: "Quản lý tài khoản"
   };
   document.getElementById("page-title").textContent = data[sectionName] || "Dashboard", document.querySelectorAll(".section").forEach(item => {
     item.classList.remove("active");
@@ -866,7 +870,7 @@ function switchSection(sectionName) {
   const overviewFilterContainerEl = document.getElementById("overview-filter-container");
   overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "departments" && renderDepartments(), sectionName === "gantt" && setTimeout(() => {
     renderGanttChart();
-  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), closeMobileMenu();
+  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), sectionName === "projects" && setupProjectsFilterControls(), sectionName === "account" && renderTrangTaiKhoan(), closeMobileMenu();
 }
 function toggleMobileMenu() {
   const sidebarEl = document.getElementById("sidebar"),
@@ -928,14 +932,81 @@ function workMatchesMonth(project, thang) {
 function renderProjects() {
   const projectsGridEl = document.getElementById("projects-grid");
   if (!projectsGridEl) return;
-  const monthEl = document.getElementById("projects-month-filter"),
-    thangDangXem = monthEl && monthEl.value ? monthEl.value : "",
-    userAllowedProjects = getUserAllowedProjects().filter(project => workMatchesMonth(project, thangDangXem));
+  const thangDangXem = thangLocCongViec(),
+    userAllowedProjects = getUserAllowedProjects().filter(project => workMatchesMonth(project, thangDangXem) && workMatchesProjectsDept(project));
   if (!userAllowedProjects || userAllowedProjects.length === 0) {
     projectsGridEl.innerHTML = "<div class=\"loading-card\">" + (thangDangXem ? "Không có công việc nào trong tháng " + escapeHtml(thangDangXem) : "Chưa có dự án nào") + "</div>";
     return;
   }
   projectsGridEl.innerHTML = userAllowedProjects.map(userAllowedProject => createProjectCard(userAllowedProject, true)).join("");
+}
+/** Tháng đang lọc ở tab Công việc, dạng "YYYY-MM"; rỗng = «Tất cả tháng». */
+function thangLocCongViec() {
+  if (!(projectsXemThang >= 1 && projectsXemThang <= 12)) return "";
+  return String(projectsXemNam) + "-" + String(projectsXemThang).padStart(2, "0");
+}
+/** Lọc theo nhóm phòng của tab Công việc (rỗng = tất cả phòng nhìn thấy được). */
+function workMatchesProjectsDept(project) {
+  if (!projectsLocPhong) return true;
+  return String(project[COL.P_DEPT] || "") === projectsLocPhong;
+}
+/** Ô Tháng/Năm + Phòng của tab Công việc — nối MỘT lần (mốc dataset.daNoi như Gantt). */
+function setupProjectsFilterControls() {
+  dongBoOThangNamProjects(), populateProjectsDeptFilter();
+  const oThang = document.getElementById("projects-month-select"),
+    oNam = document.getElementById("projects-year-select"),
+    oPhong = document.getElementById("projects-dept-filter");
+  oThang && !oThang.dataset.daNoi && ((oThang.dataset.daNoi = "1"), oThang.addEventListener("change", handleProjectsMonthChange));
+  oNam && !oNam.dataset.daNoi && ((oNam.dataset.daNoi = "1"), oNam.addEventListener("change", handleProjectsYearChange));
+  oPhong && !oPhong.dataset.daNoi && ((oPhong.dataset.daNoi = "1"), oPhong.addEventListener("change", handleProjectsDeptFilter));
+}
+function dongBoOThangNamProjects() {
+  const oThang = document.getElementById("projects-month-select"),
+    oNam = document.getElementById("projects-year-select");
+  if (!oThang || !oNam) return;
+  if (oThang.options.length === 0) {
+    const opTatCa = document.createElement("option");
+    opTatCa.value = "0", opTatCa.textContent = "Tất cả tháng", oThang.appendChild(opTatCa);
+    for (let i = 1; i <= 12; i++) {
+      const op = document.createElement("option");
+      op.value = String(i), op.textContent = "Tháng " + i, oThang.appendChild(op);
+    }
+  }
+  const namHienTai = new Date().getFullYear(),
+    cacNam = [];
+  for (let y = namHienTai - 2; y <= namHienTai + 3; y++) cacNam.push(y);
+  if (cacNam.indexOf(projectsXemNam) < 0) cacNam.push(projectsXemNam);
+  cacNam.sort((a, b) => a - b);
+  if (oNam.options.length !== cacNam.length) {
+    oNam.innerHTML = "";
+    cacNam.forEach(y => {
+      const op = document.createElement("option");
+      op.value = String(y), op.textContent = "Năm " + y, oNam.appendChild(op);
+    });
+  }
+  oThang.value = String(projectsXemThang), oNam.value = String(projectsXemNam);
+}
+function populateProjectsDeptFilter() {
+  const el = document.getElementById("projects-dept-filter");
+  if (!el || el.options.length > 1) return;
+  const list = isAdmin() ? departmentNames : visibleDepartments.length > 0 ? visibleDepartments : departmentNames;
+  (list || []).forEach(ten => {
+    const op = document.createElement("option");
+    op.value = ten, op.textContent = ten, el.appendChild(op);
+  });
+}
+function handleProjectsMonthChange(event) {
+  const so = parseInt(event.target.value, 10);
+  if (!(so >= 0 && so <= 12)) return;
+  projectsXemThang = so, renderProjects(), filterProjects(), capNhatLinkXuatExcel();
+}
+function handleProjectsYearChange(event) {
+  const so = parseInt(event.target.value, 10);
+  if (!(so >= 1900 && so <= 2200)) return;
+  projectsXemNam = so, renderProjects(), filterProjects(), capNhatLinkXuatExcel();
+}
+function handleProjectsDeptFilter(event) {
+  projectsLocPhong = event.target.value || "", renderProjects(), filterProjects();
 }
 function createProjectCard(project, showDetails = false) {
   const projectId = project[COL.P_ID] || "N/A",
@@ -3700,8 +3771,9 @@ function cuoiThangCua(thang) {
   return thang + "-" + String(new Date(nam, thangSo, 0).getDate()).padStart(2, "0");
 }
 function capNhatLinkXuatExcel() {
-  const monthEl = document.getElementById("projects-month-filter"),
-    thang = monthEl && monthEl.value ? monthEl.value : "";
+  // 2026-08-28: nguồn tháng là hai ô Tháng/Năm (thangLocCongViec) thay cho ô
+  // <input type="month"> cũ — phạm vi xuất vẫn ĐÚNG bằng phạm vi đang xem.
+  const thang = thangLocCongViec();
   Object.keys(XUAT_EXCEL_LINK).forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -4925,6 +4997,10 @@ async function restGet(path) {
       showLoginModal();
       return null;
     }
+    // 2026-08-28: 404 trên đường /api/v1/* KHÔNG phải lỗi người dùng — đường có trong mã nguồn
+    // mà máy chủ không biết nghĩa là tiến trình node đang chạy bản CŨ (đã gặp thật với
+    // /api/v1/delegations). Nói thẳng ra thay vì để người dùng đọc "HTTP 404".
+    if (res.status === 404 && path.indexOf("/api/v1/") === 0) throw new Error("máy chủ chưa có đường " + path + " — có thể đang chạy bản cũ, cần khởi động lại máy chủ");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     return json && json.data ? json.data : null;
@@ -5220,6 +5296,100 @@ function tenPhongTheoIds(ids) {
       return dept ? String(dept[COL.D_NAME] || "") : "#" + id;
     })
     .join(", ");
+}
+
+// ============================================================================
+// TRANG QUẢN LÝ TÀI KHOẢN (2026-08-28)
+// Chỉ hiện thông tin của CHÍNH người đang đăng nhập (currentUser do máy chủ trả về
+// ở publicUser) — không gọi thêm API nào, không đọc dữ liệu cán bộ khác.
+// Đổi mật khẩu dùng LẠI đúng đường cũ `changePassword(cũ, mới, nhắc lại)`: máy chủ
+// vẫn là rào chặn cuối, ở đây chỉ chặn sớm mấy lỗi rõ ràng cho đỡ mất một vòng gọi.
+// ============================================================================
+/** Một ô «nhãn — giá trị» của trang tài khoản. */
+function buildTaiKhoanDong(nhan, giaTri) {
+  const text = giaTri === 0 || giaTri ? String(giaTri) : "—";
+  return (
+    "<div class=\"dong-tt\"><span class=\"nhan\">" +
+    escapeHtml(nhan) +
+    "</span><span class=\"gia-tri\">" +
+    escapeHtml(text) +
+    "</span></div>"
+  );
+}
+/** Tên phòng của tài khoản: ưu tiên myDepartment (bối cảnh phòng), sau đó department_id. */
+function tenPhongTaiKhoan() {
+  if (myDepartment) return String(myDepartment);
+  const id = currentUser && currentUser.department_id;
+  if (!id) return "";
+  const dept = (allDepartments || []).find(item => String(item[COL.D_DB_ID] || "") === String(id));
+  return dept ? String(dept[COL.D_NAME] || "") : "#" + id;
+}
+function renderTrangTaiKhoan() {
+  const el = document.getElementById("account-info");
+  if (!el) return;
+  if (!isAuthenticated || !currentUser) {
+    el.innerHTML = "<div class=\"text-sm text-gray-500\">Bạn cần đăng nhập để xem thông tin tài khoản.</div>";
+    return;
+  }
+  const uyQuyenText =
+    uyQuyenNhan.length === 0
+      ? "Không có"
+      : uyQuyenNhan.map(row => (row.from_user_name || "?") + " (đến " + ngayVN(row.to_date) + ")").join("; ");
+  el.innerHTML = [
+    buildTaiKhoanDong("Họ tên", currentUser.name || currentUser.full_name),
+    buildTaiKhoanDong("Mã cán bộ", currentUser.code),
+    buildTaiKhoanDong("Email", currentUser.email),
+    buildTaiKhoanDong("Chức vụ", currentUser.position),
+    buildTaiKhoanDong("Phân quyền", hienThiVai(currentUser.role === "admin" ? "Giám đốc" : currentUser.role)),
+    buildTaiKhoanDong("Phòng", tenPhongTaiKhoan()),
+    buildTaiKhoanDong("Vai trò phòng", myDeptRole || currentUser.dept_role),
+    buildTaiKhoanDong("Đối tượng", currentUser.object_type),
+    buildTaiKhoanDong("Trạng thái", currentUser.is_active === false ? "Đã khoá" : "Đang hoạt động"),
+    buildTaiKhoanDong("Đang mượn quyền của", uyQuyenText)
+  ].join("");
+}
+/** Nối form đổi mật khẩu + nút Tải lại của trang tài khoản — MỘT lần (mốc dataset.daNoi). */
+function setupTrangTaiKhoan() {
+  const form = document.getElementById("account-password-form"),
+    nutTaiLai = document.getElementById("account-refresh-btn");
+  nutTaiLai && !nutTaiLai.dataset.daNoi && ((nutTaiLai.dataset.daNoi = "1"), nutTaiLai.addEventListener("click", renderTrangTaiKhoan));
+  if (!form || form.dataset.daNoi) return;
+  form.dataset.daNoi = "1";
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    // `form.elements.X` (không `form.X`) để chạy được cả dưới jsdom — cùng lý do như modal đổi mật khẩu.
+    // Mật khẩu hiện tại KHÔNG `.trim()`: dấu cách là một phần mật khẩu đã đặt.
+    const matKhauCu = form.elements.currentPassword.value,
+      matKhauMoi = form.elements.newPassword.value.trim(),
+      nhacLai = form.elements.confirmPassword.value.trim(),
+      nut = document.getElementById("account-password-submit");
+    hienLoiTaiKhoan(""), hienOkTaiKhoan("");
+    if (!matKhauCu || !matKhauMoi || !nhacLai) return hienLoiTaiKhoan("Vui lòng nhập đủ ba ô mật khẩu.");
+    if (matKhauMoi.length < 6) return hienLoiTaiKhoan("Mật khẩu mới phải có ít nhất 6 ký tự.");
+    if (matKhauMoi !== nhacLai) return hienLoiTaiKhoan("Hai lần nhập mật khẩu mới không giống nhau.");
+    if (matKhauMoi === matKhauCu) return hienLoiTaiKhoan("Mật khẩu mới phải khác mật khẩu hiện tại.");
+    setButtonLoading(nut, true), google.script.run
+      .withSuccessHandler(function (response) {
+        setButtonLoading(nut, false);
+        if (response && response.success) {
+          form.reset(), hienOkTaiKhoan(response.message || "Đã đổi mật khẩu."), showToast(response.message || "Đã đổi mật khẩu.", "success");
+        } else hienLoiTaiKhoan((response && response.error) || "Không đổi được mật khẩu.");
+      })
+      .withFailureHandler(function (error) {
+        setButtonLoading(nut, false), hienLoiTaiKhoan("Lỗi: " + ((error && error.message) || error));
+      })
+      .changePassword(matKhauCu, matKhauMoi, nhacLai);
+  });
+}
+function hienLoiTaiKhoan(message) {
+  const el = document.getElementById("account-password-error");
+  if (!el) return;
+  el.textContent = message || "", message ? el.classList.remove("hidden") : el.classList.add("hidden");
+}
+function hienOkTaiKhoan(message) {
+  const el = document.getElementById("account-password-ok");
+  if (!el) return;
+  el.textContent = message || "", message ? el.classList.remove("hidden") : el.classList.add("hidden");
 }
 
 /** Một dòng bảng ủy quyền. `laGiao` = bản ghi TÔI cho người khác (mới có nút huỷ). */

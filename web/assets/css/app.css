@@ -3578,3 +3578,119 @@
     width: 22rem !important;
     max-width: 22rem !important;
 }
+
+/* ============================================================================
+   THANH BỘ LỌC MỘT DÒNG (2026-08-28 — yêu cầu «đưa tất cả bộ lọc trên cùng 1 dòng»)
+   Vì tailwind.min.css ở đây là BẢN DỰNG SẴN (không có flex-nowrap) nên luật một
+   dòng phải viết bằng CSS thường, không thêm class Tailwind mới vào HTML.
+   Dùng cho đầu trang «Quản lý công việc» và «Quản lý nhiệm vụ».
+   ========================================================================== */
+.thanh-loc {
+    display: flex;
+    flex-wrap: nowrap; /* KHÔNG cho rớt dòng — đúng yêu cầu «cùng 1 dòng» */
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    overflow-x: auto; /* màn hình hẹp thì cuộn ngang, vẫn một dòng */
+    overflow-y: hidden;
+    padding-bottom: 2px;
+}
+
+/* Mọi ô trong thanh lọc: không co méo, không tự xuống dòng chữ */
+.thanh-loc > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* Ô tìm kiếm là phần tử DUY NHẤT được co lại khi hết chỗ */
+.thanh-loc .thanh-loc-tim {
+    flex: 0 1 16rem;
+    min-width: 9rem;
+}
+
+.thanh-loc .thanh-loc-icon {
+    margin-left: 0.25rem;
+}
+
+/* Chữ trong nút bị xếp DỌC ở ảnh phản hồi 2026-08-28 vì nút bị bóp còn ~40px */
+.thanh-loc .thanh-loc-nut {
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.thanh-loc select,
+.thanh-loc .form-select {
+    width: auto;
+    min-width: 6rem;
+}
+
+/* Bề rộng từng ô đặt Ở ĐÂY (không đặt bằng class Tailwind w-* vì bản dựng sẵn
+   thiếu w-28/w-32, và `.thanh-loc select` vẫn thắng `.w-40` về độ ưu tiên). */
+#projects-month-select,
+#tasks-month-select {
+    width: 8rem;
+}
+
+#projects-year-select,
+#tasks-year-select {
+    width: 6.5rem;
+}
+
+#projects-dept-filter,
+#tasks-dept-filter,
+#tasks-staff-filter {
+    width: 10rem;
+}
+
+#projects-status-filter,
+#tasks-status-filter {
+    width: 9rem;
+}
+
+/* Tiêu đề mục không được ăn hết chỗ của thanh lọc */
+.tieu-de-thanh-loc {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* ============================================================================
+   TRANG QUẢN LÝ TÀI KHOẢN (2026-08-28)
+   ========================================================================== */
+.the-tai-khoan {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.75rem 1.5rem;
+}
+
+/* Xếp dọc cách nhau 1rem — bản tailwind dựng sẵn KHÔNG có space-y-4 */
+.khoi-doc {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.the-tai-khoan .dong-tt {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid rgba(209, 213, 219, 0.5);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.the-tai-khoan .dong-tt .nhan {
+    font-size: 12px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.the-tai-khoan .dong-tt .gia-tri {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    word-break: break-word;
+}

@@ -14,24 +14,31 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
+// 2026-08-28: nguồn tháng của tab Công việc là hai ô Tháng/Năm (giống Sơ đồ Gantt) chứ
+// không còn <input type="month"> ⇒ đặt tháng qua biến mô-đun bằng cửa `__pq`.
 const EXPORTS = `;Object.assign(window, {
-  capNhatLinkXuatExcel, cuoiThangCua, XUAT_EXCEL_LINK,
+  capNhatLinkXuatExcel, cuoiThangCua, XUAT_EXCEL_LINK, thangLocCongViec,
+  __pq: (thang, nam) => { projectsXemThang = thang; if (nam !== undefined) projectsXemNam = nam; },
 });`;
 
 function khoiDong() {
   document.body.innerHTML = `
-    <input type="month" id="projects-month-filter" value="">
+    <select id="projects-month-select"></select>
+    <select id="projects-year-select"></select>
     <a href="/api/v1/export/works.xlsx" id="export-works"></a>
     <a href="/api/v1/export/tasks.xlsx" id="export-tasks"></a>
     <a href="/api/v1/export/stats.xlsx" id="export-stats"></a>`;
   new Function(APP_SRC + EXPORTS)();
+  window.__pq(0, 2026);
 }
 
 /** `getAttribute` chứ không `.href`: jsdom nở `.href` thành URL tuyệt đối, khó so bằng mắt. */
 const link = (id) => document.getElementById(id).getAttribute('href');
 
+/** '' = «Tất cả tháng» (projectsXemThang = 0); 'YYYY-MM' = chọn đúng tháng/năm đó. */
 const datThang = (v) => {
-  document.getElementById('projects-month-filter').value = v;
+  if (!v) return window.__pq(0);
+  window.__pq(Number(v.slice(5, 7)), Number(v.slice(0, 4)));
 };
 
 beforeEach(() => {

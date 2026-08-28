@@ -54,9 +54,9 @@ const CO_Y_KHONG_BOC = [
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 8,
+    so: 9,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -154,9 +154,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // bằng `createUyQuyenModal(...)`. Mỗi trường của bản ghi (tên hai đầu người, ngày, tên phòng,
     // trạng thái, ghi chú, `data-id`, `data-nguoi`) đi qua escapeHtml/escapeHtmlAttr đúng một lần
     // ⇒ 83 chỗ / 588 giá trị.
+    // 2026-08-28 (bộ lọc một dòng + trang «Quản lý tài khoản»): tab Công việc đổi ô tháng sang hai
+    // ô chọn Tháng/Năm giống Gantt ⇒ +1 chỗ ghi HẰNG (xoá rỗng option Năm, `oNam.innerHTML = ""`).
+    // Trang tài khoản thêm 2 chỗ ghi — khung thông tin dựng bằng `buildTaiKhoanDong(...)` và nhánh
+    // "cần đăng nhập" (hằng). Mỗi ô thông tin escape nhãn + giá trị đúng một lần ⇒ +2 giá trị nội
+    // suy ⇒ 86 chỗ / 590 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 83, gia_tri: 588 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 590 });
   });
 });
 

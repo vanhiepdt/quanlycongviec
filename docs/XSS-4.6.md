@@ -128,6 +128,22 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > (c) `tenPhongTheoIds` đọc `allDepartments` (tên phòng do người dùng nhập) nên phải thoát y như
 > dữ liệu người dùng. `tests/unit/uy-quyen-ui.test.js` bơm `<img src=x onerror=alert(1)>` vào tên
 > người, tên phòng và ghi chú để chốt cả ba đường.
+>
+> **Cập nhật 2026-08-28 (bộ lọc một dòng + trang «Quản lý tài khoản»).** Tab «Quản lý công việc» đổi
+> `<input type="month">` sang hai ô chọn Tháng/Năm giống Sơ đồ Gantt: `dongBoOThangNamProjects` xoá
+> rỗng option Năm trước khi nạp lại ⇒ **+1 chỗ ghi HẰNG** (`oNam.innerHTML = ""`). Trang tài khoản
+> thêm **2 chỗ ghi**: khung `#account-info` dựng bằng `buildTaiKhoanDong(nhãn, giá trị)` (mỗi ô thoát
+> nhãn + giá trị đúng một lần) và nhánh «cần đăng nhập» (chuỗi HẰNG) ⇒ **+2 giá trị nội suy**
+> ⇒ **86 chỗ / 590 giá trị** (TC-SEC-17).
+>
+> Hai điểm đáng nói: (a) form đổi mật khẩu trong trang là markup TĨNH ở `index.html`, ba ô mật khẩu
+> đọc bằng `form.elements.X.value` và gửi qua `changePassword(cũ, mới, nhắc lại)` — không có chỗ nào
+> dựng HTML từ mật khẩu, và câu lỗi/câu xác nhận đặt bằng `textContent` (`hienLoiTaiKhoan` /
+> `hienOkTaiKhoan`) chứ không `innerHTML`; (b) trang KHÔNG in `password` / `password_hash` — chỉ các
+> trường `publicUser` trả về, và `tests/unit/tai-khoan-ui.test.js` bơm `<img src=x onerror=alert(1)>`
+> vào tên + `"><script>` vào email để chốt, đồng thời khẳng định hai khoá mật khẩu không lọt ra HTML.
+> `.thanh-loc` / `.the-tai-khoan` / `.khoi-doc` là CSS thường ở `app.css` (bản tailwind dựng sẵn
+> không có `flex-nowrap`, `space-y-4`, `w-32`), không sinh HTML nên không đổi pin.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
