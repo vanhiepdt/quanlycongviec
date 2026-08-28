@@ -7,6 +7,8 @@
 //   TC-TASKUI-07..10: gom theo CÔNG VIỆC CON — mỗi khối có thư mục đỏ, mã, số nhiệm vụ, trạng thái +
 //                     tiến độ tổng hợp đúng luật `ganCayCon`; nhiệm vụ không cha vào khối riêng.
 //   TC-TASKUI-11..12: mũi tên thu gọn nhớ trong localStorage với khoá RIÊNG `qlcv_tasks_collapsed`.
+//   TC-TASKUI-14..18 (2026-08-28): PHẠM VI XEM — Phó Giám đốc phụ trách phòng nào thấy hết nhiệm vụ
+//                     phòng đó (có thể NHIỀU phòng); vai khác và ngữ cảnh phòng rỗng thì không nới.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -18,6 +20,7 @@ const EXPORTS = `;Object.assign(window, {
   createTasksSubworkBlockHtml, createTasksWorkSeparatorHtml,
   renderTasks, doiTrangThaiThuGonTasks, dongBoOThangNamTasks,
   populateTasksStaffFilter, populateTasksDeptFilter, COL,
+  dsPhongToiPhuTrach, dsNhiemVuToiDuocThay,
   __tasksDoc: () => ({ thang: tasksXemThang, nam: tasksXemNam, thuGon: [...tasksThuGon] }),
   __tasks: (ten, giaTri) => { ({ thang: () => { tasksXemThang = giaTri; },
     nam: () => { tasksXemNam = giaTri; },
@@ -27,6 +30,8 @@ const EXPORTS = `;Object.assign(window, {
     projects: () => { allProjects = giaTri; },
     staff: () => { allStaff = giaTri; },
     phongNames: () => { departmentNames = giaTri; },
+    phongPhuTrach: () => { visibleDepartments = giaTri; },
+    laPgd: () => { isDeputyDirectorUser = giaTri; },
     user: () => { currentUser = giaTri; } })[ten](); },
 });`;
 
@@ -329,5 +334,106 @@ describe('TC-TASKUI-12..13 — vẽ thật vào #tasks-grid và nhớ trạng th
     expect(
       document.querySelector('#tasks-grid .glass-card .tasks-table-wrap').className
     ).not.toContain('hidden');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// TC-TASKUI-14..18 — PHẠM VI XEM của tab «Quản lý Nhiệm vụ» (lỗi 2026-08-28: Phó Giám đốc mở tab
+// ra thấy TRẮNG vì chỗ lọc chỉ nhận nhiệm vụ của chính mình hoặc công việc mình đứng tên quản lý).
+// Luật đúng: phụ trách phòng nào thì thấy HẾT nhiệm vụ phòng đó, và một Phó Giám đốc có thể phụ
+// trách NHIỀU phòng — cùng luật `inScope()` của máy chủ (bó theo `managedDepartmentIds`).
+// ---------------------------------------------------------------------------------------------
+const congViec = (ma, phong, quanLy) => ({
+  [C.P_ID]: ma,
+  [C.P_NAME]: 'Công việc ' + ma,
+  [C.P_MANAGER]: quanLy || 'Quản lý khác',
+  [C.P_DEPT]: phong,
+});
+
+describe('TC-TASKUI-14..18 — Phó Giám đốc thấy hết nhiệm vụ của CÁC phòng mình phụ trách', () => {
+  const CONG_VIEC = [
+    congViec('CV1', 'Phòng Kỹ thuật'),
+    congViec('CV2', 'Phòng Kế hoạch'),
+    congViec('CV3', 'Phòng Tài chính'),
+    congViec('CV4', ''), // công việc chung, không thuộc phòng nào
+  ];
+  const NHIEM_VU = [
+    nhiemVu('NV1', 'CV1', '', '2026-08-01', '2026-08-05', 'Đang thực hiện', 'Cán bộ A'),
+    nhiemVu('NV2', 'CV2', '', '2026-08-06', '2026-08-10', 'Đang thực hiện', 'Cán bộ B'),
+    nhiemVu('NV3', 'CV3', '', '2026-08-11', '2026-08-15', 'Đang thực hiện', 'Cán bộ C'),
+    nhiemVu('NV4', 'CV4', '', '2026-08-16', '2026-08-20', 'Đang thực hiện', 'Cán bộ D'),
+  ];
+  const ma = (ds) => ds.map((task) => task[C.T_ID]).sort();
+
+  beforeEach(() => {
+    window.__tasks('projects', CONG_VIEC);
+    window.__tasks('tasks', NHIEM_VU);
+  });
+
+  const dangNhapPgd = (phongPhuTrach) => {
+    window.__tasks('user', { name: 'PGĐ một', role: 'Phó Giám đốc' });
+    window.__tasks('laPgd', true);
+    window.__tasks('phongPhuTrach', phongPhuTrach);
+  };
+
+  it('TC-TASKUI-14: phụ trách HAI phòng thì thấy nhiệm vụ của cả hai, phòng khác vẫn ẩn', () => {
+    dangNhapPgd(['Phòng Kỹ thuật', 'Phòng Kế hoạch']);
+    expect(window.dsPhongToiPhuTrach()).toEqual(['Phòng Kỹ thuật', 'Phòng Kế hoạch']);
+    // NV1/NV2 giao cho người KHÁC mà vẫn thấy — đó mới là «thấy hết nhiệm vụ phòng đấy».
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV2']);
+  });
+
+  it('TC-TASKUI-15: công việc chung (không phòng) vẫn ẩn, trừ khi chính mình được giao', () => {
+    dangNhapPgd(['Phòng Kỹ thuật']);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']);
+    window.__tasks('tasks', [
+      ...NHIEM_VU,
+      nhiemVu('NV5', 'CV4', '', '2026-08-21', '2026-08-25', 'Đang thực hiện', 'PGĐ một'),
+    ]);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV5']);
+  });
+
+  it('TC-TASKUI-16: chưa nạp ngữ cảnh phòng (rỗng) thì KHÔNG nới — chỉ việc của mình', () => {
+    dangNhapPgd([]);
+    expect(window.dsPhongToiPhuTrach()).toEqual([]);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
+    // Vẫn giữ đường cũ: công việc mình đứng tên quản lý thì thấy nhiệm vụ của nó.
+    window.__tasks('projects', [
+      congViec('CV1', 'Phòng Kỹ thuật', 'PGĐ một'),
+      ...CONG_VIEC.slice(1),
+    ]);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']);
+  });
+
+  it('TC-TASKUI-17: vai khác không được nới theo visibleDepartments; admin thấy tất cả', () => {
+    // Trưởng phòng cũng có `visibleDepartments` (phòng của họ) nhưng KHÔNG được nới ở đây:
+    // máy chủ vẫn là rào chặn cuối, trình duyệt tuyệt đối không tự cấp rộng hơn.
+    window.__tasks('user', { name: 'Trưởng phòng Kỹ thuật', role: 'Trưởng phòng' });
+    window.__tasks('laPgd', false);
+    window.__tasks('phongPhuTrach', ['Phòng Kỹ thuật']);
+    expect(window.dsPhongToiPhuTrach()).toEqual([]);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
+    window.__tasks('user', { name: 'Quản trị', role: 'admin' });
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV2', 'NV3', 'NV4']);
+  });
+
+  it('TC-TASKUI-18: vẽ thật — PGĐ không còn thấy «Chưa có nhiệm vụ nào»', () => {
+    document.body.innerHTML =
+      '<select id="tasks-month-select"></select><select id="tasks-year-select"></select>' +
+      '<select id="tasks-staff-filter"><option value="">Tất cả cán bộ</option></select>' +
+      '<select id="tasks-dept-filter"><option value="">Tất cả phòng</option></select>' +
+      '<div id="tasks-grid"></div>';
+    window.__tasks('staff', [{ 'Họ tên': 'Cán bộ A' }, { 'Họ tên': 'Cán bộ B' }]);
+    window.__tasks('phongNames', ['Phòng Kỹ thuật', 'Phòng Kế hoạch', 'Phòng Tài chính']);
+    dangNhapPgd(['Phòng Kỹ thuật', 'Phòng Kế hoạch']);
+    window.renderTasks();
+    const grid = document.getElementById('tasks-grid');
+    expect(grid.textContent).not.toContain('Chưa có nhiệm vụ nào');
+    expect(grid.textContent).toContain('Nhiệm vụ NV1');
+    expect(grid.textContent).toContain('Nhiệm vụ NV2');
+    expect(grid.textContent).not.toContain('Nhiệm vụ NV3');
+    expect(grid.textContent).not.toContain('Nhiệm vụ NV4');
+    // Ô lọc phòng của PGĐ chỉ liệt kê phòng mình phụ trách (2 phòng + «Tất cả phòng»).
+    expect(document.getElementById('tasks-dept-filter').options.length).toBe(3);
   });
 });

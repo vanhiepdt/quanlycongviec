@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-83");
+console.info("[QLCV] app.js 20260828-84");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -1022,22 +1022,47 @@ function createProjectCard(project, showDetails = false) {
     num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
   return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\">" + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
+/**
+ * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
+ * cho phép nhiều dòng `deputy_director`). Đây là bản sao đọc-only của `managedDepartmentIds` phía
+ * máy chủ: `getDepartmentContext()` đã đổi sang TÊN trong `visibleDepartments`, và với vai này
+ * `bootstrap/service.js` chỉ đưa vào đúng các phòng phụ trách chứ không phải toàn cơ quan.
+ *
+ * Vai khác, hoặc chưa nạp xong ngữ cảnh phòng ⇒ mảng RỖNG: thà hẹp còn hơn tự nới ở trình duyệt.
+ */
+function dsPhongToiPhuTrach() {
+  if (isAdmin() || !laQuanTriTrongPhamVi()) return [];
+  return (Array.isArray(visibleDepartments) ? visibleDepartments : []).map(ten => String(ten || "").trim()).filter(Boolean);
+}
+/**
+ * Nhiệm vụ mà người đang đăng nhập được THẤY ở tab «Quản lý Nhiệm vụ».
+ *
+ * Lỗi 2026-08-28: chỗ này chỉ nhận nhiệm vụ của CHÍNH MÌNH hoặc của công việc mình quản lý, nên
+ * Phó Giám đốc — người không được gán nhiệm vụ nào và cũng không đứng tên quản lý công việc — mở
+ * tab ra thấy trắng. Nay thêm đúng một nhánh: **phụ trách phòng nào thì thấy hết nhiệm vụ của
+ * phòng đó**, cùng luật với `inScope()` của máy chủ (`managedDepartmentIds`).
+ *
+ * Nhiệm vụ không có cột phòng riêng nên phòng lấy từ CÔNG VIỆC cha (`COL.P_DEPT`, cùng cách với
+ * `taskMatchesDeptFilter`). Công việc chung (không phòng) KHÔNG vào: máy chủ cũng không cho.
+ */
+function dsNhiemVuToiDuocThay() {
+  if (isAdmin()) return allTasks;
+  const phongPhuTrach = dsPhongToiPhuTrach();
+  return allTasks.filter(task => {
+    if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
+    const project = allProjects.find(project2 => project2[COL.P_ID] === task[COL.T_PID]);
+    if (!project) return false;
+    if (project[COL.P_MANAGER] === currentUser.name) return true;
+    const phongCongViec = String(project[COL.P_DEPT] || "").trim();
+    return phongCongViec !== "" && phongPhuTrach.includes(phongCongViec);
+  });
+}
 function renderTasks() {
   const tasksGridEl = document.getElementById("tasks-grid");
   if (!tasksGridEl) return;
   // Nạp lại option cho 4 ô lọc: dữ liệu cán bộ/phòng về sau lúc gắn bộ lắng nghe nên phải bù ở đây.
   dongBoOThangNamTasks(), populateTasksStaffFilter(), populateTasksDeptFilter();
-  let list = [];
-  if (isAdmin()) list = allTasks;else {
-    const userAllowedProjects = getUserAllowedProjects();
-    list = allTasks.filter(task => {
-      if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
-      const taskPid = task[COL.T_PID],
-        project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
-      if (project && project[COL.P_MANAGER] === currentUser.name) return true;
-      return false;
-    });
-  }
+  let list = dsNhiemVuToiDuocThay();
   if (!list || list.length === 0) {
     tasksGridEl.innerHTML = "<div class=\"loading-card\">Chưa có nhiệm vụ nào</div>";
     return;
