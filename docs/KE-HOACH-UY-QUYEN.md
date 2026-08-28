@@ -380,3 +380,21 @@ không làm được từ trình duyệt. Giao diện chặn sớm đúng bằng
    với câu *«Giám đốc phải ghi rõ (các) phòng…»* mà không gọi máy chủ; chọn một phòng thì tạo được.
    Sau khi PGĐ đồng ý, họ làm được việc của Phó Giám đốc trong **đúng phòng đó** và **không** vào
    được Quản lý người dùng.
+
+> **Đã kiểm chứng bằng REST 2026-08-28** (CSDL nháp riêng, đã xoá; **không** đụng bộ mẫu UAT của
+> người dùng). Chuỗi 8 bước của luồng phê duyệt chạy thật, `admin@test.local` → `pgd2@test.local`:
+>
+> | Bước | Kết quả thật |
+> | --- | --- |
+> | GĐ tạo mà thiếu phòng | `400 DELEGATION_ADMIN_SCOPE_REQUIRED` |
+> | GĐ tạo có `departmentIds:[1]` | `201`, `status = pending`, `department_ids = [1]` |
+> | **GĐ tự** `accept` bản của mình | `403` (người giao không tự phê duyệt được — cốt của mục 20) |
+> | PGĐ `accept` | `200`, `status = active` |
+> | PGĐ `accept` lần hai | `200` `changed: false` (không đổi trạng thái lần nữa) |
+> | PGĐ đọc «Tôi được ủy quyền» | `active`, `dang_hieu_luc = true`, phạm vi `[1]` |
+> | PGĐ `POST /api/v1/users` | `403` — quyền mượn **không** chạm L4 |
+> | GĐ `DELETE /delegations/:id` | `200` (huỷ mềm, dọn sạch) |
+>
+> Còn lại phần **mắt người** — nhãn màu, hai nút «Đồng ý»/«Từ chối», ô chọn phòng chỉ hiện với
+> Giám đốc — vẫn phải chạy trên trình duyệt theo §10 và các bước 2–8 ở trên.
+
