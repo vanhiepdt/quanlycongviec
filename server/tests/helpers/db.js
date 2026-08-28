@@ -13,6 +13,10 @@ const BUSINESS_TABLES = [
   // delegations trỏ vào users nên phải xoá trước users. CASCADE của TRUNCATE cũng lo được, nhưng
   // liệt kê thẳng thì đọc file này là biết đủ danh sách bảng nghiệp vụ.
   'delegations',
+  // Tên theo tháng trỏ vào CẢ works và work_items (008_work_month_names.sql) nên xoá trước hai bảng
+  // đó. `schema.test.js` chốt `names.toHaveLength(BUSINESS_TABLES.length + 1)` — thêm bảng mà quên
+  // dòng này là test lược đồ đỏ.
+  'work_month_names',
   'work_items',
   'works',
   'department_managers',
