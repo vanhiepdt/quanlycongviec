@@ -197,9 +197,12 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // gọi `buildKhungTenThang`; `createProjectCard`, `createTasksWorkSeparatorHtml`,
     // `createTasksSubworkBlockHtml`, `createTaskTableRowSimple` mỗi chỗ 2 (tên theo tháng + `title`
     // tên gốc) = 8; `buildGanttHoverCardHtml` 2 (nhãn «Tên gốc» + giá trị) ⇒ 90 chỗ / 662 giá trị.
+    // 2026-08-28 (màn hình duyệt trong Quản lý công việc): panel «Chờ duyệt» — +1 sink
+    // `#approvals-list`.innerHTML (builder buildPendingApprovalRowHtml thoát đủ) và +1 sink
+    // render spinner; JSON/label đều escape ⇒ 92 chỗ / 668 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 90, gia_tri: 662 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 668 });
   });
 });
 

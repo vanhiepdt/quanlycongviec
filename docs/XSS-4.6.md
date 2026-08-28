@@ -243,6 +243,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > Riêng `data-name`/`data-project-name` của các nút Xoá/Nhân bản/Thêm giữ **TÊN GỐC**: chúng nuôi hộp
 > thoại xác nhận, ở đó không có tháng nào đang xem.
 
+> **Cập nhật 2026-08-28 (màn hình duyệt «Chờ duyệt» trong Quản lý công việc).** Bổ sung UI cho
+> luồng duyệt Phase 5 vốn chưa có màn hình: panel «Chờ duyệt» (chỉ admin/Phó GĐ thấy) —
+> +1 sink `#approvals-list`.innerHTML (builder `buildPendingApprovalRowHtml` thoát đủ) và +1 sink
+> render spinner; builder thêm 6 giá trị escape (loại/tên/mã/`data-entity`/`data-id`/người gửi)
+> ⇒ **92 chỗ / 668 giá trị** (TC-SEC-17). Chi tiết: `docs/NHAT-KY-MAN-HINH-DUYET.md`.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

@@ -232,6 +232,7 @@ function loadDepartmentContext(callback) {
         try {
           renderProjects(), renderTasks(), renderProjectStats(), renderTaskStats(), renderStats(), renderPriorityTasksMini();
           currentSection === "gantt" && renderGanttChart();
+          currentSection === "projects" && (goiNutChoDuyetPanel(), renderChoDuyetPanel());
         } catch (err) {
           console.error("Không vẽ lại được công việc/nhiệm vụ sau khi đổi phòng phụ trách:", err);
         }
@@ -887,7 +888,7 @@ function switchSection(sectionName) {
   const overviewFilterContainerEl = document.getElementById("overview-filter-container");
   overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "departments" && renderDepartments(), sectionName === "gantt" && setTimeout(() => {
     renderGanttChart();
-  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), sectionName === "projects" && setupProjectsFilterControls(), sectionName === "account" && renderTrangTaiKhoan(), closeMobileMenu();
+  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), sectionName === "projects" && (setupProjectsFilterControls(), goiNutChoDuyetPanel(), renderChoDuyetPanel()), sectionName === "account" && renderTrangTaiKhoan(), closeMobileMenu();
 }
 function toggleMobileMenu() {
   const sidebarEl = document.getElementById("sidebar"),
@@ -2963,7 +2964,12 @@ function isPendingApproval(row) {
  */
 function pendingApprovalBadge(row) {
   if (!isPendingApproval(row)) return "";
-  return "<span class=\"status-badge status-awaiting ml-1\" title=\"" + escapeHtmlAttr("Đang chờ Phó Giám đốc duyệt") + "\"><i class=\"fas fa-hourglass-half mr-1\"></i>" + escapeHtml("Chờ duyệt") + "</span>";
+  // Cho người duyệt biết ai sẽ duyệt: tên người duyệt do máy chủ trả (COL.P_APPROVER).
+  const nguoiDuyet = (row && row[COL.P_APPROVER]) || "";
+  const tieuDe = nguoiDuyet
+    ? "Đang chờ duyệt — Người duyệt: " + nguoiDuyet
+    : "Đang chờ duyệt — Người duyệt: Phó Giám đốc phụ trách phòng";
+  return "<span class=\"status-badge status-awaiting ml-1\" title=\"" + escapeHtmlAttr(tieuDe) + "\"><i class=\"fas fa-hourglass-half mr-1\"></i>" + escapeHtml("Chờ duyệt") + "</span>";
 }
 function getStatusClass(status) {
   const lower = status.toLowerCase();
@@ -5434,6 +5440,179 @@ async function restGetIm(path) {
   } catch (err) {
     return null;
   }
+}
+
+/* ============================================================================
+ * MÀN HÌNH DUYỆT (2026-08-28) — «Chờ duyệt» trong Quản lý công việc.
+ * Máy chủ đã có sẵn: GET /approvals/pending (phạm vi theo người xem) và
+ * POST /approvals/:entity/:id/{approve,reject} — từ chối cần lý do ≥ 10 ký tự.
+ * Quyền duyệt theo §6: admin + Phó Giám đốc (chỉ phòng mình quản lý) — server chặn.
+ * ============================================================================ */
+
+/** Đọc token CSRF từ cookie `<tên-session>_csrf`; chưa có thì gọi GET /api/csrf phát mới. */
+async function layTokenCsrfChoPost() {
+  const cookies = String(document.cookie || "").split(";");
+  for (const pair of cookies) {
+    const p = pair.trim(),
+      eq = p.indexOf("=");
+    if (eq > 0 && p.slice(0, eq).endsWith("_csrf")) return p.slice(eq + 1);
+  }
+  try {
+    const res = await fetch("/api/csrf", { credentials: "same-origin", headers: { Accept: "application/json" } });
+    const json = await res.json();
+    return (json && json.data && json.data.csrfToken) || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+/** POST REST dùng cho luồng duyệt — gắn X-CSRF-Token như cầu RPC; lỗi hiện toast, trả null. */
+async function restPost(path, body) {
+  try {
+    const token = await layTokenCsrfChoPost();
+    const res = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify(body || {}),
+    });
+    if (res.status === 401) {
+      showLoginModal();
+      return null;
+    }
+    if (!res.ok) {
+      let thongDiep = "HTTP " + res.status;
+      try {
+        const json = await res.json();
+        json && json.error && json.error.message && (thongDiep = json.error.message);
+      } catch (err) {}
+      throw new Error(thongDiep);
+    }
+    const json = await res.json();
+    return json && json.data ? json.data : null;
+  } catch (err) {
+    showToast("Không thực hiện được: " + err.message, "error");
+    return null;
+  }
+}
+
+/** Người đang đăng nhập có phải NGƯỜI DUYỆT (admin / Phó Giám đốc) theo §6? */
+function laNguoiDuyetHeThong() {
+  return isAuthenticated && !!currentUser && (isAdmin() || currentUser.role === "Phó Giám đốc");
+}
+
+/** BUILDER: một dòng trong «Chờ duyệt» — mọi giá trị user-data đều qua escape. */
+function buildPendingApprovalRowHtml(item) {
+  const laWork = item.kind === "work";
+  const loai = laWork ? "Công việc" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  return (
+    '\n<div class="approval-row flex flex-wrap items-center gap-2 py-2 border-b border-gray-100" data-entity="' +
+    escapeHtml(laWork ? "work" : "work-item") +
+    '" data-id="' +
+    escapeHtml(item.code || String(item.id)) +
+    '">' +
+    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">' +
+    escapeHtml(loai) +
+    "</span>" +
+    '<span class="font-medium text-gray-800 text-sm truncate">' +
+    escapeHtml(item.name || "") +
+    "</span>" +
+    '<span class="text-xs text-gray-400 whitespace-nowrap">(' +
+    escapeHtml(item.code || "") +
+    ")</span>" +
+    '<span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Người gửi: ' +
+    escapeHtml(item.created_by_name || "—") +
+    "</span>" +
+    '<span class="flex items-center gap-2">' +
+    '<button type="button" class="approval-approve btn-primary py-1 px-3 text-xs"><i class="fas fa-check mr-1"></i>Duyệt</button>' +
+    '<button type="button" class="approval-reject-toggle btn-secondary py-1 px-3 text-xs text-red-600"><i class="fas fa-times mr-1"></i>Từ chối</button>' +
+    "</span>" +
+    '<div class="approval-reject-box hidden w-full flex items-center gap-2">' +
+    '<input type="text" class="approval-reason form-input py-1 px-2 text-xs flex-1" placeholder="Lý do từ chối (ít nhất 10 ký tự)...">' +
+    '<button type="button" class="approval-reject-confirm btn-secondary py-1 px-3 text-xs text-red-600">Xác nhận</button>' +
+    "</div></div>"
+  );
+}
+
+/** Nạp «Chờ duyệt» — chỉ hiện panel cho NGƯỜI DUYỆT; người khác vẫn thấy nhãn vàng ở danh sách. */
+async function renderChoDuyetPanel() {
+  const panel = document.getElementById("approvals-panel");
+  if (!panel || !isAuthenticated) return;
+  if (!laNguoiDuyetHeThong()) {
+    panel.classList.add("hidden");
+    return;
+  }
+  const listEl = document.getElementById("approvals-list");
+  listEl && (listEl.innerHTML = '<div class="text-sm text-gray-400 py-2"><i class="fas fa-spinner fa-spin mr-2"></i>Đang tải...</div>');
+  const duLieu = await restGet("/api/v1/approvals/pending");
+  const items = (duLieu && duLieu.items) || [];
+  panel.classList.remove("hidden");
+  const countEl = document.getElementById("approvals-count");
+  countEl && (countEl.textContent = String(items.length));
+  listEl &&
+    (listEl.innerHTML = items.length
+      ? items.map(buildPendingApprovalRowHtml).join("")
+      : '<div class="text-sm text-gray-400 py-2">Không có mục nào chờ duyệt — tốt lắm!</div>');
+}
+
+/** Duyệt một mục: POST approve → nạp lại panel + danh sách công việc. */
+async function duyetMucChoDuyet(entity, ref) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/approve"
+  );
+  if (ketQua) {
+    showToast("Đã duyệt " + ((ketQua.row && ketQua.row.code) || ""), "success");
+    await renderChoDuyetPanel();
+    typeof renderProjects === "function" && renderProjects();
+  }
+}
+
+/** Từ chối một mục — lý do ≥ 10 ký tự (máy chủ kiểm tra lại lần nữa). */
+async function tuChoiMucChoDuyet(entity, ref, lyDo) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/reject",
+    { reason: lyDo }
+  );
+  if (ketQua) {
+    showToast("Đã từ chối " + ((ketQua.row && ketQua.row.code) || ""), "info");
+    await renderChoDuyetPanel();
+    typeof renderProjects === "function" && renderProjects();
+  }
+}
+
+/** Gắn MỘT lần bộ listener cho panel (delegation theo class, chống double-bind). */
+function goiNutChoDuyetPanel() {
+  const listEl = document.getElementById("approvals-list");
+  if (!listEl || listEl.dataset.duyetBound === "1") return;
+  listEl.dataset.duyetBound = "1";
+  listEl.addEventListener("click", async (event) => {
+    const nut = event.target.closest("button");
+    if (!nut) return;
+    const rowEl = nut.closest(".approval-row");
+    if (!rowEl) return;
+    const entity = rowEl.dataset.entity,
+      ref = rowEl.dataset.id;
+    if (nut.classList.contains("approval-approve")) {
+      nut.disabled = true;
+      await duyetMucChoDuyet(entity, ref);
+    } else if (nut.classList.contains("approval-reject-toggle")) {
+      const box = rowEl.querySelector(".approval-reject-box");
+      box && box.classList.toggle("hidden");
+    } else if (nut.classList.contains("approval-reject-confirm")) {
+      const oLyDo = rowEl.querySelector(".approval-reason"),
+        lyDo = ((oLyDo && oLyDo.value) || "").trim();
+      if (lyDo.length < 10) {
+        showToast("Lý do từ chối cần ít nhất 10 ký tự", "error");
+        return;
+      }
+      nut.disabled = true;
+      await tuChoiMucChoDuyet(entity, ref, lyDo);
+    }
+  });
+  const nutRefresh = document.getElementById("approvals-refresh");
+  nutRefresh &&
+    !nutRefresh.dataset.daNoi &&
+    ((nutRefresh.dataset.daNoi = "1"), nutRefresh.addEventListener("click", () => renderChoDuyetPanel()));
 }
 
 let ganttGroupBy = "department"; // department | deputy | assignee (việc 6.6)

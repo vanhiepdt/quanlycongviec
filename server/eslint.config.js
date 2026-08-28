@@ -49,6 +49,8 @@ export default [
       'tests/unit/gantt-ui.test.js',
       // dept-select.test.js: dropdown «Phòng» của form công việc — chạy app.js thật trong jsdom.
       'tests/unit/dept-select.test.js',
+      // approvals-ui.test.js: màn hình «Chờ duyệt» — builder dòng + hành động Duyệt/Từ chối.
+      'tests/unit/approvals-ui.test.js',
       // project-form-phan-cong.test.js: simulation form tạo công việc với fetch giả — jsdom.
       'tests/unit/project-form-phan-cong.test.js',
       // task-form-candidate.test.js: nhãn «Cán bộ trực tiếp» + ứng viên chỉ Nhân viên của form

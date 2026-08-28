@@ -24,6 +24,47 @@ function buildDetailRowHtml(label, value, trongRong) {
   );
 }
 
+/**
+ * Dòng «Trạng thái duyệt / Người duyệt / Lý do từ chối» của modal chi tiết (2026-08-28).
+ * Chỉ hiện khi có dữ liệu duyệt: Chờ duyệt ⇒ hiện người duyệt; Từ chối ⇒ hiện lý do + người duyệt.
+ * Giá trị user-data qua escapeHtml — builder tự lo, caller đừng escape trước (§4.6).
+ */
+function buildPhanCongApprovalRowsHtml(project) {
+  const trangThai = String((project && project[COL.P_APPROVAL]) || "");
+  if (trangThai !== "Chờ duyệt" && trangThai !== "Từ chối") return "";
+  const nguoiDuyet = String((project && project[COL.P_APPROVER]) || "").trim();
+  const oThongTin = (nhan, giaTri, mauKhung) =>
+    '<div class="' + mauKhung + ' rounded-lg px-3 py-2 min-w-0">' +
+    '<div class="text-[11px] uppercase tracking-wide truncate">' + escapeHtml(nhan) + "</div>" +
+    '<div class="text-sm font-semibold break-words leading-snug">' + escapeHtml(giaTri) + "</div></div>";
+  let html =
+    oThongTin(
+      "Trạng thái duyệt",
+      trangThai === "Chờ duyệt" ? "Chờ duyệt — chờ người duyệt xử lý" : "Bị từ chối",
+      "bg-amber-50/80 border border-amber-100 text-amber-600"
+    );
+  if (trangThai === "Chờ duyệt") {
+    html += oThongTin(
+      "Người duyệt",
+      nguoiDuyet || "Phó Giám đốc phụ trách phòng",
+      "bg-gray-50/80 border border-gray-100 text-gray-400"
+    );
+  }
+  if (trangThai === "Từ chối") {
+    html += oThongTin(
+      "Lý do từ chối",
+      String((project && project[COL.P_REJECT_REASON]) || "").trim() || "—",
+      "bg-red-50/80 border border-red-100 text-red-500"
+    );
+    html += oThongTin(
+      "Người duyệt",
+      nguoiDuyet || "—",
+      "bg-gray-50/80 border border-gray-100 text-gray-400"
+    );
+  }
+  return html;
+}
+
 /** Thẻ số liệu nhỏ trong cột tổng quan. */
 function buildStatCardHtml(so, nhan, mauChu) {
   return (
@@ -244,7 +285,7 @@ function showProjectDetailsModal(projectId, projectName) {
     "                </div>\n" +
     '                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-3">\n' +
     buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
-    buildDetailRowHtml("Trạng thái", escapeHtml(project[COL.P_STATUS])) +
+    buildPhanCongApprovalRowsHtml(project) +
     buildDetailRowHtml(
       "Thời gian",
       escapeHtml(formatDateForDisplay(project[COL.P_START])) +

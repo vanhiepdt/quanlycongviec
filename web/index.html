@@ -713,6 +713,22 @@
                         <p class="text-xs text-gray-500">Hủy bỏ</p>
                     </div>
                 </div>
+                <!-- MÀN HÌNH DUYỆT (2026-08-28): «Chờ duyệt» — chỉ hiện với admin / Phó Giám đốc
+                     (người duyệt theo §6). Danh sách do GET /api/v1/approvals/pending trả theo phạm vi. -->
+                <div id="approvals-panel" class="glass-card p-4 mb-4 hidden">
+                    <div class="flex items-center justify-between mb-2">
+                        <h5 class="font-semibold text-gray-800 text-sm">
+                            <i class="fas fa-hourglass-half text-amber-500 mr-2"></i>Chờ duyệt
+                            <span id="approvals-count"
+                                class="ml-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
+                        </h5>
+                        <button type="button" id="approvals-refresh"
+                            class="text-xs text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-sync-alt mr-1"></i>Tải lại
+                        </button>
+                    </div>
+                    <div id="approvals-list"></div>
+                </div>
                 <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div class="loading-card">Đang tải công việc...</div>
                 </div>
@@ -1284,7 +1300,7 @@
     <script src="assets/js/api-bridge.js?v=20260825"></script>
     <script src="assets/js/app.js?v=20260828-87"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
-<script src="assets/js/project-details.js?v=20260826-4"></script>
+<script src="assets/js/project-details.js?v=20260828-1"></script>
 
 </body>
 
