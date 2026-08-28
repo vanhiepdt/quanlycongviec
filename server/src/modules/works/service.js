@@ -10,6 +10,7 @@ import { withTransaction } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { AppError, notFound } from '../../utils/errors.js';
 import { warnDueBeforeStart } from '../../utils/dateChecks.js';
+import { attachRefs } from '../../utils/historyRefs.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
@@ -137,18 +138,29 @@ export function remove(user, ref) {
  * Trả kèm `origin` để giao diện hiện được một chỗ "việc này từ đâu ra" mà không phải gọi thêm API:
  * ai lập, tự đăng ký hay được giao, và ai giao ĐẦU TIÊN (`assigned_by_*` là bất biến do trigger
  * `keep_first_origin` giữ, nên đây luôn là người giao lần đầu chứ không phải người giao gần nhất).
+ *
+ * `scope='tree'` gom thêm nhật ký của MỌI công việc con và nhiệm vụ dưới nó — cái mà tab «Nhật ký»
+ * của công việc cha hiện. Mặc định vẫn là `'self'`: đổi mặc định là lặng lẽ đổi câu trả lời của một
+ * API đang có người gọi. Quyền không nới ra theo `scope` — cấp 2/3 luôn cùng phòng với công việc cha
+ * (migration 002) nên đọc được cha là đọc được cả cây.
  */
-export async function history(user, ref, { limit = 200 } = {}) {
+export async function history(user, ref, { limit = 200, scope = 'self' } = {}) {
   const work = await mustFind(ref);
   assertCan(user, 'read', work);
-  const entries = await logsRepo.listByEntity({
-    entityTypes: ['work'],
-    entityId: work.id,
-    limit,
-  });
+  const caCay = scope === 'tree';
+  const entries = caCay
+    ? await logsRepo.listForWorkTree({ workId: work.id, limit })
+    : await logsRepo.listByEntity({ entityTypes: ['work'], entityId: work.id, limit });
+  // Chỉ tải cây khi cần nhãn: `scope=self` không có dòng của cấp 2/3 nên tra tên là truy vấn thừa.
+  const items = caCay ? await itemsRepo.listByWork(work.id) : [];
   // Khoá `originInfo`, không phải `origin`: bản thân dòng đã có CỘT `origin` kiểu chuỗi
   // ('Tự đăng ký' / 'Được giao'), trùng tên là frontend đọc lẫn hai thứ khác kiểu.
-  return { work, originInfo: originOf(work), entries };
+  return {
+    work,
+    originInfo: originOf(work),
+    scope: caCay ? 'tree' : 'self',
+    entries: attachRefs(entries, { work, items }),
+  };
 }
 
 /**

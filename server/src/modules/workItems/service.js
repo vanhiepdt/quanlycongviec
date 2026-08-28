@@ -12,6 +12,7 @@ import { withTransaction } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { mergeWarnings, warnDueBeforeStart, warnOutsideWorkRange } from '../../utils/dateChecks.js';
 import { AppError, notFound } from '../../utils/errors.js';
+import { attachRefs } from '../../utils/historyRefs.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
@@ -173,16 +174,34 @@ export async function getOne(user, ref) {
  * Hỏi cả hai `entity_type` vì cấp 2 ghi 'subwork', cấp 3 ghi 'task' và dữ liệu cũ có thể ghi lệch
  * cấp; `entity_id` vẫn là id của dòng nên không lẫn sang đầu việc khác. Ai đọc được dòng thì đọc
  * được nhật ký của nó — không có quyền riêng cho nhật ký, nhưng cũng không được rộng hơn quyền đọc.
+ *
+ * `scope='tree'` ở cấp 2 gom thêm nhật ký các nhiệm vụ con của nó; ở cấp 3 thì cây chỉ có một dòng
+ * nên `tree` = `self`. Mặc định vẫn `'self'` để không đổi câu trả lời cũ của API.
  */
-export async function history(user, ref, { limit = 200 } = {}) {
+export async function history(user, ref, { limit = 200, scope = 'self' } = {}) {
   const row = await mustFindItem(ref);
   assertCan(user, 'read', row);
-  const entries = await logsRepo.listByEntity({
-    entityTypes: ['subwork', 'task'],
-    entityId: row.id,
-    limit,
-  });
-  return { item: row, originInfo: originOf(row), entries };
+  const caCay = scope === 'tree' && Number(row.level) === repo.LEVEL_SUBWORK;
+  // Chỉ id các con ĐANG CÒN: con bị xoá thì id không tra lại được từ `work_items` nữa, nhật ký của
+  // nó chỉ còn gom được ở cấp 1 (qua `work_id`) — giới hạn đã ghi trong docs/KE-HOACH-NHAT-KY.md.
+  const children = caCay ? await repo.listChildren(row.id) : [];
+  const entries = caCay
+    ? await logsRepo.listByEntities({
+        entityTypes: ['subwork', 'task'],
+        entityIds: [row.id, ...children.map((r) => r.id)],
+        limit,
+      })
+    : await logsRepo.listByEntity({
+        entityTypes: ['subwork', 'task'],
+        entityId: row.id,
+        limit,
+      });
+  return {
+    item: row,
+    originInfo: originOf(row),
+    scope: caCay ? 'tree' : 'self',
+    entries: attachRefs(entries, { items: [row, ...children] }),
+  };
 }
 
 /**
@@ -472,6 +491,13 @@ export function remove(user, ref) {
       deletedItem: current.code,
       deletedChildren: children.map((r) => r.code),
       deletedCount: 1 + children.length,
+      // Ba khoá này chỉ để route ghi nhật ký cho ĐÚNG đầu việc: sau `remove` thì không tra lại được
+      // cấp và công việc cha của dòng vừa xoá, mà thiếu chúng thì dòng "đã xoá" không bao giờ hiện
+      // trong nhật ký của công việc cha.
+      deletedId: current.id,
+      deletedLevel: current.level,
+      deletedWorkId: current.work_id,
+      deletedName: current.name,
     };
   });
 }

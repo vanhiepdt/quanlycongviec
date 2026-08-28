@@ -58,6 +58,8 @@ const copySchema = z.object({ name: text(500).optional() });
 
 const historySchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
+  // `tree` ở cấp 2 gom thêm nhật ký các nhiệm vụ con; cấp 3 không có con nên `tree` = `self`.
+  scope: z.enum(['self', 'tree']).optional(),
 });
 
 /** camelCase của giao diện → tên cột CSDL. Chỉ khoá người dùng thực sự gửi mới được ghi. */
@@ -129,8 +131,8 @@ workItemsRouter.get('/:id', async (req, res, next) => {
 /** Nhật ký từ đầu của một công việc con / nhiệm vụ: dòng tạo + mọi lần chỉnh sửa (§2.3, §5.2). */
 workItemsRouter.get('/:id/history', validate(historySchema, 'query'), async (req, res, next) => {
   try {
-    const limit = req.validatedQuery?.limit;
-    return ok(res, await service.history(req.user, req.params.id, { limit }));
+    const { limit, scope } = req.validatedQuery ?? {};
+    return ok(res, await service.history(req.user, req.params.id, { limit, scope }));
   } catch (err) {
     return next(err);
   }
@@ -192,9 +194,15 @@ workItemsRouter.delete('/:id', async (req, res, next) => {
     const result = await service.remove(req.user, req.params.id);
     res.locals.audit = {
       action: 'workItems.remove',
-      entityType: 'task',
+      // Ghi ĐÚNG cấp và ĐÚNG id: bản trước ghi cứng 'task' và bỏ trống `entityId`/`workId`, nên lần
+      // xoá không xuất hiện trong nhật ký của công việc cha lẫn của công việc con.
+      entityType: entityOf(result.deletedLevel),
+      entityId: result.deletedId,
+      workId: result.deletedWorkId,
       details: {
         code: result.deletedItem,
+        name: result.deletedName,
+        level: result.deletedLevel,
         deletedChildren: result.deletedChildren,
         deletedCount: result.deletedCount,
       },

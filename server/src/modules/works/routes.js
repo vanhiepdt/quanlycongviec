@@ -61,9 +61,11 @@ const reorderSchema = z.object({
 });
 
 // Nhật ký có thể dài (một công việc sống cả năm): cho gọi số dòng, chặn trên ở 1000 để một request
-// không kéo cả bảng về.
+// không kéo cả bảng về. `scope=tree` gom cả công việc con và nhiệm vụ; mặc định `self` để không đổi
+// câu trả lời cũ của API.
 const historySchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
+  scope: z.enum(['self', 'tree']).optional(),
 });
 
 /** camelCase của giao diện → tên cột CSDL. Chỉ những khoá người dùng thực sự gửi được ghi. */
@@ -136,8 +138,8 @@ worksRouter.get('/:id', async (req, res, next) => {
 /** Nhật ký từ đầu của một công việc: dòng tạo + mọi lần chỉnh sửa (§2.3, §5.2). */
 worksRouter.get('/:id/history', validate(historySchema, 'query'), async (req, res, next) => {
   try {
-    const limit = req.validatedQuery?.limit;
-    return ok(res, await service.history(req.user, req.params.id, { limit }));
+    const { limit, scope } = req.validatedQuery ?? {};
+    return ok(res, await service.history(req.user, req.params.id, { limit, scope }));
   } catch (err) {
     return next(err);
   }
