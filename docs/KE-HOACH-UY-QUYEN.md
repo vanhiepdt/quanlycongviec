@@ -22,7 +22,7 @@ hiệu lực**. Không phải đổi vai trò, không phải cấp thêm quyền
 | # | Luật | Vì sao |
 |---|---|---|
 | L1 | **Không ủy quyền cho chính mình.** `from_user_id <> to_user_id`, chặn ở CHECK của CSDL và ở service. | Bản ghi tự trỏ vào mình không thêm quyền gì, chỉ làm nhật ký nhiễu và làm luật "mượn quyền" thành vòng lặp. |
-| L2 | **Không ủy quyền vai `admin`.** Người ủy quyền là admin ⇒ từ chối ngay (`DELEGATION_ADMIN_FORBIDDEN`). | Quyền admin gồm cả xoá phòng, xoá người, sửa vai trò người khác. Mượn được quyền đó nghĩa là mượn được cả quyền tự nâng mình thành admin vĩnh viễn — ủy quyền hết hạn cũng vô nghĩa. |
+| L2 | **Không cho mượn quyền TOÀN CỤC.** ~~Người ủy quyền là admin ⇒ từ chối ngay~~ — sửa 2026-08-28 theo §13.4 mục 18: Giám đốc ủy quyền được cho Phó Giám đốc, nhưng bản ghi **bắt buộc liệt kê phòng** (`DELEGATION_ADMIN_SCOPE_REQUIRED`) và lúc kiểm quyền được đọc như vai `Phó Giám đốc` trong đúng các phòng đó (xem §11). | Quyền admin gồm cả xoá phòng, xoá người, sửa vai trò người khác. Mượn được quyền đó nghĩa là mượn được cả quyền tự nâng mình thành admin vĩnh viễn — ủy quyền hết hạn cũng vô nghĩa. Hạ vai + bó theo phòng giữ được câu chốt của người dùng mà không mở cái cửa này. |
 | L3 | **Không ủy quyền rộng hơn quyền của chính mình.** Phạm vi mặc định = các phòng người ủy quyền đang phụ trách; phạm vi truyền lên phải là **tập con** của phạm vi đó. | Nếu không, Trưởng phòng A ủy quyền "toàn đơn vị" cho một Nhân viên là tự nâng quyền qua cửa sau. |
 | L4 | **Không ủy quyền dây chuyền (không tái ủy quyền).** Người đang mượn quyền KHÔNG tạo được bản ghi ủy quyền mới bằng quyền mượn. | Chuỗi A→B→C không ai kiểm được, và thời hạn của C không còn liên quan gì đến thời hạn của A. Kiểm bằng: `can()` chỉ mượn quyền cho các hành động trên `work/subwork/task`, còn `delegation` là loại thực thể riêng và KHÔNG nằm trong danh sách mượn được. |
 
@@ -130,9 +130,12 @@ nói cùng một thứ tiếng.
 Mã lỗi mới (đặt trong `utils/errors.js` theo đúng cách các mã hiện có được khai):
 
 - `DELEGATION_SELF` — ủy quyền cho chính mình (L1)
-- `DELEGATION_ADMIN_FORBIDDEN` — ủy quyền vai admin (L2)
+- `DELEGATION_ADMIN_FORBIDDEN` — ủy quyền vai admin (L2) · **hết dùng 2026-08-28**, giữ mã lại vì
+  nhật ký cũ có ghi; nay chỗ đó là `DELEGATION_ADMIN_SCOPE_REQUIRED` (xem §11)
 - `DELEGATION_SCOPE_TOO_WIDE` — phạm vi vượt quá quyền người ủy quyền (L3)
-- `DELEGATION_OVERLAP` — trùng khoảng ngày với bản ghi `active` khác (409)
+- `DELEGATION_OVERLAP` — trùng khoảng ngày với bản ghi `active` khác (409) · từ 007 tính cả `pending`
+- Thêm 2026-08-28: `DELEGATION_RANK_UP` (403, R2), `DELEGATION_DIFFERENT_DEPARTMENT` (403, R3),
+  `DELEGATION_ADMIN_SCOPE_REQUIRED` (400, L2) — xem **§11**
 
 Mọi hành động ghi đều đặt `res.locals.audit` (`delegations.create` / `.update` / `.cancel`), và
 **mọi hành động lọt nhờ mượn quyền** ghi thêm `details.viaDelegationId` — yêu cầu "mỗi hành động
@@ -168,6 +171,10 @@ Mọi hành động ghi đều đặt `res.locals.audit` (`delegations.create` /
 
 ## 8. CÂU HỎI CHỜ NGƯỜI DÙNG
 
+> **Đã trả lời 2026-08-28** — ba trong bốn câu (§13.4 mục 17, 18, 20) đã chốt, xem **§11** để biết
+> luật hiện hành và chỗ chặn của từng luật. Câu 3 (mục 19) **vẫn treo**: giữ *không giới hạn*.
+> Bốn đoạn dưới đây giữ nguyên văn giả định CŨ để đọc lại được vì sao mã từng viết như thế.
+
 Bốn câu dưới đây **không chặn** phần đã triển khai (mọi câu đều có giả định đang dùng, ghi rõ
 trong mã), nhưng cần trả lời để chốt luật lâu dài. Đã thêm vào §13.4 của `KE-HOACH-VPS.md` với
 số **17–20**.
@@ -201,6 +208,12 @@ Hai điều **cố ý không làm**: (a) client không có ô chọn phòng — 
 `department_managers`, client chỉ hiện lại và in nguyên văn lỗi `DELEGATION_SCOPE_TOO_WIDE` /
 `DELEGATION_OVERLAP`; (b) chưa gửi thông báo cho người được ủy quyền (§8 câu 4).
 
+> **Sửa 2026-08-28:** điểm (b) hết đúng — mục 20 đã chốt nên nay **có** thông báo trong ứng dụng và
+> **có** bước phê duyệt (§11). Điểm (a) chỉ còn đúng với **vai thường**: bản ghi từ Giám đốc **buộc**
+> phải có phòng (`DELEGATION_ADMIN_SCOPE_REQUIRED`), nên form đã có ô chọn nhiều phòng hiện **riêng
+> cho `role === "admin"`** (`buildUyQuyenPhamVi()`, app.js `20260828-81` — xem §13). Vai khác vẫn
+> không có ô nào: thêm vào chỉ mời họ đoán rộng hơn quyền thật, mà máy chủ vẫn từ chối.
+
 ---
 
 ## 10. Test tay giao diện — làm theo đúng thứ tự
@@ -232,3 +245,138 @@ lên chỗ đang chạy và khởi động lại Node.
    Huỷ**; đăng nhập lại bằng người nhận thì nhãn vàng **tắt** và quyền mượn hết ngay lập tức.
 9. Thử XSS: đặt ghi chú `<img src=x onerror=alert(1)>` → phải hiện **nguyên văn chữ**, không có
    hộp thoại nào (TC-UQ-15 đã canh, đây chỉ là xác nhận bằng mắt).
+
+---
+
+## 11. Bốn luật thêm 2026-08-28 (§13.4 mục 17, 18, 20 đã trả lời)
+
+Nguyên văn ba câu chốt của người dùng:
+
+- mục 17: «Mọi cán bộ đều được ủy quyền, Chỉ được ủy quền từ cấp cao xuống cấp thấp hoặc ngang bằng
+  nhau theo thứ tự: Giám đốc, phó giám đốc, trưởng phòng, phó phòng, cán bộ»
+- mục 18: «Phải cùng phòng, còn giám đốc có thể ủy quyền cho phó giám đốc, phó giám đốc có thể ủy
+  quyền cho nhau hoặc trưởng phòng?»
+- mục 20: «Cần thông báo và phê duyệt của người được ủy quyền»
+
+| # | Luật | Chỗ chặn | Mã lỗi |
+|---|---|---|---|
+| R1 | **Mọi cán bộ đều ủy quyền được.** Danh sách `VAI_DUOC_UY_QUYEN` bị **xoá hẳn** — cái chặn không còn là VAI mà là HƯỚNG của ủy quyền (R2, R3). | `service.create` không còn phép kiểm vai | — |
+| R2 | **Chỉ từ cấp cao xuống cấp thấp hoặc ngang bằng.** `BAC_VAI`: admin 1 · Phó Giám đốc 2 · Trưởng phòng 3 · Phó phòng 4 · **Quản lý công việc và Nhân viên cùng bậc 5** (cả hai là "cán bộ" trong câu chốt; `Quản lý công việc` không phải một cấp lãnh đạo, nó là vai được giao quản lý một số công việc). Vai lạ ngoài 6 vai ⇒ `bacVai()` trả `null` ⇒ **không** ủy quyền được. | `service.assertBacVaPhong` (bậc kiểm **trước** phòng) | `DELEGATION_RANK_UP` (403) |
+| R3 | **Phải cùng phòng**, trừ đúng ba cặp: `admin → Phó Giám đốc`, `Phó Giám đốc → Phó Giám đốc`, `Phó Giám đốc → Trưởng phòng`. Hai vai này làm việc theo ĐƠN VỊ chứ không theo phòng (Giám đốc không thuộc phòng nào, Phó Giám đốc phụ trách nhiều phòng), bắt họ cùng phòng thì luật thành vô nghĩa. | `service.assertBacVaPhong` (`NGOAI_LE_KHAC_PHONG`) | `DELEGATION_DIFFERENT_DEPARTMENT` (403) |
+| R4 | **Phải có thông báo và phê duyệt của người được ủy quyền.** Bản ghi mới ra ở `pending` và **không cho mượn gì**; chỉ `POST /:id/accept` của **chính người nhận** mới đưa nó sang `active`. | migration 007 + `repo.listEffectiveFor` (chỉ đọc `active`) + `service.traLoi` | `FORBIDDEN` (403) nếu không phải người nhận |
+
+**Vì sao L2 vẫn còn nguyên tinh thần dù mục 18 cho GĐ → PGĐ.** Hai lớp:
+
+1. `create()` bắt bản ghi từ admin **liệt kê phòng** — `DELEGATION_ADMIN_SCOPE_REQUIRED` (400).
+   Phạm vi rỗng nghĩa là "các phòng người ủy quyền phụ trách", mà admin không có dòng
+   `department_managers` nào, nên rỗng sẽ hoặc vô nghĩa hoặc (nếu ai đó sửa cách đọc) thành toàn
+   hệ thống.
+2. `hieuLucCho()` **hạ `from_role='admin'` xuống `'Phó Giám đốc'`** và bỏ hẳn bản admin phạm vi
+   rỗng. `middleware/rbac.js` **không sửa một dòng** — nó vẫn bỏ qua mọi `fromRole === 'admin'`,
+   nên nếu ai xoá phép hạ vai này thì kết quả là **mất** quyền mượn, không phải nới quyền. Hướng
+   sai an toàn được chọn có ý.
+
+### Máy trạng thái (migration `007_delegations_approval.sql`)
+
+```
+                 accept (chỉ người nhận)
+   pending ──────────────────────────────► active ──► (hết hạn theo to_date, không cần cron)
+      │  decline (chỉ người nhận)              │
+      ├──────────────────────────► declined    │
+      │                                        │
+      └──── cancel (người giao/admin) ─────────┴──► cancelled
+```
+
+- `status` DEFAULT đổi `'active'` → **`'pending'`**; `CHECK` nhận 4 giá trị
+  `pending|active|declined|cancelled`; thêm `accepted_at` / `declined_at timestamptz NULL`.
+- `delegation_no_overlap` và `idx_delegations_to_active` nới vị từ sang **`('pending','active')`**:
+  hai đề nghị trùng ngày phải đổ ở lúc **TẠO** (lỗi của người giao, sửa được ngay) chứ không đổ lúc
+  người nhận bấm «Đồng ý» (khi đó người bấm phải đi giải thích một lỗi không phải của họ).
+- Dòng đã có trong CSDL **giữ `'active'`** khi lên 007 — không bắt người ta phê duyệt lại thứ đang
+  chạy. `down` đổi `pending`/`declined` thành `cancelled` (không bao giờ trả về `active`).
+- Sửa (`PATCH`) được cả `pending` và `active`; `declined`/`cancelled` thì 409 — sửa chúng là hồi
+  sinh một bản ghi đã có kết cục.
+
+### Hai route mới — REST, **không** thêm tên RPC
+
+| Method | Đường | Ai gọi được | Việc |
+|---|---|---|---|
+| POST | `/:id/accept` | **chỉ** `to_user_id` | `pending → active`, ghi `accepted_at`, báo lại người giao |
+| POST | `/:id/decline` | **chỉ** `to_user_id` | `pending → declined`, ghi `declined_at`, báo lại người giao |
+
+Kể cả **admin cũng không** bấm hộ được: cả tính năng này tồn tại để không ai bị gán quyền của
+người khác mà chưa đồng ý, nên admin đồng ý hộ được thì luật vừa chốt thành hình thức. Bấm lần
+hai trả `{ changed: false }` (không lỗi, vì mạng chậm ai cũng bấm hai lần) và **không** sinh thông
+báo thứ hai. Cầu RPC vẫn **37/37** — giao diện gọi REST qua `restGhi`.
+
+### Thông báo (mục 20, phần "thông báo")
+
+Một dòng `notifications` cho **đúng một người** mỗi lần: lúc tạo → người nhận («… đề nghị ủy quyền
+cho bạn từ … đến …»), lúc trả lời → người giao («… đã ĐỒNG Ý / TỪ CHỐI …»). `ref_type='delegation'`,
+`ref_id` = id bản ủy quyền. Hàm `thongBao()` bọc `try/catch` **im lặng** có ý: bản ủy quyền đã ghi
+xong và vẫn hiện ở trang «Ủy quyền của tôi», mất một dòng thông báo không đáng đánh sập cả hành
+động. **Vẫn KHÔNG email** (§13.4 mục 4). Chưa làm: nhắc "sắp hết hạn", và đường ĐỌC thông báo trên
+giao diện vẫn chờ §13.4 mục 16 (chuông) — hiện người dùng thấy đề nghị ở chính trang ủy quyền.
+
+### Giao diện (app.js `20260828-81`)
+
+`buildUyQuyenNut(lop, mau, icon, nhan, id, nguoi)` gom cả ba nút; năm nhãn trạng thái là chuỗi
+**HẰNG** chọn theo `row.status` (dữ liệu lạ rơi vào nhánh «Chưa/hết hiệu lực», không in ra):
+
+| Trạng thái | Nhãn | Người GIAO thấy | Người NHẬN thấy |
+|---|---|---|---|
+| `pending` | «Chờ phê duyệt» (xanh dương) | **Rút lại** | **Đồng ý** + **Từ chối** |
+| `active` | «Đang hiệu lực» (xanh lá) | **Huỷ** | — |
+| `declined` | «Đã từ chối» (đỏ) | — | — |
+| `cancelled` | «Đã huỷ» (xám) | — | — |
+| còn lại | «Chưa/hết hiệu lực» (hổ phách) | **Huỷ** nếu chưa kết thúc | — |
+
+Form «Ủy quyền mới» có thêm **ô chọn nhiều phòng** (`buildUyQuyenPhamVi()` → `select[name=
+"departmentIds"] multiple required`) **chỉ hiện khi `currentUser.role === "admin"`**, và
+`taoUyQuyen()` đọc nó bằng `FormData.getAll("departmentIds")` rồi gửi mảng SỐ. Vai khác không có ô
+nào — máy chủ suy phạm vi từ `department_managers`; còn Giám đốc không có dòng nào ở bảng đó nên máy
+chủ **bắt** liệt kê phòng, tức thiếu ô này thì mục 18 («giám đốc có thể ủy quyền cho phó giám đốc»)
+không làm được từ trình duyệt. Giao diện chặn sớm đúng bằng luật máy chủ, không rộng hơn.
+
+### Test đã thêm
+
+| Mã | Tầng | Nội dung |
+|---|---|---|
+| TC-UQ-01c/01d | migration | 007: `accepted_at`/`declined_at` nullable, DEFAULT `pending`, CHECK đúng 4 giá trị (`'accepted'` bị chặn — dễ gõ nhầm vì service có hàm `accept`) |
+| TC-UQ-04c | CSDL | bản `pending` **vẫn** chặn chồng lấp; bản `declined` thì không |
+| TC-UQ-05 | API | GĐ → PGĐ: thiếu phòng ⇒ `DELEGATION_ADMIN_SCOPE_REQUIRED`, có phòng ⇒ 201 `pending` |
+| TC-UQ-05c | API | R1 + R3: cùng phòng ⇒ 201; khác phòng ⇒ `DELEGATION_DIFFERENT_DEPARTMENT` |
+| TC-UQ-05d | API | R2: Nhân viên → PGĐ **cùng phòng** và TP → PGĐ đều ⇒ `DELEGATION_RANK_UP` |
+| TC-UQ-05e | API | ba cặp ngoại lệ chạy được; GĐ → Nhân viên **vẫn** chặn |
+| TC-UQ-13 | API | bản `pending` **không** cho mượn quyền; sau `accept` mới sửa được và nhật ký có `viaDelegationId` |
+| TC-UQ-16..16g | API | thông báo đúng người · chỉ người nhận trả lời (người giao và **admin** đều 403) · `accept` ghi mốc + nhật ký `delegations.accept` · bấm hai lần `changed:false` không sinh thông báo thứ hai · `decline` rồi thì không mượn được và không hồi sinh · bản `cancelled` không trả lời được · id lạ 404, chưa đăng nhập 401 |
+| TC-UQ-17 | API | người nhận ủy quyền **từ Giám đốc** làm được việc ở phòng đã ghi, **không** phòng khác, **không** quản trị người dùng (L2 + L4) |
+| TC-UQ-16 (jsdom) | jsdom | 5 nhãn trạng thái, hai nút của người nhận, `data-id`/`data-nguoi` phải thoát |
+| TC-UQ-18 (jsdom) | jsdom | ô phòng **chỉ** hiện với admin · option mang id thật · phòng thiếu `ID phòng (DB)` bị bỏ · tên phòng có mã tấn công không dựng được thẻ |
+| TC-UQ-18b (jsdom) | jsdom | `taoUyQuyen()` gửi `departmentIds` là mảng SỐ · admin quên chọn phòng ⇒ **không** gọi máy chủ · vai thường **không** gửi khoá đó |
+
+## 12. Test tay phần phê duyệt — làm sau §10
+
+1. `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (**bắt buộc**: 007 không tự lên ở CSDL
+   khói), đồng bộ `web/` + `server/src/`, khởi động lại Node, **Ctrl+Shift+R** → Console phải in
+   đúng `[QLCV] app.js 20260828-81`.
+2. Đăng nhập **Trưởng phòng**, tạo ủy quyền cho một **Nhân viên cùng phòng** → dòng mới mang nhãn
+   xanh dương **«Chờ phê duyệt»**, nút bên phải là **«Rút lại»** (không phải «Huỷ»).
+3. Thử tạo cho **Nhân viên phòng khác** → câu lỗi đỏ *«Chỉ ủy quyền được cho người cùng phòng…»*.
+   Thử tạo cho **Phó Giám đốc** → *«Chỉ ủy quyền được cho cấp thấp hơn hoặc ngang bằng…»*.
+4. Đăng nhập **người nhận** → bảng «Tôi được ủy quyền» có dòng đó với **hai nút «Đồng ý» / «Từ
+   chối»**; **chưa** có nhãn vàng «đang được ủy quyền» và **chưa** sửa được gì của phòng — đây là
+   điểm cốt của mục 20.
+5. Bấm **«Đồng ý»** → dòng đổi sang **«Đang hiệu lực»**, hai nút biến mất, nhãn vàng bật, quyền
+   mượn có ngay. Bấm lại lần nữa (nếu còn kịp) không được đổi gì.
+6. Đăng nhập lại **người giao** → có **thông báo** «… đã ĐỒNG Ý …» trong bảng `notifications`
+   (chưa có chuông trên giao diện — §13.4 mục 16): `SELECT content FROM notifications ORDER BY id
+   DESC LIMIT 3;`.
+7. Lặp lại với **«Từ chối»** trên một bản khác → nhãn đỏ **«Đã từ chối»**, người nhận **không** có
+   quyền mượn, và người giao **tạo lại được** đúng khoảng ngày đó (bản `declined` không chặn chồng
+   lấp).
+8. Đăng nhập **Giám đốc**, mở «Ủy quyền của tôi» → form phải có ô **«Phòng được mượn quyền»** (vai
+   khác **không** thấy ô này). Chọn Phó Giám đốc, **không** chọn phòng nào → trình duyệt chặn ngay
+   với câu *«Giám đốc phải ghi rõ (các) phòng…»* mà không gọi máy chủ; chọn một phòng thì tạo được.
+   Sau khi PGĐ đồng ý, họ làm được việc của Phó Giám đốc trong **đúng phòng đó** và **không** vào
+   được Quản lý người dùng.
