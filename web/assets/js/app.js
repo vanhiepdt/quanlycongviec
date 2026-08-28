@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-82");
+console.info("[QLCV] app.js 20260828-83");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2108,7 +2108,9 @@ function createDepartmentTableRow(department) {
  * roleFilter: chuỗi con của cột Phân quyền (vd "phó giám đốc"). Không ai khớp thì gợi ý tất cả.
  */
 function buildStaffEmailDatalist(listId, roleFilter) {
-  const users = (allStaff || []).filter(staff => (staff[COL.S_OBJECT_TYPE] || "Người dùng") === "Người dùng" && String(staff[COL.S_EMAIL] || "").trim() !== ""),
+  // Cùng bẫy COL với dòng 1293: dữ liệu thật đặt "Đối tượng" là 'Nội bộ' nên đòi === 'Người dùng'
+  // sẽ cho <datalist> RỖNG. Loại theo 'Nhà cung cấp' mới đúng câu chú thích trên.
+  const users = (allStaff || []).filter(staff => String(staff[COL.S_OBJECT_TYPE] || "Nội bộ") !== "Nhà cung cấp" && String(staff[COL.S_EMAIL] || "").trim() !== ""),
     filtered = roleFilter ? users.filter(staff => String(staff[COL.S_ROLE] || "").toLowerCase().includes(roleFilter)) : users,
     source = filtered.length > 0 ? filtered : users;
   return "<datalist id=\"" + escapeHtml(listId) + "\">" + source.map(staff => "<option value=\"" + escapeHtmlAttr(String(staff[COL.S_EMAIL]).trim().toLowerCase()) + "\">" + escapeHtmlAttr((staff[COL.S_NAME] || "") + (staff[COL.S_DEPT] ? " — " + staff[COL.S_DEPT] : "")) + "</option>").join("") + "</datalist>";
@@ -5560,7 +5562,10 @@ function dsNguoiNhanUyQuyen() {
     ngoaiLe = UQ_KHAC_PHONG[String(currentUser.role)] || [];
   return (Array.isArray(allStaff) ? allStaff : [])
     .filter(staff => {
-      if ((staff[COL.S_OBJECT_TYPE] || "Người dùng") !== "Người dùng") return false;
+      // Bẫy COL: cột "Đối tượng" của dữ liệu thật/seed là **'Nội bộ'**, chỉ người tạo qua giao diện
+      // mới mang chữ 'Người dùng' ⇒ chỉ được loại theo 'Nhà cung cấp' (giống dòng 1293), tuyệt đối
+      // không đòi === 'Người dùng': đòi thế thì danh sách rỗng với đúng những người có thật.
+      if (String(staff[COL.S_OBJECT_TYPE] || "Nội bộ") === "Nhà cung cấp") return false;
       const email = String(staff[COL.S_EMAIL] || "").trim().toLowerCase();
       if (email === "" || email === emailToi) return false;
       const vai = String(staff[COL.S_ROLE] || ""),

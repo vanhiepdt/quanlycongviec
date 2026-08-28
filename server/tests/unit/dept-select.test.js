@@ -11,8 +11,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
-  COL, buildDeptIdOptions,
+  COL, buildDeptIdOptions, buildStaffEmailDatalist,
   datPhong: (v) => { allDepartments = v; },
+  datCanBo: (v) => { allStaff = v; },
 });`;
 
 function khoiDong() {
@@ -86,5 +87,51 @@ describe('buildDeptIdOptions — dropdown Phòng của form công việc (bẫy 
     const list = options(window.buildDeptIdOptions(''));
     expect(list).toHaveLength(1);
     expect(list[0].value).toBe('');
+  });
+});
+
+// Cùng một bẫy cột «Đối tượng» đã làm ô chọn người nhận ủy quyền rỗng (2026-08-28): CSDL thật ghi
+// 'Nội bộ', chỉ người tạo qua giao diện mới ghi 'Người dùng' ⇒ lọc theo === 'Người dùng' là mất hết
+// gợi ý email trong modal Phòng. Chỉ được loại 'Nhà cung cấp'.
+describe('buildStaffEmailDatalist — gợi ý email trong modal Phòng đọc đúng cột «Đối tượng»', () => {
+  const canBo = (over) => ({
+    [window.COL.S_NAME]: 'Người Mẫu',
+    [window.COL.S_EMAIL]: 'nguoi@congty.vn',
+    [window.COL.S_ROLE]: 'Phó Giám đốc',
+    [window.COL.S_DEPT]: 'Phòng Hành chính',
+    [window.COL.S_OBJECT_TYPE]: 'Nội bộ',
+    ...over,
+  });
+  const emails = (html) =>
+    Array.from(new DOMParser().parseFromString(html, 'text/html').querySelectorAll('option')).map(
+      (o) => o.value
+    );
+
+  it("dòng 'Nội bộ' của dữ liệu thật vẫn được gợi ý, 'Nhà cung cấp' thì không", () => {
+    window.datCanBo([
+      canBo({ [window.COL.S_EMAIL]: 'noibo@congty.vn' }),
+      canBo({
+        [window.COL.S_EMAIL]: 'nguoidung@congty.vn',
+        [window.COL.S_OBJECT_TYPE]: 'Người dùng',
+      }),
+      canBo({ [window.COL.S_EMAIL]: 'trong@congty.vn', [window.COL.S_OBJECT_TYPE]: '' }),
+      canBo({ [window.COL.S_EMAIL]: 'ncc@congty.vn', [window.COL.S_OBJECT_TYPE]: 'Nhà cung cấp' }),
+      canBo({ [window.COL.S_EMAIL]: '' }),
+    ]);
+    expect(emails(window.buildStaffEmailDatalist('ds-test', 'phó giám đốc')).sort()).toEqual([
+      'nguoidung@congty.vn',
+      'noibo@congty.vn',
+      'trong@congty.vn',
+    ]);
+  });
+
+  it('không ai khớp vai thì gợi ý mọi người thật (theo đúng câu chú thích của hàm)', () => {
+    window.datCanBo([
+      canBo({ [window.COL.S_EMAIL]: 'nv@congty.vn', [window.COL.S_ROLE]: 'Nhân viên' }),
+      canBo({ [window.COL.S_EMAIL]: 'ncc@congty.vn', [window.COL.S_OBJECT_TYPE]: 'Nhà cung cấp' }),
+    ]);
+    expect(emails(window.buildStaffEmailDatalist('ds-test', 'trưởng phòng'))).toEqual([
+      'nv@congty.vn',
+    ]);
   });
 });

@@ -48,7 +48,13 @@ function ban(over = {}) {
   };
 }
 
-/** Một dòng cán bộ như `staffToLegacy` trả (khoá `COL.S_*` — `Phòng` là TÊN phòng, không phải id). */
+/**
+ * Một dòng cán bộ như `staffToLegacy` trả (khoá `COL.S_*` — `Phòng` là TÊN phòng, không phải id).
+ *
+ * «Đối tượng» mặc định là **'Nội bộ'** vì đó là chữ trong CSDL thật/seed (`dev.sql`): khuôn cũ đặt
+ * 'Người dùng' nên bộ test xanh trong khi ô chọn trên trình duyệt RỖNG. Chỉ người tạo qua giao diện
+ * mới mang chữ 'Người dùng' — hai chữ đều là người thật, chỉ 'Nhà cung cấp' bị loại.
+ */
 function nguoi(over = {}) {
   return {
     'Mã NV': 'NV09',
@@ -56,7 +62,7 @@ function nguoi(over = {}) {
     Email: 'nv@congty.vn',
     'Phân quyền': 'Nhân viên',
     Phòng: 'Phòng Kỹ thuật',
-    'Đối tượng': 'Người dùng',
+    'Đối tượng': 'Nội bộ',
     ...over,
   };
 }
@@ -474,6 +480,20 @@ describe('TC-UQ-19: danh sách người nhận đúng luật máy chủ', () => 
         nguoi({ Email: 'that@congty.vn' }),
       ])
     ).toEqual(['that@congty.vn']);
+  });
+
+  // Lỗi thật 2026-08-28: ô chọn RỖNG trên trình duyệt dù có người, vì bộ lọc đòi «Đối tượng» ===
+  // 'Người dùng' mà CSDL thật ghi 'Nội bộ'. Ca này canh cả BA chữ để không tái diễn.
+  it('«Đối tượng» của dữ liệu thật là «Nội bộ» — vẫn phải hiện, cùng với «Người dùng» và ô trống', () => {
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'noibo@congty.vn', 'Đối tượng': 'Nội bộ' }),
+        nguoi({ Email: 'nguoidung@congty.vn', 'Đối tượng': 'Người dùng' }),
+        nguoi({ Email: 'trong@congty.vn', 'Đối tượng': '' }),
+        nguoi({ Email: 'thieu@congty.vn', 'Đối tượng': undefined }),
+        nguoi({ Email: 'ncc@congty.vn', 'Đối tượng': 'Nhà cung cấp' }),
+      ]).sort()
+    ).toEqual(['nguoidung@congty.vn', 'noibo@congty.vn', 'thieu@congty.vn', 'trong@congty.vn']);
   });
 
   it('vai lạ (dữ liệu sửa tay) — của tôi hoặc của họ — đều bị loại, không đoán bậc', () => {
