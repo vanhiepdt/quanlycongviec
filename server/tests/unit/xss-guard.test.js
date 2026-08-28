@@ -159,9 +159,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // Trang tài khoản thêm 2 chỗ ghi — khung thông tin dựng bằng `buildTaiKhoanDong(...)` và nhánh
     // "cần đăng nhập" (hằng). Mỗi ô thông tin escape nhãn + giá trị đúng một lần ⇒ +2 giá trị nội
     // suy ⇒ 86 chỗ / 590 giá trị.
+    // 2026-08-28 (ủy quyền phải được phê duyệt, §13.4 mục 20): bảng ủy quyền thêm hai nút «Đồng ý»
+    // / «Từ chối» cho người NHẬN. Ba nút của bảng gom về một builder `buildUyQuyenNut(...)` — nó
+    // escape 5 giá trị + 1 nhãn, và ba chỗ gọi nó là 3 lỗ HTML-BIEN trong `buildUyQuyenRow`, trong
+    // khi hai chỗ escape cũ của nút Huỷ biến mất ⇒ +7 giá trị nội suy, KHÔNG thêm chỗ ghi HTML nào
+    // ⇒ 86 chỗ / 597 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 590 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 597 });
   });
 });
 

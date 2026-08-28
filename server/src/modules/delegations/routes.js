@@ -5,6 +5,9 @@
 //
 // `DELETE /:id` là HUỶ MỀM (`status='cancelled'`), không xoá dòng: nhật ký hoạt động lưu
 // `delegation_id`, xoá dòng là biến các dòng nhật ký đó thành mã số không tra được nữa.
+//
+// `POST /:id/accept` và `POST /:id/decline` là câu trả lời của NGƯỜI ĐƯỢC ỦY QUYỀN (§13.4 mục 20):
+// bản ghi mới tạo ở trạng thái `pending` và chưa cho mượn quyền gì cho tới khi họ đồng ý.
 import { Router } from 'express';
 import { z } from 'zod';
 import { ok } from '../../middleware/errorHandler.js';
@@ -96,6 +99,41 @@ delegationsRouter.delete('/:id', async (req, res, next) => {
       entityType: 'delegation',
       entityId: result.delegation.id,
       details: { cancelled: result.cancelled },
+    };
+    return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Người NHẬN trả lời đề nghị ủy quyền (§13.4 mục 20). Hai đường riêng chứ không phải
+// `PATCH /:id {status}`: `PATCH` là cổng của NGƯỜI ỦY QUYỀN (sửa hạn, ghi chú, phạm vi), còn hai
+// đường này của người nhận. Trộn chung thì một lời `PATCH` phải tự đoán ai đang gọi để chọn luật.
+//
+// KHÔNG thêm tên nào vào cầu RPC (đang chốt đúng 37 tên): trình duyệt gọi thẳng REST qua `restGhi`.
+delegationsRouter.post('/:id/accept', async (req, res, next) => {
+  try {
+    const result = await service.accept(req.user, req.params.id);
+    res.locals.audit = {
+      action: 'delegations.accept',
+      entityType: 'delegation',
+      entityId: result.delegation.id,
+      details: { changed: result.changed, status: result.delegation.status },
+    };
+    return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+delegationsRouter.post('/:id/decline', async (req, res, next) => {
+  try {
+    const result = await service.decline(req.user, req.params.id);
+    res.locals.audit = {
+      action: 'delegations.decline',
+      entityType: 'delegation',
+      entityId: result.delegation.id,
+      details: { changed: result.changed, status: result.delegation.status },
     };
     return ok(res, result);
   } catch (err) {

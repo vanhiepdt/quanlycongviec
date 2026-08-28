@@ -144,6 +144,26 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > vào tên + `"><script>` vào email để chốt, đồng thời khẳng định hai khoá mật khẩu không lọt ra HTML.
 > `.thanh-loc` / `.the-tai-khoan` / `.khoi-doc` là CSS thường ở `app.css` (bản tailwind dựng sẵn
 > không có `flex-nowrap`, `space-y-4`, `w-32`), không sinh HTML nên không đổi pin.
+>
+> **Cập nhật 2026-08-28 (phê duyệt ủy quyền — §13.4 mục 17/18/20).** Dòng ủy quyền có thêm hai
+> trạng thái («Chờ phê duyệt», «Đã từ chối») và người NHẬN có hai nút «Đồng ý» / «Từ chối». Ba nút
+> của bảng (Huỷ/Rút lại, Đồng ý, Từ chối) rút về một hàm dựng `buildUyQuyenNut(lop, mau, icon, nhan,
+> id, nguoi)` — thoát `lop|mau|icon|id|nguoi` bằng `escapeHtmlAttr` và `nhan` bằng `escapeHtml`, tức
+> **6 chỗ thoát** trong hàm, thay cho **2 chỗ** của nút «Huỷ» viết thẳng trước đây.
+> ⇒ **86 chỗ / 597 giá trị** (TC-SEC-17), **+7 giá trị, 0 sink mới**.
+>
+> Vì sao +7 chứ không phải +4: `tools/dem-xss.mjs` coi mọi hàm tên `^(create|build|render|…)` là hàm
+> DỰNG HTML, nên **mỗi lời gọi** `buildUyQuyenNut(...)` trong chuỗi cũng là một "lỗ" nội suy. Ba lời
+> gọi + 6 chỗ thoát trong hàm − 2 chỗ thoát bỏ đi = +7. Đếm nhầm chỗ này là dấu hiệu tách hàm dựng
+> mà quên rằng bản đếm tính cả biên gọi, không chỉ thân hàm.
+>
+> Hai điểm đáng nói: (a) `data-nguoi` mang HỌ TÊN người ủy quyền vào thuộc tính rồi đọc lại bằng
+> `this.dataset.nguoi` để hỏi `window.confirm` — tên là dữ liệu người dùng nhập nên phải thoát ở lối
+> vào thuộc tính, còn lối ra là `confirm` (văn bản thuần, không dựng HTML); (b) năm nhãn trạng thái
+> là chuỗi HẰNG chọn theo `row.status`, không nội suy `status` vào HTML — dữ liệu lạ ở cột đó rơi vào
+> nhánh mặc định «Chưa/hết hiệu lực» chứ không in ra. `tests/unit/uy-quyen-ui.test.js` (TC-UQ-16)
+> chốt cả hai: đúng 5 chỗ thoát cho một dòng `pending` nhận được, và `data-id`/`data-nguoi` phải
+> thoát khi tên chứa `"><img src=x onerror=alert(1)>`.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 

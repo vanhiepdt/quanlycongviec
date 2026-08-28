@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, buildUyQuyenRow, buildUyQuyenBang, createUyQuyenModal, veNhanUyQuyen, tenPhongTheoIds,
-  ngayVN, laCuaToi, showUyQuyenError, docCookieCsrf,
+  ngayVN, laCuaToi, showUyQuyenError, docCookieCsrf, buildUyQuyenNut,
   __uq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
     allStaff: () => { allStaff = giaTri; },
@@ -182,6 +182,67 @@ describe('TC-UQ-15c: nhãn «đang được ủy quyền» cạnh tên người 
     window.veNhanUyQuyen();
     expect(nhan().getAttribute('title')).toContain(DON); // nằm trong title, không phải HTML
     expect(document.querySelectorAll('img').length).toBe(0);
+  });
+});
+
+describe('TC-UQ-16: trạng thái «Chờ phê duyệt» và hai nút của người NHẬN (§13.4 mục 20)', () => {
+  const cho = (over = {}) => ban({ status: 'pending', dang_hieu_luc: false, ...over });
+
+  it('người nhận thấy «Chờ phê duyệt» + nút Đồng ý/Từ chối, KHÔNG có nút huỷ', () => {
+    const html = window.buildUyQuyenRow(cho(), false);
+    expect(html).toContain('Chờ phê duyệt');
+    expect(html).toContain('class="uy-quyen-dong-y');
+    expect(html).toContain('class="uy-quyen-tu-choi');
+    expect(html).toContain('data-id="7"');
+    expect(html).not.toContain('uy-quyen-huy');
+  });
+
+  it('người ủy quyền thấy nút «Rút lại» (cùng đường huỷ) và KHÔNG bấm hộ được hai nút kia', () => {
+    const html = window.buildUyQuyenRow(cho(), true);
+    expect(html).toContain('class="uy-quyen-huy');
+    expect(html).toContain('Rút lại');
+    expect(html).not.toContain('uy-quyen-dong-y');
+    expect(html).not.toContain('uy-quyen-tu-choi');
+  });
+
+  it('bản đã hiệu lực thì người nhận không còn nút trả lời nữa (đã trả lời rồi)', () => {
+    const html = window.buildUyQuyenRow(ban(), false);
+    expect(html).toContain('Đang hiệu lực');
+    expect(html).not.toContain('uy-quyen-dong-y');
+    expect(html).not.toContain('uy-quyen-tu-choi');
+  });
+
+  it('bản bị từ chối: nhãn «Đã từ chối», không nút nào ở cả hai chiều', () => {
+    for (const laGiao of [true, false]) {
+      const html = window.buildUyQuyenRow(
+        ban({ status: 'declined', dang_hieu_luc: false }),
+        laGiao
+      );
+      expect(html).toContain('Đã từ chối');
+      expect(html).not.toContain('<button');
+    }
+  });
+
+  it('hai nút mới cũng thoát `data-nguoi`, và nhãn nút không dựng được thẻ', () => {
+    window.__uq('allDepartments', [{ 'ID phòng (DB)': 11, 'Tên phòng': DON }]);
+    const html = window.buildUyQuyenRow(cho({ from_user_name: DON, note: DON }), false);
+    expect(html).not.toContain('<img src=x');
+    // Năm chỗ: tên người, tên phòng, ghi chú, và `data-nguoi` của HAI nút trả lời.
+    expect(html.split('&lt;img src=x onerror=alert(1)&gt;').length - 1).toBe(5);
+  });
+
+  it('buildUyQuyenNut: id và tên đều nằm trong dấu bao thuộc tính đã thoát', () => {
+    const html = window.buildUyQuyenNut(
+      'uy-quyen-dong-y',
+      'text-green-700',
+      'fa-check',
+      'Đồng ý',
+      '7" onclick="alert(1)',
+      'A" onmouseover="alert(1)'
+    );
+    expect(html).toContain('data-id="7&quot; onclick=&quot;alert(1)"');
+    expect(html).toContain('data-nguoi="A&quot; onmouseover=&quot;alert(1)"');
+    expect(html).not.toMatch(/onclick="alert\(1\)"/);
   });
 });
 

@@ -47,12 +47,15 @@ export const ERROR_STATUS = Object.freeze({
   LEADER_NOT_IN_SOURCE: 400,
 
   // --- Ủy quyền có thời hạn (006_delegations.sql, `docs/KE-HOACH-UY-QUYEN.md`) ---------------
-  // Bốn mã cho bốn cách người dùng có thể tạo một bản ủy quyền vô nghĩa hoặc nguy hiểm. Tách
+  // Mỗi mã là một cách người dùng có thể tạo một bản ủy quyền vô nghĩa hoặc nguy hiểm. Tách
   // riêng khỏi VALIDATION_ERROR/FORBIDDEN chung vì giao diện cần nói đúng chuyện gì sai để người
   // dùng sửa được, mà không phải so chuỗi tiếng Việt.
   DELEGATION_SELF: 400, // L1 — tự ủy quyền cho chính mình
-  DELEGATION_ADMIN_FORBIDDEN: 403, // L2 — ủy quyền vai admin (quyền toàn hệ thống)
+  DELEGATION_ADMIN_FORBIDDEN: 403, // L2 — cho mượn quyền toàn hệ thống (giữ mã cho dữ liệu/nhật ký cũ)
+  DELEGATION_ADMIN_SCOPE_REQUIRED: 400, // L2 — Giám đốc ủy quyền mà không ghi rõ phòng nào
   DELEGATION_SCOPE_TOO_WIDE: 403, // L3 — cho phòng mình không phụ trách
+  DELEGATION_RANK_UP: 403, // R2 (§13.4 mục 17) — ủy quyền LÊN cấp cao hơn
+  DELEGATION_DIFFERENT_DEPARTMENT: 403, // R3 (§13.4 mục 18) — khác phòng, không thuộc ngoại lệ
   DELEGATION_OVERLAP: 409, // trùng khoảng ngày với bản ghi đang hiệu lực của cùng cặp
 });
 

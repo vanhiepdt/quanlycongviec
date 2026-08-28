@@ -1,40 +1,74 @@
 // Nghiệp vụ Ủy quyền có thời hạn (kế hoạch: `docs/KE-HOACH-UY-QUYEN.md`, lược đồ:
-// `006_delegations.sql`).
+// `006_delegations.sql` + `007_delegations_approval.sql`).
 //
 // Bốn luật gốc và chỗ chặn của từng luật:
 //
 //   L1 không tự ủy quyền cho mình → `DELEGATION_SELF` (dưới) + CHECK `delegation_not_self`
-//   L2 không ủy quyền vai admin   → `DELEGATION_ADMIN_FORBIDDEN` (dưới) + lớp mượn quyền của
-//                                   `middleware/rbac.js` chặn lần hai
+//   L2 không cho mượn quyền TOÀN CỤC → `hieuLucCho()` hạ vai `admin` xuống `Phó Giám đốc` trong
+//                                   đúng các phòng đã ghi, + `middleware/rbac.js` chặn vai admin
+//                                   lần hai (xem chú thích của `hieuLucCho`)
 //   L3 không rộng hơn quyền mình  → `DELEGATION_SCOPE_TOO_WIDE` (dưới), đối chiếu với
 //                                   `department_managers` chứ không tin danh sách gửi lên
 //   L4 không ủy quyền dây chuyền  → `middleware/rbac.js`: chỉ mượn cho work/subwork/task
 //
-// Vì sao L2 chặn ở đây chứ không ở `can()`: `can()` là hàm THUẦN, không biết ai đang tạo bản ghi
-// nào. Còn vì sao `can()` VẪN chặn vai admin lần nữa: dữ liệu cũ hoặc một câu UPDATE bằng tay
-// trong CSDL không được trở thành đường vòng lên quyền toàn hệ thống.
+// Ba luật thêm ngày 2026-08-28 theo chốt §13.4 (mục 17, 18, 20):
+//
+//   R1 MỌI cán bộ đều ủy quyền được — không còn danh sách vai được phép (mục 17)
+//   R2 chỉ ủy quyền TỪ CAO XUỐNG THẤP hoặc NGANG BẰNG theo thứ bậc `BAC_VAI` (mục 17)
+//   R3 phải CÙNG PHÒNG, trừ hai ngoại lệ cấp trên: Giám đốc → Phó Giám đốc, và Phó Giám đốc →
+//      Phó Giám đốc hoặc Trưởng phòng (mục 18)
+//   R4 tạo ra bản `pending` + thông báo; chỉ NGƯỜI NHẬN phê duyệt mới thành `active` (mục 20)
+//
+// Vì sao L2 không còn là "admin không ủy quyền được": mục 18 chốt rằng Giám đốc ủy quyền được cho
+// Phó Giám đốc. Nhưng "cho mượn quyền admin" thì vẫn KHÔNG: bản ghi từ admin bắt buộc phải liệt kê
+// phòng, và lúc kiểm quyền nó được đọc như quyền `Phó Giám đốc` trong đúng các phòng đó. Người mượn
+// vì thế không bao giờ có quyền toàn hệ thống (không quản lý được người dùng/phòng — L4 vẫn chặn).
 import { AppError, forbidden, notFound } from '../../utils/errors.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as departmentsRepo from '../departments/repo.js';
+import * as notificationsRepo from '../notifications/repo.js';
 import * as usersRepo from '../users/repo.js';
 import * as repo from './repo.js';
 
 /**
- * Vai được ủy quyền = vai CÓ PHẠM VI để cho mượn. `Nhân viên` không có gì để ủy quyền (chỉ có
- * nhiệm vụ của chính mình, mà đó là việc chuyển người thực hiện, không phải ủy quyền).
+ * Thứ bậc để xét R2 — số NHỎ là cấp CAO. Nguyên văn chốt §13.4 mục 17: «Giám đốc, phó giám đốc,
+ * trưởng phòng, phó phòng, cán bộ».
  *
- * `admin` KHÔNG có trong danh sách: đó là L2, không phải bỏ sót. Admin vẫn tạo hộ được cho người
- * khác (`fromUserId`), chỉ không cho mượn quyền của CHÍNH admin.
+ * `Quản lý công việc` và `Nhân viên` cùng bậc 5: cả hai đều là "cán bộ" trong câu chốt —
+ * `Quản lý công việc` không phải một cấp lãnh đạo, nó là vai được giao quản lý một số công việc
+ * (`works.manager_id`). Hệ quả: hai vai này ủy quyền được cho nhau (ngang bằng).
  *
- * Giả định đang chờ người dùng chốt — §13.4 mục 17: có thu hẹp về đúng Phó Giám đốc + Trưởng phòng
- * hay không.
+ * Vai lạ (dữ liệu cũ, sửa tay) không có trong bảng ⇒ `bacVai()` trả `null` ⇒ không ủy quyền được.
+ * Cấm im lặng cho qua: một vai không biết bậc thì không biết ai cao hơn ai.
  */
-export const VAI_DUOC_UY_QUYEN = Object.freeze([
-  'Phó Giám đốc',
-  'Trưởng phòng',
-  'Phó phòng',
-  'Quản lý công việc',
-]);
+export const BAC_VAI = Object.freeze({
+  admin: 1,
+  'Phó Giám đốc': 2,
+  'Trưởng phòng': 3,
+  'Phó phòng': 4,
+  'Quản lý công việc': 5,
+  'Nhân viên': 5,
+});
+
+/** Bậc của một vai, `null` nếu vai không có trong `BAC_VAI`. */
+export function bacVai(role) {
+  const key = String(role ?? '');
+  return Object.hasOwn(BAC_VAI, key) ? BAC_VAI[key] : null;
+}
+
+/**
+ * Các cặp (vai người ủy quyền → vai người nhận) được phép KHÁC PHÒNG — ngoại lệ của R3, nguyên văn
+ * §13.4 mục 18: «Phải cùng phòng, còn giám đốc có thể ủy quyền cho phó giám đốc, phó giám đốc có
+ * thể ủy quyền cho nhau hoặc trưởng phòng».
+ *
+ * Vì sao chỉ có ba cặp này: hai vai trên cùng làm việc theo ĐƠN VỊ, không theo phòng — Giám đốc
+ * không thuộc phòng nào, Phó Giám đốc phụ trách nhiều phòng. Bắt họ cùng phòng với người nhận thì
+ * luật thành vô nghĩa. Từ Trưởng phòng trở xuống, phạm vi là phòng, nên cùng phòng là bắt buộc.
+ */
+const NGOAI_LE_KHAC_PHONG = Object.freeze({
+  admin: ['Phó Giám đốc'],
+  'Phó Giám đốc': ['Phó Giám đốc', 'Trưởng phòng'],
+});
 
 const NGAY_HOP_LE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -54,15 +88,23 @@ function ngay(value, field) {
  * `managedDepartmentIds` của phiên chỉ có dòng `deputy_director`. Ở đây tra thẳng CSDL theo đúng
  * vai của NGƯỜI ỦY QUYỀN.
  *
+ * - `admin`          → mọi phòng. Nhưng bản ghi từ admin BẮT BUỘC liệt kê phòng (xem `create`), nên
+ *                     "mọi phòng" ở đây là tập được phép CHỌN TỪ, không phải phạm vi được cấp.
  * - `Phó Giám đốc`  → các phòng có dòng `department_managers.role = 'deputy_director'` (đúng thứ
  *                     `inScope()` dùng, rbac.js:161)
  * - `Trưởng phòng` / `Phó phòng` → phòng của chính họ ∪ các phòng họ phụ trách với vai head/vice
  * - `Quản lý công việc` → phòng của chính họ. Phạm vi thật của vai này là các công việc mình quản
  *                     lý (`works.manager_id`), không theo phòng; cho mượn rộng hơn phòng mình là
  *                     nới quyền, nên chặn ở mức phòng.
+ * - `Nhân viên`      → phòng của chính họ. Mượn quyền `Nhân viên` chỉ tới được nhiệm vụ do chính
+ *                     người ủy quyền thực hiện (`inScopeMuon` của rbac.js), phòng chỉ là rào ngoài.
  */
 async function phamViChoMuon(fromUser) {
   const ids = new Set();
+  if (fromUser.role === 'admin') {
+    for (const row of await departmentsRepo.listAll()) ids.add(Number(row.id));
+    return ids;
+  }
   if (fromUser.role === 'Phó Giám đốc') {
     for (const id of await departmentsRepo.listDepartmentIdsManagedBy(
       fromUser.id,
@@ -81,6 +123,44 @@ async function phamViChoMuon(fromUser) {
     }
   }
   return ids;
+}
+
+/**
+ * R2 + R3 — thứ bậc và cùng phòng. Hai luật đi cùng một hàm vì chúng cùng trả lời một câu hỏi của
+ * người dùng ("tôi ủy quyền cho ai được") và cùng đọc đúng hai bản ghi người.
+ *
+ * Thứ tự kiểm có ý: bậc trước, phòng sau. Ủy quyền LÊN cấp trên là sai nguyên tắc, còn khác phòng
+ * chỉ là sai phạm vi — báo cái sai nặng hơn trước thì câu lỗi khớp với điều người dùng cần sửa.
+ */
+function assertBacVaPhong(fromUser, toUser) {
+  const bacTu = bacVai(fromUser.role);
+  const bacDen = bacVai(toUser.role);
+  if (bacTu === null) {
+    throw forbidden(`Phân quyền "${fromUser.role}" không hợp lệ nên không ủy quyền được`);
+  }
+  if (bacDen === null) {
+    throw forbidden(`Phân quyền "${toUser.role}" của người nhận không hợp lệ`);
+  }
+  // R2 — số nhỏ là cấp cao, nên "cao xuống thấp hoặc ngang bằng" là `bacTu <= bacDen`.
+  if (bacTu > bacDen) {
+    throw new AppError(
+      'DELEGATION_RANK_UP',
+      `Chỉ ủy quyền được cho cấp thấp hơn hoặc ngang bằng: "${fromUser.role}" không ủy quyền được cho "${toUser.role}"`,
+      { field: 'toUserId' }
+    );
+  }
+  // R3 — ngoại lệ trước, vì hai vai cấp trên không làm việc theo phòng.
+  const duocKhacPhong = NGOAI_LE_KHAC_PHONG[fromUser.role] ?? [];
+  if (duocKhacPhong.includes(toUser.role)) return;
+  const phongTu = fromUser.department_id == null ? null : Number(fromUser.department_id);
+  const phongDen = toUser.department_id == null ? null : Number(toUser.department_id);
+  if (phongTu === null || phongDen === null || phongTu !== phongDen) {
+    throw new AppError(
+      'DELEGATION_DIFFERENT_DEPARTMENT',
+      'Chỉ ủy quyền được cho người cùng phòng (trừ Giám đốc ủy quyền cho Phó Giám đốc, và Phó Giám đốc ủy quyền cho Phó Giám đốc hoặc Trưởng phòng)',
+      { field: 'toUserId' }
+    );
+  }
 }
 
 /** Người nhận: id, mã nhân sự, email hoặc họ tên — cùng cách dò như `notifications/service.js`. */
@@ -134,10 +214,15 @@ export function list(user, { all = false } = {}) {
 }
 
 /**
- * Tạo bản ủy quyền.
+ * Tạo bản ủy quyền — ra bản `pending`, CHƯA cho mượn quyền gì (R4 · §13.4 mục 20).
  *
  * `fromUserId` chỉ admin được đặt khác mình (tạo hộ người đi công tác gấp). Người thường luôn là
  * chính mình — nếu không, ai cũng tự viết cho mình một bản "được A ủy quyền".
+ *
+ * Người nhận được một thông báo trong bảng `notifications` ngay trong lời gọi này. Không dùng
+ * `withTransaction`: nếu câu thông báo lỗi thì bản ủy quyền vẫn nên tồn tại (người nhận thấy nó ở
+ * trang «Ủy quyền của tôi»), còn quay lui cả hai thì người ủy quyền phải làm lại từ đầu vì một dòng
+ * thông báo — đổi một bất tiện nhỏ thành một mất mát lớn hơn.
  */
 export function create(user, input = {}) {
   assertDangNhap(user);
@@ -160,16 +245,9 @@ export function create(user, input = {}) {
         field: 'toUserId',
       });
     }
-    // L2
-    if (fromUser.role === 'admin') {
-      throw new AppError(
-        'DELEGATION_ADMIN_FORBIDDEN',
-        'Không ủy quyền được vai admin — quyền toàn hệ thống không được cho mượn'
-      );
-    }
-    if (!VAI_DUOC_UY_QUYEN.includes(fromUser.role)) {
-      throw forbidden(`Vai trò "${fromUser.role}" không có phạm vi nào để ủy quyền`);
-    }
+    // R2 + R3 — thứ bậc rồi cùng phòng. Thay cho danh sách `VAI_DUOC_UY_QUYEN` cũ: mục 17 chốt
+    // «mọi cán bộ đều được ủy quyền», nên cái chặn không còn là vai mà là HƯỚNG của ủy quyền.
+    assertBacVaPhong(fromUser, toUser);
     if (toUser.is_active === false) {
       throw new AppError('VALIDATION_ERROR', 'Người được ủy quyền đang bị vô hiệu hoá', {
         field: 'toUserId',
@@ -188,18 +266,57 @@ export function create(user, input = {}) {
     // (repo.listEffectiveFor tính lúc kiểm quyền), không phải "toàn bộ".
     const departmentIds = await chuanHoaPhamVi(fromUser, input.departmentIds);
 
-    return {
-      delegation: await repo.insert({
-        fromUserId: fromUser.id,
-        toUserId: toUser.id,
-        departmentIds,
-        fromDate,
-        toDate,
-        note: String(input.note ?? '').trim(),
-        createdBy: user.id,
-      }),
-    };
+    // L2 — quyền toàn cục không cho mượn. Admin KHÔNG có dòng `department_managers` nào, nên bản ghi
+    // để phạm vi rỗng sẽ được `listEffectiveFor` đọc là "không phòng nào" (vô nghĩa) hoặc — nếu ai
+    // đó sửa cách đọc đó — thành toàn hệ thống. Bắt liệt kê phòng ngay từ lúc tạo là chặn cả hai.
+    if (fromUser.role === 'admin' && (departmentIds === null || departmentIds.length === 0)) {
+      throw new AppError(
+        'DELEGATION_ADMIN_SCOPE_REQUIRED',
+        'Giám đốc phải ghi rõ (các) phòng khi ủy quyền — quyền toàn hệ thống không cho mượn được',
+        { field: 'departmentIds' }
+      );
+    }
+
+    const delegation = await repo.insert({
+      fromUserId: fromUser.id,
+      toUserId: toUser.id,
+      departmentIds,
+      fromDate,
+      toDate,
+      note: String(input.note ?? '').trim(),
+      createdBy: user.id,
+    });
+    await thongBao(
+      toUser.id,
+      `${tenNguoi(fromUser)} đề nghị ủy quyền cho bạn từ ${delegation.from_date} đến ${delegation.to_date}. Vào «Ủy quyền của tôi» để đồng ý hoặc từ chối.`,
+      delegation.id
+    );
+    return { delegation };
   });
+}
+
+/** Tên hiện cho người đọc thông báo. Dữ liệu cũ có dòng thiếu họ tên nên phải có đường lùi. */
+function tenNguoi(row) {
+  return String(row?.full_name || row?.email || row?.code || 'Một người dùng');
+}
+
+/**
+ * Một dòng thông báo cho đúng một người, gắn `ref_type='delegation'` để giao diện mở được đúng bản
+ * ghi. Lỗi ở đây KHÔNG được làm đổ lời gọi chính: bản ủy quyền (hoặc câu trả lời) đã ghi xong và
+ * vẫn hiện ở trang «Ủy quyền của tôi» — mất một dòng thông báo không đáng đánh sập cả hành động.
+ */
+async function thongBao(userId, content, delegationId) {
+  try {
+    await notificationsRepo.insert({
+      userId,
+      content,
+      type: notificationsRepo.LOAI.CHO_DUYET,
+      refType: 'delegation',
+      refId: delegationId,
+    });
+  } catch {
+    // Cố ý im lặng: đường thông báo là phụ trợ, không phải nguồn sự thật của quyền.
+  }
 }
 
 /** Kiểm phạm vi gửi lên có nằm trong phạm vi người ủy quyền không (L3). */
@@ -228,8 +345,10 @@ export function update(user, id, patch = {}) {
     const row = await repo.findById(id);
     if (!row) throw notFound('Không tìm thấy bản ủy quyền');
     assertChuBanGhi(user, row);
-    if (row.status !== repo.TRANG_THAI.HIEU_LUC) {
-      throw new AppError('CONFLICT', 'Bản ủy quyền đã huỷ thì không sửa được nữa');
+    // Sửa được cả bản `pending` (chỉnh đề nghị trước khi người ta bấm) và bản `active`. Bản đã huỷ
+    // hoặc bị từ chối thì không: sửa chúng là hồi sinh một bản ghi đã có kết cục.
+    if (!repo.TRANG_THAI_CON_HAN.includes(row.status)) {
+      throw new AppError('CONFLICT', 'Bản ủy quyền đã kết thúc thì không sửa được nữa');
     }
     const next = {};
     if (patch.toDate !== undefined) {
@@ -266,20 +385,74 @@ export function cancel(user, id) {
 }
 
 /**
+ * Người nhận trả lời đề nghị ủy quyền (R4 · §13.4 mục 20). Một hàm cho cả hai câu trả lời vì chúng
+ * chỉ khác nhau ở trạng thái đích và ở câu chữ thông báo — tách hai bản sao là hai chỗ để quên
+ * kiểm "đúng người" hoặc quên báo lại cho người ủy quyền.
+ *
+ * **Chỉ người được ủy quyền** bấm được, kể cả admin cũng không. Đây không phải chuyện quản trị:
+ * cả tính năng này tồn tại để không ai bị gán quyền của người khác mà chưa đồng ý, nên nếu admin
+ * đồng ý hộ được thì luật vừa chốt thành hình thức.
+ *
+ * Bấm hai lần: lần thứ hai `repo.accept/decline` trả `null` (bản ghi không còn `pending`) ⇒ trả về
+ * `{ changed: false }` chứ không lỗi, và KHÔNG gửi thông báo thứ hai.
+ */
+function traLoi(user, id, dongY) {
+  assertDangNhap(user);
+  return withPgErrors(async () => {
+    const row = await repo.findById(id);
+    if (!row) throw notFound('Không tìm thấy bản ủy quyền');
+    if (Number(row.to_user_id) !== Number(user.id)) {
+      throw forbidden('Chỉ người được ủy quyền mới đồng ý hoặc từ chối bản ủy quyền này');
+    }
+    if (row.status !== repo.TRANG_THAI.CHO_PHE_DUYET) {
+      // Đã trả lời rồi (hoặc bản ghi đã bị huỷ): trả về nguyên trạng, không đổi gì.
+      return { delegation: row, changed: false };
+    }
+    const updated = dongY ? await repo.accept(row.id) : await repo.decline(row.id);
+    if (!updated) return { delegation: row, changed: false };
+    await thongBao(
+      updated.from_user_id,
+      `${tenNguoi(user)} đã ${dongY ? 'ĐỒNG Ý' : 'TỪ CHỐI'} bản ủy quyền từ ${updated.from_date} đến ${updated.to_date}.`,
+      updated.id
+    );
+    return { delegation: updated, changed: true };
+  });
+}
+
+/** Đồng ý — bản ghi thành `active`, từ lúc này `listEffectiveFor` mới thấy nó. */
+export function accept(user, id) {
+  return traLoi(user, id, true);
+}
+
+/** Từ chối — bản ghi thành `declined`, giữ lại để người ủy quyền thấy câu trả lời. */
+export function decline(user, id) {
+  return traLoi(user, id, false);
+}
+
+/**
  * Các ủy quyền đang hiệu lực CHO một người — gọi ở `attachSession` mỗi request có phiên.
  *
- * Trả về hình dạng mà `can()` cần (camelCase), và **không bao giờ** trả bản ghi mượn vai `admin`:
- * L2 đã chặn từ lúc tạo, đây là lớp chặn thứ hai cho dữ liệu cũ hoặc sửa tay trong CSDL.
+ * Trả về hình dạng mà `can()` cần (camelCase). Hai chỗ siết ở đây, cả hai đều là L2:
+ *
+ *  - Bản ghi từ vai `admin` KHÔNG được cho mượn vai `admin`. Nó được hạ xuống `Phó Giám đốc` —
+ *    quyền cao nhất còn BÓ THEO PHÒNG — nên người mượn làm được đúng việc của một Phó Giám đốc
+ *    trong các phòng đã ghi, và không bao giờ có quyền toàn hệ thống. `middleware/rbac.js` vẫn bỏ
+ *    qua mọi `fromRole === 'admin'`, nên nếu ai đó xoá phép hạ vai này thì kết quả là MẤT quyền
+ *    mượn, không phải nới quyền — hướng an toàn.
+ *  - Bản ghi từ admin mà phạm vi rỗng thì bỏ hẳn: rỗng nghĩa là "các phòng người ủy quyền phụ
+ *    trách", mà admin không phụ trách phòng nào theo `department_managers` — đọc nó thành "mọi
+ *    phòng" là đúng cái L2 cấm. `create` đã bắt buộc liệt kê phòng; đây là lớp thứ hai cho dữ liệu
+ *    cũ hoặc câu UPDATE viết tay.
  */
 export async function hieuLucCho(userId, client = null) {
   const rows = await repo.listEffectiveFor(userId, client);
   return rows
-    .filter((r) => r.from_role !== 'admin')
+    .filter((r) => r.from_role !== 'admin' || (r.department_ids ?? []).length > 0)
     .map((r) => ({
       id: Number(r.id),
       fromUserId: Number(r.from_user_id),
       fromUserName: r.from_user_name,
-      fromRole: r.from_role,
+      fromRole: r.from_role === 'admin' ? 'Phó Giám đốc' : r.from_role,
       toDate: String(r.to_date),
       departmentIds: (r.department_ids ?? []).map((v) => Number(v)),
     }));

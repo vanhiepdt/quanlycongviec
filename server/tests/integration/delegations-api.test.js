@@ -1,14 +1,18 @@
-// TC-UQ-01..06, 13, 14 — Ủy quyền có thời hạn qua HTTP thật + các ràng buộc của
-// 006_delegations.sql (kế hoạch: `docs/KE-HOACH-UY-QUYEN.md`).
+// TC-UQ-01..06, 13, 14, 16, 17 — Ủy quyền có thời hạn qua HTTP thật + các ràng buộc của
+// 006_delegations.sql / 007_delegations_approval.sql (kế hoạch: `docs/KE-HOACH-UY-QUYEN.md`).
 //
-// Bốn câu hỏi bộ test này canh:
+// Sáu câu hỏi bộ test này canh:
 //   1. **CSDL là lớp chặn cuối.** Ba CHECK và EXCLUDE `delegation_no_overlap` phải chặn được cả khi
 //      ai đó ghi thẳng vào bảng — service chỉ là lớp cho câu chữ đẹp.
-//   2. **L2/L3 chặn từ lúc tạo.** Không ủy quyền vai admin, không ủy quyền phòng mình không phụ
-//      trách. Tập con phòng thì được.
-//   3. **Mượn quyền có DẤU VẾT.** Mỗi hành động lọt nhờ ủy quyền ghi `delegation_id` vào
+//   2. **L2/L3 chặn từ lúc tạo.** Không cho mượn quyền toàn hệ thống, không ủy quyền phòng mình
+//      không phụ trách. Tập con phòng thì được.
+//   3. **R2/R3 (§13.4 mục 17, 18).** Chỉ ủy quyền xuống cấp dưới hoặc ngang bằng, và phải cùng
+//      phòng — trừ hai ngoại lệ cấp trên (Giám đốc → Phó GĐ; Phó GĐ → Phó GĐ/Trưởng phòng).
+//   4. **R4 (§13.4 mục 20).** Tạo ra bản `pending` KHÔNG cho mượn gì; chỉ người nhận phê duyệt mới
+//      thành `active`, và họ được THÔNG BÁO ngay lúc có đề nghị.
+//   5. **Mượn quyền có DẤU VẾT.** Mỗi hành động lọt nhờ ủy quyền ghi `delegation_id` vào
 //      `activity_logs.details` — đây là yêu cầu gốc của tính năng, không phải phần thêm cho đẹp.
-//   4. **Huỷ là huỷ MỀM.** Dòng vẫn còn trong bảng để đối chiếu với nhật ký, và người ngoài không
+//   6. **Huỷ là huỷ MỀM.** Dòng vẫn còn trong bảng để đối chiếu với nhật ký, và người ngoài không
 //      huỷ được bản ghi của người khác.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
@@ -24,8 +28,10 @@ let phongA;
 let phongB;
 let quanTri;
 let phoGiamDoc; // phụ trách phòng A
+let phoGiamDocB; // không phụ trách phòng nào — để đo ngoại lệ "Phó GĐ ủy quyền cho nhau"
 let truongPhongB;
 let nhanVien; // người được ủy quyền
+let nhanVienCungPhong; // cùng phòng A với `nhanVien` — để đo R1 "mọi cán bộ đều ủy quyền được"
 let nhanVienKhac;
 
 async function nhuLa(user) {
@@ -61,6 +67,25 @@ async function dongNhatKy(action) {
     [action]
   );
   return rows;
+}
+
+/** Thông báo của một người, theo thứ tự sinh ra — để đo R4 có báo cho ĐÚNG người không. */
+async function thongBaoCua(userId) {
+  const { rows } = await pool.query(
+    `SELECT content, type, ref_type, ref_id FROM notifications
+      WHERE user_id = $1 ORDER BY id`,
+    [userId]
+  );
+  return rows;
+}
+
+/** Người nhận bấm «Đồng ý» — không có bước này thì bản ghi chỉ là đề nghị (R4). */
+async function pheDuyet(nguoiNhan, id) {
+  const api = await nhuLa(nguoiNhan);
+  const res = await api.post(`${URL_UQ}/${id}/accept`);
+  expect(res.status, 'phê duyệt ủy quyền').toBe(200);
+  expect(res.body.data.delegation.status).toBe('active');
+  return res;
 }
 
 beforeEach(async () => {
@@ -101,6 +126,21 @@ beforeEach(async () => {
     role: 'Nhân viên',
     department_id: phongB.id,
   });
+  nhanVienCungPhong = await makeLoginUser({
+    code: 'NV006',
+    email: 'nv3@congty.vn',
+    full_name: 'Đỗ Thị Cùng Phòng',
+    role: 'Nhân viên',
+    department_id: phongA.id,
+  });
+  // Phó Giám đốc thứ hai: KHÔNG thuộc phòng nào và KHÔNG có dòng `department_managers`. Nhờ vậy mọi
+  // quyền họ dùng được trong test dưới đây chỉ có thể đến từ ủy quyền, không phải quyền tự có.
+  phoGiamDocB = await makeLoginUser({
+    code: 'NV007',
+    email: 'pgd2@congty.vn',
+    full_name: 'Ngô Phó Giám Đốc Hai',
+    role: 'Phó Giám đốc',
+  });
   // Phó Giám đốc phụ trách phòng A — nguồn phạm vi của mọi phép kiểm dưới đây.
   await pool.query(
     `INSERT INTO department_managers (department_id, user_id, role)
@@ -113,10 +153,11 @@ afterAll(async () => {
   await closePool();
 });
 
-describe('TC-UQ-01: lược đồ 006_delegations.sql', () => {
+describe('TC-UQ-01: lược đồ 006_delegations.sql + 007_delegations_approval.sql', () => {
   it('TC-UQ-01: bảng, 4 ràng buộc, 2 chỉ mục và trigger updated_at đều có mặt', async () => {
     // Chỉ CHECK ('c') và EXCLUDE ('x') — bỏ khoá chính, ba khoá ngoại và các ràng buộc NOT NULL do
-    // Postgres tự đặt tên.
+    // Postgres tự đặt tên. Migration 007 dựng lại hai trong bốn cái này nên TÊN phải giữ nguyên:
+    // đổi tên là làm hỏng mọi câu `ON CONSTRAINT` và mọi bản vá sau đó.
     const { rows: cons } = await pool.query(
       `SELECT conname FROM pg_constraint
         WHERE conrelid = 'delegations'::regclass AND contype IN ('c', 'x')
@@ -155,6 +196,57 @@ describe('TC-UQ-01: lược đồ 006_delegations.sql', () => {
       [rows[0].id]
     );
     expect(sau[0].moi_hon).toBe(true);
+  });
+
+  it('TC-UQ-01c (007): thêm accepted_at/declined_at, mặc định pending, CHECK nhận 4 trạng thái', async () => {
+    const { rows: cols } = await pool.query(
+      `SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'delegations' AND column_name IN ('accepted_at','declined_at','status')
+        ORDER BY column_name`
+    );
+    expect(cols.map((c) => c.column_name)).toEqual(['accepted_at', 'declined_at', 'status']);
+    // Hai mốc mới phải cho phép NULL: "chưa trả lời" là trạng thái bình thường, không phải thiếu dữ liệu.
+    expect(cols[0].is_nullable).toBe('YES');
+    expect(cols[1].is_nullable).toBe('YES');
+    // Mặc định đổi từ 'active' sang 'pending' — đây chính là R4 ở tầng CSDL.
+    expect(String(cols[2].column_default)).toContain('pending');
+
+    // CHECK nhận đúng bốn trạng thái, và chỉ bốn. Mỗi bản một ngày riêng để EXCLUDE không chen vào
+    // phép đo này (`pending` và `active` cùng nằm trong tầm EXCLUDE — xem TC-UQ-04c).
+    const luat = ['pending', 'active', 'declined', 'cancelled'];
+    for (const [i, status] of luat.entries()) {
+      const ngayRieng = await ngayLech(10 + i * 2);
+      await expect(
+        chenThang({
+          from: phoGiamDoc.id,
+          to: nhanVien.id,
+          fromDate: ngayRieng,
+          toDate: ngayRieng,
+          status,
+        })
+      ).resolves.toBeTruthy();
+    }
+    await expect(
+      chenThang({
+        from: phoGiamDoc.id,
+        to: nhanVien.id,
+        fromDate: await ngayLech(30),
+        toDate: await ngayLech(31),
+        status: 'accepted', // không có trong luật — dễ gõ nhầm vì service có hàm `accept`
+      })
+    ).rejects.toThrow(/delegation_status_ok/);
+  });
+
+  it('TC-UQ-01d (007): không ghi status thì CSDL tự đặt pending', async () => {
+    const { rows } = await pool.query(
+      `INSERT INTO delegations (from_user_id, to_user_id, from_date, to_date)
+       VALUES ($1,$2,$3,$4) RETURNING status, accepted_at, declined_at`,
+      [phoGiamDoc.id, nhanVien.id, await ngayLech(0), await ngayLech(2)]
+    );
+    expect(rows[0].status).toBe('pending');
+    expect(rows[0].accepted_at).toBeNull();
+    expect(rows[0].declined_at).toBeNull();
   });
 });
 
@@ -234,18 +326,63 @@ describe('TC-UQ-02..04: ràng buộc của CSDL (ghi thẳng vào bảng)', () =
       })
     ).resolves.toBeTruthy();
   });
+
+  it('TC-UQ-04c (007): bản CHỜ PHÊ DUYỆT vẫn chặn chồng lấp, bản BỊ TỪ CHỐI thì không', async () => {
+    // 007 nới vị từ của EXCLUDE thành ('pending','active') có chủ ý: hai đề nghị trùng ngày phải đổ ở
+    // lúc TẠO (lỗi của người ủy quyền, sửa được ngay) chứ không để đổ lúc người nhận bấm «Đồng ý»
+    // (khi đó người bấm phải đi giải thích một lỗi không phải của họ).
+    const { rows } = await chenThang({
+      from: phoGiamDoc.id,
+      to: nhanVien.id,
+      fromDate: await ngayLech(1),
+      toDate: await ngayLech(7),
+      status: 'pending',
+    });
+    await expect(
+      chenThang({
+        from: phoGiamDoc.id,
+        to: nhanVien.id,
+        fromDate: await ngayLech(3),
+        toDate: await ngayLech(4),
+        status: 'pending',
+      })
+    ).rejects.toThrow(/delegation_no_overlap/);
+
+    // Bị từ chối rồi thì khoảng ngày đó trống lại — người ủy quyền gửi lại đề nghị được.
+    await pool.query(`UPDATE delegations SET status = 'declined' WHERE id = $1`, [rows[0].id]);
+    await expect(
+      chenThang({
+        from: phoGiamDoc.id,
+        to: nhanVien.id,
+        fromDate: await ngayLech(3),
+        toDate: await ngayLech(4),
+        status: 'pending',
+      })
+    ).resolves.toBeTruthy();
+  });
 });
 
-describe('TC-UQ-05..06: L1–L3 chặn ở API', () => {
-  it('TC-UQ-05: admin ủy quyền quyền của chính mình ⇒ DELEGATION_ADMIN_FORBIDDEN', async () => {
+describe('TC-UQ-05..06: L1–L3 và R2–R3 chặn ở API', () => {
+  it('TC-UQ-05: Giám đốc ủy quyền cho Phó Giám đốc — phải ghi rõ phòng (L2 · §13.4 mục 18)', async () => {
     const api = await nhuLa(quanTri);
-    const res = await api.post(URL_UQ, {
-      toUserId: nhanVien.id,
+    // Mục 18 cho phép cặp này, nhưng L2 không cho mượn quyền toàn hệ thống ⇒ thiếu phòng là lỗi.
+    const thieuPhong = await api.post(URL_UQ, {
+      toUserId: phoGiamDocB.id,
       fromDate: await ngayLech(0),
       toDate: await ngayLech(3),
     });
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('DELEGATION_ADMIN_FORBIDDEN');
+    expect(thieuPhong.status).toBe(400);
+    expect(thieuPhong.body.error.code).toBe('DELEGATION_ADMIN_SCOPE_REQUIRED');
+
+    const dung = await api.post(URL_UQ, {
+      toUserId: phoGiamDocB.id,
+      departmentIds: [phongB.id],
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(dung.status).toBe(201);
+    expect(dung.body.data.delegation.department_ids.map(Number)).toEqual([Number(phongB.id)]);
+    expect(dung.body.data.delegation.status).toBe('pending');
   });
 
   it('TC-UQ-05b: tự ủy quyền cho chính mình ⇒ DELEGATION_SELF', async () => {
@@ -259,15 +396,78 @@ describe('TC-UQ-05..06: L1–L3 chặn ở API', () => {
     expect(res.body.error.code).toBe('DELEGATION_SELF');
   });
 
-  it('TC-UQ-05c: Nhân viên không có phạm vi nào để ủy quyền ⇒ 403', async () => {
+  it('TC-UQ-05c: R1+R3 — cán bộ ủy quyền được cho người CÙNG PHÒNG, khác phòng thì không', async () => {
     const api = await nhuLa(nhanVien);
-    const res = await api.post(URL_UQ, {
+    // R3: Nhân viên phòng A → Nhân viên phòng B.
+    const khacPhong = await api.post(URL_UQ, {
       toUserId: nhanVienKhac.id,
       fromDate: await ngayLech(0),
       toDate: await ngayLech(3),
     });
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
+    expect(khacPhong.status).toBe(403);
+    expect(khacPhong.body.error.code).toBe('DELEGATION_DIFFERENT_DEPARTMENT');
+
+    // R1 (mục 17 «mọi cán bộ đều được ủy quyền»): trước đây vai `Nhân viên` bị chặn thẳng, giờ thì
+    // được — cùng phòng, ngang bậc.
+    const cungPhong = await api.post(URL_UQ, {
+      toUserId: nhanVienCungPhong.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(cungPhong.status).toBe(201);
+    expect(cungPhong.body.data.delegation.status).toBe('pending');
+  });
+
+  it('TC-UQ-05d: R2 — ủy quyền LÊN cấp trên ⇒ DELEGATION_RANK_UP', async () => {
+    // Cùng phòng A, nên cái sai duy nhất là HƯỚNG: bậc 5 → bậc 2.
+    const apiNv = await nhuLa(nhanVien);
+    const len = await apiNv.post(URL_UQ, {
+      toUserId: phoGiamDoc.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(len.status).toBe(403);
+    expect(len.body.error.code).toBe('DELEGATION_RANK_UP');
+
+    // Trưởng phòng → Phó Giám đốc cũng là lên, dù cặp này có mặt ở ngoại lệ theo chiều NGƯỢC lại.
+    const apiTp = await nhuLa(truongPhongB);
+    const len2 = await apiTp.post(URL_UQ, {
+      toUserId: phoGiamDoc.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(len2.status).toBe(403);
+    expect(len2.body.error.code).toBe('DELEGATION_RANK_UP');
+  });
+
+  it('TC-UQ-05e: R3 — hai ngoại lệ khác phòng của Phó Giám đốc; Giám đốc → cán bộ vẫn chặn', async () => {
+    const api = await nhuLa(phoGiamDoc);
+    // Phó Giám đốc → Phó Giám đốc (không cùng phòng, người nhận không thuộc phòng nào).
+    const choPgd = await api.post(URL_UQ, {
+      toUserId: phoGiamDocB.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(choPgd.status).toBe(201);
+    // Phó Giám đốc → Trưởng phòng phòng khác.
+    const choTp = await api.post(URL_UQ, {
+      toUserId: truongPhongB.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(choTp.status).toBe(201);
+
+    // Ngoại lệ của Giám đốc CHỈ có Phó Giám đốc: Giám đốc không thuộc phòng nào nên ủy quyền cho một
+    // Nhân viên là "khác phòng" — không có đường nào lách vào đây.
+    const apiAdmin = await nhuLa(quanTri);
+    const choNv = await apiAdmin.post(URL_UQ, {
+      toUserId: nhanVien.id,
+      departmentIds: [phongA.id],
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(choNv.status).toBe(403);
+    expect(choNv.body.error.code).toBe('DELEGATION_DIFFERENT_DEPARTMENT');
   });
 
   it('TC-UQ-06: phòng không phụ trách ⇒ DELEGATION_SCOPE_TOO_WIDE; tập con thì được', async () => {
@@ -343,8 +543,16 @@ describe('TC-UQ-13: hành động lọt nhờ mượn quyền có dấu vết tr
     expect(tao.status).toBe(201);
     const uyQuyenId = Number(tao.body.data.delegation.id);
 
+    // R4 (§13.4 mục 20) — mới TẠO thì chưa cho mượn gì. Đây là phép đo quan trọng nhất của mục 20:
+    // nếu bản `pending` đã cho quyền thì cả bước phê duyệt chỉ là trang trí.
+    const choDuyet = await nhuLa(nhanVien);
+    const vanChan = await choDuyet.patch(`/api/v1/works/${congViec.code}`, { name: 'Đổi tên sớm' });
+    expect(vanChan.status).toBe(403);
+
+    await pheDuyet(nhanVien, uyQuyenId);
+
     // Đăng nhập lại: `attachSession` nạp danh sách ủy quyền mỗi request, nên phiên cũ cũng thấy —
-    // dùng phiên mới cho rõ ý "quyền có hiệu lực ngay".
+    // dùng phiên mới cho rõ ý "quyền có hiệu lực ngay sau khi đồng ý".
     const api = await nhuLa(nhanVien);
     const sua = await api.patch(`/api/v1/works/${congViec.code}`, { name: 'Đổi tên nhờ ủy quyền' });
     expect(sua.status).toBe(200);
@@ -446,8 +654,14 @@ describe('TC-UQ-14: huỷ mềm, sửa, và danh sách', () => {
     const cuaToi = await apiNguoiNhan.get(URL_UQ);
     expect(cuaToi.status).toBe(200);
     expect(cuaToi.body.data.delegations.map((d) => Number(d.id))).toEqual([Number(id)]);
-    expect(cuaToi.body.data.delegations[0].dang_hieu_luc).toBe(true);
+    // Bản mới tạo là `pending`: người nhận THẤY nó (để bấm đồng ý) nhưng nó chưa hiệu lực.
+    expect(cuaToi.body.data.delegations[0].status).toBe('pending');
+    expect(cuaToi.body.data.delegations[0].dang_hieu_luc).toBe(false);
     expect(cuaToi.body.data.delegations[0].from_user_name).toBe(phoGiamDoc.full_name);
+
+    await pheDuyet(nhanVien, id);
+    const sauDuyet = await (await nhuLa(nhanVien)).get(URL_UQ);
+    expect(sauDuyet.body.data.delegations[0].dang_hieu_luc).toBe(true);
 
     // Người không liên quan: danh sách rỗng, và `?all=1` cũng không mở thêm gì cho họ.
     const apiKhac = await nhuLa(truongPhongB);
@@ -467,5 +681,182 @@ describe('TC-UQ-14: huỷ mềm, sửa, và danh sách', () => {
       toDate: await ngayLech(1),
     });
     expect(res.status).toBe(401);
+  });
+});
+
+describe('TC-UQ-16: phê duyệt của người được ủy quyền (R4 · §13.4 mục 20)', () => {
+  async function deNghi() {
+    const api = await nhuLa(phoGiamDoc);
+    const res = await api.post(URL_UQ, {
+      toUserId: nhanVien.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(res.status).toBe(201);
+    return { api, id: res.body.data.delegation.id };
+  }
+
+  it('TC-UQ-16: tạo ra bản pending + thông báo cho NGƯỜI NHẬN', async () => {
+    const { id } = await deNghi();
+    const { rows } = await pool.query(
+      'SELECT status, accepted_at, declined_at FROM delegations WHERE id = $1',
+      [id]
+    );
+    expect(rows[0]).toMatchObject({ status: 'pending', accepted_at: null, declined_at: null });
+
+    const cuaNguoiNhan = await thongBaoCua(nhanVien.id);
+    expect(cuaNguoiNhan.length).toBe(1);
+    expect(cuaNguoiNhan[0].content).toContain(phoGiamDoc.full_name);
+    expect(cuaNguoiNhan[0].ref_type).toBe('delegation');
+    expect(Number(cuaNguoiNhan[0].ref_id)).toBe(Number(id));
+    // Người ủy quyền chưa có gì để đọc: họ vừa gửi đề nghị, chưa ai trả lời.
+    expect(await thongBaoCua(phoGiamDoc.id)).toEqual([]);
+  });
+
+  it('TC-UQ-16b: chỉ NGƯỜI NHẬN trả lời được — người ủy quyền và cả admin đều không', async () => {
+    const { id } = await deNghi();
+    // Người ủy quyền tự đồng ý hộ thì luật vừa chốt thành hình thức.
+    const apiPgd = await nhuLa(phoGiamDoc);
+    expect((await apiPgd.post(`${URL_UQ}/${id}/accept`)).status).toBe(403);
+    // Admin cũng không: đây không phải việc quản trị, đây là sự đồng ý của một người.
+    const apiAdmin = await nhuLa(quanTri);
+    expect((await apiAdmin.post(`${URL_UQ}/${id}/accept`)).status).toBe(403);
+    expect((await apiAdmin.post(`${URL_UQ}/${id}/decline`)).status).toBe(403);
+    // Người ngoài cuộc.
+    const apiKhac = await nhuLa(truongPhongB);
+    expect((await apiKhac.post(`${URL_UQ}/${id}/accept`)).status).toBe(403);
+
+    const { rows } = await pool.query('SELECT status FROM delegations WHERE id = $1', [id]);
+    expect(rows[0].status).toBe('pending');
+  });
+
+  it('TC-UQ-16c: đồng ý ⇒ active + accepted_at, báo lại cho người ủy quyền, nhật ký ghi lại', async () => {
+    const { id } = await deNghi();
+    const res = await pheDuyet(nhanVien, id);
+    expect(res.body.data.changed).toBe(true);
+
+    const { rows } = await pool.query(
+      'SELECT status, accepted_at IS NOT NULL AS co_moc, declined_at FROM delegations WHERE id = $1',
+      [id]
+    );
+    expect(rows[0]).toMatchObject({ status: 'active', co_moc: true, declined_at: null });
+
+    const cuaNguoiUyQuyen = await thongBaoCua(phoGiamDoc.id);
+    expect(cuaNguoiUyQuyen.length).toBe(1);
+    expect(cuaNguoiUyQuyen[0].content).toContain('ĐỒNG Ý');
+    expect(cuaNguoiUyQuyen[0].content).toContain(nhanVien.full_name);
+
+    const logs = await dongNhatKy('delegations.accept');
+    expect(logs.length).toBe(1);
+    expect(Number(logs[0].entity_id)).toBe(Number(id));
+    expect(logs[0].details.changed).toBe(true);
+    expect(logs[0].details.status).toBe('active');
+  });
+
+  it('TC-UQ-16d: bấm đồng ý lần hai ⇒ changed=false, không sinh thông báo thứ hai', async () => {
+    const { id } = await deNghi();
+    const api = await nhuLa(nhanVien);
+    expect((await api.post(`${URL_UQ}/${id}/accept`)).status).toBe(200);
+    const lai = await api.post(`${URL_UQ}/${id}/accept`);
+    expect(lai.status).toBe(200);
+    expect(lai.body.data.changed).toBe(false);
+    expect(lai.body.data.delegation.status).toBe('active');
+    expect((await thongBaoCua(phoGiamDoc.id)).length).toBe(1);
+  });
+
+  it('TC-UQ-16e: từ chối ⇒ declined + declined_at, không mượn được quyền, đồng ý sau đó vô hiệu', async () => {
+    const congViec = await makeWork({
+      code: 'DA003',
+      name: 'Công việc phòng A',
+      department_id: phongA.id,
+    });
+    const { id } = await deNghi();
+    const api = await nhuLa(nhanVien);
+    const res = await api.post(`${URL_UQ}/${id}/decline`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.delegation.status).toBe('declined');
+
+    const { rows } = await pool.query(
+      'SELECT status, declined_at IS NOT NULL AS co_moc, accepted_at FROM delegations WHERE id = $1',
+      [id]
+    );
+    expect(rows[0]).toMatchObject({ status: 'declined', co_moc: true, accepted_at: null });
+    expect((await thongBaoCua(phoGiamDoc.id))[0].content).toContain('TỪ CHỐI');
+
+    // Đã từ chối thì không có quyền nào chạy sang, và bấm «Đồng ý» sau đó cũng không hồi sinh được.
+    const apiMoi = await nhuLa(nhanVien);
+    expect((await apiMoi.patch(`/api/v1/works/${congViec.code}`, { name: 'Đổi' })).status).toBe(
+      403
+    );
+    const doiY = await apiMoi.post(`${URL_UQ}/${id}/accept`);
+    expect(doiY.status).toBe(200);
+    expect(doiY.body.data.changed).toBe(false);
+    expect(doiY.body.data.delegation.status).toBe('declined');
+  });
+
+  it('TC-UQ-16f: bản đã HUỶ thì người nhận không trả lời được nữa', async () => {
+    const { api, id } = await deNghi();
+    expect((await api.del(`${URL_UQ}/${id}`)).status).toBe(200);
+    const apiNhan = await nhuLa(nhanVien);
+    const res = await apiNhan.post(`${URL_UQ}/${id}/accept`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.changed).toBe(false);
+    expect(res.body.data.delegation.status).toBe('cancelled');
+  });
+
+  it('TC-UQ-16g: trả lời bản không tồn tại ⇒ 404; chưa đăng nhập ⇒ 401', async () => {
+    const api = await nhuLa(nhanVien);
+    expect((await api.post(`${URL_UQ}/999999/accept`)).status).toBe(404);
+    const khachLa = client(app);
+    expect((await khachLa.post(`${URL_UQ}/1/accept`)).status).toBe(401);
+  });
+});
+
+describe('TC-UQ-17: ủy quyền từ Giám đốc được đọc như Phó Giám đốc trong ĐÚNG phòng đã ghi (L2)', () => {
+  it('TC-UQ-17: người nhận làm được việc của Phó Giám đốc ở phòng B, không lan sang phòng A', async () => {
+    const cvB = await makeWork({
+      code: 'DB001',
+      name: 'Công việc phòng B',
+      department_id: phongB.id,
+    });
+    const cvA = await makeWork({
+      code: 'DB002',
+      name: 'Công việc phòng A',
+      department_id: phongA.id,
+    });
+
+    // `phoGiamDocB` không thuộc phòng nào và không phụ trách phòng nào ⇒ tự mình không sửa được gì.
+    const truoc = await nhuLa(phoGiamDocB);
+    expect((await truoc.patch(`/api/v1/works/${cvB.code}`, { name: 'Đổi' })).status).toBe(403);
+
+    const apiAdmin = await nhuLa(quanTri);
+    const tao = await apiAdmin.post(URL_UQ, {
+      toUserId: phoGiamDocB.id,
+      departmentIds: [phongB.id],
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(tao.status).toBe(201);
+    const uyQuyenId = Number(tao.body.data.delegation.id);
+    await pheDuyet(phoGiamDocB, uyQuyenId);
+
+    const api = await nhuLa(phoGiamDocB);
+    const sua = await api.patch(`/api/v1/works/${cvB.code}`, { name: 'Sửa nhờ ủy quyền' });
+    expect(sua.status).toBe(200);
+    const logs = await dongNhatKy('works.update');
+    expect(logs.length).toBe(1);
+    expect(Number(logs[0].details.viaDelegationId)).toBe(uyQuyenId);
+
+    // Phòng A không nằm trong bản ghi ⇒ vẫn chặn. Nếu bước hạ vai admin bị bỏ, người mượn sẽ có
+    // quyền toàn hệ thống và dòng này là chỗ phát hiện ra.
+    expect((await api.patch(`/api/v1/works/${cvA.code}`, { name: 'Đổi' })).status).toBe(403);
+    // Và quyền quản trị người dùng thì không bao giờ mượn được — L4 chỉ cho work/subwork/task.
+    const themNguoi = await api.post('/api/v1/users', {
+      code: 'NV099',
+      full_name: 'Người Mới',
+      email: 'moi@congty.vn',
+      role: 'Nhân viên',
+    });
+    expect(themNguoi.status).toBe(403);
   });
 });

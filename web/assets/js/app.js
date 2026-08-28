@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-79");
+console.info("[QLCV] app.js 20260828-80");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -5392,12 +5392,60 @@ function hienOkTaiKhoan(message) {
   el.textContent = message || "", message ? el.classList.remove("hidden") : el.classList.add("hidden");
 }
 
-/** Một dòng bảng ủy quyền. `laGiao` = bản ghi TÔI cho người khác (mới có nút huỷ). */
+/**
+ * Một nút hành động của bảng ủy quyền. Gom về một hàm để mọi giá trị chỉ đi qua ĐÚNG MỘT chỗ thoát —
+ * ba nút (huỷ/rút lại, đồng ý, từ chối) khác nhau đúng bốn chuỗi cố định.
+ */
+function buildUyQuyenNut(lop, mau, icon, nhan, id, nguoi) {
+  return (
+    "<button type=\"button\" class=\"" +
+    escapeHtmlAttr(lop) +
+    " text-xs " +
+    escapeHtmlAttr(mau) +
+    "\" data-id=\"" +
+    escapeHtmlAttr(id) +
+    "\" data-nguoi=\"" +
+    escapeHtmlAttr(nguoi || "") +
+    "\"><i class=\"fas " +
+    escapeHtmlAttr(icon) +
+    " mr-1\"></i>" +
+    escapeHtml(nhan) +
+    "</button>"
+  );
+}
+
+/**
+ * Một dòng bảng ủy quyền. `laGiao` = bản ghi TÔI cho người khác.
+ *
+ * Năm trạng thái hiện ra năm câu khác nhau vì người dùng cần biết đang chờ AI: `pending` là chờ
+ * NGƯỜI NHẬN bấm (§13.4 mục 20), `declined` là họ đã trả lời không. Nút cũng theo chiều: người giao
+ * rút lại/huỷ được, người nhận đồng ý/từ chối được — không ai làm thay ai.
+ */
 function buildUyQuyenRow(row, laGiao) {
   const hieuLuc = row.dang_hieu_luc === true,
-    daHuy = String(row.status || "") === "cancelled",
-    trangThai = daHuy ? "Đã huỷ" : hieuLuc ? "Đang hiệu lực" : "Chưa/hết hiệu lực",
-    mauTrangThai = daHuy ? "bg-gray-100 text-gray-600" : hieuLuc ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700",
+    ma = String(row.status || ""),
+    daHuy = ma === "cancelled",
+    choDuyet = ma === "pending",
+    daTuChoi = ma === "declined",
+    conSong = !daHuy && !daTuChoi,
+    trangThai = daHuy
+      ? "Đã huỷ"
+      : daTuChoi
+        ? "Đã từ chối"
+        : choDuyet
+          ? "Chờ phê duyệt"
+          : hieuLuc
+            ? "Đang hiệu lực"
+            : "Chưa/hết hiệu lực",
+    mauTrangThai = daHuy
+      ? "bg-gray-100 text-gray-600"
+      : daTuChoi
+        ? "bg-red-100 text-red-700"
+        : choDuyet
+          ? "bg-blue-100 text-blue-700"
+          : hieuLuc
+            ? "bg-green-100 text-green-700"
+            : "bg-amber-100 text-amber-700",
     nguoi = laGiao ? row.to_user_name : row.from_user_name;
   return (
     "<tr class=\"border-b border-gray-100\">" +
@@ -5420,13 +5468,34 @@ function buildUyQuyenRow(row, laGiao) {
     "<td class=\"py-2 pr-3 text-gray-600\">" +
     escapeHtml(row.note || "") +
     "</td>" +
-    "<td class=\"py-2 text-right\">" +
-    (laGiao && !daHuy
-      ? "<button type=\"button\" class=\"uy-quyen-huy text-xs text-red-600 hover:text-red-700\" data-id=\"" +
-        escapeHtmlAttr(row.id) +
-        "\" data-nguoi=\"" +
-        escapeHtmlAttr(nguoi || "") +
-        "\"><i class=\"fas fa-ban mr-1\"></i>Huỷ</button>"
+    "<td class=\"py-2 text-right whitespace-nowrap\">" +
+    (laGiao && conSong
+      ? buildUyQuyenNut(
+          "uy-quyen-huy",
+          "text-red-600 hover:text-red-700",
+          "fa-ban",
+          choDuyet ? "Rút lại" : "Huỷ",
+          row.id,
+          nguoi
+        )
+      : "") +
+    (!laGiao && choDuyet
+      ? buildUyQuyenNut(
+          "uy-quyen-dong-y",
+          "text-green-700 hover:text-green-800 mr-3",
+          "fa-check",
+          "Đồng ý",
+          row.id,
+          nguoi
+        ) +
+        buildUyQuyenNut(
+          "uy-quyen-tu-choi",
+          "text-red-600 hover:text-red-700",
+          "fa-times",
+          "Từ chối",
+          row.id,
+          nguoi
+        )
       : "") +
     "</td>" +
     "</tr>"
@@ -5463,7 +5532,7 @@ function createUyQuyenModal(dsGiao, dsNhan) {
     "              <h3 class=\"text-xl font-bold text-gray-900\"><i class=\"fas fa-user-shield mr-2 text-blue-600\"></i>Ủy quyền của tôi</h3>\n" +
     "              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\"><i class=\"fas fa-times\"></i></button>\n" +
     "          </div>\n\n" +
-    "          <p class=\"text-xs text-gray-500 mb-4\">Người được ủy quyền dùng quyền của bạn trong đúng khoảng ngày, chỉ ở các phòng bạn phụ trách. Mọi việc họ làm nhờ ủy quyền đều được ghi nhật ký kèm mã bản ủy quyền.</p>\n\n" +
+    "          <p class=\"text-xs text-gray-500 mb-4\">Bản ủy quyền mới ở trạng thái «Chờ phê duyệt»: người nhận phải bấm Đồng ý thì quyền mới có hiệu lực. Họ dùng quyền của bạn trong đúng khoảng ngày, chỉ ở các phòng bạn phụ trách, và mọi việc làm nhờ ủy quyền đều được ghi nhật ký kèm mã bản ủy quyền.</p>\n\n" +
     "          <h4 class=\"text-sm font-semibold text-gray-700 mb-1\">Tôi ủy quyền cho</h4>\n          " +
     buildUyQuyenBang(dsGiao, true) +
     "\n\n          <h4 class=\"text-sm font-semibold text-gray-700 mt-5 mb-1\">Tôi được ủy quyền</h4>\n          " +
@@ -5495,7 +5564,7 @@ function createUyQuyenModal(dsGiao, dsNhan) {
     "              <div id=\"uy-quyen-error\" class=\"hidden mb-3\"></div>\n" +
     "              <div class=\"flex justify-end space-x-3\">\n" +
     "                  <button type=\"button\" class=\"btn-secondary close-modal\">Đóng</button>\n" +
-    "                  <button type=\"submit\" class=\"btn-accent\"><i class=\"fas fa-user-shield mr-2\"></i>Ủy quyền</button>\n" +
+    "                  <button type=\"submit\" class=\"btn-accent\"><i class=\"fas fa-user-shield mr-2\"></i>Gửi đề nghị</button>\n" +
     "              </div>\n" +
     "          </form>\n" +
     "      </div>\n  </div>\n"
@@ -5543,6 +5612,14 @@ async function moModalUyQuyen() {
     button.addEventListener("click", function () {
       huyUyQuyen(this.dataset.id, this.dataset.nguoi);
     });
+  }), modal.querySelectorAll(".uy-quyen-dong-y").forEach(button => {
+    button.addEventListener("click", function () {
+      traLoiUyQuyen(this.dataset.id, this.dataset.nguoi, true);
+    });
+  }), modal.querySelectorAll(".uy-quyen-tu-choi").forEach(button => {
+    button.addEventListener("click", function () {
+      traLoiUyQuyen(this.dataset.id, this.dataset.nguoi, false);
+    });
   }), modal.addEventListener("click", event => {
     event.target === modal && closeModal("uy-quyen-modal");
   });
@@ -5571,7 +5648,24 @@ async function taoUyQuyen() {
     showUyQuyenError(res.error);
     return;
   }
-  showToast("Đã ủy quyền cho " + than.toUserId, "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
+  showToast("Đã gửi đề nghị ủy quyền cho " + than.toUserId + " — chờ người nhận phê duyệt", "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
+}
+
+/**
+ * Người NHẬN trả lời đề nghị: đồng ý (`/accept`) hoặc từ chối (`/decline`) — §13.4 mục 20.
+ *
+ * Hỏi lại trước khi TỪ CHỐI, không hỏi khi đồng ý: từ chối là câu trả lời không lấy lại được (người
+ * ủy quyền phải tạo bản mới), còn đồng ý thì họ vẫn huỷ được.
+ */
+async function traLoiUyQuyen(id, nguoi, dongY) {
+  if (!id) return;
+  if (!dongY && !window.confirm("Từ chối ủy quyền từ " + (nguoi || "người này") + "?")) return;
+  const res = await restGhi("POST", "/api/v1/delegations/" + encodeURIComponent(id) + (dongY ? "/accept" : "/decline"));
+  if (!res.ok) {
+    showToast(res.error, "error");
+    return;
+  }
+  showToast(dongY ? "Đã nhận ủy quyền" : "Đã từ chối ủy quyền", "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
 }
 
 /** Huỷ MỀM một bản ủy quyền của mình (máy chủ đặt `status='cancelled'`, dòng vẫn còn để tra nhật ký). */

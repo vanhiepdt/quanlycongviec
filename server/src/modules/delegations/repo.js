@@ -9,15 +9,30 @@ import { pool } from '../../db/pool.js';
 const db = (client) => client ?? pool;
 
 const COLUMNS = `id, from_user_id, to_user_id, department_ids, from_date, to_date,
-                 status, note, created_by, created_at, updated_at`;
+                 status, note, created_by, created_at, updated_at, accepted_at, declined_at`;
 
 /** Cùng danh sách cột nhưng có tiền tố `d.` — dùng cho hai câu có JOIN sang `users`. Viết tay
  *  thay vì tách chuỗi COLUMNS: một dòng SQL đọc được bằng mắt đáng hơn một dòng khéo. */
 const COLUMNS_D = `d.id, d.from_user_id, d.to_user_id, d.department_ids, d.from_date, d.to_date,
-                   d.status, d.note, d.created_by, d.created_at, d.updated_at`;
+                   d.status, d.note, d.created_by, d.created_at, d.updated_at,
+                   d.accepted_at, d.declined_at`;
 
-/** Hai trạng thái duy nhất — khớp CHECK `delegation_status_ok`. «Hết hạn» suy ra từ ngày. */
-export const TRANG_THAI = Object.freeze({ HIEU_LUC: 'active', DA_HUY: 'cancelled' });
+/**
+ * Bốn trạng thái — khớp CHECK `delegation_status_ok` sau 007. «Hết hạn» vẫn suy ra từ ngày, không
+ * có trạng thái riêng.
+ *
+ * `CHO_PHE_DUYET` là trạng thái LÚC TẠO (§13.4 mục 20): bản ghi tồn tại, giữ chỗ khoảng ngày qua
+ * EXCLUDE, nhưng KHÔNG cho mượn quyền gì cho tới khi người nhận đồng ý.
+ */
+export const TRANG_THAI = Object.freeze({
+  CHO_PHE_DUYET: 'pending',
+  HIEU_LUC: 'active',
+  TU_CHOI: 'declined',
+  DA_HUY: 'cancelled',
+});
+
+/** Hai trạng thái còn "sống" — cùng tập với mệnh đề WHERE của EXCLUDE `delegation_no_overlap`. */
+export const TRANG_THAI_CON_HAN = Object.freeze([TRANG_THAI.CHO_PHE_DUYET, TRANG_THAI.HIEU_LUC]);
 
 /**
  * Các bản ghi đang HIỆU LỰC cho một người nhận, kèm vai trò + phạm vi phòng của người ủy quyền.
@@ -31,6 +46,10 @@ export const TRANG_THAI = Object.freeze({ HIEU_LUC: 'active', DA_HUY: 'cancelled
  * quyền" (L3) ở mọi thời điểm, không chỉ lúc bấm tạo.
  *
  * `u.is_active` phải có: người ủy quyền bị vô hiệu hoá thì quyền của họ không còn gì để cho mượn.
+ *
+ * `status = 'active'` ⇒ bản `pending` KHÔNG cho mượn gì. Đây là chỗ luật "phải có phê duyệt của
+ * người được ủy quyền" (§13.4 mục 20) thành sự thật: chưa đồng ý thì đường mượn quyền không thấy
+ * bản ghi, không cần thêm điều kiện nào ở `can()`.
  */
 export async function listEffectiveFor(toUserId, client = null) {
   const { rows } = await db(client).query(
@@ -71,6 +90,9 @@ export async function findById(id, client = null) {
  *
  * Trả kèm tên hai đầu vì giao diện luôn cần hiện tên, và một câu JOIN ở đây rẻ hơn N lời gọi
  * `/users` từ trình duyệt. `dang_hieu_luc` tính bằng CSDL để trình duyệt không phải tự so ngày.
+ *
+ * Sắp `pending` lên đầu: đó là các dòng ĐANG CHỜ ai đó bấm — để chúng lẫn giữa các bản đã huỷ thì
+ * người nhận không thấy việc cần làm. (Thứ tự chữ cái của `status` đặt 'pending' xuống CUỐI.)
  */
 export async function listForUser(userId, client = null) {
   const { rows } = await db(client).query(
@@ -83,7 +105,8 @@ export async function listForUser(userId, client = null) {
        JOIN users uf ON uf.id = d.from_user_id
        JOIN users ut ON ut.id = d.to_user_id
       WHERE d.from_user_id = $1 OR d.to_user_id = $1
-      ORDER BY d.status, d.from_date DESC, d.id DESC`,
+      ORDER BY CASE d.status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+               d.from_date DESC, d.id DESC`,
     [userId]
   );
   return rows;
@@ -107,8 +130,12 @@ export async function listAll(client = null) {
 }
 
 /**
- * Thêm bản ghi. Không kiểm luật ở đây — service đã kiểm L1–L3 và CSDL còn 3 CHECK + EXCLUDE
- * `delegation_no_overlap`. Repo chỉ dịch sang SQL.
+ * Thêm bản ghi. Không kiểm luật ở đây — service đã kiểm L1–L3 + thứ bậc/cùng phòng, và CSDL còn
+ * 3 CHECK + EXCLUDE `delegation_no_overlap`. Repo chỉ dịch sang SQL.
+ *
+ * KHÔNG ghi cột `status`: DEFAULT của bảng là `'pending'` sau 007, nên bản mới luôn phải chờ người
+ * nhận phê duyệt. Muốn tạo thẳng bản có hiệu lực thì phải sửa migration, không phải sửa một tham
+ * số ở đây — đó là chủ ý.
  *
  * `department_ids` để `null` ⇒ dùng DEFAULT `'{}'` = "theo phòng người ủy quyền đang phụ trách"
  * (xem `listEffectiveFor`), KHÔNG phải "không phòng nào".
@@ -165,12 +192,43 @@ export async function update(id, patch, client = null) {
  * HUỶ MỀM. Không `DELETE`: nhật ký hoạt động lưu `delegation_id`, xoá dòng là biến các dòng nhật
  * ký đó thành mã số không tra được nữa.
  *
- * `status = 'active'` trong điều kiện để huỷ hai lần không đổi `updated_at` lần thứ hai.
+ * Huỷ được cả bản `pending` (rút lại đề nghị chưa ai trả lời) và bản `active`. Điều kiện trạng
+ * thái để huỷ hai lần không đổi `updated_at` lần thứ hai — và để không "huỷ" một bản đã bị người
+ * nhận từ chối, vì `declined` là câu trả lời của người khác, không phải quyết định của mình.
  */
 export async function cancel(id, client = null) {
   const { rows } = await db(client).query(
     `UPDATE delegations SET status = 'cancelled'
-      WHERE id = $1 AND status = 'active'
+      WHERE id = $1 AND status IN ('pending', 'active')
+      RETURNING ${COLUMNS}`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Người nhận ĐỒNG Ý (§13.4 mục 20). `status = 'pending'` trong điều kiện là hàng rào chống bấm hai
+ * lần: lần thứ hai trả về `null` nên service biết là "không có gì đổi" thay vì đẩy `accepted_at`
+ * sang mốc mới.
+ *
+ * EXCLUDE `delegation_no_overlap` phủ cả 'pending' và 'active' nên câu này KHÔNG thể mở ra một
+ * khoảng ngày chồng lấp — chuyển pending ⇒ active giữ nguyên tập khoảng đang bị chặn.
+ */
+export async function accept(id, client = null) {
+  const { rows } = await db(client).query(
+    `UPDATE delegations SET status = 'active', accepted_at = now()
+      WHERE id = $1 AND status = 'pending'
+      RETURNING ${COLUMNS}`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+/** Người nhận TỪ CHỐI. Giữ dòng lại (không xoá) để người ủy quyền thấy được câu trả lời. */
+export async function decline(id, client = null) {
+  const { rows } = await db(client).query(
+    `UPDATE delegations SET status = 'declined', declined_at = now()
+      WHERE id = $1 AND status = 'pending'
       RETURNING ${COLUMNS}`,
     [id]
   );
