@@ -8,6 +8,7 @@ import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
 import * as itemsService from '../workItems/service.js';
+import { thangTuDuongDan } from '../workMonthNames/service.js';
 import * as service from './service.js';
 import { getTree } from './tree.js';
 
@@ -53,6 +54,10 @@ const querySchema = z.object({
 });
 
 const copySchema = z.object({ name: text(500).optional() });
+
+// Tên riêng của MỘT tháng. Tên rỗng KHÔNG phải lỗi kiểm dữ liệu: nó có nghĩa «bỏ tên riêng, về tên
+// gốc», và handler chuyển sang đường xoá — người dùng xoá trắng ô rồi bấm Lưu là làm đúng việc đó.
+const monthNameSchema = z.object({ name: text(500).optional() });
 
 // Kéo–thả gửi lên danh sách mã (hoặc id) theo thứ tự mới. Chặn trên 2000 phần tử để một request
 // không kéo cả bảng vào một giao dịch; công việc lớn nhất của bản cũ có ~40 dòng.
@@ -237,6 +242,67 @@ worksRouter.post('/:id/reorder', validate(reorderSchema), async (req, res, next)
       details: { count: result.ordered.length, skipped: result.skipped },
     };
     return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Đặt tên riêng cho MỘT tháng của công việc (008_work_month_names.sql).
+ *
+ * PUT chứ không PATCH: đây là «tháng này có đúng một cái tên», gọi hai lần cùng dữ liệu ra cùng kết
+ * quả. Tên rỗng ⇒ đi đúng đường DELETE bên dưới, vì «xoá trắng ô rồi Lưu» nghĩa là về tên gốc chứ
+ * không phải đặt tên rỗng (CHECK `wmn_ten_khong_rong` cũng không cho).
+ */
+worksRouter.put('/:id/month-names/:month', validate(monthNameSchema), async (req, res, next) => {
+  try {
+    const thang = thangTuDuongDan(req.params.month);
+    const ten = String(req.body.name ?? '').trim();
+    if (ten === '') {
+      const result = await service.clearMonthName(req.user, req.params.id, thang);
+      res.locals.audit = {
+        action: 'works.clearMonthName',
+        entityType: 'work',
+        entityId: result.work.id,
+        workId: result.work.id,
+        details: { code: result.work.code, month: result.month, previousName: result.previousName },
+      };
+      return ok(res, { work: result.work, month: result.month, name: '', cleared: true });
+    }
+    const result = await service.setMonthName(req.user, req.params.id, thang, ten);
+    res.locals.audit = {
+      action: 'works.setMonthName',
+      entityType: 'work',
+      entityId: result.work.id,
+      workId: result.work.id,
+      // `previousName` rỗng ⇒ tháng này trước đó dùng tên gốc. Ghi cả hai để nhật ký đọc được
+      // "từ → thành" mà không phải tra lại bảng.
+      details: {
+        code: result.work.code,
+        month: result.month,
+        name: result.name,
+        previousName: result.previousName,
+      },
+    };
+    return ok(res, { work: result.work, month: result.month, name: result.name });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/** Bỏ tên riêng của một tháng ⇒ tháng đó về tên gốc. */
+worksRouter.delete('/:id/month-names/:month', async (req, res, next) => {
+  try {
+    const thang = thangTuDuongDan(req.params.month);
+    const result = await service.clearMonthName(req.user, req.params.id, thang);
+    res.locals.audit = {
+      action: 'works.clearMonthName',
+      entityType: 'work',
+      entityId: result.work.id,
+      workId: result.work.id,
+      details: { code: result.work.code, month: result.month, previousName: result.previousName },
+    };
+    return ok(res, { work: result.work, month: result.month, removed: result.removed });
   } catch (err) {
     return next(err);
   }

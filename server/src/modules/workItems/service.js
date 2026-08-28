@@ -13,6 +13,7 @@ import { can } from '../../middleware/rbac.js';
 import { mergeWarnings, warnDueBeforeStart, warnOutsideWorkRange } from '../../utils/dateChecks.js';
 import { AppError, notFound } from '../../utils/errors.js';
 import { attachRefs } from '../../utils/historyRefs.js';
+import { banDoTenThang, ganTenThang } from '../../utils/monthNames.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
@@ -21,6 +22,8 @@ import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../a
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import * as worksRepo from '../works/repo.js';
+import * as monthNamesRepo from '../workMonthNames/repo.js';
+import { assertThangDatDuoc } from '../workMonthNames/service.js';
 import * as repo from './repo.js';
 
 /** Cấp 2 và cấp 3 là HAI loại thực thể khác nhau trong ma trận quyền §6, không được gộp. */
@@ -140,6 +143,15 @@ async function attachReminders(rows, client = null) {
   return rows.map((row) => ({ ...row, reminders: map.get(row.id) ?? [] }));
 }
 
+/** Gắn `month_names` (tên riêng theo tháng) — cùng hình dạng với cấp 1 và với cây của bootstrap. */
+async function attachMonthNames(rows, client = null) {
+  const rieng = await monthNamesRepo.listForItems(
+    rows.map((r) => r.id),
+    client
+  );
+  return ganTenThang(rows, banDoTenThang(rieng), 'item');
+}
+
 /**
  * Danh sách dòng của một công việc. `level` để trống ⇒ trả CẢ cấp 2 và cấp 3 trong một mảng,
  * đúng như `getTasks` bản cũ, để cầu RPC §5.1 trả được nguyên hình dạng cũ. Chỗ nào cần ĐẾM thì
@@ -158,7 +170,7 @@ export async function list(user, { workRef, level = null }) {
         work_manager_id: work.manager_id,
       }).ok
   );
-  return { work, items: await attachReminders(visible) };
+  return { work, items: await attachMonthNames(await attachReminders(visible)) };
 }
 
 export async function getOne(user, ref) {
@@ -637,4 +649,41 @@ export function reorder(user, workRef, refs = []) {
 
     return { work, ordered: ordered.map((r) => r.code), skipped };
   });
+}
+
+/**
+ * Đặt tên riêng cho MỘT tháng của một công việc con (cấp 2) hoặc nhiệm vụ (cấp 3).
+ *
+ * Cùng luật với cấp 1 (`works/service.js`), khác hai điểm buộc phải khác:
+ *  · khoảng thời gian của cấp 2/3 là `start_date`–`due_date` (cấp 1 là `end_date`);
+ *  · cổng quyền đi theo `level` của dòng, vì §6 coi cấp 2 và cấp 3 là hai loại thực thể.
+ *
+ * Trả kèm `row` để route ghi nhật ký được vào đúng `entity_type` theo cấp và đúng `work_id`.
+ */
+export async function setMonthName(user, ref, month, name) {
+  const row = await mustFindItem(ref);
+  assertCan(user, 'update', row);
+  assertSuaDuoc(user, row);
+  const thang = assertThangDatDuoc(month, row.start_date, row.due_date);
+  const truoc = await monthNamesRepo.findOne({ itemId: row.id, month: thang });
+  const saved = await withPgErrors(() =>
+    monthNamesRepo.upsert({
+      itemId: row.id,
+      month: thang,
+      name: String(name).trim(),
+      createdBy: user?.id ?? null,
+    })
+  );
+  return { row, month: thang, name: saved.name, previousName: truoc?.name ?? '' };
+}
+
+/** Bỏ tên riêng của một tháng ⇒ tháng đó về tên gốc. Chưa từng đặt cũng KHÔNG phải lỗi. */
+export async function clearMonthName(user, ref, month) {
+  const row = await mustFindItem(ref);
+  assertCan(user, 'update', row);
+  assertSuaDuoc(user, row);
+  const thang = assertThangDatDuoc(month, row.start_date, row.due_date);
+  const truoc = await monthNamesRepo.findOne({ itemId: row.id, month: thang });
+  const removed = await monthNamesRepo.remove({ itemId: row.id, month: thang });
+  return { row, month: thang, removed, previousName: truoc?.name ?? '' };
 }

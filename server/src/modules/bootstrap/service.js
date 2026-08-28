@@ -15,6 +15,7 @@
 //     57 chỗ của file 3653 dòng — `publicUser()` đã gán sẵn, gói này đi cùng đường đó.
 import { pool } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
+import { banDoTenThang, ganTenThang } from '../../utils/monthNames.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as approvalsService from '../approvals/service.js';
 import * as appsService from '../apps/service.js';
@@ -26,6 +27,7 @@ import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import { publicStaff } from '../users/service.js';
 import * as itemsRepo from '../workItems/repo.js';
+import * as monthNamesRepo from '../workMonthNames/repo.js';
 import * as worksService from '../works/service.js';
 
 /** Câu thống kê — xuất ra để test EXPLAIN đọc đúng hai view, không đọc bảng gốc. */
@@ -222,7 +224,15 @@ export async function cayChoUser(user, works = null) {
         work_manager_id: workById.get(row.work_id)?.manager_id,
       }).ok
   );
-  return { works: danhSach, items: await attachReminders(visibleItems) };
+  // Tên theo tháng của cấp 2/cấp 3 gắn Ở ĐÂY, không phải trong `attachReminders`: đây là chỗ duy
+  // nhất cả gói bootstrap và cầu RPC `getTasks` cùng đi qua, nên gắn một lần là cả hai đường đọc có.
+  // `works` đã được `worksService.list` gắn sẵn phần của cấp 1.
+  const rieng = await monthNamesRepo.listForItems(visibleItems.map((r) => r.id));
+  const banDo = banDoTenThang(rieng);
+  return {
+    works: danhSach,
+    items: ganTenThang(await attachReminders(visibleItems), banDo, 'item'),
+  };
 }
 
 export default { getBundle, departmentContext, STATS_QUERIES };

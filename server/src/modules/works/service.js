@@ -11,12 +11,15 @@ import { can } from '../../middleware/rbac.js';
 import { AppError, notFound } from '../../utils/errors.js';
 import { warnDueBeforeStart } from '../../utils/dateChecks.js';
 import { attachRefs } from '../../utils/historyRefs.js';
+import { banDoTenThang, ganTenThang } from '../../utils/monthNames.js';
 import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as assignments from '../assignments/service.js';
 import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
+import * as monthNamesRepo from '../workMonthNames/repo.js';
+import { assertThangDatDuoc } from '../workMonthNames/service.js';
 import * as repo from './repo.js';
 
 /** Công việc là cấp 1 của cây 3 tầng — hằng số để luật duyệt đọc được ý nghĩa con số. */
@@ -47,7 +50,12 @@ async function mustFind(ref, client = null) {
 /** Danh sách công việc, đã lọc bỏ những dòng ngoài phạm vi người đang xem. */
 export async function list(user, filter = {}) {
   const rows = await repo.list(filter);
-  return rows.filter((row) => can(user, 'read', 'work', row).ok);
+  const thayDuoc = rows.filter((row) => can(user, 'read', 'work', row).ok);
+  // Tên theo tháng đi KÈM dòng chứ không phải một lời gọi riêng: hai tab giao diện nạp dữ liệu MỘT
+  // lần rồi đổi tháng ngay trên máy khách, nên nếu tên tháng phải xin thêm thì mỗi lần đổi tháng là
+  // một vòng mạng. Truy vấn thêm là một câu `= ANY(...)`, chỉ cho các dòng đã lọc quyền.
+  const rieng = await monthNamesRepo.listForWorks(thayDuoc.map((r) => r.id));
+  return ganTenThang(thayDuoc, banDoTenThang(rieng), 'work');
 }
 
 export async function getOne(user, ref) {
@@ -249,4 +257,41 @@ export function copy(user, ref, { name = null } = {}) {
 
     return { work, copiedItems: copiedCodes, copiedCount: copiedCodes.length };
   });
+}
+
+/**
+ * Đặt tên riêng cho MỘT tháng của công việc cấp 1.
+ *
+ * Không có quyền mới: đặt được tên tháng đúng bằng sửa được công việc — cùng `assertCan(...'update')`
+ * và cùng cổng «đang chờ duyệt thì chỉ người lập sửa» của `update`. Thêm một quyền riêng chỉ để đổi
+ * một nhãn hiển thị là mở thêm một cửa phải canh mãi mãi.
+ *
+ * Trả `previousName` để route ghi được nhật ký "từ → thành": tên cũ chỉ còn ở CSDL trước khi ghi đè.
+ */
+export async function setMonthName(user, ref, month, name) {
+  const work = await mustFind(ref);
+  assertCan(user, 'update', work);
+  assertSuaDuoc(user, work);
+  const thang = assertThangDatDuoc(month, work.start_date, work.end_date);
+  const truoc = await monthNamesRepo.findOne({ workId: work.id, month: thang });
+  const row = await withPgErrors(() =>
+    monthNamesRepo.upsert({
+      workId: work.id,
+      month: thang,
+      name: String(name).trim(),
+      createdBy: user?.id ?? null,
+    })
+  );
+  return { work, month: thang, name: row.name, previousName: truoc?.name ?? '' };
+}
+
+/** Bỏ tên riêng của một tháng ⇒ tháng đó về tên gốc. Chưa từng đặt cũng KHÔNG phải lỗi. */
+export async function clearMonthName(user, ref, month) {
+  const work = await mustFind(ref);
+  assertCan(user, 'update', work);
+  assertSuaDuoc(user, work);
+  const thang = assertThangDatDuoc(month, work.start_date, work.end_date);
+  const truoc = await monthNamesRepo.findOne({ workId: work.id, month: thang });
+  const removed = await monthNamesRepo.remove({ workId: work.id, month: thang });
+  return { work, month: thang, removed, previousName: truoc?.name ?? '' };
 }

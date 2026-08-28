@@ -452,6 +452,9 @@ export function projectToLegacy(row, ctx = {}) {
     createdByName: row.created_by_name ?? '',
     assignedByName: row.assigned_by_name ?? '',
     sortOrder: row.sort_order ?? 0,
+    // Tên riêng theo tháng: khoá MỚI, KHÔNG phải một khoá `COL.*`. `COL.P_NAME` phải giữ TÊN GỐC vì
+    // form Sửa điền sẵn từ đúng khoá đó — nhét tên tháng vào là bấm Lưu một lần thành đổi tên gốc.
+    monthNames: row.month_names ?? {},
   };
 }
 
@@ -502,6 +505,8 @@ export function taskToLegacy(row, ctx = {}) {
     createdByName: row.created_by_name ?? '',
     assignedByName: row.assigned_by_name ?? '',
     sortOrder: row.sort_order ?? 0,
+    // Như `projectToLegacy`: khoá MỚI, `COL.T_NAME` vẫn là TÊN GỐC cho form Sửa.
+    monthNames: row.month_names ?? {},
   };
 }
 

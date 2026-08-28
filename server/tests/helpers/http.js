@@ -76,6 +76,12 @@ export function client(app) {
       if (token !== null) req.set('x-csrf-token', token);
       return req.send(body);
     },
+    async put(url, body = {}, { csrf } = {}) {
+      const token = csrf === undefined ? await api.csrfToken() : csrf;
+      const req = agent.put(url);
+      if (token !== null) req.set('x-csrf-token', token);
+      return req.send(body);
+    },
     async del(url, body = {}, { csrf } = {}) {
       const token = csrf === undefined ? await api.csrfToken() : csrf;
       const req = agent.delete(url);

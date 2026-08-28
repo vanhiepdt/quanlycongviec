@@ -57,6 +57,12 @@ export const ERROR_STATUS = Object.freeze({
   DELEGATION_RANK_UP: 403, // R2 (§13.4 mục 17) — ủy quyền LÊN cấp cao hơn
   DELEGATION_DIFFERENT_DEPARTMENT: 403, // R3 (§13.4 mục 18) — khác phòng, không thuộc ngoại lệ
   DELEGATION_OVERLAP: 409, // trùng khoảng ngày với bản ghi đang hiệu lực của cùng cặp
+
+  // --- Tên theo tháng (008_work_month_names.sql) --------------------------------------------
+  // Hai cách đặt tên tháng sai, tách riêng khỏi VALIDATION_ERROR vì giao diện phải nói được
+  // "tháng này nằm ngoài thời gian của việc" khác với "tháng đầu thì sửa ô Tên".
+  MONTH_OUT_OF_RANGE: 400, // tháng không nằm trong khoảng bắt đầu–kết thúc của đầu việc
+  MONTH_IS_FIRST: 400, // tháng ĐẦU — tên của nó chính là tên gốc, sửa ở ô Tên
 });
 
 export class AppError extends Error {

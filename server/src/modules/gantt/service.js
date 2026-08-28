@@ -17,6 +17,8 @@
 // duyệt không bao giờ xuất hiện trên Gantt.
 import * as deptRepo from '../departments/repo.js';
 import * as userRepo from '../users/repo.js';
+import * as monthNamesRepo from '../workMonthNames/repo.js';
+import { banDoTenThang, khoaThang } from '../../utils/monthNames.js';
 import { boLocPhong, dungPhong, giaoNhau, ngayCua, taiDuLieuDem } from '../stats/service.js';
 
 export const GROUP_MODES = Object.freeze(['department', 'deputy', 'assignee']);
@@ -40,6 +42,9 @@ function nutItem(row) {
     // Phân công ba lớp + kết quả đầu ra — dữ liệu cho tooltip của giao diện Gantt.
     output: row.output ?? '',
     leaderNames: row.leader_names ?? [],
+    // Tên riêng theo tháng (008_work_month_names.sql). Giao diện Gantt xem MỘT tháng mỗi lần nên nó
+    // tự chọn tên trong bản đồ này; máy chủ không chọn hộ vì `from`/`to` có thể trải nhiều tháng.
+    monthNames: row.month_names ?? {},
   };
 }
 
@@ -86,6 +91,7 @@ function nutWork(work) {
     endDate: work.end_date,
     supervisorName: work.supervisor_name ?? null,
     leaderNames: work.leader_names ?? [],
+    monthNames: work.month_names ?? {},
     subs: [],
     tasks: [],
   };
@@ -239,6 +245,22 @@ export async function ganttTree(
   };
   works.forEach(ghiTen);
   for (const list of itemsTheoWork.values()) list.forEach(ghiTen);
+
+  // Tên riêng theo tháng — MỘT lượt cho đúng những dòng sắp vẽ, cùng lối với `banDoTen` ở trên.
+  // Không đi qua `works/service.list` được: Gantt đọc số liệu từ `v_countable_*` qua `taiDuLieuDem`,
+  // nên các dòng ở đây chưa từng qua chỗ gắn tên tháng của cấp 1.
+  const idItems = [];
+  for (const list of itemsTheoWork.values()) for (const it of list) idItems.push(it.id);
+  const [riengWork, riengItem] = await Promise.all([
+    monthNamesRepo.listForWorks(works.map((w) => w.id)),
+    monthNamesRepo.listForItems(idItems),
+  ]);
+  const banDoThang = banDoTenThang([...riengWork, ...riengItem]);
+  const ghiThang = (row, kind) => {
+    row.month_names = banDoThang.get(khoaThang(kind, row.id)) ?? {};
+  };
+  works.forEach((w) => ghiThang(w, 'work'));
+  for (const list of itemsTheoWork.values()) list.forEach((it) => ghiThang(it, 'item'));
 
   const groups =
     groupBy === 'deputy'

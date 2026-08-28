@@ -9,6 +9,7 @@ import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
 import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
 import { remindersRouter } from '../reminders/routes.js';
+import { thangTuDuongDan } from '../workMonthNames/service.js';
 import * as service from './service.js';
 
 // `workRef` là mã (`CV001`) hoặc id số của công việc cấp 1 — bắt buộc khi tạo, vì một dòng không
@@ -55,6 +56,9 @@ const listSchema = z.object({
 });
 
 const copySchema = z.object({ name: text(500).optional() });
+
+// Tên rỗng KHÔNG phải lỗi kiểm dữ liệu: nó nghĩa là «bỏ tên riêng, về tên gốc» (xoá trắng ô rồi Lưu).
+const monthNameSchema = z.object({ name: text(500).optional() });
 
 const historySchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
@@ -224,6 +228,62 @@ workItemsRouter.post('/:id/copy', validate(copySchema), async (req, res, next) =
       details: { from: req.params.id, code: result.item.code, copiedCount: result.copiedCount },
     };
     return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Tên riêng theo tháng cho công việc con / nhiệm vụ — cùng hợp đồng với cấp 1
+ * (`PUT|DELETE /works/:id/month-names/:month`), khác duy nhất ở `entityType` đi theo cấp của dòng.
+ */
+workItemsRouter.put(
+  '/:id/month-names/:month',
+  validate(monthNameSchema),
+  async (req, res, next) => {
+    try {
+      const thang = thangTuDuongDan(req.params.month);
+      const ten = String(req.body.name ?? '').trim();
+      const result =
+        ten === ''
+          ? await service.clearMonthName(req.user, req.params.id, thang)
+          : await service.setMonthName(req.user, req.params.id, thang, ten);
+      res.locals.audit = {
+        action: ten === '' ? 'workItems.clearMonthName' : 'workItems.setMonthName',
+        entityType: entityOf(result.row.level),
+        entityId: result.row.id,
+        workId: result.row.work_id,
+        details: {
+          code: result.row.code,
+          month: result.month,
+          ...(ten === '' ? {} : { name: result.name }),
+          previousName: result.previousName,
+        },
+      };
+      return ok(res, {
+        item: result.row,
+        month: result.month,
+        name: ten === '' ? '' : result.name,
+        ...(ten === '' ? { cleared: true } : {}),
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+workItemsRouter.delete('/:id/month-names/:month', async (req, res, next) => {
+  try {
+    const thang = thangTuDuongDan(req.params.month);
+    const result = await service.clearMonthName(req.user, req.params.id, thang);
+    res.locals.audit = {
+      action: 'workItems.clearMonthName',
+      entityType: entityOf(result.row.level),
+      entityId: result.row.id,
+      workId: result.row.work_id,
+      details: { code: result.row.code, month: result.month, previousName: result.previousName },
+    };
+    return ok(res, { item: result.row, month: result.month, removed: result.removed });
   } catch (err) {
     return next(err);
   }
