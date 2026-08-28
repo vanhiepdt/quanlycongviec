@@ -1,6 +1,7 @@
 // Tiện ích chung cho test tích hợp. Mọi file test tự dọn bảng trước khi chạy để không phụ
 // thuộc thứ tự file (§8.2).
 import { pool } from '../../src/db/pool.js';
+import { flushAudit } from '../../src/middleware/audit.js';
 
 const BUSINESS_TABLES = [
   'sessions',
@@ -28,6 +29,10 @@ export { BUSINESS_TABLES, pool };
 
 /** Xoá sạch dữ liệu, giữ nguyên lược đồ. Sequence sinh mã cũng về 1 để mã trong test đoán được. */
 export async function resetTables() {
+  // `middleware/audit.js` ghi nhật ký ở `res.on('finish')`, tức SAU khi supertest đã trả về. Không
+  // chờ ở đây thì lượt ghi của test TRƯỚC rơi vào sau `TRUNCATE` này và hiện ra trong test SAU như
+  // dòng lạ — đúng kiểu đỏ giả đổi chỗ mỗi lượt chạy, mất công đi tìm ở chỗ không có lỗi.
+  await flushAudit();
   await pool.query(`TRUNCATE ${BUSINESS_TABLES.join(', ')} RESTART IDENTITY CASCADE`);
   await pool.query(`
     SELECT setval(s, 1, false) FROM unnest(ARRAY[

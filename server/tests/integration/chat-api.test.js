@@ -8,6 +8,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
+import { flushAudit } from '../../src/middleware/audit.js';
 import { makeDepartment, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
@@ -222,6 +223,9 @@ describe('POST /api/v1/chat — gửi tin', () => {
     await api.get('/api/v1/chat');
     await api.get('/api/v1/chat');
 
+    // `audit.js` ghi ở `res.on('finish')` (sau khi supertest đã trả về) ⇒ phải chờ, đọc ngay là
+    // đỏ giả. Chờ xong mới khẳng định được ý của test: đúng MỘT dòng, hai lượt GET không ghi gì.
+    await flushAudit();
     const { rows } = await pool.query(
       `SELECT action, entity_type FROM activity_logs WHERE entity_type = 'chat_message'`
     );

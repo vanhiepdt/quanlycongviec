@@ -17,6 +17,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
+import { flushAudit } from '../../src/middleware/audit.js';
 import { makeDepartment, makeWork, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
@@ -61,7 +62,11 @@ function chenThang(row) {
   );
 }
 
+// `middleware/audit.js` ghi nhật ký trong `res.on('finish')` — CỐ Ý ghi sau khi phản hồi đã gửi để
+// không làm chậm người dùng. Supertest lại `resolve` ngay khi nhận phản hồi, nên đọc `activity_logs`
+// liền sau đó có thể chưa thấy dòng nào: ĐỎ GIẢ, và đỏ khác nhau mỗi lượt chạy (TC-UQ-13b/13c/17).
 async function dongNhatKy(action) {
+  await flushAudit();
   const { rows } = await pool.query(
     'SELECT action, entity_type, entity_id, details FROM activity_logs WHERE action = $1 ORDER BY id',
     [action]

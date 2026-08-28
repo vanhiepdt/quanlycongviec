@@ -11,6 +11,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
+import { flushAudit } from '../../src/middleware/audit.js';
 import { COL } from '../../src/rpc/legacyFields.js';
 import { makeDepartment, makeItem, makeWork, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
@@ -28,6 +29,21 @@ let workA;
 let workB;
 let taskA1;
 let taskB1;
+
+/**
+ * Dòng nhật ký mới nhất của một hành động. `middleware/audit.js` CỐ Ý ghi trong `res.on('finish')`
+ * để không làm chậm người dùng, còn supertest trả về ngay khi có phản hồi ⇒ đọc `activity_logs`
+ * liền sau đó là **đỏ giả**; `flushAudit()` chờ đúng những lượt ghi đang bay.
+ */
+async function choNhatKy(action) {
+  await flushAudit();
+  const { rows } = await pool.query(
+    `SELECT action, entity_type, details FROM activity_logs
+      WHERE action = $1 ORDER BY id DESC LIMIT 1`,
+    [action]
+  );
+  return rows;
+}
 
 /** Gán người phụ trách phòng — `Phó Giám đốc` chỉ duyệt được phòng có dòng này (§6). */
 async function themQuanLy(departmentId, userId, role) {
@@ -377,10 +393,8 @@ describe('PATCH /api/v1/proposals/:id — sửa và duyệt', () => {
     expect(res.body.data.proposal.status).toBe('Đã duyệt');
     expect(res.body.data.proposal.review_note).toBe('Đồng ý mua');
 
-    const { rows } = await pool.query(
-      `SELECT action, entity_type, details FROM activity_logs
-        WHERE action = 'proposal.update' ORDER BY id DESC LIMIT 1`
-    );
+    // `audit.js` ghi ở `res.on('finish')`, tức SAU khi supertest đã trả về ⇒ đọc ngay là đỏ giả.
+    const rows = await choNhatKy('proposal.update');
     expect(rows[0].entity_type).toBe('proposal');
     expect(rows[0].details.status).toEqual({ from: 'Đề xuất mới', to: 'Đã duyệt' });
   });

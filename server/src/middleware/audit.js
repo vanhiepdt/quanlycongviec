@@ -13,6 +13,19 @@ import { logger } from '../utils/logger.js';
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+// Các lượt ghi ĐANG BAY. Nguyên tắc 2 (ghi sau khi phản hồi đã gửi) làm lượt ghi sống lâu hơn
+// request, nên test tích hợp không có mốc nào để biết "đã ghi xong chưa": nó đọc `activity_logs`
+// ngay khi supertest trả về ⇒ có lúc chưa thấy dòng, mà lượt ghi rơi muộn còn lọt qua `TRUNCATE`
+// của test SAU và hiện ra như dòng lạ. Đó là gốc của mấy ca đỏ giả đổi chỗ mỗi lượt chạy
+// (delegations TC-UQ-13b/13c/17, proposals `proposal.update`, chat `chat.send`).
+// Giữ tập promise ở đây để test chờ được; chạy thật thì tập luôn tự rỗng lại nên không tốn gì.
+const DANG_GHI = new Set();
+
+/** Chờ mọi lượt ghi nhật ký đang bay kết thúc. Dùng cho test (`tests/helpers/db.js`). */
+export async function flushAudit() {
+  while (DANG_GHI.size > 0) await Promise.allSettled([...DANG_GHI]);
+}
+
 /** Tên hành động mặc định: `POST /api/v1/auth/login`. Handler nên đặt tên nghiệp vụ rõ hơn. */
 function defaultAction(req) {
   const path = `${req.baseUrl || ''}${req.route?.path && req.route.path !== '/' ? req.route.path : req.path}`;
@@ -37,7 +50,7 @@ export function audit(req, res, next) {
         : details;
     // Người vừa đăng nhập chưa có req.user (phiên tạo trong handler) — handler đặt actorId vào
     // res.locals.audit để dòng nhật ký không bị mất chủ thể.
-    writeLog({
+    const dangGhi = writeLog({
       actorId: extra.actorId ?? req.user?.id ?? null,
       actorName: extra.actorName ?? req.user?.full_name ?? '',
       action: extra.action ?? defaultAction(req),
@@ -47,6 +60,8 @@ export function audit(req, res, next) {
       details: withDelegation,
       ip: req.ip ?? null,
     }).catch((err) => logger.warn({ err: err.message }, 'Không ghi được activity_logs'));
+    DANG_GHI.add(dangGhi);
+    dangGhi.finally(() => DANG_GHI.delete(dangGhi));
   });
 
   return next();

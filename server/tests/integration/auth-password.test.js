@@ -3,6 +3,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
+import { flushAudit } from '../../src/middleware/audit.js';
 import { verifyPassword } from '../../src/modules/auth/password.js';
 import { resetTables } from '../helpers/db.js';
 import { client, makeLoginUser, TEST_PASSWORD } from '../helpers/http.js';
@@ -17,6 +18,10 @@ async function passwordHash(userId) {
 
 /** Chờ audit ghi xong: audit chạy ở `res.on('finish')`, tức là SAU khi supertest đã trả về. */
 async function waitForLogs(minRows, tries = 40) {
+  // `flushAudit()` chờ ĐÚNG những lượt ghi đang bay, nên tới đây là bảng đã đủ dòng. Vòng đếm
+  // dưới chỉ còn là lưới an toàn: đếm `minRows` mà trả về sớm là lấy được BỘ DÒNG THIẾU, và câu
+  // `expect` sau đó đỏ ở chỗ chẳng liên quan (TC-RPC-21 từng đỏ vì chỉ thấy `auth.login`).
+  await flushAudit();
   for (let i = 0; i < tries; i++) {
     const { rows } = await pool.query('SELECT * FROM activity_logs ORDER BY id');
     if (rows.length >= minRows) return rows;
