@@ -224,6 +224,25 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > thoát JS. `tests/unit/nhat-ky-ui.test.js` (TC-NKUI-07) chốt: tên `<img src=x onerror=alert(1)>`
 > của một nhiệm vụ ĐÃ XOÁ vẫn hiện thành chữ, không dựng được thẻ.
 
+> **Cập nhật 2026-08-28 (tên theo tháng cho đầu việc dài hơn một tháng).** Yêu cầu nguyên văn: «Các
+> công việc, nhiệm vụ mà thời gian nhiều hơn 1 tháng thì có chức năng sửa tên của công việc trong các
+> tháng tiếp theo… kể cả trên sơ đồ Gantt… tháng sau khi được đổi tên thì khi di chuột vào công việc
+> đấy sẽ hiển thị tên cũ». Tab thứ ba «Tên theo tháng» dựng bằng `buildKhungTenThang`,
+> `buildBangTenThang`, `buildDongTenThang`, vẽ lại bằng `veLaiBangTenThang`.
+> ⇒ **90 chỗ / 662 giá trị** (TC-SEC-17), **+1 sink, +30 giá trị**: sink mới là chỗ ghi của
+> `veLaiBangTenThang` (vẽ lại bảng sau mỗi lần Lưu/Bỏ để nút «Bỏ» xuất hiện/mất theo trạng thái thật).
+>
+> Điểm cần canh: **tên riêng của tháng là dữ liệu người dùng nhập, đi qua ba đường đọc** (`monthNames`
+> của cầu RPC, `month_names` của REST, và cây Gantt) rồi đổ vào **hai loại lỗ khác nhau**: giữa hai
+> thẻ (`escapeHtml`) và trong thuộc tính `title`/`value`/`placeholder` (`escapeHtmlAttr`). Ba tham số
+> của `onclick`/`onkeydown` trong `buildDongTenThang` — `kieu`, `ma`, `thang` — đều thoát bằng
+> `escapeForInlineHandler` **viết thẳng trong chuỗi**; `thang` tuy đã qua `/^\d{4}-\d{2}$/` khi sinh ra
+> nhưng vẫn thoát, vì cái đảm bảo đó ở cách đó ba hàm và bộ soát (TC-SEC-18) không đọc được nó.
+> Thuộc tính `title` chỉ được ghép khi tháng ĐÃ đổi tên (`" title=\"…\""`), nên không có `title=""`
+> rỗng nào lọt ra — và giá trị vẫn escape tại đúng lỗ nội suy.
+> Riêng `data-name`/`data-project-name` của các nút Xoá/Nhân bản/Thêm giữ **TÊN GỐC**: chúng nuôi hộp
+> thoại xác nhận, ở đó không có tháng nào đang xem.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

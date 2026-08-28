@@ -186,9 +186,20 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // 3 (2 id + `data-ma`); hai chỗ gọi
     // `buildThanhTabNhatKy`/`buildKhungNhatKy` trong hai modal là 4 lỗ nữa; 1 lỗ cho
     // `list.slice().reverse().map(...).join("")` ⇒ 89 chỗ / 632 giá trị.
+    // 2026-08-28 (tên theo tháng, docs/KE-HOACH-TEN-THEO-THANG.md): tab thứ ba «Tên theo tháng».
+    // +1 chỗ ghi HTML: `veLaiBangTenThang` (vẽ lại bảng sau mỗi lần lưu/bỏ). +30 giá trị nội suy:
+    // `buildDongTenThang` 12 (nhãn tháng, id ô, giá trị, gợi ý, 3 tham số của `onkeydown`, 3 của
+    // `onclick` Lưu, 3 của `onclick` Bỏ — mỗi tham số thoát THẲNG trong chuỗi vì TC-SEC-18 không
+    // nhận biến trung gian) = 12; `buildBangTenThang` 3 (tên gốc ở câu nhắc, nhãn tháng đầu, 1 lỗ
+    // cho `suaDuoc.map(...).join("")`) + 1 lỗ cho câu «không kéo dài hơn một tháng» (hằng, đếm là
+    // chỗ ghi chứ không phải giá trị) ⇒ 4; `buildKhungTenThang` 3 (2 id + `data-ma`) + 1 lỗ cho
+    // `buildBangTenThang(...)`; `buildThanhTabNhatKy` thêm 2 cho nút tab thứ ba; hai modal thêm 2 lỗ
+    // gọi `buildKhungTenThang`; `createProjectCard`, `createTasksWorkSeparatorHtml`,
+    // `createTasksSubworkBlockHtml`, `createTaskTableRowSimple` mỗi chỗ 2 (tên theo tháng + `title`
+    // tên gốc) = 8; `buildGanttHoverCardHtml` 2 (nhãn «Tên gốc» + giá trị) ⇒ 90 chỗ / 662 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 89, gia_tri: 632 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 90, gia_tri: 662 });
   });
 });
 

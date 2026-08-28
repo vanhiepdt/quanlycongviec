@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-85");
+console.info("[QLCV] app.js 20260828-86");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -1011,6 +1011,10 @@ function handleProjectsDeptFilter(event) {
 function createProjectCard(project, showDetails = false) {
   const projectId = project[COL.P_ID] || "N/A",
     projectName = project[COL.P_NAME] || "Chưa có tên",
+    // Tên theo THÁNG ĐANG XEM; các thuộc tính data-* dưới đây vẫn giữ TÊN GỐC vì chúng nuôi hộp
+    // thoại Xoá/Nhân bản/Thêm nhiệm vụ — ở đó không có tháng nào đang xem.
+    tenTheoThang = tenTheoThangCuaDong(project, projectName, thangLocCongViec()),
+    tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, projectName, thangLocCongViec()),
     projectDesc = project[COL.P_DESC] || "Không có mô tả",
     projectManager = project[COL.P_MANAGER] || "Chưa gán",
     projectStatus = project[COL.P_STATUS] || "Chưa bắt đầu",
@@ -1020,7 +1024,7 @@ function createProjectCard(project, showDetails = false) {
     filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
     filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
     num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
-  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\">" + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
+  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + " (" + escapeHtml(projectId) + ")</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
 /**
  * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
@@ -1092,8 +1096,11 @@ function renderTasks() {
 function createTasksWorkSeparatorHtml(maCongViec, tenCongViec, project, soNhiemVu) {
   const trangThai = project ? project[COL.P_STATUS] || "" : "",
     nguoiQuanLy = project ? project[COL.P_MANAGER] || "" : "",
-    phong = project ? project[COL.P_DEPT] || "" : "";
-  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\">" + escapeHtml(tenCongViec) + " (" + escapeHtml(maCongViec) + ")</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
+    phong = project ? project[COL.P_DEPT] || "" : "",
+    // Tên theo tháng đang lọc ở tab Nhiệm vụ; nút «+ Công việc con» phía dưới vẫn nhận TÊN GỐC.
+    tenTheoThang = tenTheoThangCuaDong(project, tenCongViec, thangLocNhiemVu()),
+    tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, tenCongViec, thangLocNhiemVu());
+  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + " (" + escapeHtml(maCongViec) + ")</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
 }
 /**
  * Xếp các dòng của MỘT công việc cấp 1 thành khối theo CÔNG VIỆC CON (cấp 2).
@@ -1119,6 +1126,8 @@ function xepNhiemVuTheoCongViecCon(rows, maCongViec) {
       khoa: maCon,
       ma: maCon,
       ten: con[COL.T_NAME] || "",
+      // Dòng cấp 2 đi kèm để đầu khối đổi được tên theo tháng (bản đồ `monthNames` nằm trên dòng).
+      dong: con,
       maCongViec: maCongViec,
       tenCongViec: "",
       nhiemVu: ds,
@@ -1133,6 +1142,7 @@ function xepNhiemVuTheoCongViecCon(rows, maCongViec) {
     khoa: "truc:" + maCongViec,
     ma: maCongViec,
     ten: "Nhiệm vụ trực thuộc công việc",
+    dong: null,
     maCongViec: maCongViec,
     tenCongViec: "",
     nhiemVu: treo,
@@ -1169,8 +1179,11 @@ function tinhTongHopNhiemVu(rows) {
 function createTasksSubworkBlockHtml(khoi) {
   const tongHop = tinhTongHopNhiemVu(khoi.nhiemVu),
     thuGon = tasksThuGon.has(khoi.khoa),
-    tieuDe = khoi.truc ? khoi.ten : khoi.ten + " (" + khoi.ma + ")";
-  return "\n    <div class=\"glass-card\">\n      <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n        <div class=\"flex items-center justify-between gap-3\">\n          <h4 class=\"text-base font-semibold text-gray-900 flex items-center min-w-0\">\n            <button type=\"button\" class=\"tasks-subwork-toggle mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center shrink-0\" data-khoi=\"" + escapeHtmlAttr(khoi.khoa) + "\" title=\"Thu gọn/Mở rộng\" aria-expanded=\"" + (thuGon ? "false" : "true") + "\"><i class=\"fas fa-chevron-" + (thuGon ? "right" : "down") + "\"></i></button>\n            <i class=\"fas fa-folder" + (thuGon ? "" : "-open") + " text-red-500 mr-2 shrink-0\"></i>\n            <span class=\"truncate\">" + escapeHtml(tieuDe) + "</span>\n            <span class=\"status-badge " + escapeHtml(tongHop.lop) + " ml-3 text-xs shrink-0\">" + escapeHtml(tongHop.trangThai) + "</span>\n          </h4>\n          <div class=\"flex items-center gap-3 shrink-0\">\n            <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + escapeHtml(tongHop.tong) + " nhiệm vụ</span>\n            <div class=\"flex items-center gap-2\">\n              <div class=\"w-24 h-2 bg-gray-200 rounded-full\">\n                <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(tongHop.tienDo) + "%\"></div>\n              </div>\n              <span class=\"text-xs text-gray-600 w-10 text-right\">" + escapeHtml(tongHop.tienDo) + "%</span>\n            </div>\n            <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtmlAttr(khoi.maCongViec) + "\" data-project-name=\"" + escapeHtmlAttr(khoi.ten) + "\" title=\"Thêm nhiệm vụ\">\n              + Thêm\n            </button>\n          </div>\n        </div>\n      </div>\n      <div class=\"overflow-x-auto tasks-table-wrap " + (thuGon ? "hidden" : "") + "\">\n        <table class=\"min-w-full table-auto\">\n          <thead class=\"bg-gray-50\">\n            <tr>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nhiệm vụ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Người thực hiện</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Trạng thái</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ưu tiên</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Tiến độ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Link kết quả</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ngày bắt đầu</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Hạn chót</th>\n              <th class=\"px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>\n            </tr>\n          </thead>\n          <tbody class=\"bg-white divide-y divide-gray-200\">\n            " + khoi.nhiemVu.map(nhiemVu => createTaskTableRowSimple(nhiemVu)).join("") + "\n          </tbody>\n        </table>\n      </div>\n    </div>\n  ";
+    // Khối «Nhiệm vụ trực thuộc công việc» là nhãn cố định, không phải một đầu việc ⇒ không đổi tên.
+    tenThangKhoi = khoi.truc ? khoi.ten : tenTheoThangCuaDong(khoi.dong, khoi.ten, thangLocNhiemVu()),
+    tenCuKhoi = khoi.truc ? "" : tenGocNeuDaDoiCuaDong(khoi.dong, khoi.ten, thangLocNhiemVu()),
+    tieuDe = khoi.truc ? tenThangKhoi : tenThangKhoi + " (" + khoi.ma + ")";
+  return "\n    <div class=\"glass-card\">\n      <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n        <div class=\"flex items-center justify-between gap-3\">\n          <h4 class=\"text-base font-semibold text-gray-900 flex items-center min-w-0\">\n            <button type=\"button\" class=\"tasks-subwork-toggle mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center shrink-0\" data-khoi=\"" + escapeHtmlAttr(khoi.khoa) + "\" title=\"Thu gọn/Mở rộng\" aria-expanded=\"" + (thuGon ? "false" : "true") + "\"><i class=\"fas fa-chevron-" + (thuGon ? "right" : "down") + "\"></i></button>\n            <i class=\"fas fa-folder" + (thuGon ? "" : "-open") + " text-red-500 mr-2 shrink-0\"></i>\n            <span class=\"truncate\"" + (tenCuKhoi ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuKhoi) + "\"" : "") + ">" + escapeHtml(tieuDe) + "</span>\n            <span class=\"status-badge " + escapeHtml(tongHop.lop) + " ml-3 text-xs shrink-0\">" + escapeHtml(tongHop.trangThai) + "</span>\n          </h4>\n          <div class=\"flex items-center gap-3 shrink-0\">\n            <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + escapeHtml(tongHop.tong) + " nhiệm vụ</span>\n            <div class=\"flex items-center gap-2\">\n              <div class=\"w-24 h-2 bg-gray-200 rounded-full\">\n                <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(tongHop.tienDo) + "%\"></div>\n              </div>\n              <span class=\"text-xs text-gray-600 w-10 text-right\">" + escapeHtml(tongHop.tienDo) + "%</span>\n            </div>\n            <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtmlAttr(khoi.maCongViec) + "\" data-project-name=\"" + escapeHtmlAttr(khoi.ten) + "\" title=\"Thêm nhiệm vụ\">\n              + Thêm\n            </button>\n          </div>\n        </div>\n      </div>\n      <div class=\"overflow-x-auto tasks-table-wrap " + (thuGon ? "hidden" : "") + "\">\n        <table class=\"min-w-full table-auto\">\n          <thead class=\"bg-gray-50\">\n            <tr>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nhiệm vụ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Người thực hiện</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Trạng thái</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ưu tiên</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Tiến độ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Link kết quả</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ngày bắt đầu</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Hạn chót</th>\n              <th class=\"px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>\n            </tr>\n          </thead>\n          <tbody class=\"bg-white divide-y divide-gray-200\">\n            " + khoi.nhiemVu.map(nhiemVu => createTaskTableRowSimple(nhiemVu)).join("") + "\n          </tbody>\n        </table>\n      </div>\n    </div>\n  ";
 }
 /** ======================================================================
  * TAB NHIỆM VỤ (2026-08-27): lọc theo THÁNG/NĂM + CÁN BỘ + PHÒNG; mỗi công việc con là
@@ -1281,6 +1294,9 @@ function handleTasksDeptFilter(event) {
 function createTaskTableRowSimple(task) {
   const taskId = task[COL.T_ID] || "N/A",
     taskName = task[COL.T_NAME] || "Chưa có tên",
+    // Tên theo tháng đang lọc; data-name của các nút Xoá/Nhân bản/hoàn thành vẫn là TÊN GỐC.
+    tenTheoThang = tenTheoThangCuaDong(task, taskName, thangLocNhiemVu()),
+    tenCuTheoThang = tenGocNeuDaDoiCuaDong(task, taskName, thangLocNhiemVu()),
     taskAssignee = task[COL.T_ASSIGNEE] || "Chưa gán",
     taskStatus = task[COL.T_STATUS] || "Chưa bắt đầu",
     taskPriority = task[COL.T_PRIORITY] || "Trung bình",
@@ -1294,7 +1310,7 @@ function createTaskTableRowSimple(task) {
     hasMatch = taskStatus.toLowerCase().includes("hoàn thành"),
     taskReminders = task[COL.T_REMINDERS] || [],
     isArray = Array.isArray(taskReminders) && taskReminders.length > 0;
-  return "\n<tr class=\"hover:bg-gray-50 " + (isTaskOverdue2 ? "bg-red-overdue" : "") + " task-clickable cursor-pointer draggable-item\" \n    data-id=\"" + escapeHtml(taskId) + "\" \n    data-project-id=\"" + escapeHtml(taskPid) + "\" \n    draggable=\"true\">\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-start\">\n        <input type=\"checkbox\" \n                class=\"quick-complete-checkbox\" \n                data-id=\"" + escapeHtml(taskId) + "\" \n                data-name=\"" + escapeHtml(taskName) + "\"\n                " + (hasMatch ? "checked disabled" : "") + " \n                title=\"" + (hasMatch ? "Đã hoàn thành" : "Click để hoàn thành") + "\">\n        <div>\n            <div class=\"font-medium text-gray-900 text-sm leading-tight\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1\" title=\"Có nhắc việc\"></i>" : "") + escapeHtml(taskName) + (Number(task[COL.T_LEVEL]) === 2 ? "<span class=\"ml-2 text-[10px] uppercase tracking-wide text-indigo-600\">công việc con</span>" : "") + "</div>\n            <div class=\"text-xs text-gray-500 mt-1\">" + escapeHtml(taskId) + "</div>\n        </div>\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(taskAssignee) + "</td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(taskStatus) + "</span>\n    " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue ml-1\">Quá hạn</span>" : "") + pendingApprovalBadge(task) + "\n  </td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(priorityClass) + "\">" + escapeHtml(taskPriority) + "</span>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-center space-x-2\">\n      <div class=\"w-16 h-2 bg-gray-200 rounded-full\">\n        <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n      </div>\n      <span class=\"text-sm text-gray-600\">" + escapeHtml(num) + "%</span>\n    </div>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"text-sm\">\n      " + renderLinksButton(task[COL.T_RESULT_LINKS], taskId) + "\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(startDateText) + "</td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(dueDateText) + "</td>\n  <td class=\"px-4 py-4 text-right\">\n    <div class=\"flex space-x-1 justify-end\">\n      " + (() => {
+  return "\n<tr class=\"hover:bg-gray-50 " + (isTaskOverdue2 ? "bg-red-overdue" : "") + " task-clickable cursor-pointer draggable-item\" \n    data-id=\"" + escapeHtml(taskId) + "\" \n    data-project-id=\"" + escapeHtml(taskPid) + "\" \n    draggable=\"true\">\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-start\">\n        <input type=\"checkbox\" \n                class=\"quick-complete-checkbox\" \n                data-id=\"" + escapeHtml(taskId) + "\" \n                data-name=\"" + escapeHtml(taskName) + "\"\n                " + (hasMatch ? "checked disabled" : "") + " \n                title=\"" + (hasMatch ? "Đã hoàn thành" : "Click để hoàn thành") + "\">\n        <div>\n            <div class=\"font-medium text-gray-900 text-sm leading-tight\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1\" title=\"Có nhắc việc\"></i>" : "") + "<span" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>" + (Number(task[COL.T_LEVEL]) === 2 ? "<span class=\"ml-2 text-[10px] uppercase tracking-wide text-indigo-600\">công việc con</span>" : "") + "</div>\n            <div class=\"text-xs text-gray-500 mt-1\">" + escapeHtml(taskId) + "</div>\n        </div>\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(taskAssignee) + "</td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(taskStatus) + "</span>\n    " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue ml-1\">Quá hạn</span>" : "") + pendingApprovalBadge(task) + "\n  </td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(priorityClass) + "\">" + escapeHtml(taskPriority) + "</span>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-center space-x-2\">\n      <div class=\"w-16 h-2 bg-gray-200 rounded-full\">\n        <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n      </div>\n      <span class=\"text-sm text-gray-600\">" + escapeHtml(num) + "%</span>\n    </div>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"text-sm\">\n      " + renderLinksButton(task[COL.T_RESULT_LINKS], taskId) + "\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(startDateText) + "</td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(dueDateText) + "</td>\n  <td class=\"px-4 py-4 text-right\">\n    <div class=\"flex space-x-1 justify-end\">\n      " + (() => {
     const project = allProjects.find(project3 => project3[COL.P_ID] === task[COL.T_PID]),
       project2 = project && project[COL.P_MANAGER] === currentUser.name,
       isAdmin2 = laQuanTriTrongPhamVi() || project2;
@@ -1764,6 +1780,79 @@ function closeModal(modalId) {
     }
   }, 300));
 }
+/** ======================================================================
+ * TÊN THEO THÁNG cho đầu việc dài hơn một tháng (docs/KE-HOACH-TEN-THEO-THANG.md)
+ *
+ * Máy chủ gửi kèm MỖI dòng một bản đồ `monthNames` = { "YYYY-MM": "tên riêng của tháng đó" } và
+ * KHÔNG tự chọn tên thay trình duyệt: một lần gọi `/api/v1/gantt` có thể trải nhiều tháng, chỉ màn
+ * hình mới biết đang xem tháng nào. Hai tab Công việc/Nhiệm vụ lại nạp dữ liệu MỘT lần rồi lọc
+ * tháng tại chỗ (không gọi lại API), nên bản đồ buộc phải đi theo từng dòng.
+ *
+ * Tháng ĐẦU không có tên riêng — tên tháng đầu chính là tên gốc ở ô «Tên» của form Sửa.
+ * ==================================================================== */
+/** `YYYY-MM-DD…` → `YYYY-MM`; chuỗi lạ ⇒ rỗng (không đoán). */
+function thangCuaNgay(value) {
+  const text = String(value == null ? "" : value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text.slice(0, 7) : "";
+}
+/** Mọi tháng "YYYY-MM" mà đầu việc phủ qua. Thiếu đầu/cuối hoặc cuối < đầu ⇒ rỗng. */
+function cacThangCuaDauViec(batDau, ketThuc) {
+  const dau = thangCuaNgay(batDau),
+    cuoi = thangCuaNgay(ketThuc);
+  if (!dau || !cuoi || cuoi < dau) return [];
+  const ds = [];
+  let nam = Number(dau.slice(0, 4)),
+    thang = Number(dau.slice(5, 7));
+  // Chặn 240 vòng (20 năm): ngày kết thúc gõ sai kiểu 9999-12-31 không được treo trình duyệt.
+  for (let i = 0; i < 240; i++) {
+    const khoa = String(nam) + "-" + String(thang).padStart(2, "0");
+    ds.push(khoa);
+    if (khoa === cuoi) break;
+    thang === 12 ? ((nam += 1), (thang = 1)) : (thang += 1);
+  }
+  return ds;
+}
+/** Các tháng ĐẶT TÊN RIÊNG ĐƯỢC = mọi tháng TRỪ tháng đầu. Rỗng ⇒ đầu việc không dài hơn 1 tháng. */
+function thangSuaDuocCuaDauViec(batDau, ketThuc) {
+  return cacThangCuaDauViec(batDau, ketThuc).slice(1);
+}
+/** Bản đồ tên tháng của một dòng — nhận cả `monthNames` (cầu RPC, Gantt) và `month_names` (REST). */
+function banDoTenThangCuaDong(dong) {
+  const d = dong || {},
+    banDo = d.monthNames || d.month_names;
+  return banDo && typeof banDo === "object" ? banDo : {};
+}
+/** Tên HIỂN THỊ trong tháng đang xem; không có tên riêng (hoặc không xem theo tháng) ⇒ tên gốc. */
+function tenTheoThangCuaDong(dong, tenGoc, thang) {
+  const goc = String(tenGoc == null ? "" : tenGoc);
+  if (!thang) return goc;
+  const rieng = banDoTenThangCuaDong(dong)[thang];
+  return rieng != null && String(rieng).trim() !== "" ? String(rieng) : goc;
+}
+/** TÊN CŨ để hiện khi di chuột; rỗng khi tháng này không đổi tên ⇒ chỗ gọi bỏ hẳn dòng đó đi. */
+function tenGocNeuDaDoiCuaDong(dong, tenGoc, thang) {
+  const goc = String(tenGoc == null ? "" : tenGoc);
+  return tenTheoThangCuaDong(dong, goc, thang) === goc ? "" : goc;
+}
+/** Tháng đang lọc ở tab Nhiệm vụ, dạng "YYYY-MM" — cùng điều kiện với `taskMatchesDateFilter`. */
+function thangLocNhiemVu() {
+  const thang = Number(tasksXemThang),
+    nam = Number(tasksXemNam);
+  if (!(thang >= 1 && thang <= 12) || !(nam >= 1900 && nam <= 2200)) return "";
+  return String(nam) + "-" + String(thang).padStart(2, "0");
+}
+/** Tháng đang xem của Sơ đồ Gantt — Gantt LUÔN xem đúng một tháng (`datKhoangGanttTheoThang`). */
+function thangLocGantt() {
+  const thang = Number(ganttXemThang),
+    nam = Number(ganttXemNam);
+  if (!(thang >= 1 && thang <= 12) || !(nam >= 1900 && nam <= 2200)) return "";
+  return String(nam) + "-" + String(thang).padStart(2, "0");
+}
+/** "2026-09" → "Tháng 9/2026" cho phần nhãn. */
+function nhanThangVN(thang) {
+  const text = String(thang == null ? "" : thang);
+  return /^\d{4}-\d{2}$/.test(text) ? "Tháng " + Number(text.slice(5, 7)) + "/" + text.slice(0, 4) : text;
+}
 // ===== Nhật ký từng lần chỉnh sửa — 3 cấp (docs/KE-HOACH-NHAT-KY.md) =====
 // Nhãn tiếng Việt cho `action` của bảng activity_logs. Hành động lạ ⇒ hiện nguyên tên hành động,
 // KHÔNG bỏ dòng đó đi: nhật ký thiếu dòng thì người đọc không biết là thiếu.
@@ -1773,6 +1862,8 @@ const NHAT_KY_HANH_DONG = {
   "works.copy": { nhan: "Nhân bản công việc", icon: "fa-copy", mau: "text-indigo-600" },
   "works.remove": { nhan: "Xoá công việc", icon: "fa-trash", mau: "text-red-600" },
   "works.reorder": { nhan: "Sắp xếp lại", icon: "fa-arrows-up-down", mau: "text-gray-500" },
+  "works.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-teal-600" },
+  "works.clearMonthName": { nhan: "Bỏ tên theo tháng", icon: "fa-calendar-xmark", mau: "text-gray-500" },
   "subworks.create": { nhan: "Thêm công việc con", icon: "fa-plus-circle", mau: "text-green-600" },
   "subworks.update": { nhan: "Sửa công việc con", icon: "fa-pen", mau: "text-blue-600" },
   "subworks.copy": { nhan: "Nhân bản công việc con", icon: "fa-copy", mau: "text-indigo-600" },
@@ -1781,6 +1872,8 @@ const NHAT_KY_HANH_DONG = {
   "tasks.copy": { nhan: "Nhân bản nhiệm vụ", icon: "fa-copy", mau: "text-indigo-600" },
   "workItems.remove": { nhan: "Xoá", icon: "fa-trash", mau: "text-red-600" },
   "workItems.reorder": { nhan: "Sắp xếp lại", icon: "fa-arrows-up-down", mau: "text-gray-500" },
+  "workItems.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-teal-600" },
+  "workItems.clearMonthName": { nhan: "Bỏ tên theo tháng", icon: "fa-calendar-xmark", mau: "text-gray-500" },
   "reminders.create": { nhan: "Thêm nhắc việc", icon: "fa-bell", mau: "text-amber-600" },
   "reminders.update": { nhan: "Sửa nhắc việc", icon: "fa-bell", mau: "text-amber-600" },
   "reminders.remove": { nhan: "Xoá nhắc việc", icon: "fa-bell-slash", mau: "text-red-600" },
@@ -1831,6 +1924,13 @@ function buildNhatKyChiTiet(entry) {
     if (details.copiedCount) phu.push("Sao " + details.copiedCount + " dòng");
     if (details.createdByName) phu.push("Người lập: " + details.createdByName);
     if (details.assignedByName) phu.push("Người giao: " + details.assignedByName);
+    // Đặt/bỏ tên theo tháng: máy chủ ghi `{ code, month, name, previousName }` chứ không ghi
+    // `changes` (tên tháng nằm ở bảng riêng, không phải một cột của đầu việc).
+    if (details.month) {
+      phu.push(nhanThangVN(details.month));
+      if (details.previousName) phu.push("tên cũ: " + details.previousName);
+      phu.push(details.name ? "tên mới: " + details.name : "bỏ tên riêng, dùng lại tên gốc");
+    }
     return phu.length === 0 ? "" : "<div class=\"mt-2 text-xs text-gray-600\">" + escapeHtml(phu.join(" · ")) + "</div>";
   }
   const dong = Object.keys(changes).map(cot => {
@@ -1891,16 +1991,22 @@ function chuyenTabNhatKy(kieu, tab) {
   // Cập nhật) nên chỉ ẩn khối 3 cột bên trong.
   const than = document.getElementById(kieu === "project" ? "project-form" : "task-form-body"),
     khung = document.getElementById(kieu + "-nhat-ky-panel"),
+    khungTen = document.getElementById(kieu + "-ten-thang-panel"),
     nutTt = document.getElementById(kieu + "-tab-thong-tin"),
-    nutNk = document.getElementById(kieu + "-tab-nhat-ky");
+    nutNk = document.getElementById(kieu + "-tab-nhat-ky"),
+    nutTen = document.getElementById(kieu + "-tab-ten-thang");
   if (!than || !khung) return;
-  const xemNhatKy = tab === "nhat-ky";
-  than.classList.toggle("hidden", xemNhatKy);
+  const xemNhatKy = tab === "nhat-ky",
+    xemTenThang = tab === "ten-thang";
+  than.classList.toggle("hidden", xemNhatKy || xemTenThang);
   khung.classList.toggle("hidden", !xemNhatKy);
+  khungTen && khungTen.classList.toggle("hidden", !xemTenThang);
   if (nutTt && nutNk) {
-    const bat = "border-blue-500 text-blue-600", tat = "border-transparent text-gray-500";
-    (xemNhatKy ? nutNk : nutTt).className = "px-3 py-2 text-sm font-semibold border-b-2 " + bat;
-    (xemNhatKy ? nutTt : nutNk).className = "px-3 py-2 text-sm font-semibold border-b-2 " + tat;
+    const bat = "px-3 py-2 text-sm font-semibold border-b-2 border-blue-500 text-blue-600",
+      tat = "px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500";
+    nutTt.className = xemNhatKy || xemTenThang ? tat : bat;
+    nutNk.className = xemNhatKy ? bat : tat;
+    if (nutTen) nutTen.className = xemTenThang ? bat : tat;
   }
   // Nạp một lần rồi thôi: đổi tab qua lại không gọi lại API.
   if (xemNhatKy && khung.dataset.daNap !== "1") {
@@ -1908,12 +2014,15 @@ function chuyenTabNhatKy(kieu, tab) {
     napNhatKy(kieu, khung.dataset.ma || "", kieu + "-nhat-ky-noi-dung");
   }
 }
-function buildThanhTabNhatKy(kieu) {
+function buildThanhTabNhatKy(kieu, coTenThang = false) {
   // Thoát NGAY tại chỗ nội suy, không qua biến trung gian: bộ soát XSS (TC-SEC-18) chỉ nhận hàm
   // thoát viết thẳng ở lỗ HTML — và đúng ra thế, vì biến thì đọc mã không biết đã thoát chưa.
   return "<div class=\"flex gap-2 border-b border-gray-100 mb-4\">" +
     "<button type=\"button\" id=\"" + escapeHtmlAttr(kieu) + "-tab-thong-tin\" class=\"px-3 py-2 text-sm font-semibold border-b-2 border-blue-500 text-blue-600\" onclick=\"chuyenTabNhatKy('" + escapeForInlineHandler(kieu) + "', 'thong-tin')\">Thông tin</button>" +
     "<button type=\"button\" id=\"" + escapeHtmlAttr(kieu) + "-tab-nhat-ky\" class=\"px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500\" onclick=\"chuyenTabNhatKy('" + escapeForInlineHandler(kieu) + "', 'nhat-ky')\"><i class=\"fas fa-clock-rotate-left mr-1\"></i>Nhật ký</button>" +
+    // Tab thứ ba chỉ hiện với đầu việc DÀI HƠN MỘT THÁNG: bấm vào một tab trống thì người dùng
+    // tưởng chức năng hỏng, còn không có tab thì thấy ngay là đầu việc này không thuộc diện.
+    (coTenThang ? "<button type=\"button\" id=\"" + escapeHtmlAttr(kieu) + "-tab-ten-thang\" class=\"px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500\" onclick=\"chuyenTabNhatKy('" + escapeForInlineHandler(kieu) + "', 'ten-thang')\"><i class=\"fas fa-calendar-day mr-1\"></i>Tên theo tháng</button>" : "") +
     "</div>";
 }
 function buildKhungNhatKy(kieu, ma) {
@@ -1921,6 +2030,96 @@ function buildKhungNhatKy(kieu, ma) {
   return "<div id=\"" + escapeHtmlAttr(kieu) + "-nhat-ky-panel\" class=\"hidden\" data-ma=\"" + escapeHtmlAttr(ma) + "\">" +
     "<div id=\"" + escapeHtmlAttr(kieu) + "-nhat-ky-noi-dung\" class=\"space-y-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar\">" +
     "<div class=\"py-8 text-center text-gray-400\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải nhật ký…</div></div></div>";
+}
+/** Dòng đầu việc TRONG BỘ NHỚ theo mã — nơi duy nhất `monthNames` được cập nhật sau khi ghi. */
+function timDongDauViec(kieu, ma) {
+  const khoa = String(ma == null ? "" : ma);
+  if (kieu === "project") return allProjects.find(row => String(row[COL.P_ID]) === khoa) || null;
+  return allTasks.find(row => String(row[COL.T_ID]) === khoa) || null;
+}
+/** Tên gốc + khoảng thời gian của một dòng, gọi đúng cột theo cấp (cấp 1 khác cấp 2/3). */
+function thongTinTenThangCuaDong(kieu, dong) {
+  const d = dong || {};
+  if (kieu === "project") return { ten: String(d[COL.P_NAME] || ""), batDau: d[COL.P_START], ketThuc: d[COL.P_END] };
+  return { ten: String(d[COL.T_NAME] || ""), batDau: d[COL.T_START], ketThuc: d[COL.T_DUE] };
+}
+/** MỘT hàng của bảng: ô nhập + nút Lưu, thêm nút Bỏ khi tháng đó đang có tên riêng. */
+function buildDongTenThang(kieu, ma, tenGoc, thang, giaTri) {
+  const hienTai = giaTri == null ? "" : String(giaTri);
+  return "<tr>" +
+    "<td class=\"px-3 py-2 text-sm font-medium text-gray-700 whitespace-nowrap\">" + escapeHtml(nhanThangVN(thang)) + "</td>" +
+    "<td class=\"px-3 py-2\"><input type=\"text\" class=\"form-input\" id=\"" + escapeHtmlAttr(kieu + "-ten-thang-o-" + thang) + "\" value=\"" + escapeHtmlAttr(hienTai) + "\" placeholder=\"" + escapeHtmlAttr(tenGoc) + "\" maxlength=\"500\" onkeydown=\"enterLuuTenThang(event, '" + escapeForInlineHandler(kieu) + "', '" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(thang) + "')\"></td>" +
+    "<td class=\"px-3 py-2 text-right whitespace-nowrap\">" +
+    "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"luuTenThang('" + escapeForInlineHandler(kieu) + "', '" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(thang) + "')\">Lưu</button>" +
+    (hienTai ? "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm ml-2 text-red-600\" onclick=\"xoaTenThang('" + escapeForInlineHandler(kieu) + "', '" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(thang) + "')\">Bỏ</button>" : "") +
+    "</td></tr>";
+}
+/** Bảng «Tên theo tháng» — dựng LẠI TỪ dòng trong bộ nhớ, không gọi thêm API (bản đồ đã đi kèm). */
+function buildBangTenThang(kieu, ma) {
+  const dong = timDongDauViec(kieu, ma),
+    tt = thongTinTenThangCuaDong(kieu, dong),
+    cacThang = cacThangCuaDauViec(tt.batDau, tt.ketThuc),
+    suaDuoc = cacThang.slice(1);
+  if (!dong || suaDuoc.length === 0) {
+    return "<div class=\"py-8 text-center text-sm text-gray-500\">Đầu việc này không kéo dài hơn một tháng nên không có tháng nào để đặt tên riêng.</div>";
+  }
+  const banDo = banDoTenThangCuaDong(dong);
+  return "<div class=\"text-xs text-gray-500 mb-3\">" + escapeHtml(nhanThangVN(cacThang[0])) + " luôn dùng tên gốc «" + escapeHtml(tt.ten) + "» — muốn đổi thì sửa ô Tên ở tab Thông tin. Để TRỐNG một tháng là dùng lại tên gốc; tháng đã đổi tên thì di chuột vào sẽ thấy tên gốc.</div>" +
+    "<table class=\"min-w-full table-auto\"><thead class=\"bg-gray-50\"><tr>" +
+    "<th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase\">Tháng</th>" +
+    "<th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase\">Tên riêng của tháng</th>" +
+    "<th class=\"px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>" +
+    "</tr></thead><tbody class=\"bg-white divide-y divide-gray-100\">" +
+    suaDuoc.map(thang => buildDongTenThang(kieu, ma, tt.ten, thang, banDo[thang])).join("") +
+    "</tbody></table>";
+}
+function buildKhungTenThang(kieu, ma) {
+  return "<div id=\"" + escapeHtmlAttr(kieu) + "-ten-thang-panel\" class=\"hidden\" data-ma=\"" + escapeHtmlAttr(ma) + "\">" +
+    "<div id=\"" + escapeHtmlAttr(kieu) + "-ten-thang-bang\" class=\"max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar\">" +
+    buildBangTenThang(kieu, ma) + "</div></div>";
+}
+function veLaiBangTenThang(kieu, ma) {
+  const el = document.getElementById(kieu + "-ten-thang-bang");
+  if (el) el.innerHTML = buildBangTenThang(kieu, ma);
+}
+/**
+ * GHI tên tháng: `ten === null` là DELETE, chuỗi rỗng là PUT rỗng (máy chủ hiểu là bỏ tên riêng).
+ * Quyền do máy chủ quyết (đúng bằng quyền SỬA đầu việc) — chỗ này chỉ hiện lại câu lỗi nguyên văn.
+ */
+async function ghiTenThang(kieu, ma, thang, ten) {
+  const goc = kieu === "project" ? "/api/v1/works/" : "/api/v1/work-items/",
+    duong = goc + encodeURIComponent(ma) + "/month-names/" + encodeURIComponent(thang),
+    ketQua = ten === null ? await restGhi("DELETE", duong) : await restGhi("PUT", duong, { name: ten }),
+    boTen = ten === null || String(ten).trim() === "";
+  if (!ketQua.ok) {
+    showToast(ketQua.error || "Không lưu được tên theo tháng", "error");
+    return false;
+  }
+  // Sửa NGAY bản đồ trong bộ nhớ: hai tab lọc tháng tại chỗ, không nạp lại dữ liệu từ máy chủ.
+  const dong = timDongDauViec(kieu, ma);
+  if (dong) {
+    const banDo = Object.assign({}, banDoTenThangCuaDong(dong));
+    boTen ? delete banDo[thang] : (banDo[thang] = String(ten).trim());
+    dong.monthNames = banDo;
+  }
+  showToast(boTen ? "Đã bỏ tên riêng của " + nhanThangVN(thang) : "Đã lưu tên của " + nhanThangVN(thang), "success");
+  veLaiBangTenThang(kieu, ma), renderProjects(), renderTasks();
+  if (currentSection === "gantt") renderGanttChart();
+  return true;
+}
+function luuTenThang(kieu, ma, thang) {
+  const o = document.getElementById(kieu + "-ten-thang-o-" + thang);
+  // Cắt trắng NGAY tại đây: máy chủ cũng trim (works/routes.js), gửi đúng thứ sẽ được lưu.
+  return ghiTenThang(kieu, ma, thang, o ? String(o.value).trim() : "");
+}
+function xoaTenThang(kieu, ma, thang) {
+  return ghiTenThang(kieu, ma, thang, null);
+}
+function enterLuuTenThang(event, kieu, ma, thang) {
+  if (!event || event.key !== "Enter") return;
+  // Ô này nằm TRONG <form> của modal nhiệm vụ: Enter mặc định là bấm Cập nhật cả nhiệm vụ.
+  event.preventDefault();
+  luuTenThang(kieu, ma, thang);
 }
 function createProjectModal(isEdit, project) {
   const text = isEdit ? "Chỉnh sửa công việc" : "Tạo công việc mới",
@@ -1975,7 +2174,7 @@ function createProjectModal(isEdit, project) {
         // nạp phân công — không thì ô phòng trống vĩnh viễn cho tới khi đóng/mở lại modal.
         Array.isArray(allDepartments) && allDepartments.length > 0 ? veLaiPhong() : loadDepartmentContext(veLaiPhong);
       }
-    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project") : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
+    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project", thangSuaDuocCuaDauViec(project[COL.P_START], project[COL.P_END]).length > 0) : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) + buildKhungTenThang("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
 }
 function createTaskModal(isEdit, task) {
   const draft = isEdit ? null : pendingTaskCreate;
@@ -2079,14 +2278,14 @@ function createTaskModal(isEdit, task) {
     projectSel.addEventListener("change", napPhanCongTask);
     napPhanCongTask();
   }, 250);
-  return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        </div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              " + (isEdit ? buildThanhTabNhatKy("task") : "") + "\n              <!-- 3 Columns Content -->\n              <div id=\"task-form-body\" class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 || createProject ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + (isAdmin() || isManager() ? allProjects : getUserAllowedProjects()).map(item => {
+  return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        </div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              " + (isEdit ? buildThanhTabNhatKy("task", thangSuaDuocCuaDauViec(task[COL.T_START], task[COL.T_DUE]).length > 0) : "") + "\n              <!-- 3 Columns Content -->\n              <div id=\"task-form-body\" class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 || createProject ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + (isAdmin() || isManager() ? allProjects : getUserAllowedProjects()).map(item => {
     const text3 = (isEdit ? task[COL.T_PID] : createProject) === item[COL.P_ID] ? "selected" : "";
     return "<option value=\"" + escapeHtml(item[COL.P_ID]) + "\" " + text3 + ">" + escapeHtml(item[COL.P_NAME]) + " (" + escapeHtml(item[COL.P_ID]) + ")</option>";
   }).join("") + "\n                            </select>\n                          </div>\n                          <div id=\"task-supervisor-group\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                              <select name=\"supervisorId\" id=\"task-supervisor-select\" class=\"form-select\"></select>\n                          </div>\n                          <div id=\"task-leaders-multi\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <div id=\"task-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                          </div>\n                          <div id=\"task-leader-single\" class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <select name=\"leaderIds\" id=\"task-leader-select\" class=\"form-select\"></select>\n                          </div>\n                          <input type=\"hidden\" name=\"leaderIds\" id=\"task-leaders-input\" value=\"" + (isEdit && task ? (task.leaderIds || []).join(",") : "") + "\">\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mô tả</label>\n                            <textarea name=\"description\" class=\"form-textarea\" rows=\"5\" " + (isEdit22 ? "disabled" : "") + ">" + (isEdit ? escapeHtml(task[COL.T_DESC]) || "" : "") + "</textarea>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                                <label class=\"form-label\">Cán bộ trực tiếp</label>\n                                <select name=\"assignee\" class=\"form-select\" " + (isEdit22 || laCapHai ? "disabled" : "") + ">\n                                  <option value=\"\">-- Chọn người thực hiện --</option>\n                                  " + list.map(list2 => {
     let text3 = "";
     if (isEdit) text3 = task[COL.T_ASSIGNEE] === list2[COL.S_NAME] ? "selected" : "";else !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
     return "<option value=\"" + escapeHtml(list2[COL.S_NAME]) + "\" " + text3 + ">" + escapeHtml(list2[COL.S_NAME]) + "</option>";
-  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tiến độ (%)</label>\n                                  <input type=\"number\" name=\"completion\" class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? parseInt(task[COL.T_COMPLETION] || 0) : 0) + "\">\n                              </div>\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Link kết quả</label>\n                            <textarea name=\"resultLinks\" class=\"form-textarea\" rows=\"5\" placeholder=\"Nhập mỗi link trên một dòng\">" + (isEdit ? escapeHtml(task[COL.T_RESULT_LINKS]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) : "") + "\n          </form>\n      </div>\n  </div>\n";
+  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tiến độ (%)</label>\n                                  <input type=\"number\" name=\"completion\" class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? parseInt(task[COL.T_COMPLETION] || 0) : 0) + "\">\n                              </div>\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Link kết quả</label>\n                            <textarea name=\"resultLinks\" class=\"form-textarea\" rows=\"5\" placeholder=\"Nhập mỗi link trên một dòng\">" + (isEdit ? escapeHtml(task[COL.T_RESULT_LINKS]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n          </form>\n      </div>\n  </div>\n";
 }
 function toggleTaskReminders(forceShow) {
   const taskRemindersContainerEl = document.getElementById("task-reminders-container"),
@@ -4633,21 +4832,23 @@ function createGanttSubRowHtml(sub) {
     key = "sub:" + sub.id,
     bodyId = escapeHtml("gantt-subs-" + ganttDomKey(String(sub.id))),
     an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
+    thangXem = thangLocGantt(),
+    tenThang = tenTheoThangCuaDong(sub, sub.name || "", thangXem),
     nhanNgay = [formatDateForGantt(sub.startDate), formatDateForGantt(sub.dueDate)]
         .filter(Boolean)
         .join(" - "),
-      nhan = (nhanNgay ? nhanNgay + ": " : "") + (sub.name || ""),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + tenThang,
     thanh = buildGanttCellHtml(sub.startDate, sub.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-subwork", nhan, Number(sub.completion) || 0),
     soCon = (sub.children || []).length,
     // JSON tooltip đã qua escapeHtmlAttr MỘT lần trước khi đặt vào thuộc tính.
-    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(sub)));
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(sub, thangXem)));
   return '\n<div class="gantt-item gantt-item-subwork" data-type="subwork" data-id="' + escapeHtml(sub.code || "") + '">' +
     '<div class="gantt-item-label">' +
     createGanttToggleSlotHtml(key, soCon > 0) +
     // Icon CV con = GIỐNG icon công việc cha nhưng MÀU ĐỎ (yêu cầu 2026-08-26).
     '<i class="fas fa-folder text-red-500 mr-2"></i>' +
-    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(sub.name || "") + "</span>" +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(tenThang) + "</span>" +
     '<span class="gantt-task-count">' + escapeHtml(soCon) + "</span></div>" +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>" +
     '\n<div id="' + bodyId + '"' + an + ">" +
@@ -4660,17 +4861,19 @@ function createGanttTaskRowHtml(task) {
   const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
     totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
     quaHan = isTaskOverdue(task.dueDate) && !(task.status || "").toLowerCase().includes("hoàn thành"),
-    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(task))),
+    thangXem = thangLocGantt(),
+    tenThang = tenTheoThangCuaDong(task, task.name || "", thangXem),
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(task, thangXem))),
     nhanNgay = [formatDateForGantt(task.startDate), formatDateForGantt(task.dueDate)]
         .filter(Boolean)
         .join(" - "),
-      nhan = (nhanNgay ? nhanNgay + ": " : "") + (task.name || ""),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + tenThang,
     thanh = buildGanttCellHtml(task.startDate, task.dueDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-task" + (quaHan ? " gantt-bar-overdue" : ""), nhan, Number(task.completion) || 0);
   return '\n<div class="gantt-item" data-type="task" data-id="' + escapeHtml(task.code || "") + '">' +
     '<div class="gantt-item-label text-sm">' +
     createGanttToggleSlotHtml("", false) +
-    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(task.name || "") + "</span></div>" +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(tenThang) + "</span></div>" +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>";
 }
 
@@ -4826,13 +5029,15 @@ function gomCanBoThucHienGantt(work) {
   return tap.join(", ");
 }
 
-/** Chuẩn bị dữ liệu hiển thị cho một dòng bất kỳ của cây Gantt. */
-function duLieuHoverGantt(dong) {
+/** Chuẩn bị dữ liệu hiển thị cho một dòng bất kỳ của cây Gantt.
+ *  `thang` = tháng đang xem: có tên riêng thì tiêu đề thẻ hiện tên đó và thêm dòng «Tên gốc». */
+function duLieuHoverGantt(dong, thang) {
   if (!dong) return null;
   if (dong.progress != null || dong.endDate)
     return {
       loai: "Công việc",
-      ten: dong.name || "",
+      ten: tenTheoThangCuaDong(dong, dong.name || "", thang),
+      tenGoc: tenGocNeuDaDoiCuaDong(dong, dong.name || "", thang),
       banKiemSoat: dong.supervisorName || "",
       lanhDaoPhong: (dong.leaderNames || []).join(", "),
       canBo: gomCanBoThucHienGantt(dong),
@@ -4840,7 +5045,8 @@ function duLieuHoverGantt(dong) {
     };
   return {
     loai: Number(dong.level) === 2 ? "Công việc con" : "Nhiệm vụ",
-    ten: dong.name || "",
+    ten: tenTheoThangCuaDong(dong, dong.name || "", thang),
+    tenGoc: tenGocNeuDaDoiCuaDong(dong, dong.name || "", thang),
     lanhDaoPhong: (dong.leaderNames || []).join(", "),
     canBo: dong.assigneeName || "",
     tienDo: Number(dong.completion || 0) + "%",
@@ -4853,6 +5059,10 @@ function buildGanttHoverCardHtml(d) {
   if (!d) return "";
   let html =
     '<div class="tieu-de">' + escapeHtml(d.loai) + ": " + escapeHtml(d.ten || "") + "</div>";
+  // Tháng đã đổi tên thì hiện TÊN CŨ ngay dưới tiêu đề; tháng không đổi thì bỏ hẳn dòng này.
+  if (d.tenGoc)
+    html +=
+      '<div class="dong"><b>' + escapeHtml("Tên gốc") + ": </b>" + escapeHtml(d.tenGoc) + "</div>";
   if ("banKiemSoat" in d)
     html +=
       '<div class="dong"><b>' +
@@ -5326,18 +5536,20 @@ function createGanttWorkRowHtml(work) {
     key = "work:" + work.code,
     bodyId = escapeHtml("gantt-tasks-" + ganttDomKey(work.code)),
     an = escapeHtml(ganttThuGon.has(key) ? " hidden" : ""),
+    thangXem = thangLocGantt(),
+    tenThang = tenTheoThangCuaDong(work, work.name || "", thangXem),
     nhanNgay = [formatDateForGantt(work.startDate), formatDateForGantt(work.endDate)]
         .filter(Boolean)
         .join(" - "),
-      nhan = (nhanNgay ? nhanNgay + ": " : "") + (work.name || ""),
+      nhan = (nhanNgay ? nhanNgay + ": " : "") + tenThang,
     thanh = buildGanttCellHtml(work.startDate, work.endDate, rangeStart, rangeEnd, totalDays,
       "gantt-bar-project", nhan, work.progress),
-    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(work)));
+    duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(work, thangXem)));
   return '\n<div class="gantt-work-block">' +
     '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '">' +
     '<div class="gantt-item-label">' + createGanttToggleSlotHtml(key, true) +
     '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(work.status)) + ' mr-2"></i>' +
-    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(work.name || "") + "</span>" +
+    '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(tenThang) + "</span>" +
     '<span class="gantt-task-count">' + escapeHtml(work.taskCount) + "</span>" +
     '<div class="gantt-item-actions"></div></div>' +
     '<div class="gantt-item-timeline">' + thanh + "</div></div>" +

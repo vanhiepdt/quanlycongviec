@@ -80,6 +80,9 @@ export default [
       // nhat-ky-ui.test.js: tab «Nhật ký» trong modal chỉnh sửa cả 3 cấp (TC-NKUI, 2026-08-28) —
       // chạy app.js thật trong jsdom, fetch giả.
       'tests/unit/nhat-ky-ui.test.js',
+      // ten-thang-ui.test.js: tên riêng theo từng tháng ở 2 tab + Sơ đồ Gantt và tab «Tên theo
+      // tháng» của modal chỉnh sửa (TC-TENTHANG-25..38, 2026-08-28) — app.js thật, fetch giả.
+      'tests/unit/ten-thang-ui.test.js',
     ],
     languageOptions: {
       globals: {
