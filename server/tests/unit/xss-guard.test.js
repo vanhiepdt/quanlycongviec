@@ -169,9 +169,16 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // `createUyQuyenModal`, 1 chỗ thoát `size` của thẻ select, 1 lỗ cho cả biểu thức `list.map(...)`
     // và 2 chỗ thoát bên trong (id + tên phòng). KHÔNG thêm chỗ ghi HTML nào (vẫn dựng trong chuỗi
     // của modal cũ) ⇒ 86 chỗ / 602 giá trị.
+    // 2026-08-28 (ô CHỌN người nhận thay ô gõ email, yêu cầu «danh sách hiện ra sẽ đúng theo luồng
+    // đã nói»): form ủy quyền đổi `<input list=uy-quyen-staff-list>` sang `<select>` do
+    // `buildUyQuyenNguoiNhan()` dựng. −1 lời gọi `buildStaffEmailDatalist` trong `createUyQuyenModal`
+    // (ô ủy quyền không dùng datalist nữa; hai chỗ gọi của modal Phòng giữ nguyên), +1 lời gọi
+    // builder mới, +2 chỗ thoát của nhánh rỗng (câu giải thích) và +2 chỗ thoát của mỗi option
+    // (email + nhãn tên/vai/phòng) ⇒ +4 giá trị nội suy, KHÔNG thêm chỗ ghi HTML nào
+    // ⇒ 86 chỗ / 606 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 602 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 86, gia_tri: 606 });
   });
 });
 

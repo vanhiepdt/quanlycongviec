@@ -222,19 +222,22 @@ Chuẩn bị: `DATABASE_URL=…/quanlycongviec_uat npm run migrate:up` (CSDL kh�
 migration 006 — bẫy đã ghi ở `docs/BAT-DAU-SESSION.md` mục 1), rồi đồng bộ `web/` + `server/src/`
 lên chỗ đang chạy và khởi động lại Node.
 
-1. **Ctrl+Shift+R** (nạp lại bỏ cache) → mở Console → phải thấy đúng `[QLCV] app.js 20260827-78`.
+1. **Ctrl+Shift+R** (nạp lại bỏ cache) → mở Console → phải thấy đúng `[QLCV] app.js 20260828-82`.
    Thấy số khác là trình duyệt/Nginx còn giữ file cũ, mọi bước dưới đều vô nghĩa.
 2. Đăng nhập bằng **Phó Giám đốc** hoặc **Trưởng phòng** (§13.7, mật khẩu `Test@12345`) → khối
    người dùng góc trên có nút **«Ủy quyền của tôi»** (icon `fa-user-shield`). Đăng nhập bằng
-   **Nhân viên** thì nút vẫn hiện nhưng tạo sẽ bị máy chủ trả **403** — đúng thiết kế (máy chủ là
-   rào chặn cuối, không ẩn nút để giả vờ an toàn).
+   **Cán bộ** thì nút vẫn hiện và **tạo được** (§13.4 mục 17: mọi cán bộ đều được ủy quyền) —
+   ô chọn người nhận chỉ còn người cùng phòng cùng bậc; không có ai như vậy thì ô bị vô hiệu hoá.
 3. Bấm nút → modal có **hai bảng**: «Tôi ủy quyền cho» và «Tôi được ủy quyền», ban đầu cả hai nói
    rõ là rỗng («Bạn chưa ủy quyền cho ai.» / «Chưa ai ủy quyền cho bạn.»).
-4. Tạo một bản: chọn email người nhận trong danh sách gợi ý, **Từ ngày** = hôm nay, **Đến ngày** =
-   hôm nay + 7 → Lưu. Bảng «Tôi ủy quyền cho» hiện một dòng: người nhận, khoảng ngày `dd/mm/yyyy`,
-   phòng («Tất cả phòng tôi phụ trách» nếu để trống), trạng thái **Đang hiệu lực**, nút **Huỷ**.
+4. Tạo một bản: mở ô **Người nhận** — nó là **ô chọn**, chỉ liệt kê người bạn ủy quyền được (cùng
+   phòng, bậc ngang bằng hoặc thấp hơn; ba cặp ngoại lệ ở §11), mỗi dòng đọc «tên — vai · phòng».
+   Chọn một người, **Từ ngày** = hôm nay, **Đến ngày** = hôm nay + 7 → Lưu. Bảng «Tôi ủy quyền cho»
+   hiện một dòng: người nhận, khoảng ngày `dd/mm/yyyy`, phòng («Tất cả phòng tôi phụ trách» nếu để
+   trống), trạng thái **Chờ phê duyệt**, nút **Rút lại**.
 5. Tạo lại **đúng cặp người và khoảng ngày trùng** → phải thấy câu lỗi đỏ ngay trong modal (mã
-   `DELEGATION_OVERLAP`), không tạo thêm dòng. Tự ủy quyền cho chính mình cũng bị chặn.
+   `DELEGATION_OVERLAP`), không tạo thêm dòng. Chính mình **không có** trong ô chọn, nên không còn
+   cách tự ủy quyền cho mình từ giao diện (máy chủ vẫn chặn `DELEGATION_SELF`).
 6. **Đăng xuất, đăng nhập bằng người nhận** → cạnh tên có nhãn vàng **«đang được ủy quyền»**; trỏ
    chuột vào nhãn thấy tooltip *«Bạn đang dùng quyền của \<tên người giao\> đến \<dd/mm/yyyy\>»*.
    Người này giờ sửa/duyệt được đúng phần việc của phòng người giao phụ trách, **không** rộng hơn.
@@ -318,7 +321,7 @@ xong và vẫn hiện ở trang «Ủy quyền của tôi», mất một dòng t
 động. **Vẫn KHÔNG email** (§13.4 mục 4). Chưa làm: nhắc "sắp hết hạn", và đường ĐỌC thông báo trên
 giao diện vẫn chờ §13.4 mục 16 (chuông) — hiện người dùng thấy đề nghị ở chính trang ủy quyền.
 
-### Giao diện (app.js `20260828-81`)
+### Giao diện (app.js `20260828-82`)
 
 `buildUyQuyenNut(lop, mau, icon, nhan, id, nguoi)` gom cả ba nút; năm nhãn trạng thái là chuỗi
 **HẰNG** chọn theo `row.status` (dữ liệu lạ rơi vào nhánh «Chưa/hết hiệu lực», không in ra):
@@ -338,6 +341,28 @@ nào — máy chủ suy phạm vi từ `department_managers`; còn Giám đốc 
 chủ **bắt** liệt kê phòng, tức thiếu ô này thì mục 18 («giám đốc có thể ủy quyền cho phó giám đốc»)
 không làm được từ trình duyệt. Giao diện chặn sớm đúng bằng luật máy chủ, không rộng hơn.
 
+Ô **«Người nhận»** (2026-08-28, yêu cầu «cái này là sẽ chọn người, danh sách hiện ra sẽ đúng theo
+luồng đã nói») không còn là ô gõ email tự do mà là `select[name="to"] required` do
+`buildUyQuyenNguoiNhan()` dựng. Danh sách ứng viên (`dsNguoiNhanUyQuyen()`) là **bản sao đọc-only**
+của `assertBacVaPhong` phía máy chủ — hai hằng `UQ_BAC_VAI` / `UQ_KHAC_PHONG` sao nguyên văn
+`BAC_VAI` / `NGOAI_LE_KHAC_PHONG`:
+
+| Tôi là | Ô chọn hiện ai |
+|---|---|
+| Giám đốc | Phó Giám đốc (mọi phòng) — mục 18 |
+| Phó Giám đốc | Phó Giám đốc và Trưởng phòng (mọi phòng), cùng người **cùng phòng** bậc ≥ 2 |
+| Trưởng phòng | người **cùng phòng** bậc ≥ 3 (Phó phòng, Quản lý công việc, Cán bộ) |
+| Phó phòng | người **cùng phòng** bậc ≥ 4 |
+| Quản lý công việc / Cán bộ | người **cùng phòng** cùng bậc 5 |
+
+Ba chỗ luôn bị loại: chính mình (so bằng email), **Nhà cung cấp**, và vai lạ (không có trong
+`UQ_BAC_VAI` ⇒ không biết bậc thì không đoán). Giá trị `<option>` vẫn là EMAIL nên `taoUyQuyen()`
+gửi khoá `toUserId` y như cũ. So phòng phải qua **TÊN** phòng vì `staffToLegacy` chỉ trả `COL.S_DEPT`
+là tên — `tenPhongCuaToi()` đổi `currentUser.department_id` sang tên trước khi so; tra không ra thì
+danh sách rỗng chứ **không** mở ra cả cơ quan. Lọc này luôn **hẹp hơn hoặc bằng** máy chủ: giao diện
+không có cột `is_active` nên người bị vô hiệu hoá vẫn có thể lọt vào ô chọn và máy chủ mới là chỗ
+chặn. Không còn ai hợp lệ thì ô bị `disabled` kèm câu nói rõ lý do, thay vì mời bấm gửi để nhận 400.
+
 ### Test đã thêm
 
 | Mã | Tầng | Nội dung |
@@ -354,6 +379,8 @@ không làm được từ trình duyệt. Giao diện chặn sớm đúng bằng
 | TC-UQ-16 (jsdom) | jsdom | 5 nhãn trạng thái, hai nút của người nhận, `data-id`/`data-nguoi` phải thoát |
 | TC-UQ-18 (jsdom) | jsdom | ô phòng **chỉ** hiện với admin · option mang id thật · phòng thiếu `ID phòng (DB)` bị bỏ · tên phòng có mã tấn công không dựng được thẻ |
 | TC-UQ-18b (jsdom) | jsdom | `taoUyQuyen()` gửi `departmentIds` là mảng SỐ · admin quên chọn phòng ⇒ **không** gọi máy chủ · vai thường **không** gửi khoá đó |
+| TC-UQ-19 (jsdom) | jsdom | danh sách người nhận theo từng vai · ba cặp ngoại lệ khác phòng · loại chính mình / Nhà cung cấp / dòng thiếu email / vai lạ · xếp theo bậc rồi tên · phòng tra không ra ⇒ rỗng chứ không mở rộng |
+| TC-UQ-19b (jsdom) | jsdom | ô người nhận là `select[name="to"] required`, **không** còn `input[name="to"]` hay datalist · option mang email chữ thường + nhãn «tên — vai · phòng» · rỗng ⇒ `disabled` + nói lý do · tên có mã tấn công không dựng được thẻ |
 
 ## 12. Test tay phần phê duyệt — làm sau §10
 

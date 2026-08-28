@@ -186,6 +186,27 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > tên phòng chứa `<img src=x onerror=alert(1)>` không dựng được thẻ; `taoUyQuyen()` gửi
 > `departmentIds` là mảng SỐ, và KHÔNG gửi khoá đó khi form không có ô phòng.
 
+> **Cập nhật 2026-08-28 (ô CHỌN người nhận thay ô gõ email).** Yêu cầu nguyên văn: «Sửa cái ủy quyền
+> mới: Email người nhận, cái này là sẽ chọn người, danh sách hiện ra sẽ đúng theo luồng đã nói». Ô
+> `<input type="text" name="to" list="uy-quyen-staff-list">` biến thành `<select name="to" required>`
+> do `buildUyQuyenNguoiNhan()` dựng; giá trị `<option>` vẫn là EMAIL (đã `escapeHtmlAttr` + hạ chữ
+> thường) để `taoUyQuyen()` gửi đúng khoá `toUserId` như cũ, nhãn là `escapeHtml(tên — vai · phòng)`.
+> ⇒ **86 chỗ / 606 giá trị** (TC-SEC-17), **+4 giá trị, 0 sink mới**: −1 lời gọi
+> `buildStaffEmailDatalist(...)` (modal Phòng vẫn gọi hai lần, không đụng tới), +1 lời gọi
+> `buildUyQuyenNguoiNhan()` trong `createUyQuyenModal`, +2 chỗ thoát của nhánh RỖNG (câu giải thích),
+> +2 chỗ thoát của mỗi `<option>`.
+>
+> Điểm cần canh không phải HTML mà là PHẠM VI danh sách: `dsNguoiNhanUyQuyen()` là **bản sao đọc-only**
+> của `assertBacVaPhong` (`server/src/modules/delegations/service.js`) — hai hằng `UQ_BAC_VAI` và
+> `UQ_KHAC_PHONG` sao nguyên văn `BAC_VAI` / `NGOAI_LE_KHAC_PHONG`. Lọc luôn HẸP HƠN HOẶC BẰNG máy
+> chủ: giao diện không có cột `is_active` nên người bị vô hiệu hoá vẫn có thể lọt vào ô chọn và máy
+> chủ mới là chỗ chặn (`VALIDATION_ERROR`); ngược lại, phòng của tôi mà tra `department_id` không ra
+> tên thì danh sách rỗng chứ không mở ra cả cơ quan. `COL.S_DEPT` là TÊN phòng (`staffToLegacy` không
+> có cột id phòng) nên `tenPhongCuaToi()` phải đổi `currentUser.department_id` sang tên trước khi so.
+> `tests/unit/uy-quyen-ui.test.js` (TC-UQ-19, TC-UQ-19b) chốt từng cặp vai, ba ngoại lệ khác phòng,
+> loại chính mình + Nhà cung cấp + vai lạ, không còn `input[name="to"]` / `#uy-quyen-staff-list`, và
+> tên người chứa `<img src=x onerror=alert(1)>` không dựng được thẻ.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

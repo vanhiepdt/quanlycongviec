@@ -17,7 +17,7 @@ const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 
 const EXPORTS = `;Object.assign(window, {
   COL, buildUyQuyenRow, buildUyQuyenBang, createUyQuyenModal, veNhanUyQuyen, tenPhongTheoIds,
   ngayVN, laCuaToi, showUyQuyenError, docCookieCsrf, buildUyQuyenNut, buildUyQuyenPhamVi,
-  taoUyQuyen,
+  taoUyQuyen, buildUyQuyenNguoiNhan, dsNguoiNhanUyQuyen, tenPhongCuaToi, uqBacVai,
   __uq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
     allStaff: () => { allStaff = giaTri; },
@@ -44,6 +44,19 @@ function ban(over = {}) {
     status: 'active',
     note: 'đi công tác',
     dang_hieu_luc: true,
+    ...over,
+  };
+}
+
+/** Một dòng cán bộ như `staffToLegacy` trả (khoá `COL.S_*` — `Phòng` là TÊN phòng, không phải id). */
+function nguoi(over = {}) {
+  return {
+    'Mã NV': 'NV09',
+    'Họ tên': 'Trần Thị Nhân Viên',
+    Email: 'nv@congty.vn',
+    'Phân quyền': 'Nhân viên',
+    Phòng: 'Phòng Kỹ thuật',
+    'Đối tượng': 'Người dùng',
     ...over,
   };
 }
@@ -300,12 +313,32 @@ describe('TC-UQ-18: ô chọn phòng của form ủy quyền chỉ dành cho Gi�
 });
 
 describe('TC-UQ-18b: taoUyQuyen gửi phạm vi phòng lên máy chủ', () => {
-  /** Dựng form thật trong DOM rồi thay `restGhi` bằng ống ghi lại thân yêu cầu. */
-  function moForm(vai) {
-    window.__uq('currentUser', { id: 1, name: 'Người tạo', role: vai });
+  /**
+   * Dựng form thật trong DOM rồi thay `restGhi` bằng ống ghi lại thân yêu cầu.
+   *
+   * `allStaff` phải có người HỢP LỆ theo đúng luật ô chọn (TC-UQ-19): ô người nhận là `<select>`,
+   * gán `.value` một email không có trong danh sách thì jsdom giữ chuỗi rỗng — nghĩa là bộ test này
+   * cũng canh luôn việc ô chọn có sinh option cho người đó không.
+   */
+  function moForm(vai, email = 'pgd@congty.vn') {
+    window.__uq('currentUser', {
+      id: 1,
+      name: 'Người tạo',
+      role: vai,
+      email: 'toi@congty.vn',
+      department_id: 11,
+    });
     window.__uq('allDepartments', [
       { 'ID phòng (DB)': 11, 'Tên phòng': 'Phòng Kỹ thuật' },
       { 'ID phòng (DB)': 12, 'Tên phòng': 'Phòng Kế hoạch' },
+    ]);
+    window.__uq('allStaff', [
+      nguoi({
+        'Họ tên': 'Phạm Phó Giám Đốc',
+        Email: 'pgd@congty.vn',
+        'Phân quyền': 'Phó Giám đốc',
+      }),
+      nguoi({ 'Họ tên': 'Trần Cán Bộ', Email: 'nv@congty.vn', 'Phân quyền': 'Nhân viên' }),
     ]);
     const wrapper = document.createElement('div');
     wrapper.innerHTML = window.createUyQuyenModal([], []);
@@ -318,7 +351,7 @@ describe('TC-UQ-18b: taoUyQuyen gửi phạm vi phòng lên máy chủ', () => {
       return Promise.resolve({ ok: false, error: 'dừng ở đây' });
     });
     const form = document.getElementById('uy-quyen-form');
-    form.querySelector('[name="to"]').value = 'pgd@congty.vn';
+    form.querySelector('[name="to"]').value = email;
     form.querySelector('[name="fromDate"]').value = '2026-09-01';
     form.querySelector('[name="toDate"]').value = '2026-09-10';
     return { form, goi };
@@ -344,9 +377,11 @@ describe('TC-UQ-18b: taoUyQuyen gửi phạm vi phòng lên máy chủ', () => {
   });
 
   it('vai thường: không có ô phòng nên KHÔNG gửi khoá departmentIds', async () => {
-    const { goi } = moForm('Trưởng phòng');
+    // Trưởng phòng (bậc 3) không ủy quyền LÊN Phó Giám đốc (bậc 2), nên chọn người cùng phòng.
+    const { goi } = moForm('Trưởng phòng', 'nv@congty.vn');
     await window.taoUyQuyen();
     expect(goi.length).toBe(1);
+    expect(goi[0].body.toUserId).toBe('nv@congty.vn');
     expect('departmentIds' in goi[0].body).toBe(false);
   });
 });
@@ -370,5 +405,180 @@ describe('TC-UQ-15d: hai hàm phụ mà cả khối dựa vào', () => {
     document.cookie = 'qlcv_sid=abc';
     document.cookie = 'qlcv_sid_csrf=mot-hai-ba';
     expect(window.docCookieCsrf()).toBe('mot-hai-ba');
+  });
+});
+
+// ============================================================================
+// TC-UQ-19 — ô CHỌN NGƯỜI NHẬN (yêu cầu 2026-08-28: «cái này là sẽ chọn người, danh sách hiện ra
+// sẽ đúng theo luồng đã nói»). Danh sách phải là BẢN SAO ĐÚNG của `assertBacVaPhong` phía máy chủ:
+// bậc vai ngang bằng hoặc thấp hơn (R2), cùng phòng trừ ba cặp ngoại lệ (R3), không tự ủy quyền
+// (L1), không có Nhà cung cấp. Sai một cặp là giao diện mời người dùng bấm gửi để nhận lỗi 400.
+// ============================================================================
+describe('TC-UQ-19: danh sách người nhận đúng luật máy chủ', () => {
+  const PHONG = [
+    { 'ID phòng (DB)': 11, 'Tên phòng': 'Phòng Kỹ thuật' },
+    { 'ID phòng (DB)': 12, 'Tên phòng': 'Phòng Kế hoạch' },
+  ];
+
+  /** Đặt người đang đăng nhập + danh sách cán bộ rồi trả về email của các ứng viên. */
+  function emails(toi, ds) {
+    window.__uq('allDepartments', PHONG);
+    window.__uq('currentUser', toi);
+    window.__uq('allStaff', ds);
+    return window.dsNguoiNhanUyQuyen().map((s) => s.Email);
+  }
+
+  const TOI_NV = {
+    id: 9,
+    name: 'Tôi',
+    role: 'Nhân viên',
+    email: 'toi@congty.vn',
+    department_id: 11,
+  };
+
+  it('Cán bộ: chỉ người CÙNG PHÒNG và bậc ngang bằng hoặc thấp hơn', () => {
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'nv2@congty.vn', 'Phân quyền': 'Nhân viên' }),
+        nguoi({ Email: 'qlcv@congty.vn', 'Phân quyền': 'Quản lý công việc' }),
+        nguoi({ Email: 'pp@congty.vn', 'Phân quyền': 'Phó phòng' }),
+        nguoi({ Email: 'tp@congty.vn', 'Phân quyền': 'Trưởng phòng' }),
+        nguoi({ Email: 'pgd@congty.vn', 'Phân quyền': 'Phó Giám đốc' }),
+        nguoi({ Email: 'gd@congty.vn', 'Phân quyền': 'admin', Phòng: '' }),
+      ]).sort()
+    ).toEqual(['nv2@congty.vn', 'qlcv@congty.vn']);
+  });
+  it('Cán bộ: người khác phòng KHÔNG hiện, dù cùng bậc', () => {
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'cungphong@congty.vn' }),
+        nguoi({ Email: 'khacphong@congty.vn', Phòng: 'Phòng Kế hoạch' }),
+      ])
+    ).toEqual(['cungphong@congty.vn']);
+  });
+
+  it('không tự ủy quyền cho mình (so bằng email, không so tên)', () => {
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'TOI@congty.vn', 'Họ tên': 'Tôi' }),
+        nguoi({ Email: 'nguoikhac@congty.vn' }),
+      ])
+    ).toEqual(['nguoikhac@congty.vn']);
+  });
+
+  it('Nhà cung cấp và dòng thiếu email không bao giờ vào danh sách', () => {
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'ncc@congty.vn', 'Đối tượng': 'Nhà cung cấp' }),
+        nguoi({ Email: '' }),
+        nguoi({ Email: 'that@congty.vn' }),
+      ])
+    ).toEqual(['that@congty.vn']);
+  });
+
+  it('vai lạ (dữ liệu sửa tay) — của tôi hoặc của họ — đều bị loại, không đoán bậc', () => {
+    expect(emails({ ...TOI_NV, role: 'Siêu quản trị' }, [nguoi({ Email: 'a@congty.vn' })])).toEqual(
+      []
+    );
+    expect(
+      emails(TOI_NV, [
+        nguoi({ Email: 'la@congty.vn', 'Phân quyền': 'Chuyên viên' }),
+        nguoi({ Email: 'ok@congty.vn' }),
+      ])
+    ).toEqual(['ok@congty.vn']);
+  });
+  it('Phó Giám đốc: được KHÁC PHÒNG với Phó Giám đốc và Trưởng phòng, nhưng không với Cán bộ', () => {
+    expect(
+      emails({ id: 2, role: 'Phó Giám đốc', email: 'pgd1@congty.vn', department_id: 11 }, [
+        nguoi({ Email: 'pgd2@congty.vn', 'Phân quyền': 'Phó Giám đốc', Phòng: 'Phòng Kế hoạch' }),
+        nguoi({ Email: 'tp2@congty.vn', 'Phân quyền': 'Trưởng phòng', Phòng: 'Phòng Kế hoạch' }),
+        nguoi({ Email: 'nv2@congty.vn', 'Phân quyền': 'Nhân viên', Phòng: 'Phòng Kế hoạch' }),
+        nguoi({ Email: 'nv1@congty.vn', 'Phân quyền': 'Nhân viên' }),
+      ]).sort()
+    ).toEqual(['nv1@congty.vn', 'pgd2@congty.vn', 'tp2@congty.vn']);
+  });
+
+  it('Giám đốc (không thuộc phòng nào): chỉ Phó Giám đốc — mục 18, không phải cả cơ quan', () => {
+    expect(
+      emails({ id: 1, role: 'admin', email: 'gd@congty.vn', department_id: null }, [
+        nguoi({ Email: 'pgd@congty.vn', 'Phân quyền': 'Phó Giám đốc' }),
+        nguoi({ Email: 'tp@congty.vn', 'Phân quyền': 'Trưởng phòng' }),
+        nguoi({ Email: 'nv@congty.vn', 'Phân quyền': 'Nhân viên' }),
+      ])
+    ).toEqual(['pgd@congty.vn']);
+  });
+
+  it('xếp theo bậc rồi theo tên, để danh sách đọc như sơ đồ tổ chức', () => {
+    expect(
+      emails({ id: 3, role: 'Trưởng phòng', email: 'tp@congty.vn', department_id: 11 }, [
+        nguoi({ Email: 'nv-b@congty.vn', 'Họ tên': 'Bùi Văn B', 'Phân quyền': 'Nhân viên' }),
+        nguoi({ Email: 'pp@congty.vn', 'Họ tên': 'Zét Phó Phòng', 'Phân quyền': 'Phó phòng' }),
+        nguoi({ Email: 'nv-a@congty.vn', 'Họ tên': 'An Văn A', 'Phân quyền': 'Nhân viên' }),
+        nguoi({
+          Email: 'tp2@congty.vn',
+          'Họ tên': 'Cù Trưởng Phòng',
+          'Phân quyền': 'Trưởng phòng',
+        }),
+      ])
+    ).toEqual(['tp2@congty.vn', 'pp@congty.vn', 'nv-a@congty.vn', 'nv-b@congty.vn']);
+  });
+
+  it('phòng của tôi không tra được id ⇒ danh sách rỗng, KHÔNG mở rộng ra cả cơ quan', () => {
+    expect(emails({ ...TOI_NV, department_id: 99 }, [nguoi({ Email: 'nv2@congty.vn' })])).toEqual(
+      []
+    );
+  });
+});
+describe('TC-UQ-19b: HTML ô chọn — không còn ô gõ email tự do', () => {
+  const PHONG = [{ 'ID phòng (DB)': 11, 'Tên phòng': 'Phòng Kỹ thuật' }];
+
+  function moModal(
+    ds,
+    toi = { id: 9, role: 'Trưởng phòng', email: 'tp@congty.vn', department_id: 11 }
+  ) {
+    window.__uq('allDepartments', PHONG);
+    window.__uq('currentUser', toi);
+    window.__uq('allStaff', ds);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = window.createUyQuyenModal([], []);
+    return wrapper;
+  }
+
+  it('ô người nhận là <select required>, không còn <input> hay datalist', () => {
+    const wrapper = moModal([nguoi({ Email: 'nv@congty.vn', 'Họ tên': 'Trần Cán Bộ' })]);
+    const select = wrapper.querySelector('select[name="to"]');
+    expect(select).not.toBeNull();
+    expect(select.required).toBe(true);
+    expect(select.disabled).toBe(false);
+    expect(wrapper.querySelector('input[name="to"]')).toBeNull();
+    expect(wrapper.querySelector('#uy-quyen-staff-list')).toBeNull();
+    expect(wrapper.innerHTML).toContain('Người nhận');
+  });
+
+  it('option mang EMAIL chữ thường làm giá trị, nhãn là tên — vai · phòng', () => {
+    const wrapper = moModal([
+      nguoi({ Email: 'NV@Congty.VN', 'Họ tên': 'Trần Cán Bộ', 'Phân quyền': 'Nhân viên' }),
+    ]);
+    const options = [...wrapper.querySelectorAll('select[name="to"] option')];
+    expect(options.map((o) => o.value)).toEqual(['', 'nv@congty.vn']);
+    // «Nhân viên» của CSDL hiện là «Cán bộ» (hienThiVai) — cùng một chữ với cả giao diện.
+    expect(options[1].textContent).toBe('Trần Cán Bộ — Cán bộ · Phòng Kỹ thuật');
+  });
+
+  it('không có ai hợp lệ ⇒ ô bị vô hiệu hoá và nói rõ lý do, không mời bấm gửi', () => {
+    const wrapper = moModal([nguoi({ Email: 'khacphong@congty.vn', Phòng: 'Phòng Kế hoạch' })]);
+    const select = wrapper.querySelector('select[name="to"]');
+    expect(select.disabled).toBe(true);
+    expect([...select.options].map((o) => o.value)).toEqual(['']);
+    expect(wrapper.textContent).toContain('Không có ai bạn ủy quyền được');
+  });
+
+  it('tên người và tên phòng có mã tấn công vẫn là chữ, không dựng được thẻ', () => {
+    const wrapper = moModal([
+      nguoi({ Email: `x@congty.vn" onfocus="alert(1)`, 'Họ tên': DON, Phòng: 'Phòng Kỹ thuật' }),
+    ]);
+    expect(wrapper.innerHTML).toContain('&quot; onfocus=&quot;alert(1)');
+    expect(wrapper.querySelectorAll('img').length).toBe(0);
+    expect(wrapper.querySelector('select[name="to"] option[value$="alert(1)"]')).not.toBeNull();
   });
 });

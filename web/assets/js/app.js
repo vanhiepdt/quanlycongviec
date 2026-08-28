@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-81");
+console.info("[QLCV] app.js 20260828-82");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -5519,6 +5519,98 @@ function buildUyQuyenBang(rows, laGiao) {
   );
 }
 
+// Bậc vai + ba cặp được khác phòng: BẢN SAO nguyên văn `BAC_VAI` và `NGOAI_LE_KHAC_PHONG` của
+// `server/src/modules/delegations/service.js`. Sao chép chứ không đoán lại: sai một bậc là danh sách
+// hiện người mà máy chủ sẽ từ chối (`DELEGATION_RANK_UP` / `DELEGATION_DIFFERENT_DEPARTMENT`).
+// Sửa luật ở máy chủ thì PHẢI sửa hai hằng này — test TC-UQ-19 chốt từng cặp.
+const UQ_BAC_VAI = { admin: 1, "Phó Giám đốc": 2, "Trưởng phòng": 3, "Phó phòng": 4, "Quản lý công việc": 5, "Nhân viên": 5 },
+  UQ_KHAC_PHONG = { admin: ["Phó Giám đốc"], "Phó Giám đốc": ["Phó Giám đốc", "Trưởng phòng"] };
+
+/** Bậc của một vai; `null` = vai lạ (dữ liệu sửa tay) và vai lạ thì không ủy quyền được — giống `bacVai()` máy chủ. */
+function uqBacVai(role) {
+  const key = String(role == null ? "" : role);
+  return Object.hasOwn(UQ_BAC_VAI, key) ? UQ_BAC_VAI[key] : null;
+}
+
+/**
+ * TÊN phòng của chính tôi. Phải đổi `currentUser.department_id` (số) sang tên vì `staffToLegacy`
+ * chỉ trả `COL.S_DEPT` là TÊN phòng — không có cột id phòng nào trong danh sách cán bộ.
+ * Không tra được (Giám đốc không thuộc phòng nào, hoặc phòng lạ) ⇒ chuỗi rỗng ⇒ luật cùng phòng
+ * không khớp ai: hẹp hơn máy chủ, không bao giờ rộng hơn.
+ */
+function tenPhongCuaToi() {
+  const id = currentUser && currentUser.department_id != null ? String(currentUser.department_id) : "";
+  if (id === "") return "";
+  const dept = (Array.isArray(allDepartments) ? allDepartments : []).find(item => String(item[COL.D_DB_ID] == null ? "" : item[COL.D_DB_ID]) === id);
+  return dept ? String(dept[COL.D_NAME] || "").trim() : "";
+}
+
+/**
+ * Những người TÔI được ủy quyền cho — bản sao của `assertBacVaPhong` phía máy chủ: bậc vai ngang
+ * bằng hoặc thấp hơn (R2), cùng phòng trừ ba cặp ngoại lệ (R3), không tự ủy quyền cho mình (L1),
+ * và không bao giờ là Nhà cung cấp (họ không có tài khoản).
+ *
+ * Xếp theo bậc rồi theo tên để danh sách đọc như sơ đồ tổ chức, không theo thứ tự mã nhân sự.
+ */
+function dsNguoiNhanUyQuyen() {
+  const bacTu = uqBacVai(currentUser && currentUser.role);
+  if (bacTu === null) return [];
+  const phongToi = tenPhongCuaToi(),
+    emailToi = String((currentUser && currentUser.email) || "").trim().toLowerCase(),
+    ngoaiLe = UQ_KHAC_PHONG[String(currentUser.role)] || [];
+  return (Array.isArray(allStaff) ? allStaff : [])
+    .filter(staff => {
+      if ((staff[COL.S_OBJECT_TYPE] || "Người dùng") !== "Người dùng") return false;
+      const email = String(staff[COL.S_EMAIL] || "").trim().toLowerCase();
+      if (email === "" || email === emailToi) return false;
+      const vai = String(staff[COL.S_ROLE] || ""),
+        bacDen = uqBacVai(vai);
+      if (bacDen === null || bacTu > bacDen) return false;
+      if (ngoaiLe.includes(vai)) return true;
+      const phongDen = String(staff[COL.S_DEPT] || "").trim();
+      return phongToi !== "" && phongDen !== "" && phongDen === phongToi;
+    })
+    .sort((a, b) => (uqBacVai(a[COL.S_ROLE]) - uqBacVai(b[COL.S_ROLE])) || String(a[COL.S_NAME] || "").localeCompare(String(b[COL.S_NAME] || ""), "vi"));
+}
+
+/**
+ * Ô CHỌN NGƯỜI NHẬN của form ủy quyền — thay ô gõ email tự do (yêu cầu 2026-08-28: «cái này là sẽ
+ * chọn người, danh sách hiện ra sẽ đúng theo luồng đã nói»).
+ *
+ * Vì sao đổi: gõ tay thì người dùng chỉ biết mình chọn sai SAU khi bấm gửi và đọc `DELEGATION_RANK_UP`
+ * hoặc `DELEGATION_DIFFERENT_DEPARTMENT`. Danh sách chỉ chứa người hợp lệ thì hai câu lỗi đó không
+ * còn dịp xuất hiện — mà máy chủ vẫn kiểm lại đủ, giao diện KHÔNG nới rộng gì.
+ *
+ * Giá trị option vẫn là EMAIL để `taoUyQuyen()` gửi đúng khoá `toUserId` như cũ (`timNguoi` dò email).
+ * Danh sách rỗng thì nói rõ lý do ngay dưới ô thay vì để người dùng bấm gửi rồi nhận lỗi.
+ */
+function buildUyQuyenNguoiNhan() {
+  const list = dsNguoiNhanUyQuyen();
+  if (list.length === 0) {
+    return (
+      "<select name=\"to\" class=\"form-select\" required disabled><option value=\"\">-- Không có ai hợp lệ --</option></select>\n" +
+      "                      <p class=\"text-xs text-red-600 mt-1\">" +
+      escapeHtml("Không có ai bạn ủy quyền được: chỉ chọn được người cùng phòng, vai ngang bằng hoặc thấp hơn (Giám đốc → Phó Giám đốc, Phó Giám đốc → Phó Giám đốc hoặc Trưởng phòng là ngoại lệ).") +
+      "</p>"
+    );
+  }
+  return (
+    "<select name=\"to\" class=\"form-select\" required>\n" +
+    "                          <option value=\"\">-- Chọn người nhận --</option>\n                          " +
+    list
+      .map(
+        staff =>
+          "<option value=\"" +
+          escapeHtmlAttr(String(staff[COL.S_EMAIL]).trim().toLowerCase()) +
+          "\">" +
+          escapeHtml(String(staff[COL.S_NAME] || staff[COL.S_EMAIL] || "").trim() + " — " + hienThiVai(staff[COL.S_ROLE] === "admin" ? "Giám đốc" : staff[COL.S_ROLE]) + (staff[COL.S_DEPT] ? " · " + staff[COL.S_DEPT] : "")) +
+          "</option>"
+      )
+      .join("\n                          ") +
+    "\n                      </select>"
+  );
+}
+
 /**
  * Ô chọn PHẠM VI PHÒNG của form ủy quyền — chỉ hiện với Giám đốc, rỗng với mọi vai khác.
  *
@@ -5569,10 +5661,9 @@ function createUyQuyenModal(dsGiao, dsNhan) {
     "              <h4 class=\"text-sm font-semibold text-gray-700 mb-2\">Ủy quyền mới</h4>\n" +
     "              <div class=\"grid grid-cols-1 md:grid-cols-3 gap-3 mb-3\">\n" +
     "                  <div class=\"form-group mb-0\">\n" +
-    "                      <label class=\"form-label required\">Email người nhận</label>\n" +
-    "                      <input type=\"text\" name=\"to\" class=\"form-input\" list=\"uy-quyen-staff-list\" placeholder=\"nguoinhan@...\" required>\n" +
+    "                      <label class=\"form-label required\">Người nhận</label>\n" +
     "                      " +
-    buildStaffEmailDatalist("uy-quyen-staff-list", "") +
+    buildUyQuyenNguoiNhan() +
     "\n                  </div>\n" +
     "                  <div class=\"form-group mb-0\">\n" +
     "                      <label class=\"form-label required\">Từ ngày</label>\n" +
@@ -5671,7 +5762,7 @@ async function taoUyQuyen() {
     than = { toUserId: read("to").toLowerCase(), fromDate: read("fromDate"), toDate: read("toDate"), note: read("note") };
   if (phongIds.length > 0) than.departmentIds = phongIds;
   if (!than.toUserId || !than.fromDate || !than.toDate) {
-    showUyQuyenError("Cần đủ email người nhận và hai mốc ngày.");
+    showUyQuyenError("Cần chọn người nhận và đủ hai mốc ngày.");
     return;
   }
   // Chặn sớm ĐÚNG bằng luật máy chủ (`DELEGATION_ADMIN_SCOPE_REQUIRED`), không rộng hơn: đỡ một vòng
