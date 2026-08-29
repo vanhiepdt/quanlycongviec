@@ -9,6 +9,7 @@
 // nhánh trên nó là chắc chắn nhờ view, nhưng JOIN mang theo `manager_id` của công việc cha để
 // `can()` xét phạm vi «Quản lý công việc» mà không cần truy vấn thứ hai.
 import { pool } from '../../db/pool.js';
+import { DIEU_KIEN_LOAI_DONG_RAC } from '../activityLogs/repo.js';
 
 /**
  * Hai câu SELECT gốc của thống kê. Chỉ SELECT cột cần tính + cột phạm vi (`can()` đọc):
@@ -58,13 +59,15 @@ export async function listActivitiesPaged({ limit, offset, actorId }) {
               created_at
          FROM activity_logs
         WHERE ($3::bigint IS NULL OR actor_id = $3)
+        ${DIEU_KIEN_LOAI_DONG_RAC}
         ORDER BY id DESC
         LIMIT $1 OFFSET $2`,
       [limit, offset, actorId]
     ),
     pool.query(
       `SELECT count(*)::int AS total FROM activity_logs
-        WHERE ($1::bigint IS NULL OR actor_id = $1)`,
+        WHERE ($1::bigint IS NULL OR actor_id = $1)
+        ${DIEU_KIEN_LOAI_DONG_RAC}`,
       [actorId]
     ),
   ]);

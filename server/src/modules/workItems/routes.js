@@ -255,6 +255,7 @@ workItemsRouter.put(
         workId: result.row.work_id,
         details: {
           code: result.row.code,
+          itemName: result.row.name,
           month: result.month,
           ...(ten === '' ? {} : { name: result.name }),
           previousName: result.previousName,
@@ -281,7 +282,12 @@ workItemsRouter.delete('/:id/month-names/:month', async (req, res, next) => {
       entityType: entityOf(result.row.level),
       entityId: result.row.id,
       workId: result.row.work_id,
-      details: { code: result.row.code, month: result.month, previousName: result.previousName },
+      details: {
+        code: result.row.code,
+        itemName: result.row.name,
+        month: result.month,
+        previousName: result.previousName,
+      },
     };
     return ok(res, { item: result.row, month: result.month, removed: result.removed });
   } catch (err) {

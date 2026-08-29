@@ -27,6 +27,16 @@ export async function writeLog(entry, client = null) {
   return rows[0];
 }
 
+/**
+ * Điều kiện loại dòng RÁC của thời cầu RPC chưa bị chặn (người dùng 2026-08-29): trước ngày đó
+ * MỌI lời gọi qua cầu đều được ghi — `rpc.<tên>` từ cầu, `bootstrap.get` do route GET giẫm đè
+ * `res.locals.audit` qua subrequest (`locals` dùng chung). Máy chủ đã hết SINH những dòng này
+ * (rpc/index.js + bỏ audit chết ở các route GET); dòng cũ còn trong CSDL thì ẨN khỏi hai màn
+ * hình «hoạt động» thay vì xoá — nhật ký là dữ liệu điều tra. Không chứa tham số `$n`.
+ */
+export const DIEU_KIEN_LOAI_DONG_RAC = `AND action NOT LIKE 'rpc.%'
+  AND action NOT IN ('bootstrap.get', 'stats.summary', 'stats.charts', 'stats.activities', 'gantt.tree')`;
+
 /** Nhật ký gần nhất — dùng cho màn hình quản trị (nhóm J) và cho test. */
 export async function listRecent({ limit = 50, actorId = null } = {}, client = null) {
   const { rows } = await db(client).query(
@@ -34,6 +44,7 @@ export async function listRecent({ limit = 50, actorId = null } = {}, client = n
             created_at
        FROM activity_logs
       WHERE ($2::bigint IS NULL OR actor_id = $2)
+      ${DIEU_KIEN_LOAI_DONG_RAC}
       ORDER BY id DESC
       LIMIT $1`,
     [Math.min(Number(limit) || 50, 500), actorId]

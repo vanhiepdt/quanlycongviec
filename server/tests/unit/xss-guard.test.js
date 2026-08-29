@@ -200,9 +200,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // 2026-08-28 (màn hình duyệt trong Quản lý công việc): panel «Chờ duyệt» — +1 sink
     // `#approvals-list`.innerHTML (builder buildPendingApprovalRowHtml thoát đủ) và +1 sink
     // render spinner; JSON/label đều escape ⇒ 92 chỗ / 668 giá trị.
+    // 2026-08-29 («Hoạt động gần đây» đọc được, docs/NHAT-KY-HOAT-DONG-GAN-DAY.md): `renderActivity`
+    // đổi sang builder `createHoatDongItemHtml` — nhãn/icon/màu theo bản đồ NHAT_KY_HANH_DONG, mô
+    // tả rỗng thì bỏ hẳn dòng phụ. Sink giữ nguyên 1 (chỗ innerHTML cũ), giá trị +2: 4 nội suy cũ
+    // (action, details, user, giờ) thành 6 (icon + màu qua escapeHtmlAttr, nhãn, mô tả, user, giờ)
+    // ⇒ 92 chỗ / 670 giá trị.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 668 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 670 });
   });
 });
 

@@ -52,7 +52,7 @@ statsRouter.use(requireAuth);
 
 statsRouter.get('/summary', validate(summarySchema, 'query'), async (req, res, next) => {
   try {
-    res.locals.audit = { action: 'stats.summary' };
+    // Route GET không đặt `res.locals.audit` — xem lý do ở bootstrap/routes.js.
     return ok(res, await service.summary(req.user, req.validatedQuery));
   } catch (err) {
     return next(err);
@@ -61,7 +61,7 @@ statsRouter.get('/summary', validate(summarySchema, 'query'), async (req, res, n
 
 statsRouter.get('/charts', validate(chartsSchema, 'query'), async (req, res, next) => {
   try {
-    res.locals.audit = { action: 'stats.charts', details: { type: req.validatedQuery.type } };
+    // Route GET không đặt `res.locals.audit` — xem lý do ở bootstrap/routes.js.
     return ok(res, await service.charts(req.user, req.validatedQuery.type, req.validatedQuery));
   } catch (err) {
     return next(err);
@@ -70,7 +70,7 @@ statsRouter.get('/charts', validate(chartsSchema, 'query'), async (req, res, nex
 
 statsRouter.get('/activities', validate(activitiesSchema, 'query'), async (req, res, next) => {
   try {
-    res.locals.audit = { action: 'stats.activities' };
+    // Route GET không đặt `res.locals.audit` — xem lý do ở bootstrap/routes.js.
     return ok(res, await service.activities(req.user, req.validatedQuery));
   } catch (err) {
     return next(err);

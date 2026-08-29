@@ -265,7 +265,12 @@ worksRouter.put('/:id/month-names/:month', validate(monthNameSchema), async (req
         entityType: 'work',
         entityId: result.work.id,
         workId: result.work.id,
-        details: { code: result.work.code, month: result.month, previousName: result.previousName },
+        details: {
+          code: result.work.code,
+          workName: result.work.name,
+          month: result.month,
+          previousName: result.previousName,
+        },
       };
       return ok(res, { work: result.work, month: result.month, name: '', cleared: true });
     }
@@ -279,6 +284,7 @@ worksRouter.put('/:id/month-names/:month', validate(monthNameSchema), async (req
       // "từ → thành" mà không phải tra lại bảng.
       details: {
         code: result.work.code,
+        workName: result.work.name,
         month: result.month,
         name: result.name,
         previousName: result.previousName,
@@ -300,7 +306,12 @@ worksRouter.delete('/:id/month-names/:month', async (req, res, next) => {
       entityType: 'work',
       entityId: result.work.id,
       workId: result.work.id,
-      details: { code: result.work.code, month: result.month, previousName: result.previousName },
+      details: {
+        code: result.work.code,
+        workName: result.work.name,
+        month: result.month,
+        previousName: result.previousName,
+      },
     };
     return ok(res, { work: result.work, month: result.month, removed: result.removed });
   } catch (err) {

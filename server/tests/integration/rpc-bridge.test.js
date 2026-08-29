@@ -343,6 +343,29 @@ describe('công việc cấp 1 — đúng hình dạng "dự án" của giao di�
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('Mã dự án');
   });
+
+  it('TC-RPC-24: lời gọi ĐỌC qua cầu RPC không còn ghi nhật ký rác rpc.*/bootstrap.get (2026-08-29)', async () => {
+    // Mỗi lần mở trang giao diện gọi cả chục lời đọc (getDataForUser, getDepartmentContext, …) —
+    // trước đây mỗi lượt sinh một dòng rác trong «Hoạt động gần đây». Giờ mốc `rpc.<tên>` còn
+    // nguyên sau handler ⇒ là lời đọc ⇒ skipAudit (rpc/index.js); route GET cũng không còn giẫm
+    // đè `res.locals.audit` qua subrequest (bootstrap/stats/gantt đã bỏ dòng audit chết).
+    await call('getDataForUser', []);
+    await call('getDepartmentContext', []);
+    await flushAudit();
+    const rac = await pool.query(
+      `SELECT count(*)::int AS so FROM activity_logs
+        WHERE action LIKE 'rpc.%'
+           OR action IN ('bootstrap.get', 'stats.summary', 'stats.charts', 'stats.activities', 'gantt.tree')`
+    );
+    expect(rac.rows[0].so).toBe(0);
+    // Lời gọi GHI thì vẫn ghi đúng tên nghiệp vụ — hành vi của TC-RPC-21 không bị mất.
+    await call('addProjectWithAuth', [form]);
+    await flushAudit();
+    const sau = await pool.query('SELECT action FROM activity_logs ORDER BY id');
+    const actions = sau.rows.map((r) => r.action);
+    expect(actions).toContain('works.create');
+    expect(actions).not.toContain('rpc.addProjectWithAuth');
+  });
 });
 
 describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', () => {

@@ -85,6 +85,10 @@ export default [
       // ten-thang-ui.test.js: tên riêng theo từng tháng ở 2 tab + Sơ đồ Gantt và tab «Tên theo
       // tháng» của modal chỉnh sửa (TC-TENTHANG-25..38, 2026-08-28) — app.js thật, fetch giả.
       'tests/unit/ten-thang-ui.test.js',
+      // hoat-dong-ui.test.js: «Hoạt động gần đây» trang Tổng quan — nhãn tiếng Việt theo bản đồ
+      // NHAT_KY_HANH_DONG, hết "{}" và hết mã trong mô tả tên theo tháng (TC-HD, 2026-08-29) —
+      // app.js thật trong jsdom.
+      'tests/unit/hoat-dong-ui.test.js',
     ],
     languageOptions: {
       globals: {

@@ -593,9 +593,25 @@ export function activityToLegacy(row) {
 function moTaNhatKy(details) {
   if (details == null || details === '') return '';
   if (typeof details === 'string') return details;
-  if (typeof details === 'object' && details.code) {
-    return details.name ? `${details.code} — ${details.name}` : String(details.code);
+  if (typeof details !== 'object') return String(details);
+  // Object rỗng (dòng rác `rpc.*` của thời cầu cũ) ⇒ rỗng — đừng in "{}" ra màn hình.
+  if (Object.keys(details).length === 0) return '';
+  // Đặt/bỏ tên theo tháng: hiện theo ĐẦU VIỆC (tên, không mã) + Tháng n/YYYY + tên mới/cũ.
+  if (details.month) {
+    const thang = String(details.month);
+    const nhanThang = /^\d{4}-\d{2}$/.test(thang)
+      ? `Tháng ${Number(thang.slice(5, 7))}/${thang.slice(0, 4)}`
+      : thang;
+    const phan = [details.workName || details.itemName || details.code || '', nhanThang];
+    if (details.name) phan.push(`tên mới: ${details.name}`);
+    if (details.previousName) phan.push(`tên cũ: ${details.previousName}`);
+    return phan.filter(Boolean).join(' · ');
   }
+  if (details.changes && typeof details.changes === 'object') {
+    const soTruong = Object.keys(details.changes).length;
+    return soTruong === 0 ? '' : `Cập nhật ${soTruong} trường`;
+  }
+  if (details.code) return details.name ? String(details.name) : String(details.code);
   try {
     return JSON.stringify(details);
   } catch {

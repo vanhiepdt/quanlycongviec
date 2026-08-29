@@ -249,6 +249,13 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > render spinner; builder thêm 6 giá trị escape (loại/tên/mã/`data-entity`/`data-id`/người gửi)
 > ⇒ **92 chỗ / 668 giá trị** (TC-SEC-17). Chi tiết: `docs/NHAT-KY-MAN-HINH-DUYET.md`.
 
+> **Cập nhật 2026-08-29 («Hoạt động gần đây» ở trang Tổng quan đọc được bằng tiếng Việt).**
+> Người dùng báo panel hiện tên action thô (`works.setMonthName`) và chuỗi `{}`. `renderActivity`
+> đổi sang builder `createHoatDongItemHtml` (bản đồ `NHAT_KY_HANH_DONG` dùng chung với tab Nhật
+> ký): sink giữ nguyên 1 chỗ `innerHTML`, giá trị nội suy 4 → 6 (icon + màu qua `escapeHtmlAttr`,
+> nhãn, mô tả — rỗng thì bỏ dòng, người, giờ) ⇒ **92 chỗ / 670 giá trị** (TC-SEC-17). Chi tiết:
+> `docs/NHAT-KY-HOAT-DONG-GAN-DAY.md`.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

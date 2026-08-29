@@ -31,10 +31,8 @@ ganttRouter.use(requireAuth);
 
 ganttRouter.get('/', validate(ganttSchema, 'query'), async (req, res, next) => {
   try {
-    res.locals.audit = {
-      action: 'gantt.tree',
-      details: { groupBy: req.validatedQuery.groupBy },
-    };
+    // Không đặt `res.locals.audit` ở route GET — xem lý do ở bootstrap/routes.js (code chết với
+    // REST trực tiếp, giẫm đè mốc `rpc.*` của cầu qua subrequest).
     return ok(res, await service.ganttTree(req.user, req.validatedQuery));
   } catch (err) {
     return next(err);

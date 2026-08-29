@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260828-88");
+console.info("[QLCV] app.js 20260829-1");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -1718,6 +1718,29 @@ function renderStaffPerformanceChart() {
     }
   });
 }
+/** BUILDER — một dòng «Hoạt động gần đây» ở trang Tổng quan: nhãn tiếng Việt + icon theo hành
+ * động (bản đồ NHAT_KY_HANH_DONG dùng chung với tab Nhật ký), mô tả ngắn, người + giờ. Mô tả
+ * rỗng thì bỏ hẳn dòng phụ (hết "{}"). Hành động lạ vẫn hiện nguyên tên, không bỏ dòng. */
+function createHoatDongItemHtml(dong) {
+  const hanhDong = nhanHanhDongNhatKy(dong[COL.A_ACTION]),
+    chiTiet = String(dong[COL.A_DETAILS] || "");
+  return "<div class=\"activity-item\">\n" +
+    "    <div class=\"flex items-start space-x-3\">\n" +
+    "        <div class=\"w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0\">\n" +
+    "            <i class=\"fas " + escapeHtmlAttr(hanhDong.icon) + " " + escapeHtmlAttr(hanhDong.mau) + " text-xs\"></i>\n" +
+    "        </div>\n" +
+    "        <div class=\"flex-1 min-w-0\">\n" +
+    "            <p class=\"text-sm font-medium text-gray-900\">" + escapeHtml(hanhDong.nhan) + "</p>\n" +
+    (chiTiet
+      ? "            <p class=\"text-xs text-gray-600 mt-1 break-words\">" + escapeHtml(chiTiet) + "</p>\n"
+      : "") +
+    "            <p class=\"text-xs text-gray-500 mt-1\">\n" +
+    "                " + escapeHtml(dong[COL.A_USER] || "Ai đó") + " • " + escapeHtml(formatDateForDisplay(dong[COL.A_TIME], true)) + "\n" +
+    "            </p>\n" +
+    "        </div>\n" +
+    "    </div>\n" +
+    "</div>";
+}
 function renderActivity(activities) {
   const recentActivityEl = document.getElementById("recent-activity");
   if (!recentActivityEl) return;
@@ -1725,8 +1748,7 @@ function renderActivity(activities) {
     recentActivityEl.innerHTML = "<div class=\"loading-card\">Không có hoạt động nào</div>";
     return;
   }
-  const slice = activities.slice(0, 22);
-  recentActivityEl.innerHTML = slice.map(slice2 => "\n    <div class=\"activity-item\">\n        <div class=\"flex items-start space-x-3\">\n            <div class=\"w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0\">\n                <i class=\"fas fa-history text-blue-600 text-xs\"></i>\n            </div>\n            <div class=\"flex-1 min-w-0\">\n                <p class=\"text-sm font-medium text-gray-900\">" + (escapeHtml(slice2[COL.A_ACTION]) || "Hành động") + "</p>\n                <p class=\"text-xs text-gray-600 mt-1\">" + (escapeHtml(slice2[COL.A_DETAILS]) || "") + "</p>\n                <p class=\"text-xs text-gray-500 mt-1\">\n                    " + (escapeHtml(slice2[COL.A_USER]) || "Ai đó") + " • " + escapeHtml(formatDateForDisplay(slice2[COL.A_TIME], true)) + "\n                </p>\n            </div>\n        </div>\n    </div>\n").join("");
+  recentActivityEl.innerHTML = activities.slice(0, 22).map(createHoatDongItemHtml).join("");
 }
 function openTaskModalForProject(projectId, projectName, opts) {
   pendingTaskCreate = {
@@ -1897,7 +1919,28 @@ const NHAT_KY_HANH_DONG = {
   "reminders.remove": { nhan: "Xoá nhắc việc", icon: "fa-bell-slash", mau: "text-red-600" },
   "approvals.submit": { nhan: "Gửi duyệt", icon: "fa-paper-plane", mau: "text-blue-600" },
   "approvals.approve": { nhan: "Đã duyệt", icon: "fa-circle-check", mau: "text-green-600" },
-  "approvals.reject": { nhan: "Từ chối duyệt", icon: "fa-circle-xmark", mau: "text-red-600" }
+  "approvals.reject": { nhan: "Từ chối duyệt", icon: "fa-circle-xmark", mau: "text-red-600" },
+  "auth.login": { nhan: "Đăng nhập", icon: "fa-right-to-bracket", mau: "text-gray-500" },
+  "auth.logout": { nhan: "Đăng xuất", icon: "fa-right-from-bracket", mau: "text-gray-400" },
+  "users.create": { nhan: "Thêm người dùng", icon: "fa-user-plus", mau: "text-green-600" },
+  "users.update": { nhan: "Sửa người dùng", icon: "fa-user-pen", mau: "text-blue-600" },
+  "users.remove": { nhan: "Xoá người dùng", icon: "fa-user-minus", mau: "text-red-600" },
+  "departments.create": { nhan: "Thêm phòng ban", icon: "fa-sitemap", mau: "text-green-600" },
+  "departments.update": { nhan: "Sửa phòng ban", icon: "fa-pen", mau: "text-blue-600" },
+  "departments.remove": { nhan: "Xoá phòng ban", icon: "fa-trash", mau: "text-red-600" },
+  "delegations.create": { nhan: "Tạo ủy quyền", icon: "fa-user-lock", mau: "text-indigo-600" },
+  "delegations.update": { nhan: "Sửa ủy quyền", icon: "fa-pen", mau: "text-blue-600" },
+  "delegations.cancel": { nhan: "Hủy ủy quyền", icon: "fa-ban", mau: "text-red-600" },
+  "delegations.accept": { nhan: "Nhận ủy quyền", icon: "fa-circle-check", mau: "text-green-600" },
+  "delegations.decline": { nhan: "Từ chối ủy quyền", icon: "fa-circle-xmark", mau: "text-red-600" },
+  "proposal.create": { nhan: "Gửi đề nghị", icon: "fa-plus-circle", mau: "text-green-600" },
+  "proposal.update": { nhan: "Sửa đề nghị", icon: "fa-pen", mau: "text-blue-600" },
+  "proposal.remove": { nhan: "Xoá đề nghị", icon: "fa-trash", mau: "text-red-600" },
+  "app.create": { nhan: "Thêm App", icon: "fa-plus-circle", mau: "text-green-600" },
+  "app.update": { nhan: "Sửa App", icon: "fa-pen", mau: "text-blue-600" },
+  "app.remove": { nhan: "Xoá App", icon: "fa-trash", mau: "text-red-600" },
+  "notification.create": { nhan: "Gửi thông báo", icon: "fa-bell", mau: "text-amber-600" },
+  "chat.send": { nhan: "Nhắn tin", icon: "fa-comment", mau: "text-blue-600" }
 };
 // Khoá của `changes` là TÊN CỘT CSDL (máy chủ ghi thẳng cột), không phải tên trường của form.
 const NHAT_KY_COT = {
@@ -5188,27 +5231,46 @@ let hoatDongTrang = 1,
   hoatDongTongTrang = 1,
   hoatDongDanhSach = [];
 
-/** Ánh xạ dòng activity_logs của REST sang khoá COL.A_* — cùng luật `activityToLegacy`. */
+/** Ánh xạ dòng activity_logs của REST sang khoá COL.A_* — cùng luật activityToLegacy phía máy chủ. */
 function hoatDongSangLegacy(rows) {
-  const moTa = (details) => {
-    if (details == null || details === "") return "";
-    if (typeof details === "string") return details;
-    if (typeof details === "object" && details.code)
-      return details.name ? details.code + " — " + details.name : String(details.code);
-    try {
-      return JSON.stringify(details);
-    } catch (err) {
-      return "";
-    }
-  };
   return (rows || []).map((row) => ({
     [COL.A_TIME]: row.created_at ?? "",
     [COL.A_ACTION]: row.action ?? "",
     [COL.A_USER]: row.actor_name ?? "",
-    [COL.A_DETAILS]: moTa(row.details),
+    [COL.A_DETAILS]: moTaChiTietHoatDong(row.details),
   }));
 }
-
+/** Mô tả NGẮN một dòng hoạt động cho trang Tổng quan — cùng luật moTaNhatKy phía máy chủ:
+ * object rỗng ⇒ rỗng (hết "{}"), tên theo tháng hiện theo TÊN đầu việc + Tháng n/YYYY (bỏ mã,
+ * người dùng 2026-08-29), bản sửa đếm số trường bằng nhãn cột của tab Nhật ký. */
+function moTaChiTietHoatDong(details) {
+  if (details == null || details === "") return "";
+  if (typeof details === "string") return details;
+  if (typeof details !== "object") return String(details);
+  if (Object.keys(details).length === 0) return "";
+  if (details.month) {
+    const phan = [
+      details.workName || details.itemName || details.code || "",
+      nhanThangVN(details.month),
+    ];
+    if (details.name) phan.push("tên mới: " + details.name);
+    if (details.previousName) phan.push("tên cũ: " + details.previousName);
+    return phan.filter(Boolean).join(" · ");
+  }
+  if (details.changes && typeof details.changes === "object") {
+    const cacCot = Object.keys(details.changes),
+      goiY = cacCot.slice(0, 3).map(nhanCotNhatKy).join(", ");
+    return cacCot.length === 0
+      ? ""
+      : "Cập nhật " + cacCot.length + " trường" + (goiY ? ": " + goiY : "");
+  }
+  if (details.code) return details.name ? String(details.name) : String(details.code);
+  try {
+    return JSON.stringify(details);
+  } catch (err) {
+    return "";
+  }
+}
 /** Nạp một trang hoạt động; trang > 1 nối tiếp vào danh sách đang hiển thị. */
 async function napHoatDong(trang) {
   const duLieu = await restGet("/api/v1/stats/activities?page=" + trang + "&limit=22");

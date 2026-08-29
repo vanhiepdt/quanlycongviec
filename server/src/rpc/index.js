@@ -97,9 +97,15 @@ export function createRpcRouter(v1Router) {
       return next(new AppError('NOT_FOUND', `Không có hàm «${name}» ở máy chủ`, { status: 404 }));
     }
     // Tên chưa có nghiệp vụ: 501 kèm tên chức năng bằng tiếng Việt (§5.3).
-    res.locals.audit = { action: `rpc.${name}` };
+    const mocAudit = { action: `rpc.${name}` };
+    res.locals.audit = mocAudit;
     try {
       const data = await entry.handler(argsOf(req.body), makeContext(v1Router, req, res));
+      // Lời gọi RPC chỉ xứng đáng một dòng nhật ký khi BÊN TRONG nó có route GHI thật chạy qua —
+      // route GHI tự đặt `res.locals.audit` MỚI với tên nghiệp vụ (works.create…, TC-RPC-21).
+      // Mốc còn nguyên ⇒ lời ĐỌC (getDataForUser, getDepartmentContext, …): mỗi lần mở trang gọi
+      // cả chục lượt mà cứ ghi thì «Hoạt động gần đây» đầy rác `rpc.*` (người dùng 2026-08-29).
+      if (res.locals.audit === mocAudit) res.locals.skipAudit = true;
       return ok(res, data);
     } catch (err) {
       return next(err);
