@@ -164,6 +164,30 @@ khớp 1:1. Bump `app.css?v=20260827-4` (chỉ CSS, app.js giữ -75).
 Bài học §13.5: khi hai vùng phải căn nhau, ngoài cơ chế đặt vị trí (grid) phải **khử mọi
 min-width/width cứng của cả HAI vùng** — một luật cũ còn sống là đủ lệch.
 
+## Vòng 7 (2026-08-29) — bỏ nốt mã khỏi tên · «Tạo mới» hết nhảy đầu trang · TP/PP thêm được công việc
+
+Phản hồi người dùng (kèm 2 ảnh): (1) tên công việc/công việc con/nhiệm vụ VẪN gắn mã
+(`(CV002)`, `(CV002-009)`, `CV002-010` dưới tên) — bản vá vòng 5 bị `git checkout` hoàn tác mất
+một phần khi cứu lỗi cú pháp; (2) bấm «Tạo mới» thì trang **nhảy lên đầu**; (3) Trưởng
+phòng/Phó giám đốc không thêm được công việc.
+
+| Việc | Nguyên nhân | Sửa |
+|---|---|---|
+| Mã còn dính ở 5 chỗ | Vòng 5 vá 3 chỗ nhưng bị hoàn tác; còn sót: h4 thẻ công việc (`+ " (" + projectId + ")"`), dải tab Nhiệm vụ (`maCongViec`), khối CV con (`khoi.ma`), div mã dưới tên nhiệm vụ, chip mã trong thẻ nhiệm vụ của modal chi tiết | Gỡ cả 5 chỗ nội suy MÃ khỏi HTML hiển thị; `data-*`/`data-id`/onclick GIỮ mã (nuôi hộp thoại Xoá/Sửa/ghim thu gọn). project-details.js: bỏ ` (id)` ở tiêu đề «Chi tiết công việc: …» và `(CV002-009)` cạnh tên CV con — delegate đọc tên từ h3 vẫn chạy (bây giờ sạch mã) |
+| «Tạo mới» nhảy đầu trang | Các mục dropdown «Tạo mới» là `<a href="#">` (index.html 379–395) — click mặc định cuộn về đầu trang; 7 listener không `preventDefault` | Bọc `(event) => { event && event.preventDefault(); … }` cho cả 7 nút: quick-add-project/task/staff/proposal/app + add-project-standalone + add-task-standalone |
+| TP/PGD không thêm được công việc | Máy chủ `PERMISSIONS` ĐÃ cho `work.create` (PGD trong phòng phụ trách, TP/PP phòng mình — tạo xong về «Chờ duyệt»); phía client chặn: `hideAdminButtons` chỉ mở cho `laQuanTriTrongPhamVi() || isManager()`, handler «Tạo mới → Công việc mới» gate `isAdmin() || isManager()` | Helper mới `laLanhDaoPhong()` (Trưởng phòng/Phó phòng); mở nút theo `laQuanTriTrongPhamVi() || isManager() || laLanhDaoPhong()` ở cả visibility lẫn 2 handler. Máy chủ KHÔNG đổi |
+
+Bài học §13.5: **trong MỘT file app.js có HAI kiểu escape lẫn nhau** — vùng nối dài `\n` dùng
+`\"` cho thuộc tính, vùng thường dùng nháy trần; anchor tìm-kiếm phải chọn đúng kiểu theo TỪNG
+vùng (kiểm bằng `JSON.stringify(slice)` in mã ký tự trước khi vá), đừng đoán theo mẫu khác.
+
+Kiểm chứng: jsdom — TC-TASKUI-19 (hết `(CV1)`, hết div mã), TC-CV-BL-2 (thẻ hết `(CV01…)`),
+TC-TP-UI (TP/PP thấy nút, NV không; hợp đồng preventDefault 7 nút); cập nhật assertion cũ của
+ten-thang-ui/project-details-phan-cong (kỳ vọng mã → không mã). **1343 test / 79 file xanh**;
+pin XSS **92 chỗ / 666 giá trị** (−4 nội suy mã); banner `app.js 20260829-2`, buster
+`app.js?v=20260829-2`, `project-details.js?v=20260829-1`.
+
+
 
 
 
