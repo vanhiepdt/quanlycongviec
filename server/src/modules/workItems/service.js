@@ -18,7 +18,12 @@ import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as assignments from '../assignments/service.js';
-import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
+import {
+  boCotKhoaDuyet,
+  CHO_DUYET,
+  coSuaDuocKhiChoDuyet,
+  trangThaiDuyetKhiTao,
+} from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
 import * as worksRepo from '../works/repo.js';
@@ -456,12 +461,33 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
       { current, work, parentRow: parentMoi, doiParent: parentMoi !== undefined || moved, patch },
       client
     );
+    // Trưởng/Phó phòng sửa CÔNG VIỆC CON đã duyệt ⇒ quay lại «Chờ duyệt» chờ Phó GĐ phụ trách
+    // duyệt lại (yêu cầu 2026-08-28). admin/Phó GĐ sửa giữ nguyên trạng thái; mục đang «Chờ
+    // duyệt» thì assertSuaDuoc phía trên đã bó đúng người được sửa, trạng thái giữ nguyên.
+    const phaiDuyetLai =
+      Number(current.level) === repo.LEVEL_SUBWORK &&
+      (user.role === 'Trưởng phòng' || user.role === 'Phó phòng') &&
+      current.approval_status !== CHO_DUYET;
+
     const row = await withPgErrors(() =>
       repo.updateStructure(
         current.id,
-        // Sửa dòng KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động submit/approve/reject
-        // của `approvals/service.js`, nơi có kiểm quyền duyệt và ghi lại ai duyệt (§7 việc 5.2).
-        { ...boCotKhoaDuyet(patch), ...assignee.fields, ...structural },
+        // Sửa dòng KHÔNG đổi được khoá duyệt QUA PATCH — đường duy nhất là ba hành động
+        // submit/approve/reject của `approvals/service.js`. Riêng việc hạ về «Chờ duyệt» sau khi
+        // TP/PP sửa CV con là luồng duyệt chính thống, viết tại đây một lần duy nhất.
+        {
+          ...boCotKhoaDuyet(patch),
+          ...assignee.fields,
+          ...structural,
+          ...(phaiDuyetLai
+            ? {
+                approval_status: CHO_DUYET,
+                approver_id: null,
+                approved_at: null,
+                reject_reason: '',
+              }
+            : {}),
+        },
         client
       )
     );
@@ -469,6 +495,7 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
     return {
       item: { ...row, reminders: await remindersRepo.listByItem(row.id, client) },
       moved,
+      choDuyetLai: phaiDuyetLai,
       parentCleared: moved && current.parent_id != null && row.parent_id == null,
       // Nhật ký "các lần chỉnh sửa" (§2.3): kể cả hai cột cấu trúc, vì "chuyển sang công việc
       // khác" là thay đổi người dùng cần thấy nhất trong nhật ký.

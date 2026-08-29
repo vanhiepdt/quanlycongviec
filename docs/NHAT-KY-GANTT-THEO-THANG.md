@@ -127,6 +127,27 @@ Kiểm chứng: **1095/1095 test · 64 file** xanh · lint + prettier sạch · 
 
 ---
 
+## Vòng 5–6 (2026-08-29) — chỉnh theo phản hồi ảnh chụp (5 mục)
+
+| Phản hồi | Nguyên nhân | Đã sửa |
+|---|---|---|
+| Một số thanh Gantt mất màu (Phase 1/2/3 — các CV con) | **`.gantt-bar-subwork` chưa từng có luật màu** — thanh CV con trong suốt từ đầu | Khối màu ghim đè cuối app.css: project xanh / **subwork cam** / task xanh lá / overdue đỏ, kèm `.gantt-progress` |
+| Bỏ mã (CV00x) hiển thị ở 2 tab | Mã nằm rải trong chuỗi template nhiều kiểu escape | `boLocMaCV()` (regex từ charCode, không backslash trong nguồn) bọc kết quả render của cả 2 tab — không đụng chuỗi template |
+| PGD sửa công việc cha + CV con phòng mình | Server rbac ĐÃ cho update trong phạm vi; **client** `canUserEditResource` chặn PGD | Viết lại `canUserEditResource`: PGD được project; PGD/TP/PP được task cấp 2 (server vẫn chặn phòng khác) |
+| Nút sửa CV con ở 2 tab cho 4 vai; TP/PP sửa ⇒ Phó GĐ duyệt lại | Thiếu nút ở tab Nhiệm vụ; server cập nhật không hạ trạng thái | Nút ✎ `edit-btn` (data-type task, data-id mã CV con) trên đầu khối CV con; server `workItems/service.update`: TP/PP sửa cấp 2 đã duyệt ⇒ tự hạ về «Chờ duyệt» (trả `choDuyetLai`); PGD sửa giữ nguyên |
+| PGD ủy quyền cho PGD: không thấy duyệt + việc phòng bên ủy quyền | `phamViBadge` (approvals) và `boLocPhong` (Gantt/nhiệm vụ) chỉ đọc `managedDepartmentIds`, bỏ qua `user.delegations` | Gộp `departmentIds` của các bản ủy quyền đang hiệu lực vào cả hai phạm vi (L3 — phạm vi mượn đã bó sẵn trong từng bản ghi) |
+
+Phiên bản: banner `20260828-88`, buster `app.js?v=20260828-88` · `app.css?v=20260828-7` ·
+`project-details.js?v=20260828-2`. Kiểm chứng: **1330/1330 test · 78 file** xanh (hai lượt),
+lint + prettier sạch, pin giữ **92/668**.
+
+Bẫy mới ghi §13.5: **needle vá file dựng bằng chuỗi thường bị lớp JSON/editor ăn mất backslash** —
+dựng needle từ `String.fromCharCode(92)` hoặc dùng regex xây runtime; mốc kết thúc kiểu `");`
+trên dòng kết thúc bằng `\";` sẽ overshoot — luôn in mã ký tự quanh mốc trước khi khớp.
+
+
+---
+
 ## Vòng 4b (2026-08-27) — thủ phạm cuối: header bị ép min-width ~3060px
 
 Ảnh chụp sau Vòng 4: thanh "07/09 - 24/09" đúng 18 cột lưới **nhưng** không khớp ô ngày — đo pixel

@@ -92,13 +92,31 @@ export async function boLocPhong(user, rawIds = []) {
   }
 
   if (user.role === 'Phó Giám đốc') {
-    const base = (user.managedDepartmentIds ?? []).map((id) => String(id));
+    // + các phòng MƯỢN qua ủy quyền đang hiệu lực (2026-08-28) — phạm vi mượn đã bó sẵn
+    // theo department_ids của từng bản ghi ủy quyền (lớp 3 của rbac.js).
+    const base = [
+      ...new Set([
+        ...(user.managedDepartmentIds ?? []).map((id) => String(id)),
+        ...(user.delegations ?? []).flatMap((d) => (d.departmentIds ?? []).map((id) => String(id))),
+      ]),
+    ];
     if (yeuCau.length === 0) return base;
     const choPhep = new Set(base);
     return yeuCau.filter((id) => choPhep.has(id));
   }
 
-  return user.department_id == null ? [] : [String(user.department_id)];
+  const rieng = user.department_id == null ? [] : [String(user.department_id)];
+  // Trưởng/Phó phòng được ủy quyền: gộp thêm phòng của bên ủy quyền (chỉ 3 vai theo phòng
+  // được mượn quyền theo phạm vi phòng — xem inScopeMuon của rbac.js).
+  if (user.role === 'Trưởng phòng' || user.role === 'Phó phòng') {
+    return [
+      ...new Set([
+        ...rieng,
+        ...(user.delegations ?? []).flatMap((d) => (d.departmentIds ?? []).map((id) => String(id))),
+      ]),
+    ];
+  }
+  return rieng;
 }
 
 /** Dòng có thuộc bộ phòng được lọc không? `null` = mọi phòng. EXPORT cho Gantt (6.6). */

@@ -265,6 +265,9 @@ export function phamViBadge(user) {
   const departmentIds = [];
   if (user.role === 'Phó Giám đốc') departmentIds.push(...(user.managedDepartmentIds ?? []));
   else if (user.department_id != null) departmentIds.push(user.department_id);
+  // Ủy quyền đang hiệu lực: các phòng của NGƯỜI ỦY QUYỀN cũng vào phạm vi badge/danh sách
+  // (2026-08-28 — Phó GĐ được ủy quyền phải thấy duyệt + việc của phòng bên ủy quyền).
+  (user.delegations ?? []).forEach((d) => departmentIds.push(...(d.departmentIds ?? [])));
   return { all: false, departmentIds, createdBy: user.id };
 }
 
