@@ -229,7 +229,8 @@ describe('TC-TENTHANG-32..33 — hai tab đổi tên theo tháng đang xem', () 
     window.__pq('projectsXemThang', 9);
     window.renderProjects();
     const luoi = document.getElementById('projects-grid');
-    expect(luoi.textContent).toContain('Tên tháng chín (CV001)');
+    expect(luoi.textContent).toContain('Tên tháng chín');
+    expect(luoi.textContent).not.toContain('(CV001)');
     expect(luoi.textContent).not.toContain('Tên gốc công việc (CV001)');
     // Di chuột vào hiện TÊN CŨ (R6).
     expect(luoi.querySelector('h4').getAttribute('title')).toBe('Tên gốc: Tên gốc công việc');
@@ -237,11 +238,11 @@ describe('TC-TENTHANG-32..33 — hai tab đổi tên theo tháng đang xem', () 
     expect(luoi.querySelector('.project-card').getAttribute('data-name')).toBe('Tên gốc công việc');
     window.__pq('projectsXemThang', 10);
     window.renderProjects();
-    expect(luoi.textContent).toContain('Tên gốc công việc (CV001)');
+    expect(luoi.textContent).toContain('Tên gốc công việc');
     expect(luoi.querySelector('h4').getAttribute('title')).toBeNull();
     window.__pq('projectsXemThang', 0);
     window.renderProjects();
-    expect(luoi.textContent).toContain('Tên gốc công việc (CV001)');
+    expect(luoi.textContent).toContain('Tên gốc công việc');
   });
 
   it('TC-TENTHANG-33: tab Nhiệm vụ — cả 3 cấp đổi tên theo tháng, tên cũ nằm ở title', () => {
@@ -253,8 +254,8 @@ describe('TC-TENTHANG-32..33 — hai tab đổi tên theo tháng đang xem', () 
     window.__pq('tasksXemThang', 9);
     window.renderTasks();
     const luoi = document.getElementById('tasks-grid');
-    expect(luoi.textContent).toContain('CV tháng chín (CV001)');
-    expect(luoi.textContent).toContain('CV con tháng chín (CV001-001)');
+    expect(luoi.textContent).toContain('CV tháng chín');
+    expect(luoi.textContent).toContain('CV con tháng chín');
     expect(luoi.textContent).toContain('NV tháng chín');
     expect(luoi.textContent).not.toContain('Tên gốc nhiệm vụ');
     const cacTitle = [...luoi.querySelectorAll('[title^="Tên gốc: "]')].map((el) =>
@@ -449,8 +450,8 @@ describe('TC-TENTHANG-37..38 — đường ghi tên theo tháng', () => {
     expect(JSON.parse(ghi[0].body)).toEqual({ name: 'CV tháng chín' });
     // Không có lượt tải lại nào ⇒ dòng trong bộ nhớ phải được vá tại chỗ.
     expect(window.__congViec('CV001').monthNames['2026-09']).toBe('CV tháng chín');
-    expect(document.getElementById('projects-grid').textContent).toContain('CV tháng chín (CV001)');
-    expect(document.getElementById('tasks-grid').textContent).toContain('CV tháng chín (CV001)');
+    expect(document.getElementById('projects-grid').textContent).toContain('CV tháng chín');
+    expect(document.getElementById('tasks-grid').textContent).toContain('CV tháng chín');
 
     lanGoi = fetchGia();
     expect(await window.xoaTenThang('project', 'CV001', '2026-09')).toBe(true);
@@ -458,9 +459,7 @@ describe('TC-TENTHANG-37..38 — đường ghi tên theo tháng', () => {
     expect(xoa[0].method).toBe('DELETE');
     expect(xoa[0].body).toBeUndefined();
     expect(window.__congViec('CV001').monthNames['2026-09']).toBeUndefined();
-    expect(document.getElementById('projects-grid').textContent).toContain(
-      'Tên gốc công việc (CV001)'
-    );
+    expect(document.getElementById('projects-grid').textContent).toContain('Tên gốc công việc');
   });
 
   it('TC-TENTHANG-38: máy chủ từ chối thì giữ nguyên dữ liệu cũ và báo lỗi của máy chủ', async () => {

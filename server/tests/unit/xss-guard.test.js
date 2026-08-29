@@ -205,9 +205,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // tả rỗng thì bỏ hẳn dòng phụ. Sink giữ nguyên 1 (chỗ innerHTML cũ), giá trị +2: 4 nội suy cũ
     // (action, details, user, giờ) thành 6 (icon + màu qua escapeHtmlAttr, nhãn, mô tả, user, giờ)
     // ⇒ 92 chỗ / 670 giá trị.
+    // 2026-08-29 (vòng 7 — bỏ nốt mã khỏi tên, phản hồi ảnh CV002): gỡ 4 chỗ nội suy MÃ khỏi tên
+    // hiển thị — h4 thẻ công việc (projectId), dải tab Nhiệm vụ (maCongViec), div mã dưới tên
+    // nhiệm vụ (taskId), chip mã trong thẻ nhiệm vụ của modal chi tiết (taskId); khối CV con giữ
+    // nguyên 1 nội suy tieuDe. project-details.js không nằm trong bộ soát này. ⇒ 92 chỗ / 666
+    // giá trị. Chi tiết: docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 7.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 670 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 666 });
   });
 });
 

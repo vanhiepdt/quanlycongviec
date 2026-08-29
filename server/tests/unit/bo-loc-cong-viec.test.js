@@ -130,6 +130,17 @@ describe('TC-CV-BL — ô Tháng/Năm của tab Công việc (giống Sơ đồ 
   });
 });
 
+describe('TC-CV-BL-2 — tên công việc không còn gắn mã (2026-08-29)', () => {
+  it('renderProjects: tiêu đề thẻ hết "(CV…)", tên vẫn hiện đủ', () => {
+    window.renderProjects();
+    const html = document.getElementById('projects-grid').innerHTML;
+    expect(html).toContain('Việc tháng 3');
+    expect(html).not.toContain('(CV01)');
+    expect(html).not.toContain('(CV02)');
+    expect(html).not.toContain('(CV03)');
+  });
+});
+
 describe('TC-CV-BL — lọc theo tháng và theo nhóm phòng', () => {
   it('lọc tháng 3/2026: chỉ còn việc phủ qua tháng đó', () => {
     window.__pq('projectsXemThang', 3);

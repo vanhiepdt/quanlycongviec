@@ -214,7 +214,9 @@ describe('icon bút chì sửa công việc con — hiển thị và hành độ
     const cacNut = goc.querySelectorAll('.edit-subwork-btn');
     expect(cacNut.length).toBe(1);
     const khoi = cacNut[0].closest('[class*="rounded-xl"]');
-    expect(khoi && khoi.textContent).toContain('CV001-01');
+    expect(khoi && khoi.textContent).toContain('Chuẩn bị hậu cần');
+    // 2026-08-29: bỏ mã khỏi tên hiển thị — mã chỉ còn ở id/data-* (sw-tasks-CV001-01…).
+    expect(khoi && khoi.textContent).not.toContain('(CV001-01)');
   });
 
   it('lãnh đạo phòng của CV con thấy icon đúng CV con mình; người ngoài cuộc không thấy gì', () => {

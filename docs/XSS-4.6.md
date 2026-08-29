@@ -256,6 +256,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > nhãn, mô tả — rỗng thì bỏ dòng, người, giờ) ⇒ **92 chỗ / 670 giá trị** (TC-SEC-17). Chi tiết:
 > `docs/NHAT-KY-HOAT-DONG-GAN-DAY.md`.
 
+> **Cập nhật 2026-08-29 (vòng 7 — bỏ nốt mã khỏi tên công việc/nhiệm vụ).** Gỡ 4 chỗ nội suy MÃ
+> khỏi tên hiển thị ở app.js: h4 thẻ công việc (projectId), dải tab Nhiệm vụ (maCongViec), div
+> mã dưới tên nhiệm vụ (taskId), chip mã trong thẻ nhiệm vụ của modal chi tiết (taskId). Khối CV
+> con vẫn 1 nội suy `tieuDe` (giá trị hết gắn mã). project-details.js không nằm trong bộ soát.
+> ⇒ **92 chỗ / 666 giá trị** (TC-SEC-17). Chi tiết: `docs/NHAT-KY-GANTT-THEO-THANG.md` mục Vòng 7.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

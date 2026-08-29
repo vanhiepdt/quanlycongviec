@@ -256,7 +256,9 @@ describe('TC-TASKUI-07..10 — gom theo CÔNG VIỆC CON, tổng hợp đúng lu
     });
     expect(html).toContain('fa-folder');
     expect(html).toContain('text-red-500');
-    expect(html).toContain('Công việc con CVC1 (CVC1)');
+    expect(html).toContain('Công việc con CVC1');
+    // 2026-08-29: bỏ mã khỏi TÊN hiển thị — mã chỉ còn ở data-* nuôi hộp thoại Xoá/Sửa.
+    expect(html).not.toContain('(CVC1)');
     expect(html).toContain('2 nhiệm vụ');
     expect(html).toContain('50%');
     expect(html).toContain('tasks-subwork-toggle');
@@ -310,7 +312,8 @@ describe('TC-TASKUI-12..13 — vẽ thật vào #tasks-grid và nhớ trạng th
     window.renderTasks();
     const grid = document.getElementById('tasks-grid');
     expect(grid.querySelectorAll('.tasks-subwork-toggle').length).toBe(2);
-    expect(grid.textContent).toContain('Công việc 1 (CV1)');
+    expect(grid.textContent).toContain('Công việc 1');
+    expect(grid.textContent).not.toContain('(CV1)');
     expect(grid.textContent).toContain('Nhiệm vụ trực thuộc công việc');
     // NV3 thuộc tháng 9 nên không được vẽ khi đang xem tháng 8.
     expect(grid.textContent).not.toContain('Nhiệm vụ NV3');
@@ -334,6 +337,16 @@ describe('TC-TASKUI-12..13 — vẽ thật vào #tasks-grid và nhớ trạng th
     expect(
       document.querySelector('#tasks-grid .glass-card .tasks-table-wrap').className
     ).not.toContain('hidden');
+  });
+
+  it('TC-TASKUI-19: tên nhiệm vụ/công việc hết gắn mã — hết div mã dưới tên (2026-08-29)', () => {
+    window.renderTasks();
+    const grid = document.getElementById('tasks-grid');
+    expect(grid.textContent).toContain('Nhiệm vụ NV1');
+    expect(grid.innerHTML).not.toContain('(CV1)');
+    expect(grid.innerHTML).not.toContain('(CVC1)');
+    // Div mã dưới tên nhiệm vụ đã bỏ — mã chỉ còn trong data-id/data-project-id.
+    expect(grid.innerHTML).not.toContain('>NV1</div>');
   });
 });
 

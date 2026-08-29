@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
-  COL, isAdmin, isManager, laQuanTriTrongPhamVi, updateUIForUser, canUserCreateTask,
+  COL, isAdmin, isManager, laQuanTriTrongPhamVi, laLanhDaoPhong, updateUIForUser, canUserCreateTask,
   canUserEditResource, canUserDeleteResource, getUserAllowedProjects,
   __pq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
@@ -186,5 +186,52 @@ describe('TC-PGD-UI-03: nút thêm/sửa/xoá của Phó Giám đốc', () => {
     window.__pq('allProjects', [cvA, cvB]);
     window.__pq('visibleDepartments', ['Phòng A']);
     expect(window.getUserAllowedProjects()).toHaveLength(2);
+  });
+});
+
+describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (2026-08-29)', () => {
+  it('laLanhDaoPhong đúng hai vai, không nới cho vai khác', () => {
+    window.__pq('currentUser', { name: 'A', role: 'Trưởng phòng' });
+    expect(window.laLanhDaoPhong()).toBe(true);
+    window.__pq('currentUser', { name: 'B', role: 'Phó phòng' });
+    expect(window.laLanhDaoPhong()).toBe(true);
+    window.__pq('currentUser', { name: 'C', role: 'Phó Giám đốc' });
+    expect(window.laLanhDaoPhong()).toBe(false);
+    window.__pq('currentUser', { name: 'D', role: 'Nhân viên' });
+    expect(window.laLanhDaoPhong()).toBe(false);
+    window.__pq('currentUser', null);
+    expect(window.laLanhDaoPhong()).toBe(false);
+  });
+
+  it('Trưởng phòng thấy nút «Công việc mới» (add-project-standalone)', () => {
+    dangNhap({ name: 'Anh TP', role: 'Trưởng phòng' });
+    expect(document.getElementById('add-project-standalone').style.display).toBe('');
+  });
+
+  it('Phó phòng cũng thấy; Nhân viên vẫn không thấy', () => {
+    dangNhap({ name: 'Anh PP', role: 'Phó phòng' });
+    expect(document.getElementById('add-project-standalone').style.display).toBe('');
+    dangNhap({ name: 'Bạn NV', role: 'Nhân viên' });
+    expect(document.getElementById('add-project-standalone').style.display).toBe('none');
+  });
+
+  it('«Tạo mới» là <a href="#"> ⇒ handler phải preventDefault, hết nhảy đầu trang', () => {
+    // Kiểm hợp đồng theo nguồn: cả 7 nút Tạo mới đều bọc (event) + preventDefault ngay đầu.
+    const dem = (APP_SRC.match(/event && event\.preventDefault\(\);/g) || []).length;
+    // 7 nút Tạo mới vừa bọc + 1 chỗ preventDefault có sẵn từ trước ở app.js.
+    expect(dem).toBe(8);
+    for (const id of [
+      'quick-add-project',
+      'quick-add-task',
+      'quick-add-staff',
+      'quick-add-proposal',
+      'quick-add-app',
+      'add-project-standalone',
+      'add-task-standalone',
+    ]) {
+      expect(APP_SRC).toContain(
+        `document.getElementById("${id}")?.addEventListener("click", (event) => {`
+      );
+    }
   });
 });

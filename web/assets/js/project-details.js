@@ -171,9 +171,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     '<i class="fas fa-folder-open text-blue-400"></i>' +
     '<span class="font-semibold text-gray-900 truncate">' +
     escapeHtml(sw[COL.T_NAME]) +
-    '</span> <span class="text-xs text-gray-400 whitespace-nowrap">(' +
-    escapeHtml(sw[COL.T_ID]) +
-    ")</span>" +
+    "</span>" +
     '<span class="text-xs px-2 py-0.5 rounded-full bg-white border border-blue-100 text-blue-600 whitespace-nowrap">' +
     nvTrong.length +
     " nhiệm vụ</span>" +
@@ -264,9 +262,7 @@ function showProjectDetailsModal(projectId, projectName) {
     '        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10">\n' +
     '            <h3 class="text-lg md:text-xl font-bold text-gray-900 truncate pr-2">Chi tiết công việc: ' +
     escapeHtml(projectName) +
-    " (" +
-    escapeHtml(projectId) +
-    ')</h3>\n' +
+    '</h3>\n' +
     '            <button type="button" class="close-modal text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times text-lg"></i></button>\n' +
     "        </div>\n" +
     '        <div class="flex-1 overflow-y-auto p-5 space-y-4">\n' +
