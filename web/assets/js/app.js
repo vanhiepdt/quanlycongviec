@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-2");
+console.info("[QLCV] app.js 20260829-3");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -5995,6 +5995,208 @@ function tenPhongTaiKhoan() {
   const dept = (allDepartments || []).find(item => String(item[COL.D_DB_ID] || "") === String(id));
   return dept ? String(dept[COL.D_NAME] || "") : "#" + id;
 }
+// ============================================================================
+// BẢNG PHÂN QUYỀN HỆ THỐNG (2026-08-29) — hiện ở trang «Quản lý tài khoản».
+//
+// Dữ liệu viết tay nhưng PHẢI khớp hai nguồn sự thật phía máy chủ:
+//   - PERMISSIONS + inScope(): server/src/middleware/rbac.js
+//   - trangThaiDuyetKhiTao(): server/src/modules/approvals/rules.js
+// Đổi luật máy chủ ⇒ phải đổi bảng này trong CÙNG commit (test TC-TKPQ canh các ô then chốt).
+// Ký hiệu: ✓ được làm ngay · ⏳ làm được nhưng phải chờ duyệt · ✕ không được · ↻ mượn qua ủy quyền.
+// ============================================================================
+const BANG_PHAN_QUYEN = [
+  {
+    ten: "Xem Công việc / Công việc con / Nhiệm vụ",
+    a: { s: "✓", n: "Toàn hệ thống" },
+    g: { s: "✓", n: "Các phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Việc mình quản lý + phòng mình" },
+    nv: { s: "✓", n: "Phòng mình + việc được giao" },
+  },
+  {
+    ten: "Tạo Công việc (cấp 1)",
+    a: { s: "✓", n: "Ngay" },
+    g: { s: "✓", n: "Phòng phụ trách — Ngay" },
+    tp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
+    pp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
+    q: { s: "⏳", n: "Chờ duyệt" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Tạo Công việc con (cấp 2)",
+    a: { s: "✓", n: "Ngay" },
+    g: { s: "✓", n: "Phòng phụ trách — Ngay" },
+    tp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
+    pp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
+    q: { s: "⏳", n: "Chờ duyệt" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Tạo Nhiệm vụ (cấp 3)",
+    gc: "Nhiệm vụ KHÔNG qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con.",
+    a: { s: "✓", n: "Ngay" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Trong việc mình quản lý" },
+    nv: { s: "✓", n: "Trong việc được giao / tự nhận" },
+  },
+  {
+    ten: "Sửa Công việc (cấp 1)",
+    a: { s: "✓", n: "" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Việc mình quản lý" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Sửa Công việc con (cấp 2)",
+    gc: "Mục đang «Chờ duyệt» chỉ người lập (và người duyệt) sửa được; TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.",
+    a: { s: "✓", n: "" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "⏳", n: "Phòng mình — duyệt lại sau sửa" },
+    pp: { s: "⏳", n: "Phòng mình — duyệt lại sau sửa" },
+    q: { s: "✓", n: "Việc mình quản lý" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Sửa Nhiệm vụ (cấp 3)",
+    a: { s: "✓", n: "" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Việc mình quản lý / mình thực hiện" },
+    nv: { s: "✓", n: "Chỉ nhiệm vụ của mình" },
+  },
+  {
+    ten: "Xoá Công việc / Công việc con",
+    a: { s: "✓", n: "" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Việc mình quản lý" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Xoá Nhiệm vụ (cấp 3)",
+    a: { s: "✓", n: "" },
+    g: { s: "✓", n: "Phòng phụ trách" },
+    tp: { s: "✓", n: "Phòng mình" },
+    pp: { s: "✓", n: "Phòng mình" },
+    q: { s: "✓", n: "Việc mình quản lý" },
+    nv: { s: "✓", n: "Chỉ nhiệm vụ của mình" },
+  },
+  {
+    ten: "Duyệt Công việc / Công việc con",
+    gc: "Chỉ hai vai này được duyệt — nơi những mục chờ duyệt phía trên chờ.",
+    a: { s: "✓", n: "Toàn hệ thống" },
+    g: { s: "✓", n: "Các phòng phụ trách" },
+    tp: { s: "✕", n: "" },
+    pp: { s: "✕", n: "" },
+    q: { s: "✕", n: "" },
+    nv: { s: "✕", n: "" },
+  },
+  {
+    ten: "Thêm / sửa / xoá Người dùng",
+    a: { s: "✓", n: "" },
+    g: { s: "👁", n: "Chỉ xem" },
+    tp: { s: "👁", n: "Chỉ xem" },
+    pp: { s: "👁", n: "Chỉ xem" },
+    q: { s: "👁", n: "Chỉ xem" },
+    nv: { s: "👁", n: "Chỉ xem" },
+  },
+  {
+    ten: "Thêm / sửa / xoá Phòng ban",
+    a: { s: "✓", n: "" },
+    g: { s: "👁", n: "Chỉ xem" },
+    tp: { s: "👁", n: "Chỉ xem" },
+    pp: { s: "👁", n: "Chỉ xem" },
+    q: { s: "👁", n: "Chỉ xem" },
+    nv: { s: "👁", n: "Chỉ xem" },
+  },
+  {
+    ten: "Ủy quyền cho người khác",
+    gc: "Ngang hoặc xuống cấp (không ủy lên cấp trên), cùng phòng; người nhận phải bấm «Đồng ý» mới hiệu lực.",
+    a: { s: "✕", n: "Không ủy / không mượn" },
+    g: { s: "✓", n: "" },
+    tp: { s: "✓", n: "" },
+    pp: { s: "✓", n: "" },
+    q: { s: "✓", n: "" },
+    nv: { s: "✓", n: "Ủy ngang cho Cán bộ khác" },
+  },
+  {
+    ten: "Mượn quyền khi được ủy quyền",
+    gc: "Chỉ áp dụng cho Công việc / Công việc con / Nhiệm vụ, trong thời hạn và phạm vi của người ủy.",
+    a: { s: "✕", n: "Không mượn" },
+    g: { s: "↻", n: "Phòng của người ủy" },
+    tp: { s: "↻", n: "Phòng của người ủy" },
+    pp: { s: "↻", n: "Phòng của người ủy" },
+    q: { s: "↻", n: "Đúng việc của người ủy" },
+    nv: { s: "↻", n: "Phòng của người ủy" },
+  },
+  {
+    ten: "Xuất Excel",
+    a: { s: "✓", n: "Theo phạm vi thấy được" },
+    g: { s: "✓", n: "Theo phạm vi thấy được" },
+    tp: { s: "✓", n: "Theo phạm vi thấy được" },
+    pp: { s: "✓", n: "Theo phạm vi thấy được" },
+    q: { s: "✓", n: "Theo phạm vi thấy được" },
+    nv: { s: "✓", n: "Theo phạm vi thấy được" },
+  },
+];
+/** BUILDER — bảng phân quyền. Mọi chữ là HẰNG của BANG_PHAN_QUYEN nhưng vẫn đi qua escapeHtml
+ * (quy ước 4.6); tên cột/ký hiệu không có dữ liệu người dùng. */
+function buildBangPhanQuyenHtml() {
+  const mauKyHieu = { "✓": "text-green-600", "⏳": "text-amber-600", "↻": "text-indigo-500", "👁": "text-gray-400", "✕": "text-red-400" };
+  const cacVai = ["a", "g", "tp", "pp", "q", "nv"];
+  const dong = BANG_PHAN_QUYEN.map(
+    (h) =>
+      "<tr class=\"border-t border-gray-100\">" +
+      "<td class=\"px-2 py-2 text-xs font-medium text-gray-800 align-top\">" +
+      escapeHtml(h.ten) +
+      (h.gc ? "<div class=\"text-[11px] font-normal text-gray-500 mt-0.5 leading-snug\">" + escapeHtml(h.gc) + "</div>" : "") +
+      "</td>" +
+      cacVai
+        .map((vai) => {
+          const c = h[vai];
+          return (
+            "<td class=\"px-2 py-2 align-top\">" +
+            "<span class=\"font-semibold text-sm " + escapeHtml(mauKyHieu[c.s] || "text-gray-400") + "\">" + escapeHtml(c.s) + "</span>" +
+            (c.n ? "<div class=\"text-[11px] text-gray-500 mt-0.5 leading-snug\">" + escapeHtml(c.n) + "</div>" : "") +
+            "</td>"
+          );
+        })
+        .join("") +
+      "</tr>"
+  ).join("");
+  const thead =
+    "<thead><tr class=\"bg-gray-50\">" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Chức năng</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Giám đốc (admin)</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó Giám đốc</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Trưởng phòng</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó phòng</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Quản lý công việc</th>" +
+    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Cán bộ</th>" +
+    "</tr></thead>";
+  const chuThich =
+    "<div class=\"text-[11px] text-gray-500 mt-2 leading-relaxed\">" +
+    "Ký hiệu: <span class=\"font-semibold text-green-600\">✓</span> được làm ngay · " +
+    "<span class=\"font-semibold text-amber-600\">⏳</span> làm được nhưng phải chờ <b>Phó Giám đốc phụ trách</b> (hoặc Giám đốc) duyệt rồi mới vào thống kê · " +
+    "<span class=\"font-semibold text-indigo-500\">↻</span> mượn qua ủy quyền · " +
+    "<span class=\"font-semibold text-gray-400\">👁</span> chỉ xem · " +
+    "<span class=\"font-semibold text-red-400\">✕</span> không được. " +
+    "Máy chủ là rào chặn cuối — bảng này mô tả đúng luật của hệ thống, không cấp quyền thêm.</div>";
+  return "<div class=\"overflow-x-auto\"><table class=\"min-w-full\">" + thead + "<tbody>" + dong + "</tbody></table></div>" + chuThich;
+}
+/** Vẽ bảng phân quyền vào trang tài khoản; không có khung thì bỏ qua (an toàn cho test cũ). */
+function veBangPhanQuyen() {
+  const el = document.getElementById("account-permission-table");
+  if (!el) return;
+  el.innerHTML = buildBangPhanQuyenHtml();
+}
 function renderTrangTaiKhoan() {
   const el = document.getElementById("account-info");
   if (!el) return;
@@ -6018,6 +6220,7 @@ function renderTrangTaiKhoan() {
     buildTaiKhoanDong("Trạng thái", currentUser.is_active === false ? "Đã khoá" : "Đang hoạt động"),
     buildTaiKhoanDong("Đang mượn quyền của", uyQuyenText)
   ].join("");
+  veBangPhanQuyen();
 }
 /** Nối form đổi mật khẩu + nút Tải lại của trang tài khoản — MỘT lần (mốc dataset.daNoi). */
 function setupTrangTaiKhoan() {

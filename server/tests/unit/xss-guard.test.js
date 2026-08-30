@@ -212,7 +212,7 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // giá trị. Chi tiết: docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 7.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 92, gia_tri: 666 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 93, gia_tri: 675 });
   });
 });
 

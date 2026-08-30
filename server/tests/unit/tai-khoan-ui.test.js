@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, renderTrangTaiKhoan, setupTrangTaiKhoan, buildTaiKhoanDong, tenPhongTaiKhoan,
-  hienLoiTaiKhoan, hienOkTaiKhoan,
+  hienLoiTaiKhoan, hienOkTaiKhoan, buildBangPhanQuyenHtml, veBangPhanQuyen,
   __tk: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -32,6 +32,7 @@ const EXPORTS = `;Object.assign(window, {
 
 const HTML = `
   <div id="account-info"></div>
+  <div id="account-permission-table"></div>
   <form id="account-password-form">
     <div id="account-password-error" class="hidden"></div>
     <div id="account-password-ok" class="hidden"></div>
@@ -241,5 +242,71 @@ describe('TC-TK — đổi mật khẩu ngay trong trang', () => {
     dienMatKhau('cu123456', 'moi123456', 'moi123456');
     guiForm();
     expect(goiChangePassword).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ------------------------------------------------------------------------------------------
+// TC-TKPQ (2026-08-29): BẢNG PHÂN QUYỀN HỆ THỐNG ở trang Quản lý tài khoản.
+// Yêu cầu người dùng: «làm lại bảng Phân quyền hệ thống — ghi rõ mỗi chức năng của từng đối
+// tượng, được làm gì, làm gì nhưng phải được người khác duyệt». Bảng là HẰNG dữ liệu khớp
+// PERMISSIONS/inScope + trangThaiDuyetKhiTao phía máy chủ; test canh các ô then chốt.
+// ------------------------------------------------------------------------------------------
+describe('TC-TKPQ — bảng Phân quyền hệ thống', () => {
+  it('TC-TKPQ-01: đủ 6 vai ở hàng tiêu đề, mỗi vai một cột', () => {
+    const bang = window.buildBangPhanQuyenHtml();
+    expect(bang).toContain('Giám đốc (admin)');
+    expect(bang).toContain('Phó Giám đốc');
+    expect(bang).toContain('Trưởng phòng');
+    expect(bang).toContain('Phó phòng');
+    expect(bang).toContain('Quản lý công việc');
+    expect(bang).toContain('Cán bộ');
+  });
+
+  it('TC-TKPQ-02: hàng «Duyệt» — chỉ Giám đốc và Phó GĐ, các vai khác ✕', () => {
+    const bang = window.buildBangPhanQuyenHtml();
+    expect(bang).toContain('Duyệt Công việc / Công việc con');
+    const viTriDuyet = bang.indexOf('Duyệt Công việc / Công việc con');
+    const vung = bang.slice(viTriDuyet, bang.indexOf('Thêm / sửa / xoá Người dùng', viTriDuyet));
+    expect(vung).toContain('Toàn hệ thống');
+    expect(vung).toContain('Các phòng phụ trách');
+    expect(vung).not.toContain('⏳');
+  });
+
+  it('TC-TKPQ-03: TP/PP tạo Công việc cấp 1 là ⏳ (chờ Phó GĐ duyệt), admin/PGD là ✓, Cán bộ ✕', () => {
+    const bang = window.buildBangPhanQuyenHtml();
+    const viTriTao = bang.indexOf('Tạo Công việc (cấp 1)');
+    const vung = bang.slice(viTriTao, viTriTao + 1200);
+    expect(vung).toContain('⏳');
+    expect(vung).toContain('chờ Phó GĐ duyệt');
+    expect(vung).toContain('✕');
+  });
+
+  it('TC-TKPQ-04: Nhiệm vụ (cấp 3) không qua duyệt — mọi vai ✓, Cán bộ chỉ trong việc được giao', () => {
+    const bang = window.buildBangPhanQuyenHtml();
+    const viTri = bang.indexOf('Tạo Nhiệm vụ (cấp 3)');
+    const vung = bang.slice(viTri, bang.indexOf('Sửa Công việc (cấp 1)', viTri));
+    expect(vung).toContain('KHÔNG qua bước duyệt');
+    expect(vung).not.toContain('⏳');
+    expect(vung).toContain('Trong việc được giao');
+  });
+
+  it('TC-TKPQ-05: có chú thích ký hiệu ⏳ và dòng «Phó Giám đốc phụ trách duyệt»', () => {
+    const bang = window.buildBangPhanQuyenHtml();
+    expect(bang).toContain('Phó Giám đốc phụ trách');
+    expect(bang).toContain('Máy chủ là rào chặn cuối');
+  });
+
+  it('TC-TKPQ-06: renderTrangTaiKhoan vẽ bảng vào #account-permission-table', () => {
+    window.__tk('currentUser', {
+      name: 'Admin',
+      code: 'NV001',
+      email: 'admin@test.local',
+      role: 'admin',
+    });
+    window.renderTrangTaiKhoan();
+    const khung = document.getElementById('account-permission-table');
+    expect(khung.innerHTML).toContain('Duyệt Công việc / Công việc con');
+    expect(khung.querySelector('table')).toBeTruthy();
+    expect(khung.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(14);
   });
 });

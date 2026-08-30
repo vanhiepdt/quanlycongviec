@@ -262,6 +262,13 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > con vẫn 1 nội suy `tieuDe` (giá trị hết gắn mã). project-details.js không nằm trong bộ soát.
 > ⇒ **92 chỗ / 666 giá trị** (TC-SEC-17). Chi tiết: `docs/NHAT-KY-GANTT-THEO-THANG.md` mục Vòng 7.
 
+> **Cập nhật 2026-08-29 (vòng 8 — Bảng Phân quyền hệ thống ở trang Quản lý tài khoản).** Bảng mới
+> vẽ động từ hằng `BANG_PHAN_QUYEN` (khớp PERMISSIONS/inScope + trangThaiDuyetKhiTao phía máy
+> chủ) qua builder `buildBangPhanQuyenHtml` — 15 chức năng × 6 vai, ký hiệu ✓/⏳(chờ duyệt)/✕/↻/👁.
+> +1 sink `#account-permission-table`.innerHTML, giá trị nội suy qua escapeHtml trực tiếp tại từng
+> lỗ (bỏ helper o() — bẫy §13.5). Bảng tĩnh cũ 3 cột (ADMIN/QUẢN LÝ/CÁN BỘ) ở section Cán bộ đã
+> GỠ. ⇒ **93 chỗ / 675 giá trị** (TC-SEC-17).
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |
