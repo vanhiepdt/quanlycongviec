@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-4");
+console.info("[QLCV] app.js 20260829-5");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -5996,300 +5996,159 @@ function tenPhongTaiKhoan() {
   return dept ? String(dept[COL.D_NAME] || "") : "#" + id;
 }
 // ============================================================================
-// BẢNG PHÂN QUYỀN HỆ THỐNG (2026-08-29) — hiện ở trang «Quản lý tài khoản».
+// BẢNG PHÂN QUYỀN HỆ THỐNG (ĐỘNG — Vòng 9/10) — hiện ở trang «Quản lý tài khoản».
 //
-// Dữ liệu viết tay nhưng PHẢI khớp hai nguồn sự thật phía máy chủ:
-//   - PERMISSIONS + inScope(): server/src/middleware/rbac.js
-//   - trangThaiDuyetKhiTao(): server/src/modules/approvals/rules.js
-// Đổi luật máy chủ ⇒ phải đổi bảng này trong CÙNG commit (test TC-TKPQ canh các ô then chốt).
-// Ký hiệu: ✓ được làm ngay · ⏳ làm được nhưng phải chờ duyệt · ✕ không được · ↻ mượn qua ủy quyền.
-// Vòng 9: cột «Quản lý công việc» đã bỏ khỏi bảng hiển thị — vai cũ phía máy chủ vẫn hoạt động.
+// 12 chức năng nghiệp vụ là DROPDOWN (admin sửa được, lưu PUT /api/v1/permissions vào
+// `permission_overrides` 009/010); các hàng còn lại chỉ hiển thị. Với Phó Giám đốc / Trưởng
+// phòng / Phó phòng, mỗi ô có thêm dropdown ĐIỀU KIỆN PHẠM VI: «Phòng phụ trách / Phòng mình»
+// hoặc «Tất cả các phòng» (010) — `can()` bỏ qua inScope khi chọn «tất cả».
+// Nguồn sự thật: PERMISSIONS + inScope() (rbac.js), trangThaiDuyetKhiTao() (approvals/rules.js).
+// Ký hiệu: ✓ được làm ngay · ⏳ chờ Phó GĐ duyệt · ✕ tắt · ↻ mượn qua ủy quyền · 👁 chỉ xem.
+// Vòng 9: cột «Quản lý công việc» đã bỏ khỏi bảng — vai cũ phía máy chủ vẫn hoạt động.
 // ============================================================================
 const BANG_PHAN_QUYEN = [
-  {
-    ten: "Xem Công việc / Công việc con / Nhiệm vụ",
-    a: { s: "✓", n: "Toàn hệ thống" },
-    g: { s: "✓", n: "Các phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Việc mình quản lý + phòng mình" },
-    nv: { s: "✓", n: "Phòng mình + việc được giao" },
-  },
-  {
-    ten: "Tạo Công việc (cấp 1)",
-    a: { s: "✓", n: "Ngay" },
-    g: { s: "✓", n: "Phòng phụ trách — Ngay" },
-    tp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
-    pp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
-    q: { s: "⏳", n: "Chờ duyệt" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Tạo Công việc con (cấp 2)",
-    a: { s: "✓", n: "Ngay" },
-    g: { s: "✓", n: "Phòng phụ trách — Ngay" },
-    tp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
-    pp: { s: "⏳", n: "Phòng mình — chờ Phó GĐ duyệt" },
-    q: { s: "⏳", n: "Chờ duyệt" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Tạo Nhiệm vụ (cấp 3)",
-    gc: "Nhiệm vụ KHÔNG qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con.",
-    a: { s: "✓", n: "Ngay" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Trong việc mình quản lý" },
-    nv: { s: "✓", n: "Trong việc được giao / tự nhận" },
-  },
-  {
-    ten: "Sửa Công việc (cấp 1)",
-    a: { s: "✓", n: "" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Việc mình quản lý" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Sửa Công việc con (cấp 2)",
-    gc: "Mục đang «Chờ duyệt» chỉ người lập (và người duyệt) sửa được; TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.",
-    a: { s: "✓", n: "" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "⏳", n: "Phòng mình — duyệt lại sau sửa" },
-    pp: { s: "⏳", n: "Phòng mình — duyệt lại sau sửa" },
-    q: { s: "✓", n: "Việc mình quản lý" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Sửa Nhiệm vụ (cấp 3)",
-    a: { s: "✓", n: "" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Việc mình quản lý / mình thực hiện" },
-    nv: { s: "✓", n: "Chỉ nhiệm vụ của mình" },
-  },
-  {
-    ten: "Xoá Công việc / Công việc con",
-    a: { s: "✓", n: "" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Việc mình quản lý" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Xoá Nhiệm vụ (cấp 3)",
-    a: { s: "✓", n: "" },
-    g: { s: "✓", n: "Phòng phụ trách" },
-    tp: { s: "✓", n: "Phòng mình" },
-    pp: { s: "✓", n: "Phòng mình" },
-    q: { s: "✓", n: "Việc mình quản lý" },
-    nv: { s: "✓", n: "Chỉ nhiệm vụ của mình" },
-  },
-  {
-    ten: "Duyệt Công việc / Công việc con",
-    gc: "Chỉ hai vai này được duyệt — nơi những mục chờ duyệt phía trên chờ.",
-    a: { s: "✓", n: "Toàn hệ thống" },
-    g: { s: "✓", n: "Các phòng phụ trách" },
-    tp: { s: "✕", n: "" },
-    pp: { s: "✕", n: "" },
-    q: { s: "✕", n: "" },
-    nv: { s: "✕", n: "" },
-  },
-  {
-    ten: "Thêm / sửa / xoá Người dùng",
-    a: { s: "✓", n: "" },
-    g: { s: "👁", n: "Chỉ xem" },
-    tp: { s: "👁", n: "Chỉ xem" },
-    pp: { s: "👁", n: "Chỉ xem" },
-    q: { s: "👁", n: "Chỉ xem" },
-    nv: { s: "👁", n: "Chỉ xem" },
-  },
-  {
-    ten: "Thêm / sửa / xoá Phòng ban",
-    a: { s: "✓", n: "" },
-    g: { s: "👁", n: "Chỉ xem" },
-    tp: { s: "👁", n: "Chỉ xem" },
-    pp: { s: "👁", n: "Chỉ xem" },
-    q: { s: "👁", n: "Chỉ xem" },
-    nv: { s: "👁", n: "Chỉ xem" },
-  },
-  {
-    ten: "Ủy quyền cho người khác",
-    gc: "Ngang hoặc xuống cấp (không ủy lên cấp trên), cùng phòng; người nhận phải bấm «Đồng ý» mới hiệu lực.",
-    a: { s: "✕", n: "Không ủy / không mượn" },
-    g: { s: "✓", n: "" },
-    tp: { s: "✓", n: "" },
-    pp: { s: "✓", n: "" },
-    q: { s: "✓", n: "" },
-    nv: { s: "✓", n: "Ủy ngang cho Cán bộ khác" },
-  },
-  {
-    ten: "Mượn quyền khi được ủy quyền",
-    gc: "Chỉ áp dụng cho Công việc / Công việc con / Nhiệm vụ, trong thời hạn và phạm vi của người ủy.",
-    a: { s: "✕", n: "Không mượn" },
-    g: { s: "↻", n: "Phòng của người ủy" },
-    tp: { s: "↻", n: "Phòng của người ủy" },
-    pp: { s: "↻", n: "Phòng của người ủy" },
-    q: { s: "↻", n: "Đúng việc của người ủy" },
-    nv: { s: "↻", n: "Phòng của người ủy" },
-  },
-  {
-    ten: "Xuất Excel",
-    a: { s: "✓", n: "Theo phạm vi thấy được" },
-    g: { s: "✓", n: "Theo phạm vi thấy được" },
-    tp: { s: "✓", n: "Theo phạm vi thấy được" },
-    pp: { s: "✓", n: "Theo phạm vi thấy được" },
-    q: { s: "✓", n: "Theo phạm vi thấy được" },
-    nv: { s: "✓", n: "Theo phạm vi thấy được" },
-  },
+  { ten: 'Xem Công việc / Công việc con / Nhiệm vụ', entityType: 'work', action: 'read' },
+  { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create' },
+  { ten: 'Tạo Công việc con (cấp 2)', entityType: 'subwork', action: 'create' },
+  { ten: 'Tạo Nhiệm vụ (cấp 3)', entityType: 'task', action: 'create', gc: 'Nhiệm vụ KHÔNG qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con.' },
+  { ten: 'Sửa Công việc (cấp 1)', entityType: 'work', action: 'update' },
+  { ten: 'Sửa Công việc con (cấp 2)', entityType: 'subwork', action: 'update', gc: 'TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.' },
+  { ten: 'Sửa Nhiệm vụ (cấp 3)', entityType: 'task', action: 'update' },
+  { ten: 'Xoá Công việc (cấp 1)', entityType: 'work', action: 'delete' },
+  { ten: 'Xoá Công việc con (cấp 2)', entityType: 'subwork', action: 'delete' },
+  { ten: 'Xoá Nhiệm vụ (cấp 3)', entityType: 'task', action: 'delete', gc: 'Cán bộ chỉ xoá nhiệm vụ của mình.' },
+  { ten: 'Duyệt Công việc (cấp 1)', entityType: 'work', action: 'approve', gc: 'Chỉ hai vai này được duyệt — nơi những mục ⏳ chờ.' },
+  { ten: 'Duyệt Công việc con (cấp 2)', entityType: 'subwork', action: 'approve' },
+  { ten: 'Thêm / sửa / xoá Người dùng', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
+  { ten: 'Thêm / sửa / xoá Phòng ban', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
+  { ten: 'Ủy quyền cho người khác', gc: 'Ngang hoặc xuống cấp, cùng phòng; người nhận phải bấm «Đồng ý».', a: { s: '✕', n: 'Không ủy' }, g: { s: '✓', n: '' }, tp: { s: '✓', n: '' }, pp: { s: '✓', n: '' }, nv: { s: '✓', n: 'Ủy ngang cho Cán bộ khác' } },
+  { ten: 'Mượn quyền khi được ủy quyền', gc: 'Chỉ work/subwork/task, trong thời hạn + phạm vi của người ủy.', a: { s: '✕', n: 'Không mượn' }, g: { s: '↻', n: 'Phòng của người ủy' }, tp: { s: '↻', n: 'Phòng của người ủy' }, pp: { s: '↻', n: 'Phòng của người ủy' }, nv: { s: '↻', n: 'Phòng của người ủy' } },
+  { ten: 'Xuất Excel', a: { s: '✓', n: 'Theo phạm vi thấy được' }, g: { s: '✓', n: 'Theo phạm vi' }, tp: { s: '✓', n: 'Theo phạm vi' }, pp: { s: '✓', n: 'Theo phạm vi' }, nv: { s: '✓', n: 'Theo phạm vi' } },
 ];
-/** BUILDER — bảng phân quyền. Mọi chữ là HẰNG của BANG_PHAN_QUYEN nhưng vẫn đi qua escapeHtml
- * (quy ước 4.6); tên cột/ký hiệu không có dữ liệu người dùng. */
-function buildBangPhanQuyenHtml() {
-  const mauKyHieu = { "✓": "text-green-600", "⏳": "text-amber-600", "↻": "text-indigo-500", "👁": "text-gray-400", "✕": "text-red-400" };
-  const cacVai = ["a", "g", "tp", "pp", "nv"];
-  const dong = BANG_PHAN_QUYEN.map(
-    (h) =>
-      "<tr class=\"border-t border-gray-100\">" +
-      "<td class=\"px-2 py-2 text-xs font-medium text-gray-800 align-top\">" +
-      escapeHtml(h.ten) +
-      (h.gc ? "<div class=\"text-[11px] font-normal text-gray-500 mt-0.5 leading-snug\">" + escapeHtml(h.gc) + "</div>" : "") +
-      "</td>" +
-      cacVai
-        .map((vai) => {
-          const c = h[vai];
-          return (
-            "<td class=\"px-2 py-2 align-top\">" +
-            "<span class=\"font-semibold text-sm " + escapeHtml(mauKyHieu[c.s] || "text-gray-400") + "\">" + escapeHtml(c.s) + "</span>" +
-            (c.n ? "<div class=\"text-[11px] text-gray-500 mt-0.5 leading-snug\">" + escapeHtml(c.n) + "</div>" : "") +
-            "</td>"
-          );
-        })
-        .join("") +
-      "</tr>"
-  ).join("");
-  const thead =
-    "<thead><tr class=\"bg-gray-50\">" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Chức năng</th>" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Giám đốc (admin)</th>" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó Giám đốc</th>" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Trưởng phòng</th>" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó phòng</th>" +
-    
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Cán bộ</th>" +
-    "</tr></thead>";
-  const chuThich =
-    "<div class=\"text-[11px] text-gray-500 mt-2 leading-relaxed\">" +
-    "Ký hiệu: <span class=\"font-semibold text-green-600\">✓</span> được làm ngay · " +
-    "<span class=\"font-semibold text-amber-600\">⏳</span> làm được nhưng phải chờ <b>Phó Giám đốc phụ trách</b> (hoặc Giám đốc) duyệt rồi mới vào thống kê · " +
-    "<span class=\"font-semibold text-indigo-500\">↻</span> mượn qua ủy quyền · " +
-    "<span class=\"font-semibold text-gray-400\">👁</span> chỉ xem · " +
-    "<span class=\"font-semibold text-red-400\">✕</span> không được. " +
-    "Máy chủ là rào chặn cuối — bảng này mô tả đúng luật của hệ thống, không cấp quyền thêm.</div>";
-  return "<div class=\"overflow-x-auto\"><table class=\"min-w-full\">" + thead + "<tbody>" + dong + "</tbody></table></div>" + chuThich;
-}
-/** Vẽ bảng phân quyền vào trang tài khoản; không có khung thì bỏ qua (an toàn cho test cũ). */
-function veBangPhanQuyen() {
-  const el = document.getElementById("account-permission-table");
-  if (!el) return;
-  el.innerHTML = buildBangPhanQuyenHtml();
-  veTrinhSuaPhanQuyen();
-}
-// — Trình sửa «Bảng phân quyền» cho Giám đốc (Vòng 9): dropdown từng ô, PUT /api/v1/permissions.
-const NHOM_PHAN_QUYEN = [
-  { e: "work", ten: "Công việc (cấp 1)", hanhDong: ["read", "create", "update", "delete", "approve"] },
-  { e: "subwork", ten: "Công việc con (cấp 2)", hanhDong: ["read", "create", "update", "delete", "approve"] },
-  { e: "task", ten: "Nhiệm vụ (cấp 3)", hanhDong: ["read", "create", "update", "delete"] },
+const VAU_BANG = [
+  { ten: 'Phó Giám đốc', phamViText: 'Phòng phụ trách' },
+  { ten: 'Trưởng phòng', phamViText: 'Phòng mình' },
+  { ten: 'Phó phòng', phamViText: 'Phòng mình' },
+  { ten: 'Cán bộ', phamViText: '' },
 ];
-const VAU_TRINH_SUA = ["Phó Giám đốc", "Trưởng phòng", "Phó phòng"];
-const TEN_HANH_DONG_PQ = { read: "Xem", create: "Tạo", update: "Sửa", delete: "Xoá", approve: "Duyệt" };
-// Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → (vai: giá trị).
+const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': 'text-indigo-500', '👁': 'text-gray-400', '✕': 'text-red-400' };
+/** Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc. */
+function oPhanQuyenHieuLuc(row, vaiTen, ghiDe) {
+  const gd = ghiDe[row.entityType + ':' + row.action] && ghiDe[row.entityType + ':' + row.action][vaiTen];
+  if (gd) {
+    if (gd.gia_tri === 'cho-phep') return { s: '✓', n: 'Ghi đè: cho phép ngay' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
+    if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: 'Ghi đè: chờ Phó GĐ duyệt' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
+    if (gd.gia_tri === 'tu-choi') return { s: '✕', n: 'Ghi đè: đã tắt' };
+  }
+  return row[vaiTen === 'Phó Giám đốc' ? 'g' : vaiTen === 'Trưởng phòng' ? 'tp' : vaiTen === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
+}
+// __KHOI2__
+// Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → { vai: giá trị }.
 function chiSoGhiDe(danhSach) {
   const kq = {};
   (danhSach || []).forEach((r) => {
-    const khoa = (r.entity_type || r.entityType) + ":" + (r.action || "");
+    const khoa = (r.entity_type || r.entityType) + ':' + (r.action || '');
     kq[khoa] = kq[khoa] || {};
-    kq[khoa][r.vai] = r.gia_tri || r.giaTri;
+    kq[khoa][r.vai] = { gia_tri: r.gia_tri || r.giaTri, pham_vi: r.pham_vi || r.phamVi || 'phong' };
   });
   return kq;
 }
-function buildTrinhSuaPhanQuyenHtml() {
-  const luaChon = (e, a, v) =>
-    "<select class=\"form-select text-xs w-full\" data-entity=\"" + escapeHtmlAttr(e) + "\" data-action=\"" + escapeHtmlAttr(a) + "\" data-vai=\"" + escapeHtmlAttr(v) + "\">" +
-    "<option value=\"\">Mặc định</option>" +
-    "<option value=\"cho-phep\">✓ Cho phép ngay</option>" +
-    "<option value=\"cho-duyet\">⏳ Cho phép — chờ duyệt</option>" +
-    "<option value=\"tu-choi\">✕ Từ chối</option>" +
-    "</select>";
-  const nhom = NHOM_PHAN_QUYEN.map((n) =>
-    "<tr class=\"bg-blue-50\"><td colspan=\"4\" class=\"px-2 py-1.5 text-xs font-semibold text-blue-800\">" + escapeHtml(n.ten) + "</td></tr>" +
-    n.hanhDong.map((a) =>
-      "<tr><td class=\"px-2 py-1.5 text-xs text-gray-700\">" + escapeHtml(TEN_HANH_DONG_PQ[a] || a) + "</td>" +
-      VAU_TRINH_SUA.map((v) => "<td class=\"px-1 py-1\">" + luaChon(n.e, a, v) + "</td>").join("") +
-      "</tr>"
-    ).join("")
-  ).join("");
-  return "<p class=\"text-[11px] text-gray-500 mb-2\">Chọn «Mặc định» để dùng đúng luật gốc của máy chủ. Thay đổi có hiệu lực ngay cho mọi phiên đăng nhập.</p>" +
-    "<div class=\"overflow-x-auto\"><table class=\"min-w-full\">" +
-    "<thead><tr class=\"bg-gray-50\"><th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Hành động</th>" +
-    VAU_TRINH_SUA.map((v) => "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">" + escapeHtml(v) + "</th>").join("") +
-    "</tr></thead><tbody>" + nhom + "</tbody></table></div>";
+function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
+  ghiDe = ghiDe || {};
+  macDinh = macDinh || {};
+  const o = (cell) =>
+    '<td class="px-2 py-2 align-top">' +
+    '<span class="font-semibold text-sm ' + (MAU_KY_HIEU[cell.s] || 'text-gray-400') + '">' + escapeHtml(cell.s) + '</span>' +
+    (cell.n ? '<div class="text-[11px] text-gray-500 mt-0.5 leading-snug">' + escapeHtml(cell.n) + '</div>' : '') +
+    '</td>';
+  const dong = BANG_PHAN_QUYEN.map((row) => {
+    const tenTd =
+      '<td class="px-2 py-2 text-xs font-medium text-gray-800 align-top">' +
+      escapeHtml(row.ten) +
+      (row.gc ? '<div class="text-[11px] font-normal text-gray-500 mt-0.5 leading-snug">' + escapeHtml(row.gc) + '</div>' : '') +
+      '</td>';
+    const adminTd =
+      '<td class="px-2 py-2 align-top"><span class="font-semibold text-sm text-green-600">✓</span></td>';
+    if (!row.entityType) {
+      return '<tr class="border-t border-gray-100">' + tenTd + adminTd + o(row.g) + o(row.tp) + o(row.pp) + o(row.nv) + '</tr>';
+    }
+    const cells = VAU_BANG.map((vaiCot) => {
+      const vaiTen = vaiCot.ten;
+      if (laAdmin) {
+        const khoa = row.entityType + ':' + row.action;
+        const gd = (ghiDe[khoa] || {})[vaiTen] || {};
+        const chon = gd.gia_tri || '';
+        const chonPv = gd.pham_vi === 'tat-ca' ? 'tat-ca' : '';
+        const oHanhDong =
+          '<select class="form-select text-[11px] w-full" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
+          '<option value="">Mặc định</option>' +
+          '<option value="cho-phep"' + (chon === 'cho-phep' ? ' selected' : '') + '>✓ Cho phép</option>' +
+          (row.action === 'create' ? '<option value="cho-duyet"' + (chon === 'cho-duyet' ? ' selected' : '') + '>⏳ Chờ duyệt</option>' : '') +
+          '<option value="tu-choi"' + (chon === 'tu-choi' ? ' selected' : '') + '>✕ Tắt</option>' +
+          '</select>';
+        const oPhamVi = vaiCot.phamViText
+          ? '<select class="form-select text-[10px] w-full mt-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
+            '<option value="">' + escapeHtml(vaiCot.phamViText) + '</option>' +
+            '<option value="tat-ca"' + (chonPv ? ' selected' : '') + '>Tất cả các phòng</option>' +
+            '</select>'
+          : '';
+        return '<td class="px-2 py-2 align-top">' + oHanhDong + oPhamVi + '</td>';
+      }
+      return o(oPhanQuyenHieuLuc(row, vaiTen, ghiDe));
+    }).join('');
+    return '<tr class="border-t border-gray-100">' + tenTd + adminTd + cells + '</tr>';
+  }).join('');
+  const thead =
+    '<thead><tr class="bg-gray-50">' +
+    '<th class="px-2 py-2 text-left text-xs font-semibold text-gray-600">Chức năng</th>' +
+    '<th class="px-2 py-2 text-left text-xs font-semibold text-gray-600">Giám đốc (admin)</th>' +
+    VAU_BANG.map((vaiCot) => '<th class="px-2 py-2 text-left text-xs font-semibold text-gray-600">' + escapeHtml(vaiCot.ten) + '</th>').join('') +
+    '</tr></thead>';
+  const chuThich =
+    '<div class="text-[11px] text-gray-500 mt-2 leading-relaxed">' +
+    'Ký hiệu: <span class="font-semibold text-green-600">✓</span> được làm ngay · ' +
+    '<span class="font-semibold text-amber-600">⏳</span> làm được nhưng phải chờ <b>Phó Giám đốc phụ trách</b> (hoặc Giám đốc) duyệt rồi mới vào thống kê · ' +
+    '<span class="font-semibold text-indigo-500">↻</span> mượn qua ủy quyền · ' +
+    '<span class="font-semibold text-gray-400">👁</span> chỉ xem · ' +
+    '<span class="font-semibold text-red-400">✕</span> không được. ' +
+    'Máy chủ là rào chặn cuối — bảng này mô tả đúng luật của hệ thống, không cấp quyền thêm.</div>';
+  return '<div class="overflow-x-auto"><table class="min-w-full">' + thead + '<tbody>' + dong + '</tbody></table></div>' + chuThich;
 }
-/** Gán giá trị ghi đè đang có lên các dropdown — SAU khi render (option là hằng, hết lỗ CAN-THOAT). */
-function datGiaTriTrinhSua(ghiDe) {
-  const so = ghiDe || {};
-  document.querySelectorAll("#pq-editor-body select[data-entity]").forEach((sel) => {
-    const nhomGhiDe = so[sel.dataset.entity + ":" + sel.dataset.action];
-    sel.value = (nhomGhiDe && nhomGhiDe[sel.dataset.vai]) || "";
-  });
-}
-function veTrinhSuaPhanQuyen() {
-  const el = document.getElementById("account-permission-editor");
+/** Vẽ bảng phân quyền (động) + trình sửa cho admin; không có khung thì bỏ qua. */
+function veBangPhanQuyen() {
+  const el = document.getElementById('account-permission-table');
   if (!el) return;
-  if (!isAdmin()) {
-    el.classList.add("hidden"), (el.innerHTML = "");
-    return;
-  }
-  el.classList.remove("hidden");
-  el.innerHTML = "<h4 class=\"text-lg font-semibold text-gray-900 mb-2\"><i class=\"fas fa-user-shield text-amber-600 mr-2\"></i>Sửa bảng phân quyền</h4>" +
-    "<div id=\"pq-editor-body\" class=\"the-tai-khoan\"><div class=\"text-sm text-gray-500\">Đang tải...</div></div>" +
-    "<div class=\"flex justify-end mt-3\"><button type=\"button\" id=\"pq-save-btn\" class=\"btn-primary thanh-loc-nut\"><i class=\"fas fa-save mr-2\"></i>Lưu bảng phân quyền</button></div>";
-  restGet("/api/v1/permissions")
+  el.innerHTML = '<div class="text-sm text-gray-500">Đang tải bảng phân quyền...</div>';
+  restGet('/api/v1/permissions')
     .then((duLieu) => {
-      const body = document.getElementById("pq-editor-body");
-      if (!body) return;
-      body.innerHTML = buildTrinhSuaPhanQuyenHtml();
-      datGiaTriTrinhSua(chiSoGhiDe(duLieu && duLieu.ghiDe));
-      document.getElementById("pq-save-btn")?.addEventListener("click", luuPhanQuyen);
+      const laAdmin = isAdmin();
+      el.innerHTML = buildBangPhanQuyenHtml(chiSoGhiDe(duLieu && duLieu.ghiDe), duLieu && duLieu.macDinh, laAdmin);
+      if (laAdmin) {
+        document.getElementById('pq-save-btn')?.addEventListener('click', luuPhanQuyen);
+      }
     })
     .catch(() => {
-      const body = document.getElementById("pq-editor-body");
-      body && (body.innerHTML = "<p class=\"text-sm text-red-500\">Không tải được bảng ghi đè phân quyền.</p>");
+      el.innerHTML = '<div class="text-sm text-red-500">Không tải được bảng phân quyền.</div>';
     });
 }
 async function luuPhanQuyen() {
-  const nut = document.getElementById("pq-save-btn");
+  const nut = document.getElementById('pq-save-btn');
   nut && (nut.disabled = true);
-  const thayDoi = [...document.querySelectorAll("#account-permission-editor select[data-entity]")].map((sel) => ({
-    vai: sel.dataset.vai,
-    entityType: sel.dataset.entity,
-    action: sel.dataset.action,
-    giaTri: sel.value || "mac-dinh",
-  }));
-  const ketQua = await restGhi("PUT", "/api/v1/permissions", { thayDoi });
+  const gop = {};
+  [...document.querySelectorAll('#account-permission-table select[data-entity]')].forEach((sel) => {
+    const khoa = sel.dataset.entity + ':' + sel.dataset.action + ':' + sel.dataset.vai;
+    gop[khoa] = gop[khoa] || { vai: sel.dataset.vai, entityType: sel.dataset.entity, action: sel.dataset.action };
+    if (sel.dataset.gd) gop[khoa].giaTri = sel.value || 'mac-dinh';
+    if (sel.dataset.pv) gop[khoa].phamVi = sel.value || 'phong';
+  });
+  const ketQua = await restGhi('PUT', '/api/v1/permissions', { thayDoi: Object.values(gop) });
   if (ketQua) {
-    const body = document.getElementById("pq-editor-body");
-    body && (body.innerHTML = buildTrinhSuaPhanQuyenHtml());
-    body && datGiaTriTrinhSua(chiSoGhiDe(ketQua.ghiDe));
-    showToast("Đã lưu bảng phân quyền — hiệu lực ngay", "success");
+    showToast('Đã lưu bảng phân quyền — hiệu lực ngay', 'success');
+    veBangPhanQuyen();
   } else {
-    showToast("Không lưu được bảng phân quyền", "error");
+    showToast('Không lưu được bảng phân quyền', 'error');
+    nut && (nut.disabled = false);
   }
-  nut && (nut.disabled = false);
 }
 function renderTrangTaiKhoan() {
   const el = document.getElementById("account-info");

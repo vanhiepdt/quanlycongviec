@@ -69,13 +69,21 @@ export async function attachSession(req, res, next) {
       logger.warn({ err: err.message }, 'Không đọc được danh sách ủy quyền');
     }
 
-    // Ghi đè «Bảng phân quyền hệ thống» của vai này (009): `can()` đọc `user.ghiDe` — vẫn thuần.
-    // Hỏng bảng ghi đè không làm đổ request: mất phần tùy chỉnh, quyền gốc vẫn nguyên.
+    // Ghi đè «Bảng phân quyền hệ thống» của vai này (009/010): `can()` đọc `user.ghiDe` — vẫn thuần.
+    // Mỗi giá trị là { gia_tri, pham_vi } (pham_vi: 'phong' | 'tat-ca' — Vòng 10). Hỏng bảng ghi đè
+    // không làm đổ request: mất phần tùy chỉnh, quyền gốc vẫn nguyên.
     req.user.ghiDe = {};
     try {
-      req.user.ghiDe = await permissionsRepo.listByVai(row.role).then((dong) =>
-        Object.fromEntries(dong.map((d) => [d.entity_type + ':' + d.action, d.gia_tri]))
-      );
+      req.user.ghiDe = await permissionsRepo
+        .listByVai(row.role)
+        .then((dong) =>
+          Object.fromEntries(
+            dong.map((d) => [
+              d.entity_type + ':' + d.action,
+              { gia_tri: d.gia_tri, pham_vi: d.pham_vi },
+            ])
+          )
+        );
     } catch (err) {
       logger.warn({ err: err.message }, 'Không đọc được bảng ghi đè phân quyền');
     }

@@ -36,3 +36,29 @@ dưới cùng; **admin thay đổi được Phân quyền hệ thống bằng dr
 4. **Quản lý công việc**: đã ẩn khỏi bảng + trình sửa; vai cũ vẫn hoạt động phía máy chủ cho dữ
    liệu cũ. Nếu bỏ HẲN: cần migration đổi role người dùng hiện có + dọn FORM_ROLE_MAP/DB_ROLES —
    chờ người dùng chốt (§13.4).
+
+## 4. VÒNG 10 (cùng ngày) — dropdown trên BẢNG 15 chức năng + điều kiện phạm vi
+
+Phản hồi người dùng: «Sao vẫn chưa thấy thay đổi» (bảng cũ 3 cột ở tab Cán bộ đã gỡ, bản mới nằm
+trong trang «Quản lý tài khoản» — người dùng nhìn nhầm chỗ / chưa Ctrl+Shift+R) · «Sửa lại
+dropdown tất cả các chức năng, riêng Phó Giám đốc / Trưởng phòng / Phó phòng thì thêm điều kiện
+phòng mình phụ trách hoặc tất cả các phòng».
+
+Triển khai:
+| Việc | Chi tiết |
+|---|---|
+| Migration **010** | `permission_overrides` thêm cột `pham_vi text CHECK IN ('phong','tat-ca')` (mặc định 'phong') |
+| Server | `repo`/`service`/`routes`: PUT nhận `phamVi`; **chỉ Phó GĐ/TP/PP được nới 'tat-ca'** (service chặn, 400); `GET /permissions` mở cho mọi vai đăng nhập (bảng không phải dữ liệu mật) — PUT vẫn chỉ admin |
+| `can()` | `user.ghiDe` giờ là `{ gia_tri, pham_vi }`; `pham_vi === 'tat-ca'` ⇒ **bỏ qua inScope()** sau khi ma trận/ghi đè cho phép (lớp 4); `trangThaiDuyetKhiTao` đọc object form |
+| Client | **Bảng 15 chức năng trở thành trình sửa**: 12 hàng nghiệp vụ × 4 vai là dropdown (Mặc định/✓/⏳/✕) + hàng Phó GĐ/TP/PP có thêm dropdown **phạm vi** (Phòng phụ trách / Phòng mình ⟷ Tất cả các phòng); nút **Lưu bảng phân quyền** dưới bảng; người thường thấy trạng thái hiệu lực (badge + ghi chú «Ghi đè», «TẤT CẢ các phòng»); trình sửa kỹ thuật riêng của Vòng 9 ĐÃ GỠ |
+| Whitelist XSS | +5 (màu ký hiệu hằng `MAU_KY_HIEU[cell.s]`, 4 chỗ gọi `o(row.*)` của hàng chỉ hiển thị) −1 (`luaChon` đã xoá); sink `""` 10 → 9 |
+
+Test: TC-PQ-01..10 (mới thêm 10: scope «tat-ca» nới TP sang phòng khác, vai khác bị cản); jsdom
+TC-TKPQ-01..08 viết lại cho builder động (48 ô dropdown + 36 ô phạm vi, badge ghi đè, ký hiệu
+dưới cùng). **1371 test / 81 file xanh**; lint + format sạch; pin **95/694**; banner
+`app.js 20260829-5`, buster `app.js?v=20260829-5`. Deploy: migrate 010 + restart Node + sync web/.
+
+Câu hỏi chờ người dùng (§13.4): «Tất cả các phòng» có nên giới hạn ở các phòng người đó ĐANG
+phụ trách tại thời điểm kiểm (giống ủy quyền) hay nới tuyệt đối? Hiện triển khai theo «nới toàn
+bộ inScope» — đơn giản, dễ hiểu, ghi dấu trong nhật ký.
+

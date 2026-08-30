@@ -51,9 +51,45 @@ const CO_Y_KHONG_BOC = [
   {
     ctx: 'text',
     ma: 'luaChon(n.e, a, v)',
+    so: 0,
+    ly_do:
+      'ĐÃ XOÁ (Vòng 10): trình sửa cũ dùng helper này; bản mới dropdown nằm ngay trên bảng, option là HẰNG và giá trị gán bằng JS sau render',
+  },
+  {
+    ctx: 'attr',
+    attr: 'class',
+    ma: 'MAU_KY_HIEU[cell.s]',
     so: 1,
     ly_do:
-      'dropdown trình sửa phân quyền (Vòng 9): e/a/v đi qua escapeHtmlAttr ngay trong helper, các <option> là HẰNG; giá trị đang chọn gán bằng JS sau render (datGiaTriTrinhSua)',
+      'màu ký hiệu là HẰNG tra từ bảng MAU_KY_HIEU — cell.s là hằng của chương trình, không phải dữ liệu',
+  },
+  {
+    ctx: 'text',
+    ma: 'o(row.g)',
+    so: 1,
+    ly_do:
+      'hàng chỉ hiển thị — o() dựng HTML từ HẰNG trong BANG_PHAN_QUYEN, bên trong đã escapeHtml',
+  },
+  {
+    ctx: 'text',
+    ma: 'o(row.tp)',
+    so: 1,
+    ly_do:
+      'hàng chỉ hiển thị — o() dựng HTML từ HẰNG trong BANG_PHAN_QUYEN, bên trong đã escapeHtml',
+  },
+  {
+    ctx: 'text',
+    ma: 'o(row.pp)',
+    so: 1,
+    ly_do:
+      'hàng chỉ hiển thị — o() dựng HTML từ HẰNG trong BANG_PHAN_QUYEN, bên trong đã escapeHtml',
+  },
+  {
+    ctx: 'text',
+    ma: 'o(row.nv)',
+    so: 1,
+    ly_do:
+      'hàng chỉ hiển thị — o() dựng HTML từ HẰNG trong BANG_PHAN_QUYEN, bên trong đã escapeHtml',
   },
 ];
 
@@ -61,9 +97,9 @@ const CO_Y_KHONG_BOC = [
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 10,
+    so: 9,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc; 2026-08-29: +1 chỗ xoá khung trình sửa phân quyền khi vai không phải admin)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc; 2026-08-29: +1 chỗ xoá khung trình sửa phân quyền khi vai không phải admin; Vòng 10: trình sửa cũ đã gỡ nên dòng đó mất, bảng mới xoá rỗng vùng «Đang tải» trước khi nạp)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -221,11 +257,11 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // sửa `#account-permission-editor`.innerHTML, body của nó, bảng hiển thị đổi qua builder
     // `buildTrinhSuaPhanQuyenHtml` (dropdown data-entity/action/vai, toàn bộ qua escapeHtml/
     // escapeHtmlAttr trực tiếp); bỏ helper o() của bảng tĩnh vòng 8. Giá trị option của trình sửa
-    // là HẰNG, gán selected bằng JS sau render ⇒ ròng ⇒ 98 chỗ / 686 giá trị. Chi tiết:
-    // docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 9.
+    // là HẰNG, gán selected bằng JS sau render. Vòng 10: bảng ĐỘNG trên 15 chức năng — 95 chỗ /
+    // 694 giá trị. Chi tiết: docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 9-10.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 98, gia_tri: 686 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 95, gia_tri: 694 });
   });
 });
 

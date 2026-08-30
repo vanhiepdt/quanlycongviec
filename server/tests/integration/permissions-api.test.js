@@ -43,11 +43,12 @@ describe('GET /api/v1/permissions', () => {
     expect(res.body.data.ghiDe).toEqual([]);
   });
 
-  it('TC-PQ-02: vai không phải admin bị chặn 403', async () => {
+  it('TC-PQ-02: GET mở cho mọi vai đăng nhập (bảng phân quyền không phải dữ liệu mật)', async () => {
     await api.login(tp.email);
     const res = await api.get('/api/v1/permissions');
-    expect(res.status).toBe(403);
-    expect(res.body.error.message).toContain('Giám đốc');
+    expect(res.status).toBe(200);
+    expect(res.body.data.macDinh['Trưởng phòng'].work).toContain('create');
+    // Chỉnh sửa (PUT) vẫn chỉ của admin — canh ở TC-PQ-08.
   });
 });
 
@@ -134,5 +135,49 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
       `SELECT action FROM activity_logs WHERE action = 'permissions.update'`
     );
     expect(rows.rows.length).toBe(1);
+  });
+
+  it('TC-PQ-10: phạm vi «tat-ca» nới TP sang phòng khác — chỉ Phó GĐ/TP/PP được nới', async () => {
+    const phongKhac = await makeDepartment({ code: 'PH-PQ10', name: 'Phòng khác PQ10' });
+    const workKhac = await makeWork({ department_id: phongKhac.id, manager_id: null });
+
+    // Mặc định (phạm vi phòng mình): TP sửa việc phòng khác bị chặn.
+    await api.login(tp.email);
+    const truoc = await api.patch(`/api/v1/works/${workKhac.code}`, { name: 'Sửa trái phép' });
+    expect(truoc.status).toBe(403);
+
+    // Nới «tat-ca» cho TP ⇒ sửa được việc phòng khác.
+    await api.login(admin.email);
+    const luu = await api.put('/api/v1/permissions', {
+      thayDoi: [
+        {
+          vai: 'Trưởng phòng',
+          entityType: 'work',
+          action: 'update',
+          giaTri: 'cho-phep',
+          phamVi: 'tat-ca',
+        },
+      ],
+    });
+    expect(luu.status).toBe(200);
+
+    await api.login(tp.email);
+    const sau = await api.patch(`/api/v1/works/${workKhac.code}`, { name: 'Sửa được rồi' });
+    expect(sau.status).toBe(200);
+
+    // Cản nới phạm vi cho vai không có quyền đó (Cán bộ).
+    await api.login(admin.email);
+    const sai = await api.put('/api/v1/permissions', {
+      thayDoi: [
+        {
+          vai: 'Nhân viên',
+          entityType: 'work',
+          action: 'update',
+          giaTri: 'cho-phep',
+          phamVi: 'tat-ca',
+        },
+      ],
+    });
+    expect(sai.status).toBe(400);
   });
 });

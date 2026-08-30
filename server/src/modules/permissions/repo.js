@@ -6,7 +6,7 @@ const db = (client) => client ?? pool;
 /** Mọi dòng ghi đè (cho GET ma trận). */
 export async function listAll(client = null) {
   const { rows } = await db(client).query(
-    `SELECT vai, entity_type, action, gia_tri, updated_by, updated_at
+    `SELECT vai, entity_type, action, gia_tri, pham_vi, updated_by, updated_at
        FROM permission_overrides
       ORDER BY vai, entity_type, action`
   );
@@ -16,7 +16,7 @@ export async function listAll(client = null) {
 /** Ghi đè của MỘT vai — session gắn vào `req.user.ghiDe` để `can()` vẫn thuần. */
 export async function listByVai(vai, client = null) {
   const { rows } = await db(client).query(
-    `SELECT entity_type, action, gia_tri
+    `SELECT entity_type, action, gia_tri, pham_vi
        FROM permission_overrides
       WHERE vai = $1`,
     [vai]
@@ -24,14 +24,18 @@ export async function listByVai(vai, client = null) {
   return rows;
 }
 
-/** Đặt ghi đè (gia_tri đã kiểm ở service). */
-export async function upsert({ vai, entityType, action, giaTri, updatedBy }, client = null) {
+/** Đặt ghi đè (gia_tri/pham_vi đã kiểm ở service). */
+export async function upsert(
+  { vai, entityType, action, giaTri, phamVi, updatedBy },
+  client = null
+) {
   await db(client).query(
-    `INSERT INTO permission_overrides (vai, entity_type, action, gia_tri, updated_by)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO permission_overrides (vai, entity_type, action, gia_tri, pham_vi, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (vai, entity_type, action)
-     DO UPDATE SET gia_tri = EXCLUDED.gia_tri, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-    [vai, entityType, action, giaTri, updatedBy ?? null]
+     DO UPDATE SET gia_tri = EXCLUDED.gia_tri, pham_vi = EXCLUDED.pham_vi,
+                   updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [vai, entityType, action, giaTri, phamVi || 'phong', updatedBy ?? null]
   );
 }
 

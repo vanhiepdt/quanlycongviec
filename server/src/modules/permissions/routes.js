@@ -22,6 +22,7 @@ const ghiDeSchema = z.object({
   entityType: z.enum(['work', 'subwork', 'task']),
   action: z.enum(['read', 'create', 'update', 'delete', 'approve']),
   giaTri: z.enum(['mac-dinh', 'cho-phep', 'tu-choi', 'cho-duyet']),
+  phamVi: z.enum(['phong', 'tat-ca']).optional(),
 });
 
 const putSchema = z.object({
@@ -30,7 +31,8 @@ const putSchema = z.object({
 
 permissionsRouter.get('/', async (req, res, next) => {
   try {
-    assertAdmin(req);
+    // Mở cho mọi vai đăng nhập: bảng phân quyền không phải dữ liệu mật — người dùng cần biết
+    // mình được làm gì. Chỉ PUT mới là admin.
     return ok(res, await service.bangHienTai());
   } catch (err) {
     return next(err);

@@ -18,7 +18,7 @@ const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 
 const EXPORTS = `;Object.assign(window, {
   COL, renderTrangTaiKhoan, setupTrangTaiKhoan, buildTaiKhoanDong, tenPhongTaiKhoan,
   hienLoiTaiKhoan, hienOkTaiKhoan, buildBangPhanQuyenHtml, veBangPhanQuyen,
-  buildTrinhSuaPhanQuyenHtml, chiSoGhiDe, datGiaTriTrinhSua,
+  chiSoGhiDe,
   __tk: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -252,93 +252,78 @@ describe('TC-TK — đổi mật khẩu ngay trong trang', () => {
 // tượng, được làm gì, làm gì nhưng phải được người khác duyệt». Bảng là HẰNG dữ liệu khớp
 // PERMISSIONS/inScope + trangThaiDuyetKhiTao phía máy chủ; test canh các ô then chốt.
 // ------------------------------------------------------------------------------------------
-describe('TC-TKPQ — bảng Phân quyền hệ thống', () => {
-  it('TC-TKPQ-01: đủ 5 vai nghiệp vụ ở hàng tiêu đề — ĐÃ BỎ «Quản lý công việc»', () => {
-    const bang = window.buildBangPhanQuyenHtml();
+describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', () => {
+  const MAC_DINH = {
+    'Phó Giám đốc': {
+      work: ['read', 'create', 'update', 'delete', 'approve'],
+      subwork: ['read', 'create', 'update', 'delete', 'approve'],
+      task: ['read', 'create', 'update', 'delete'],
+    },
+    'Trưởng phòng': {
+      work: ['read', 'create', 'update', 'delete'],
+      subwork: ['read', 'create', 'update', 'delete'],
+      task: ['read', 'create', 'update', 'delete'],
+    },
+    'Phó phòng': {
+      work: ['read', 'create', 'update', 'delete'],
+      subwork: ['read', 'create', 'update', 'delete'],
+      task: ['read', 'create', 'update', 'delete'],
+    },
+    'Nhân viên': {
+      work: ['read'],
+      subwork: ['read'],
+      task: ['read', 'create', 'update', 'delete'],
+    },
+  };
+  const ghiDeRong = {};
+
+  it('TC-TKPQ-01: 5 vai nghiệp vụ — ĐÃ BỎ «Quản lý công việc»; có cột Giám đốc', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
     expect(bang).toContain('Giám đốc (admin)');
     expect(bang).toContain('Phó Giám đốc');
     expect(bang).toContain('Trưởng phòng');
     expect(bang).toContain('Phó phòng');
     expect(bang).toContain('Cán bộ');
-    // Vòng 9: bỏ đối tượng «Quản lý công việc» khỏi bảng.
     expect(bang).not.toContain('Quản lý công việc');
   });
 
-  it('TC-TKPQ-02: hàng «Duyệt» — chỉ Giám đốc và Phó GĐ, các vai khác ✕', () => {
-    const bang = window.buildBangPhanQuyenHtml();
-    expect(bang).toContain('Duyệt Công việc / Công việc con');
-    const viTriDuyet = bang.indexOf('Duyệt Công việc / Công việc con');
-    const vung = bang.slice(viTriDuyet, bang.indexOf('Thêm / sửa / xoá Người dùng', viTriDuyet));
-    expect(vung).toContain('Toàn hệ thống');
-    expect(vung).toContain('Các phòng phụ trách');
-    expect(vung).not.toContain('⏳');
+  it('TC-TKPQ-02: không ghi đè — TP Tạo Công việc hiện ⏳ (chờ Phó GĐ duyệt) theo luật gốc', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
+    expect(bang).toContain('⏳');
+    expect(bang).toContain('chờ Phó GĐ duyệt');
   });
 
-  it('TC-TKPQ-03: TP/PP tạo Công việc cấp 1 là ⏳ (chờ Phó GĐ duyệt), admin/PGD là ✓, Cán bộ ✕', () => {
-    const bang = window.buildBangPhanQuyenHtml();
-    const viTriTao = bang.indexOf('Tạo Công việc (cấp 1)');
-    const vung = bang.slice(viTriTao, viTriTao + 1200);
-    expect(vung).toContain('⏳');
-    expect(vung).toContain('chờ Phó GĐ duyệt');
-    expect(vung).toContain('✕');
+  it('TC-TKPQ-03: ghi đè «cho-duyet» cho Phó GĐ ⇒ hiện ⏳ + «Ghi đè»', () => {
+    const ghiDe = { 'work:create': { 'Phó Giám đốc': { gia_tri: 'cho-duyet', pham_vi: 'phong' } } };
+    const bang = window.buildBangPhanQuyenHtml(ghiDe, MAC_DINH, false);
+    expect(bang).toContain('Ghi đè: chờ Phó GĐ duyệt');
   });
 
-  it('TC-TKPQ-04: Nhiệm vụ (cấp 3) không qua duyệt — mọi vai ✓, Cán bộ chỉ trong việc được giao', () => {
-    const bang = window.buildBangPhanQuyenHtml();
-    const viTri = bang.indexOf('Tạo Nhiệm vụ (cấp 3)');
-    const vung = bang.slice(viTri, bang.indexOf('Sửa Công việc (cấp 1)', viTri));
-    expect(vung).toContain('KHÔNG qua bước duyệt');
-    expect(vung).not.toContain('⏳');
-    expect(vung).toContain('Trong việc được giao');
+  it('TC-TKPQ-04: ghi đè «tu-choi» tắt quyền của Trưởng phòng', () => {
+    const ghiDe = { 'work:update': { 'Trưởng phòng': { gia_tri: 'tu-choi', pham_vi: 'phong' } } };
+    const bang = window.buildBangPhanQuyenHtml(ghiDe, MAC_DINH, false);
+    expect(bang).toContain('Ghi đè: đã tắt');
   });
 
-  it('TC-TKPQ-05: có chú thích ký hiệu ⏳ và dòng «Phó Giám đốc phụ trách duyệt»', () => {
-    const bang = window.buildBangPhanQuyenHtml();
-    expect(bang).toContain('Phó Giám đốc phụ trách');
-    expect(bang).toContain('Máy chủ là rào chặn cuối');
-    // Ký hiệu nằm DƯỚI CÙNG của bảng (yêu cầu 2026-08-29).
+  it('TC-TKPQ-05: ghi đè phạm vi «tat-ca» hiện «TẤT CẢ các phòng»', () => {
+    const ghiDe = { 'work:update': { 'Trưởng phòng': { gia_tri: 'cho-phep', pham_vi: 'tat-ca' } } };
+    const bang = window.buildBangPhanQuyenHtml(ghiDe, MAC_DINH, false);
+    expect(bang).toContain('TẤT CẢ các phòng');
+  });
+
+  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 12 hàng × 4 vai + phạm vi cho 3 vai', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    expect((bang.match(/data-gd="1"/g) || []).length).toBe(12 * 4);
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(12 * 3);
+  });
+
+  it('TC-TKPQ-07: người thường không có dropdown — chỉ badge hiển thị', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
+    expect(bang).not.toContain('data-gd="1"');
+  });
+
+  it('TC-TKPQ-08: chú thích ký hiệu nằm dưới cùng của bảng', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
     expect(bang.lastIndexOf('Ký hiệu:')).toBeGreaterThan(bang.indexOf('</table>'));
-  });
-
-  it('TC-TKPQ-07: trình sửa (admin) — 14 hàng hành động × 3 vai, dropdown đủ 4 lựa chọn', () => {
-    const trinh = window.buildTrinhSuaPhanQuyenHtml({});
-    expect(trinh).toContain('Công việc (cấp 1)');
-    expect(trinh).toContain('Công việc con (cấp 2)');
-    expect(trinh).toContain('Nhiệm vụ (cấp 3)');
-    expect((trinh.match(/<select /g) || []).length).toBe(14 * 3);
-    expect(trinh).toContain('⏳ Cho phép — chờ duyệt');
-    expect(trinh).not.toContain('Quản lý công việc');
-  });
-
-  it('TC-TKPQ-08: giá trị ghi đè gán lên dropdown SAU khi render (option là hằng)', () => {
-    document.body.innerHTML =
-      '<div id="pq-editor-body">' + window.buildTrinhSuaPhanQuyenHtml() + '</div>';
-    window.datGiaTriTrinhSua(
-      window.chiSoGhiDe([
-        { vai: 'Trưởng phòng', entity_type: 'work', action: 'update', gia_tri: 'tu-choi' },
-      ])
-    );
-    const o = document.querySelector(
-      'select[data-entity="work"][data-action="update"][data-vai="Trưởng phòng"]'
-    );
-    expect(o.value).toBe('tu-choi');
-    const oKhac = document.querySelector(
-      'select[data-entity="work"][data-action="update"][data-vai="Phó Giám đốc"]'
-    );
-    expect(oKhac.value).toBe('');
-  });
-
-  it('TC-TKPQ-06: renderTrangTaiKhoan vẽ bảng vào #account-permission-table', () => {
-    window.__tk('currentUser', {
-      name: 'Admin',
-      code: 'NV001',
-      email: 'admin@test.local',
-      role: 'admin',
-    });
-    window.renderTrangTaiKhoan();
-    const khung = document.getElementById('account-permission-table');
-    expect(khung.innerHTML).toContain('Duyệt Công việc / Công việc con');
-    expect(khung.querySelector('table')).toBeTruthy();
-    expect(khung.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(14);
   });
 });
