@@ -18,6 +18,7 @@ const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 
 const EXPORTS = `;Object.assign(window, {
   COL, renderTrangTaiKhoan, setupTrangTaiKhoan, buildTaiKhoanDong, tenPhongTaiKhoan,
   hienLoiTaiKhoan, hienOkTaiKhoan, buildBangPhanQuyenHtml, veBangPhanQuyen,
+  buildTrinhSuaPhanQuyenHtml, chiSoGhiDe, datGiaTriTrinhSua,
   __tk: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -252,14 +253,15 @@ describe('TC-TK — đổi mật khẩu ngay trong trang', () => {
 // PERMISSIONS/inScope + trangThaiDuyetKhiTao phía máy chủ; test canh các ô then chốt.
 // ------------------------------------------------------------------------------------------
 describe('TC-TKPQ — bảng Phân quyền hệ thống', () => {
-  it('TC-TKPQ-01: đủ 6 vai ở hàng tiêu đề, mỗi vai một cột', () => {
+  it('TC-TKPQ-01: đủ 5 vai nghiệp vụ ở hàng tiêu đề — ĐÃ BỎ «Quản lý công việc»', () => {
     const bang = window.buildBangPhanQuyenHtml();
     expect(bang).toContain('Giám đốc (admin)');
     expect(bang).toContain('Phó Giám đốc');
     expect(bang).toContain('Trưởng phòng');
     expect(bang).toContain('Phó phòng');
-    expect(bang).toContain('Quản lý công việc');
     expect(bang).toContain('Cán bộ');
+    // Vòng 9: bỏ đối tượng «Quản lý công việc» khỏi bảng.
+    expect(bang).not.toContain('Quản lý công việc');
   });
 
   it('TC-TKPQ-02: hàng «Duyệt» — chỉ Giám đốc và Phó GĐ, các vai khác ✕', () => {
@@ -294,6 +296,36 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống', () => {
     const bang = window.buildBangPhanQuyenHtml();
     expect(bang).toContain('Phó Giám đốc phụ trách');
     expect(bang).toContain('Máy chủ là rào chặn cuối');
+    // Ký hiệu nằm DƯỚI CÙNG của bảng (yêu cầu 2026-08-29).
+    expect(bang.lastIndexOf('Ký hiệu:')).toBeGreaterThan(bang.indexOf('</table>'));
+  });
+
+  it('TC-TKPQ-07: trình sửa (admin) — 14 hàng hành động × 3 vai, dropdown đủ 4 lựa chọn', () => {
+    const trinh = window.buildTrinhSuaPhanQuyenHtml({});
+    expect(trinh).toContain('Công việc (cấp 1)');
+    expect(trinh).toContain('Công việc con (cấp 2)');
+    expect(trinh).toContain('Nhiệm vụ (cấp 3)');
+    expect((trinh.match(/<select /g) || []).length).toBe(14 * 3);
+    expect(trinh).toContain('⏳ Cho phép — chờ duyệt');
+    expect(trinh).not.toContain('Quản lý công việc');
+  });
+
+  it('TC-TKPQ-08: giá trị ghi đè gán lên dropdown SAU khi render (option là hằng)', () => {
+    document.body.innerHTML =
+      '<div id="pq-editor-body">' + window.buildTrinhSuaPhanQuyenHtml() + '</div>';
+    window.datGiaTriTrinhSua(
+      window.chiSoGhiDe([
+        { vai: 'Trưởng phòng', entity_type: 'work', action: 'update', gia_tri: 'tu-choi' },
+      ])
+    );
+    const o = document.querySelector(
+      'select[data-entity="work"][data-action="update"][data-vai="Trưởng phòng"]'
+    );
+    expect(o.value).toBe('tu-choi');
+    const oKhac = document.querySelector(
+      'select[data-entity="work"][data-action="update"][data-vai="Phó Giám đốc"]'
+    );
+    expect(oKhac.value).toBe('');
   });
 
   it('TC-TKPQ-06: renderTrangTaiKhoan vẽ bảng vào #account-permission-table', () => {

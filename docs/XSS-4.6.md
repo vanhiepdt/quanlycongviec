@@ -269,6 +269,13 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > lỗ (bỏ helper o() — bẫy §13.5). Bảng tĩnh cũ 3 cột (ADMIN/QUẢN LÝ/CÁN BỘ) ở section Cán bộ đã
 > GỠ. ⇒ **93 chỗ / 675 giá trị** (TC-SEC-17).
 
+> **Cập nhật 2026-08-29 (vòng 9 — Bảng phân quyền ĐỘNG, admin sửa bằng dropdown).** Bảng hiển thị
+> bỏ cột «Quản lý công việc»; thêm trình sửa cho admin: dropdown từng ô (Mặc định/✓/⏳/✕) lưu qua
+> `PUT /api/v1/permissions` vào `permission_overrides` (009), `can()` đọc qua `user.ghiDe`. +5
+> sink (khung trình sửa + body + builder `buildTrinhSuaPhanQuyenHtml`), +17 giá trị ròng — mọi ô
+> qua escapeHtml/escapeHtmlAttr trực tiếp (không qua helper). ⇒ **98 chỗ / 692 giá trị**
+> (TC-SEC-17).
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

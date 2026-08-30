@@ -20,6 +20,7 @@ import { departmentsRouter } from './modules/departments/routes.js';
 import { exportRouter } from './modules/export/routes.js';
 import { ganttRouter } from './modules/gantt/routes.js';
 import { notificationsRouter } from './modules/notifications/routes.js';
+import { permissionsRouter } from './modules/permissions/routes.js';
 import { proposalsRouter } from './modules/proposals/routes.js';
 import { statsRouter } from './modules/stats/routes.js';
 import { usersRouter } from './modules/users/routes.js';
@@ -121,6 +122,8 @@ export function createV1Router() {
   // Ủy quyền có thời hạn (`docs/KE-HOACH-UY-QUYEN.md`). Đặt sau `requirePasswordChanged`: người
   // còn phải đổi mật khẩu lần đầu thì chưa được cho ai mượn quyền của mình.
   v1.use('/delegations', delegationsRouter);
+  // Bảng phân quyền hệ thống — Giám đốc sửa bằng dropdown (Vòng 9, 009_permission_overrides.sql).
+  v1.use('/permissions', permissionsRouter);
   return v1;
 }
 

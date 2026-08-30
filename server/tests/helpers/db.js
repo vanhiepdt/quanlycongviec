@@ -18,6 +18,8 @@ const BUSINESS_TABLES = [
   // đó. `schema.test.js` chốt `names.toHaveLength(BUSINESS_TABLES.length + 1)` — thêm bảng mà quên
   // dòng này là test lược đồ đỏ.
   'work_month_names',
+  // Ghi đè Bảng phân quyền (009) trỏ updated_by → users: xoá trước users.
+  'permission_overrides',
   'work_items',
   'works',
   'department_managers',

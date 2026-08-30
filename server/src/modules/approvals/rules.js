@@ -35,6 +35,14 @@ const LEVEL_TASK = 3;
  * @returns {'Chờ duyệt'|'Đã duyệt'}
  */
 export function trangThaiDuyetKhiTao(user, level) {
+  // Ghi đè «Bảng phân quyền» (009): admin ép Tạo = ✓ (Đã duyệt ngay) hoặc ⏳ (Chờ duyệt) cho vai.
+  const entityType = Number(level) === 1 ? 'work' : Number(level) === 2 ? 'subwork' : 'task';
+  const ghiDe =
+    user && user.ghiDe && Object.hasOwn(user.ghiDe, entityType + ':create')
+      ? user.ghiDe[entityType + ':create']
+      : null;
+  if (ghiDe === 'cho-duyet') return CHO_DUYET;
+  if (ghiDe === 'cho-phep') return DA_DUYET;
   if (Number(level) === LEVEL_TASK) return DA_DUYET;
   if (user && VAI_TU_DUYET.includes(user.role)) return DA_DUYET;
   return CHO_DUYET;

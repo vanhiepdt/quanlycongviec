@@ -311,7 +311,20 @@ export function can(user, action, entityType, row = null) {
     return deny('FORBIDDEN', `Phân quyền "${user.role}" không hợp lệ, liên hệ quản trị hệ thống`);
   }
 
-  if (!table[entityType].includes(action)) {
+  // Lớp 4 — GHI ĐÈ từ «Bảng phân quyền hệ thống» (009): admin sửa bằng dropdown, giá trị gắn theo
+  // vai. admin KHÔNG bị ghi đè (chính người sửa bảng); phạm vi `inScope()` vẫn xét như quyền thường.
+  const ghiDe =
+    user.role === 'admin' || !user.ghiDe || !Object.hasOwn(user.ghiDe, entityType + ':' + action)
+      ? null
+      : user.ghiDe[entityType + ':' + action];
+  if (ghiDe === 'tu-choi') {
+    return deny(
+      'FORBIDDEN',
+      `Quản trị hệ thống đã tắt quyền ${ACTION_LABEL[action]} ${ENTITY_LABEL[entityType]} cho vai "${user.role}"`
+    );
+  }
+  const duocMaTran = table[entityType].includes(action) || ghiDe === 'cho-phep' || ghiDe === 'cho-duyet';
+  if (!duocMaTran) {
     // Vai của chính mình không cho ⇒ thử quyền MƯỢN (ủy quyền có thời hạn) trước khi từ chối.
     const muon = tryDelegations(user, action, entityType, normalizeRow(row));
     if (muon) return muon;

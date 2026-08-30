@@ -48,15 +48,22 @@ const CO_Y_KHONG_BOC = [
     so: 2,
     ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
   },
+  {
+    ctx: 'text',
+    ma: 'luaChon(n.e, a, v)',
+    so: 1,
+    ly_do:
+      'dropdown trình sửa phân quyền (Vòng 9): e/a/v đi qua escapeHtmlAttr ngay trong helper, các <option> là HẰNG; giá trị đang chọn gán bằng JS sau render (datGiaTriTrinhSua)',
+  },
 ];
 
 /** Chỗ ghi HTML mà vế phải không phải HTML dựng sẵn — đã soát tay từng chỗ. */
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 9,
+    so: 10,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc; 2026-08-29: +1 chỗ xoá khung trình sửa phân quyền khi vai không phải admin)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -210,9 +217,15 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // nhiệm vụ (taskId), chip mã trong thẻ nhiệm vụ của modal chi tiết (taskId); khối CV con giữ
     // nguyên 1 nội suy tieuDe. project-details.js không nằm trong bộ soát này. ⇒ 92 chỗ / 666
     // giá trị. Chi tiết: docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 7.
+    // 2026-08-29 (vòng 9 — Bảng phân quyền ĐỘNG, admin sửa bằng dropdown): +5 sink — khung trình
+    // sửa `#account-permission-editor`.innerHTML, body của nó, bảng hiển thị đổi qua builder
+    // `buildTrinhSuaPhanQuyenHtml` (dropdown data-entity/action/vai, toàn bộ qua escapeHtml/
+    // escapeHtmlAttr trực tiếp); bỏ helper o() của bảng tĩnh vòng 8. Giá trị option của trình sửa
+    // là HẰNG, gán selected bằng JS sau render ⇒ ròng ⇒ 98 chỗ / 686 giá trị. Chi tiết:
+    // docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 9.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 93, gia_tri: 675 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 98, gia_tri: 686 });
   });
 });
 

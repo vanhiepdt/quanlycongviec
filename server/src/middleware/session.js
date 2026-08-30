@@ -18,6 +18,7 @@ import {
 } from '../modules/auth/cookies.js';
 import * as authRepo from '../modules/auth/repo.js';
 import * as delegations from '../modules/delegations/service.js';
+import * as permissionsRepo from '../modules/permissions/repo.js';
 
 export async function attachSession(req, res, next) {
   try {
@@ -66,6 +67,17 @@ export async function attachSession(req, res, next) {
       req.user.delegations = await delegations.hieuLucCho(row.id);
     } catch (err) {
       logger.warn({ err: err.message }, 'Không đọc được danh sách ủy quyền');
+    }
+
+    // Ghi đè «Bảng phân quyền hệ thống» của vai này (009): `can()` đọc `user.ghiDe` — vẫn thuần.
+    // Hỏng bảng ghi đè không làm đổ request: mất phần tùy chỉnh, quyền gốc vẫn nguyên.
+    req.user.ghiDe = {};
+    try {
+      req.user.ghiDe = await permissionsRepo.listByVai(row.role).then((dong) =>
+        Object.fromEntries(dong.map((d) => [d.entity_type + ':' + d.action, d.gia_tri]))
+      );
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Không đọc được bảng ghi đè phân quyền');
     }
 
     // Gia hạn khi còn hoạt động. Lỗi ở bước này KHÔNG được làm đổ request — người dùng vẫn đang

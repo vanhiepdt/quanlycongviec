@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-3");
+console.info("[QLCV] app.js 20260829-4");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -6003,6 +6003,7 @@ function tenPhongTaiKhoan() {
 //   - trangThaiDuyetKhiTao(): server/src/modules/approvals/rules.js
 // Đổi luật máy chủ ⇒ phải đổi bảng này trong CÙNG commit (test TC-TKPQ canh các ô then chốt).
 // Ký hiệu: ✓ được làm ngay · ⏳ làm được nhưng phải chờ duyệt · ✕ không được · ↻ mượn qua ủy quyền.
+// Vòng 9: cột «Quản lý công việc» đã bỏ khỏi bảng hiển thị — vai cũ phía máy chủ vẫn hoạt động.
 // ============================================================================
 const BANG_PHAN_QUYEN = [
   {
@@ -6150,7 +6151,7 @@ const BANG_PHAN_QUYEN = [
  * (quy ước 4.6); tên cột/ký hiệu không có dữ liệu người dùng. */
 function buildBangPhanQuyenHtml() {
   const mauKyHieu = { "✓": "text-green-600", "⏳": "text-amber-600", "↻": "text-indigo-500", "👁": "text-gray-400", "✕": "text-red-400" };
-  const cacVai = ["a", "g", "tp", "pp", "q", "nv"];
+  const cacVai = ["a", "g", "tp", "pp", "nv"];
   const dong = BANG_PHAN_QUYEN.map(
     (h) =>
       "<tr class=\"border-t border-gray-100\">" +
@@ -6178,7 +6179,7 @@ function buildBangPhanQuyenHtml() {
     "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó Giám đốc</th>" +
     "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Trưởng phòng</th>" +
     "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Phó phòng</th>" +
-    "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Quản lý công việc</th>" +
+    
     "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Cán bộ</th>" +
     "</tr></thead>";
   const chuThich =
@@ -6196,6 +6197,99 @@ function veBangPhanQuyen() {
   const el = document.getElementById("account-permission-table");
   if (!el) return;
   el.innerHTML = buildBangPhanQuyenHtml();
+  veTrinhSuaPhanQuyen();
+}
+// — Trình sửa «Bảng phân quyền» cho Giám đốc (Vòng 9): dropdown từng ô, PUT /api/v1/permissions.
+const NHOM_PHAN_QUYEN = [
+  { e: "work", ten: "Công việc (cấp 1)", hanhDong: ["read", "create", "update", "delete", "approve"] },
+  { e: "subwork", ten: "Công việc con (cấp 2)", hanhDong: ["read", "create", "update", "delete", "approve"] },
+  { e: "task", ten: "Nhiệm vụ (cấp 3)", hanhDong: ["read", "create", "update", "delete"] },
+];
+const VAU_TRINH_SUA = ["Phó Giám đốc", "Trưởng phòng", "Phó phòng"];
+const TEN_HANH_DONG_PQ = { read: "Xem", create: "Tạo", update: "Sửa", delete: "Xoá", approve: "Duyệt" };
+// Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → (vai: giá trị).
+function chiSoGhiDe(danhSach) {
+  const kq = {};
+  (danhSach || []).forEach((r) => {
+    const khoa = (r.entity_type || r.entityType) + ":" + (r.action || "");
+    kq[khoa] = kq[khoa] || {};
+    kq[khoa][r.vai] = r.gia_tri || r.giaTri;
+  });
+  return kq;
+}
+function buildTrinhSuaPhanQuyenHtml() {
+  const luaChon = (e, a, v) =>
+    "<select class=\"form-select text-xs w-full\" data-entity=\"" + escapeHtmlAttr(e) + "\" data-action=\"" + escapeHtmlAttr(a) + "\" data-vai=\"" + escapeHtmlAttr(v) + "\">" +
+    "<option value=\"\">Mặc định</option>" +
+    "<option value=\"cho-phep\">✓ Cho phép ngay</option>" +
+    "<option value=\"cho-duyet\">⏳ Cho phép — chờ duyệt</option>" +
+    "<option value=\"tu-choi\">✕ Từ chối</option>" +
+    "</select>";
+  const nhom = NHOM_PHAN_QUYEN.map((n) =>
+    "<tr class=\"bg-blue-50\"><td colspan=\"4\" class=\"px-2 py-1.5 text-xs font-semibold text-blue-800\">" + escapeHtml(n.ten) + "</td></tr>" +
+    n.hanhDong.map((a) =>
+      "<tr><td class=\"px-2 py-1.5 text-xs text-gray-700\">" + escapeHtml(TEN_HANH_DONG_PQ[a] || a) + "</td>" +
+      VAU_TRINH_SUA.map((v) => "<td class=\"px-1 py-1\">" + luaChon(n.e, a, v) + "</td>").join("") +
+      "</tr>"
+    ).join("")
+  ).join("");
+  return "<p class=\"text-[11px] text-gray-500 mb-2\">Chọn «Mặc định» để dùng đúng luật gốc của máy chủ. Thay đổi có hiệu lực ngay cho mọi phiên đăng nhập.</p>" +
+    "<div class=\"overflow-x-auto\"><table class=\"min-w-full\">" +
+    "<thead><tr class=\"bg-gray-50\"><th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">Hành động</th>" +
+    VAU_TRINH_SUA.map((v) => "<th class=\"px-2 py-2 text-left text-xs font-semibold text-gray-600\">" + escapeHtml(v) + "</th>").join("") +
+    "</tr></thead><tbody>" + nhom + "</tbody></table></div>";
+}
+/** Gán giá trị ghi đè đang có lên các dropdown — SAU khi render (option là hằng, hết lỗ CAN-THOAT). */
+function datGiaTriTrinhSua(ghiDe) {
+  const so = ghiDe || {};
+  document.querySelectorAll("#pq-editor-body select[data-entity]").forEach((sel) => {
+    const nhomGhiDe = so[sel.dataset.entity + ":" + sel.dataset.action];
+    sel.value = (nhomGhiDe && nhomGhiDe[sel.dataset.vai]) || "";
+  });
+}
+function veTrinhSuaPhanQuyen() {
+  const el = document.getElementById("account-permission-editor");
+  if (!el) return;
+  if (!isAdmin()) {
+    el.classList.add("hidden"), (el.innerHTML = "");
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = "<h4 class=\"text-lg font-semibold text-gray-900 mb-2\"><i class=\"fas fa-user-shield text-amber-600 mr-2\"></i>Sửa bảng phân quyền</h4>" +
+    "<div id=\"pq-editor-body\" class=\"the-tai-khoan\"><div class=\"text-sm text-gray-500\">Đang tải...</div></div>" +
+    "<div class=\"flex justify-end mt-3\"><button type=\"button\" id=\"pq-save-btn\" class=\"btn-primary thanh-loc-nut\"><i class=\"fas fa-save mr-2\"></i>Lưu bảng phân quyền</button></div>";
+  restGet("/api/v1/permissions")
+    .then((duLieu) => {
+      const body = document.getElementById("pq-editor-body");
+      if (!body) return;
+      body.innerHTML = buildTrinhSuaPhanQuyenHtml();
+      datGiaTriTrinhSua(chiSoGhiDe(duLieu && duLieu.ghiDe));
+      document.getElementById("pq-save-btn")?.addEventListener("click", luuPhanQuyen);
+    })
+    .catch(() => {
+      const body = document.getElementById("pq-editor-body");
+      body && (body.innerHTML = "<p class=\"text-sm text-red-500\">Không tải được bảng ghi đè phân quyền.</p>");
+    });
+}
+async function luuPhanQuyen() {
+  const nut = document.getElementById("pq-save-btn");
+  nut && (nut.disabled = true);
+  const thayDoi = [...document.querySelectorAll("#account-permission-editor select[data-entity]")].map((sel) => ({
+    vai: sel.dataset.vai,
+    entityType: sel.dataset.entity,
+    action: sel.dataset.action,
+    giaTri: sel.value || "mac-dinh",
+  }));
+  const ketQua = await restGhi("PUT", "/api/v1/permissions", { thayDoi });
+  if (ketQua) {
+    const body = document.getElementById("pq-editor-body");
+    body && (body.innerHTML = buildTrinhSuaPhanQuyenHtml());
+    body && datGiaTriTrinhSua(chiSoGhiDe(ketQua.ghiDe));
+    showToast("Đã lưu bảng phân quyền — hiệu lực ngay", "success");
+  } else {
+    showToast("Không lưu được bảng phân quyền", "error");
+  }
+  nut && (nut.disabled = false);
 }
 function renderTrangTaiKhoan() {
   const el = document.getElementById("account-info");
