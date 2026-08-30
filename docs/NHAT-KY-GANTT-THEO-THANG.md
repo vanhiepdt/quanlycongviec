@@ -187,6 +187,32 @@ ten-thang-ui/project-details-phan-cong (kỳ vọng mã → không mã). **1343 
 pin XSS **92 chỗ / 666 giá trị** (−4 nội suy mã); banner `app.js 20260829-2`, buster
 `app.js?v=20260829-2`, `project-details.js?v=20260829-1`.
 
+## Vòng 8 (2026-08-29) — BẢNG PHÂN QUYỀN HỆ THỐNG vào trang «Quản lý tài khoản»
+
+Yêu cầu người dùng: «Làm lại bảng Phân quyền hệ thống — ghi rõ mỗi chức năng của từng đối tượng,
+được làm gì, làm gì nhưng phải được người khác duyệt. Thêm bảng này vào phần Quản lý tài khoản».
+
+Phát hiện: bảng phân quyền TĨNH cũ (3 cột ADMIN/QUẢN LÝ/CÁN BỘ, cuối section Cán bộ) đã lạc hậu —
+thiếu Phó GĐ/TP/PP, không nói gì về luồng duyệt, và có ô sai với luật máy chủ (vd «Quản lý tạo
+công việc chỉ cho bản thân» trong khi rbac cho tạo trong phạm vi). Đã GỠ bảng cũ, thay comment
+dẫn đường.
+
+Đã làm:
+| Việc | Chi tiết |
+|---|---|
+| Dữ liệu | Hằng `BANG_PHAN_QUYEN` (app.js): **15 chức năng × 6 vai**, mỗi ô = ký hiệu + ghi chú phạm vi. Nguồn khớp: `PERMISSIONS` + `inScope()` (rbac.js) và `trangThaiDuyetKhiTao()` (approvals/rules.js) — đổi luật máy chủ phải đổi bảng trong cùng commit |
+| Ký hiệu | ✓ được làm ngay · **⏳ làm được nhưng phải chờ Phó GĐ phụ trách (hoặc admin) duyệt** · ✕ không được · ↻ mượn qua ủy quyền · 👁 chỉ xem |
+| Các ô ⏳ | TP/PP tạo Công việc + CV con; QLCV tạo cấp 1/2; TP/PP sửa lại CV con đã duyệt (tự về «Chờ duyệt» — `workItems/service.update` trả `choDuyetLai`) |
+| Không qua duyệt | Nhiệm vụ cấp 3 (quyết định nghiệp vụ §6, ghi rõ trong ghi chú hàng) |
+| Giao diện | Khung «Phân quyền hệ thống» chèn vào `#account-section` giữa «Thông tin tài khoản» và «Đổi mật khẩu»; `renderTrangTaiKhoan` gọi `veBangPhanQuyen()` vẽ vào `#account-permission-table` |
+| Bẫy gặp | Helper `o()` bọc escape khiến TC-SEC-10 coi 6 lỗ là KHÔNG thoát (bẫy §13.5 «helper lạ với bộ soát») — viết lại builder nội suy `escapeHtml` TRỰC TIẾP tại từng lỗ |
+
+Kiểm chứng: jsdom **TC-TKPQ-01..06** (đủ 6 vai; hàng Duyệt chỉ admin/PGD; TP/PP tạo cấp 1 = ⏳;
+cấp 3 không qua duyệt; chú thích; render vào khung). **1349 test / 79 file xanh**; lint + format
+sạch; pin XSS **93 chỗ / 675 giá trị** (+1 sink, −4+13 giá trị); banner `app.js 20260829-3`,
+buster `app.js?v=20260829-3`. Bảng tĩnh cũ đã gỡ khỏi section Cán bộ.
+
+
 
 
 
