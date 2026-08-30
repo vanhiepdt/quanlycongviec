@@ -212,6 +212,33 @@ cấp 3 không qua duyệt; chú thích; render vào khung). **1349 test / 79 fi
 sạch; pin XSS **93 chỗ / 675 giá trị** (+1 sink, −4+13 giá trị); banner `app.js 20260829-3`,
 buster `app.js?v=20260829-3`. Bảng tĩnh cũ đã gỡ khỏi section Cán bộ.
 
+## Vòng 9 (2026-08-29) — BẢNG PHÂN QUYỀN ĐỘNG · bỏ đối tượng Quản lý công việc
+
+Yêu cầu người dùng: (1) bỏ đối tượng «Quản lý công việc»; (2) chú thích ký hiệu xuống dưới cùng
+của bảng; (3) **lên kế hoạch và triển khai** cho admin thay đổi Phân quyền hệ thống bằng dropdown.
+
+Thiết kế + triển khai chi tiết: `docs/KE-HOACH-PHAN-QUYEN-DONG.md`. Tóm tắt:
+
+- **Bỏ cột Quản lý công việc** khỏi bảng hiển thị và trình sửa (vai cũ phía máy chủ vẫn giữ cho
+  dữ liệu cũ; bỏ hẳn cần migration đổi role — chờ chốt §13.4).
+- **Chú thích ký hiệu** (`Ký hiệu: ✓ … Máy chủ là rào chặn cuối…`) chuyển xuống dưới cùng của bảng;
+  đoạn mô tả tĩnh cũng chuyển xuống.
+- **Bảng phân quyền ĐỘNG**: migration 009 `permission_overrides` → REST `GET/PUT /api/v1/permissions`
+  (chỉ admin) → `attachSession` nạp `user.ghiDe` → `can()` lớp 4 đọc ghi đè (tu-choi tắt; cho-phep/
+  cho-duyet mở khi ma trận từ chối; inScope vẫn xét; admin không chịu); `trangThaiDuyetKhiTao` tôn
+  trọng ghi đè create. Trang Quản lý tài khoản: khung «Sửa bảng phân quyền» (chỉ admin) — dropdown
+  từng ô (Mặc định/✓/⏳/✕) × 3 nhóm × 3 vai, nút Lưu → hiệu lực ngay, không cần đăng nhập lại.
+- Bẫy mới: helper `o()`/`opt()` bọc escape khiến TC-SEC-10 coi các lỗ là CAN-THOAT → viết lại
+  builder escape TRỰC TIẾP, `<option>` hằng, giá trị selected gán bằng JS sau render.
+
+Kiểm chứng: unit `phan-quyen-ghi-de` TC-PQ-10..13; integration `permissions-api` TC-PQ-01..09
+(đọc/403/tu-choi chặn/cho-phep «Đã duyệt»/mac-dinh hoàn tác/cho-duyet chỉ create/chặn admin và
+giá trị lạ/vai thường 403/audit); jsdom TC-TKPQ-01..08. **1368 test / 81 file xanh**; lint +
+format sạch; pin XSS **98 chỗ / 686 giá trị**; banner `app.js 20260829-4`, buster
+`app.js?v=20260829-4`. Deploy: **chạy `npm run migrate:up`** + sync `web/`, `server/src/` +
+restart Node.
+
+
 
 
 
