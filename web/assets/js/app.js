@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-10");
+console.info("[QLCV] app.js 20260829-11");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -220,12 +220,14 @@ function loadDepartmentContext(callback) {
       // mặc định nên Phó Giám đốc thấy trắng, và không có gì vẽ lại 2 tab khi dữ liệu phòng về tới.
       // "Có khi thấy khi không" tuỳ thứ tự thao tác của người dùng, đúng kiểu bẫy race condition.
       // Nay hễ đổi vai trò/phòng phụ trách xong thì vẽ lại đúng 2 tab bị ảnh hưởng.
-      const truocLaDeputy = isDeputyDirectorUser;
+      const truocLaDeputy = isDeputyDirectorUser, truocLaHead = isDepartmentHeadUser;
       allDepartments = response.departments || [], departmentNames = response.departmentNames || [], visibleDepartments = response.visibleDepartments || [], myDepartment = response.myDepartment || "", myDeptRole = response.myDeptRole || "", isDeputyDirectorUser = response.isDeputyDirector === true, isDepartmentHeadUser = response.isDepartmentHead === true;
       const departmentNavEl = document.getElementById("nav-departments");
       departmentNavEl && departmentNavEl.classList.toggle("hidden", !isAdmin());
       currentSection === "departments" && renderDepartments();
-      if (isDeputyDirectorUser || truocLaDeputy) {
+      if (isDeputyDirectorUser || truocLaDeputy || isDepartmentHeadUser || truocLaHead) {
+        // Vòng 12d: thêm TP/PP — lần vẽ đầu của họ chạy lúc `myDepartment` còn rỗng (bối cảnh
+        // phòng về SAU), giờ bối cảnh về là phải vẽ lại đúng như đã vá cho Phó GĐ (bẫy §13.5).
         // Vài hàm vẽ lại (renderProjectStats...) không tự kiểm phần tử null — bọc try/catch để một
         // khung thiếu trên trang không chặn mất `callback(response)` bên dưới (bài học api-bridge.js:
         // "vỡ thì vẫn phải thấy dấu vết, không được nuốt", nhưng KHÔNG được làm mất lượt gọi tiếp theo).

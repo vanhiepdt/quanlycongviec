@@ -32,6 +32,8 @@ const EXPORTS = `;Object.assign(window, {
     phongNames: () => { departmentNames = giaTri; },
     phongPhuTrach: () => { visibleDepartments = giaTri; },
     laPgd: () => { isDeputyDirectorUser = giaTri; },
+    laHead: () => { isDepartmentHeadUser = giaTri; },
+    phongToi: () => { myDepartment = giaTri; },
     user: () => { currentUser = giaTri; } })[ten](); },
 });`;
 
@@ -419,15 +421,28 @@ describe('TC-TASKUI-14..18 — Phó Giám đốc thấy hết nhiệm vụ của
   });
 
   it('TC-TASKUI-17: vai khác không được nới theo visibleDepartments; admin thấy tất cả', () => {
-    // Trưởng phòng cũng có `visibleDepartments` (phòng của họ) nhưng KHÔNG được nới ở đây:
-    // máy chủ vẫn là rào chặn cuối, trình duyệt tuyệt đối không tự cấp rộng hơn.
+    // 2026-08-29 (Vòng 12c): TP/PP xem nhiệm vụ PHÒNG MÌNH là luật mới (ma trận §6 read theo
+    // phòng) — nhưng vẫn KHÔNG nới theo `visibleDepartments` kiểu PGĐ; phòng lấy từ tài khoản.
     window.__tasks('user', { name: 'Trưởng phòng Kỹ thuật', role: 'Trưởng phòng' });
     window.__tasks('laPgd', false);
-    window.__tasks('phongPhuTrach', ['Phòng Kỹ thuật']);
-    expect(window.dsPhongToiPhuTrach()).toEqual([]);
-    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
+    window.__tasks('phongPhuTrach', ['Phòng Kỹ thuật']); // PGD-mới: phải bị bỏ qua với TP
+    window.__tasks('laHead', true);
+    window.__tasks('phongToi', 'Phòng Kỹ thuật');
+    expect(window.dsPhongToiPhuTrach()).toEqual([]); // TP không dùng kênh phòng phụ trách
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']); // nhưng thấy nhiệm vụ phòng mình
     window.__tasks('user', { name: 'Quản trị', role: 'admin' });
     expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV2', 'NV3', 'NV4']);
+  });
+
+  it('TC-TASKUI-19: TP chưa nạp bối cảnh phòng (rỗng) thì chưa thấy gì — bối cảnh về là thấy', () => {
+    // Phản chiếu race thật (Vòng 12d): lần vẽ đầu `myDepartment` còn rỗng ⇒ trống; nhờ
+    // `loadDepartmentContext` vẽ lại khi `isDepartmentHead` bật nên sau đó TP thấy phòng mình.
+    window.__tasks('user', { name: 'TP Kế hoạch', role: 'Trưởng phòng' });
+    window.__tasks('laHead', true);
+    window.__tasks('phongToi', '');
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
+    window.__tasks('phongToi', 'Phòng Kế hoạch');
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV2']);
   });
 
   it('TC-TASKUI-18: vẽ thật — PGĐ không còn thấy «Chưa có nhiệm vụ nào»', () => {
