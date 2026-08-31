@@ -108,3 +108,53 @@ describe('v_countable_items — công việc con / nhiệm vụ được phép �
     expect(fields.map((f) => f.name)).toEqual(base.map((f) => f.name));
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Bản NHÁP (012, Vòng 13) — cùng phòng tuyến với 'Chờ duyệt': hai view là chỗ DUY NHẤT phải sửa
+// để nháp không lọt vào bất kỳ con số nào. Người dùng chốt: «lưu tức là lưu thôi chưa gửi đi
+// duyệt, CHƯA ĐƯỢC TÍNH LÀ CÔNG VIỆC».
+// ---------------------------------------------------------------------------------------------
+describe('Bản Nháp bị loại khỏi cả hai view (012)', () => {
+  it('công việc cấp 1 Nháp không vào v_countable_works', async () => {
+    await makeWork({ code: 'CV001', department_id: dept.id });
+    const nhap = await makeWork({ code: 'CV002', name: 'Bản nháp', department_id: dept.id });
+    await setApproval('works', nhap.id, 'Nháp');
+
+    expect(await codesIn('v_countable_works')).toEqual(['CV001']);
+  });
+
+  it('công việc con / nhiệm vụ Nháp không vào v_countable_items', async () => {
+    const work = await makeWork({ code: 'CV001', department_id: dept.id });
+    await makeItem({ code: 'CV001-001', work_id: work.id, level: 2 });
+    const nhap = await makeItem({ code: 'CV001-002', work_id: work.id, level: 2 });
+    await setApproval('work_items', nhap.id, 'Nháp');
+
+    expect(await codesIn('v_countable_items')).toEqual(['CV001-001']);
+  });
+
+  it('MỌI dòng nằm dưới một cây Nháp đều bị loại, kể cả nhiệm vụ cấp 3 «Đã duyệt»', async () => {
+    const work = await makeWork({ code: 'CV001', department_id: dept.id });
+    const sub = await makeItem({ code: 'CV001-001', work_id: work.id, level: 2 });
+    const task = await makeItem({
+      code: 'CV001-002',
+      work_id: work.id,
+      parent_id: sub.id,
+      level: 3,
+    });
+    await setApproval('works', work.id, 'Nháp');
+
+    // Cấp 3 luôn 'Đã duyệt' (việc 5.1) nên nếu view chỉ soi cột của chính dòng thì thêm một nhiệm
+    // vụ vào bản nháp là nó cộng ngay vào thẻ «Tổng nhiệm vụ» — đúng kiểu sót mà 004 sinh ra để chặn.
+    expect(task.approval_status).toBe('Đã duyệt');
+    expect(await codesIn('v_countable_items')).toEqual([]);
+  });
+
+  it('nhiệm vụ cấp 3 nằm dưới một công việc con Nháp cũng bị loại', async () => {
+    const work = await makeWork({ code: 'CV001', department_id: dept.id });
+    const sub = await makeItem({ code: 'CV001-001', work_id: work.id, level: 2 });
+    await makeItem({ code: 'CV001-002', work_id: work.id, parent_id: sub.id, level: 3 });
+    await setApproval('work_items', sub.id, 'Nháp');
+
+    expect(await codesIn('v_countable_items')).toEqual([]);
+  });
+});

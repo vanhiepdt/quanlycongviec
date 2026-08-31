@@ -68,5 +68,6 @@ export const requiredText = (message, max = 500) =>
 /** Danh sách liên kết kết quả — phải là MẢNG (CHECK `links_is_array` cũng đòi thế). */
 export const resultLinksInput = z.array(z.unknown()).max(50).optional();
 
-export const KHOA_DUYET = Object.freeze(['Chờ duyệt', 'Đã duyệt', 'Từ chối']);
+/** Bốn giá trị của `approval_status` — khớp CHECK sau migration 012 ('Nháp' thêm ở Vòng 13). */
+export const KHOA_DUYET = Object.freeze(['Nháp', 'Chờ duyệt', 'Đã duyệt', 'Từ chối']);
 export const approvalInput = z.enum(KHOA_DUYET).optional();
