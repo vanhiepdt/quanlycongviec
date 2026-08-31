@@ -23,6 +23,7 @@ const EXPORTS = `;Object.assign(window, {
     visibleDepartments: () => { visibleDepartments = giaTri; },
     isDeputyDirectorUser: () => { isDeputyDirectorUser = giaTri; },
     isDepartmentHeadUser: () => { isDepartmentHeadUser = giaTri; },
+    myDepartment: () => { myDepartment = giaTri; },
   })[ten](); }
 });`;
 
@@ -203,6 +204,73 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
     expect(window.laLanhDaoPhong()).toBe(false);
   });
 
+  // ------------------------------------------------------------------------------------------
+  // TC-TP-CV (Vòng 12e) — «Phòng có 4 công việc nhưng Phó phòng chỉ thấy 1».
+  //
+  // Nguyên nhân đo được: `getUserAllowedProjects()` có nhánh admin, nhánh Phó GĐ
+  // (visibleDepartments) và nhánh «Quản lý công việc», rồi rơi xuống luật cuối «việc mình đứng
+  // tên quản lý hoặc được giao nhiệm vụ» — TP/PP không có nhánh nào ⇒ chỉ thấy đúng công việc
+  // mình đứng tên. Dữ liệu thật của phòng Quản lý Đào tạo dùng làm khuôn test ở dưới.
+  // ------------------------------------------------------------------------------------------
+  const PHONG = 'Quản lý Đào tạo';
+  const cvPhong = (ma, quanLy, phong) => ({
+    [window.COL.P_ID]: ma,
+    [window.COL.P_DEPT]: phong === undefined ? PHONG : phong,
+    [window.COL.P_MANAGER]: quanLy,
+  });
+  /** Bốn công việc thật của PH01: chỉ CV008 do Phó phòng đứng tên. */
+  const BON_CONG_VIEC = () => [
+    cvPhong('CV001', 'Quản lý Công việc'),
+    cvPhong('CV002', 'Trưởng phòng Đào tạo'),
+    cvPhong('CV006', 'Quản trị Hệ thống'),
+    cvPhong('CV008', 'Phó phòng Đào tạo'),
+  ];
+  const maCV = () => window.getUserAllowedProjects().map((cv) => cv[window.COL.P_ID]);
+
+  it('TC-TP-CV-01: Phó phòng thấy ĐỦ 4 công việc của phòng mình, không chỉ việc mình quản lý', () => {
+    window.__pq('currentUser', { name: 'Phó phòng Đào tạo', role: 'Phó phòng' });
+    window.__pq('allProjects', BON_CONG_VIEC());
+    window.__pq('isDepartmentHeadUser', true);
+    window.__pq('myDepartment', PHONG);
+    expect(maCV()).toEqual(['CV001', 'CV002', 'CV006', 'CV008']);
+  });
+
+  it('TC-TP-CV-02: Trưởng phòng cũng vậy; công việc phòng KHÁC và việc chung vẫn ẩn', () => {
+    window.__pq('currentUser', { name: 'Trưởng phòng Đào tạo', role: 'Trưởng phòng' });
+    window.__pq('allProjects', [
+      ...BON_CONG_VIEC(),
+      cvPhong('CV003', 'Ai đó', 'Nghiên cứu Khoa học'),
+      cvPhong('CV099', 'Ai đó', ''), // công việc chung, không phòng — máy chủ cũng không cho
+    ]);
+    window.__pq('isDepartmentHeadUser', true);
+    window.__pq('myDepartment', PHONG);
+    expect(maCV()).toEqual(['CV001', 'CV002', 'CV006', 'CV008']);
+  });
+
+  it('TC-TP-CV-03: bối cảnh phòng chưa về (myDepartment rỗng) ⇒ KHÔNG nới, giữ luật cũ', () => {
+    // Phản chiếu race thật (§13.5): lần vẽ đầu chạy lúc `myDepartment` còn rỗng. Thà hẹp còn hơn
+    // tự nới ở trình duyệt — `loadDepartmentContext` vẽ lại cho TP/PP (Vòng 12d) nên sau đó đúng.
+    window.__pq('currentUser', { name: 'Phó phòng Đào tạo', role: 'Phó phòng' });
+    window.__pq('allProjects', BON_CONG_VIEC());
+    window.__pq('isDepartmentHeadUser', true);
+    window.__pq('myDepartment', '');
+    expect(maCV()).toEqual(['CV008']); // chỉ việc mình đứng tên quản lý
+  });
+
+  it('TC-TP-CV-04: KHÔNG dùng visibleDepartments (kênh của Phó GĐ) và không nới cho Cán bộ', () => {
+    // TP/PP lấy phòng từ tài khoản; `visibleDepartments` có gì cũng không được ảnh hưởng.
+    window.__pq('currentUser', { name: 'Trưởng phòng Đào tạo', role: 'Trưởng phòng' });
+    window.__pq('allProjects', [...BON_CONG_VIEC(), cvPhong('CV003', 'Ai đó', 'Phòng lạ')]);
+    window.__pq('isDepartmentHeadUser', true);
+    window.__pq('myDepartment', PHONG);
+    window.__pq('visibleDepartments', ['Phòng lạ']);
+    expect(maCV()).not.toContain('CV003');
+    // Cán bộ cùng phòng vẫn chỉ thấy việc của mình (ma trận §6: work chỉ read, không nới nút).
+    window.__pq('currentUser', { name: 'Nhân viên Đào tạo', role: 'Nhân viên' });
+    window.__pq('isDepartmentHeadUser', false);
+    expect(maCV()).toEqual([]);
+  });
+
   it('Trưởng phòng thấy nút «Công việc mới» (add-project-standalone)', () => {
     dangNhap({ name: 'Anh TP', role: 'Trưởng phòng' });
     expect(document.getElementById('add-project-standalone').style.display).toBe('');
@@ -233,5 +301,29 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
         `document.getElementById("${id}")?.addEventListener("click", (event) => {`
       );
     }
+  });
+
+  it('TC-TP-CV-05: TP/PP SỬA và XOÁ được công việc/CV con/nhiệm vụ phòng mình (khớp ma trận §6)', () => {
+    // Máy chủ cho hai vai này update+delete trên cả ba cấp trong phòng mình (rbac.js PERMISSIONS
+    // + inScope case 'Trưởng phòng'/'Phó phòng'); client từng hẹp hơn — chỉ mở nút Sửa cho
+    // project/subwork, còn canUserDeleteResource không có nhánh TP/PP nào (Vòng 12e).
+    const COL = window.COL;
+    window.__pq('allProjects', [{ [COL.P_ID]: 'CV001', [COL.P_MANAGER]: 'Người khác' }]);
+    window.__pq('allTasks', [
+      { [COL.T_ID]: 'CV001-002', [COL.T_PID]: 'CV001', [COL.T_ASSIGNEE]: 'Người khác' },
+    ]);
+    for (const vai of ['Trưởng phòng', 'Phó phòng']) {
+      window.__pq('currentUser', { name: 'Lãnh đạo phòng', role: vai });
+      for (const loai of ['project', 'subwork', 'task']) {
+        expect(window.canUserDeleteResource(loai, 'CV001'), `xoá ${loai} với ${vai}`).toBe(true);
+      }
+      expect(window.canUserEditResource('project', 'CV001')).toBe(true);
+      expect(window.canUserEditResource('subwork', 'CV001')).toBe(true);
+    }
+    // Cán bộ ngoài cuộc vẫn không được — client KHÔNG nới rộng hơn máy chủ.
+    window.__pq('currentUser', { name: 'Cán bộ khác', role: 'Nhân viên' });
+    expect(window.canUserEditResource('project', 'CV001')).toBe(false);
+    expect(window.canUserDeleteResource('project', 'CV001')).toBe(false);
+    expect(window.canUserDeleteResource('task', 'CV001-002')).toBe(false);
   });
 });

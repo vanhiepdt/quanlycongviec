@@ -319,8 +319,12 @@ describe('TC-TASKUI-12..13 — vẽ thật vào #tasks-grid và nhớ trạng th
     expect(grid.textContent).toContain('Nhiệm vụ trực thuộc công việc');
     // NV3 thuộc tháng 9 nên không được vẽ khi đang xem tháng 8.
     expect(grid.textContent).not.toContain('Nhiệm vụ NV3');
-    expect(document.getElementById('tasks-month-select').options.length).toBe(12);
-    expect(document.getElementById('tasks-month-select').value).toBe('8');
+    // Vòng 12e: ô Tháng có 13 option — «Tất cả tháng» (value 0) + 12 tháng, như tab Công việc.
+    const oThang = document.getElementById('tasks-month-select');
+    expect(oThang.options.length).toBe(13);
+    expect(oThang.options[0].value).toBe('0');
+    expect(oThang.options[0].textContent).toBe('Tất cả tháng');
+    expect(oThang.value).toBe('8'); // mặc định vẫn là tháng đang xem, không phải «Tất cả»
     expect(document.getElementById('tasks-year-select').options.length).toBeGreaterThanOrEqual(6);
     expect(document.getElementById('tasks-staff-filter').options.length).toBe(3);
     expect(document.getElementById('tasks-dept-filter').options.length).toBe(3);
