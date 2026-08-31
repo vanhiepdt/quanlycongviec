@@ -107,3 +107,28 @@ duy nhất + option đầu là option được chọn). **1375 test / 81 file xa
 pin **96/698** (+1 sink nút Lưu); banner `app.js 20260829-8`, buster `-8`. Bẫy: thay cả một khối
 lớn trong app.js phải rà lại MỌI id/hàm mà khối cũ liên quan tới (nút Lưu bị rơi là bằng chứng).
 
+## 8. VÒNG 12c — TP/PP bị khoá nhầm sau khi có bảng phân quyền (3 lỗi thật)
+
+Phản hồi người dùng: «1. CV con không cho TP/PP sửa (không thấy icon sửa) · 2. TP/PP không xem
+được nhiệm vụ tab Quản lý Nhiệm vụ dù đã cho phép · 3. Bảng phân quyền trên user khác admin
+hiển thị không đúng, không cập nhật».
+
+Kiểm tra ra **3 lỗi thật**:
+1. `coQuyenSuaCongViecCon` (project-details.js) viết từ vòng phân công ba lớp — chỉ cho admin +
+   người nằm trong phân công của CV con. TP/PP không nằm trong phân công ⇒ không thấy icon dù
+   ma trận §6 cho `subwork:update` theo phòng. Đã sửa: mở icon cho Phó GĐ + TP/PP (máy chủ
+   `inScope` vẫn là rào chặn phạm vi); NV ngoài cuộc vẫn không thấy.
+2. `dsNhiemVuToiDuocThay` (app.js) lọc nhiệm vụ chỉ theo: được giao · quản lý công việc ·
+   phòng trong `dsPhongToiPhuTrach` (chỉ PGD). TP/PP rơi hụt ⇒ tab nhiệm vụ trống. Đã sửa: thêm
+   nhánh TP/PP nhận nhiệm vụ theo phòng của công việc cha (`laLanhDaoPhong` + `tenPhongTaiKhoan`).
+3. `oPhanQuyenHieuLuc` mô tả trạng thái gốc bằng 3 cột tĩnh `g/tp/pp/nv` (không có Giám đốc) và
+   **không đọc ma trận server** ⇒ bảng sai và đứng im khi admin lưu ghi đè mới. Đã sửa: hàm nhận
+   thêm `macDinh` (ma trận `PERMISSIONS` do `GET /api/v1/permissions` trả về) — ô gốc lấy từ
+   ma trận server nên user khác F5 là thấy đúng ngay.
+
+Test cập nhật: `project-details-phan-cong.test.js` 2 test icon (PGD/TP/PP thấy MỌI CV con,
+NV ngoài cuộc 0). **1375 test / 81 file xanh**; lint + format sạch; pin giữ **96/698** (chỉ thêm
+chuỗi tĩnh); banner `app.js 20260829-10`, buster `app.js?v=-10`, `project-details.js?v=-2`.
+Bẫy mới (§13.5): **bảng quyền vẽ client phải lấy trạng thái gốc TỪ SERVER** (`GET /permissions`
+trả ma trận) — đoán bằng cột tĩnh sẽ lệch vĩnh viễn với server.
+
