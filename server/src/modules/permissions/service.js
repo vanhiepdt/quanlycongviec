@@ -53,8 +53,17 @@ export async function luuGhiDe(user, thayDoi) {
         field: 'giaTri',
       });
     }
-    if (g.giaTri === 'cho-duyet' && g.action !== 'create') {
-      throw new AppError('VALIDATION_ERROR', '«Chờ duyệt» chỉ áp dụng cho hành động Tạo', {
+    if (g.giaTri === 'cho-duyet' && !['create', 'update', 'delete'].includes(g.action)) {
+      throw new AppError('VALIDATION_ERROR', '«Chờ duyệt» chỉ áp dụng cho Tạo / Sửa / Xoá', {
+        field: 'giaTri',
+      });
+    }
+    // «Chờ duyệt» chỉ có ý nghĩa với vai có luồng duyệt phía trên: Phó GĐ / Trưởng phòng / Phó phòng.
+    if (
+      g.giaTri === 'cho-duyet' &&
+      !['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'].includes(g.vai)
+    ) {
+      throw new AppError('VALIDATION_ERROR', `Vai "${g.vai}" không có luồng «Chờ duyệt»`, {
         field: 'giaTri',
       });
     }

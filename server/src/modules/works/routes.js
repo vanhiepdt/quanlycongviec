@@ -176,7 +176,7 @@ worksRouter.post('/', validate(createSchema), async (req, res, next) => {
 
 worksRouter.patch('/:id', validate(updateSchema), async (req, res, next) => {
   try {
-    const { work, warnings, changes } = await service.update(
+    const { work, warnings, changes, choDuyetLai } = await service.update(
       req.user,
       req.params.id,
       toRow(req.body)
@@ -190,7 +190,7 @@ worksRouter.patch('/:id', validate(updateSchema), async (req, res, next) => {
       // thứ làm nên mục "các lần chỉnh sửa". Không đổi gì thì không ghi khoá nào.
       details: changes ? { code: work.code, changes } : { code: work.code },
     };
-    return ok(res, { work, warnings });
+    return ok(res, { work, warnings, choDuyetLai: choDuyetLai === true });
   } catch (err) {
     return next(err);
   }

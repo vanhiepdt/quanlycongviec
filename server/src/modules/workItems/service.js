@@ -23,6 +23,8 @@ import {
   CHO_DUYET,
   coSuaDuocKhiChoDuyet,
   trangThaiDuyetKhiTao,
+  phaiChoDuyetKhiSua,
+  xoaDuocKhongKhiChoDuyet,
 } from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
@@ -464,10 +466,14 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
     // Trưởng/Phó phòng sửa CÔNG VIỆC CON đã duyệt ⇒ quay lại «Chờ duyệt» chờ Phó GĐ phụ trách
     // duyệt lại (yêu cầu 2026-08-28). admin/Phó GĐ sửa giữ nguyên trạng thái; mục đang «Chờ
     // duyệt» thì assertSuaDuoc phía trên đã bó đúng người được sửa, trạng thái giữ nguyên.
+    // Ghi đè «Chờ duyệt» cho Sửa (011): MỌI vai bị admin ghi đè update = 'cho-duyet' đều rơi vào
+    // luồng này, cho cả cấp 2 lẫn cấp 3 (mở rộng từ TP/PP × cấp 2 ban đầu).
+    const entityType = Number(current.level) === repo.LEVEL_SUBWORK ? 'subwork' : 'task';
     const phaiDuyetLai =
-      Number(current.level) === repo.LEVEL_SUBWORK &&
-      (user.role === 'Trưởng phòng' || user.role === 'Phó phòng') &&
-      current.approval_status !== CHO_DUYET;
+      (Number(current.level) === repo.LEVEL_SUBWORK &&
+        (user.role === 'Trưởng phòng' || user.role === 'Phó phòng') &&
+        current.approval_status !== CHO_DUYET) ||
+      phaiChoDuyetKhiSua(user, entityType, current.approval_status);
 
     const row = await withPgErrors(() =>
       repo.updateStructure(
@@ -524,6 +530,12 @@ export function remove(user, ref) {
     const current = await mustFindItem(ref, client);
     assertCan(user, 'delete', current);
     assertSuaDuoc(user, current);
+    // Ghi đè «Chờ duyệt» cho Xoá (011): luồng duyệt-yêu-cầu-xoá chưa có — chặn với câu nói rõ.
+    const xoaOk = xoaDuocKhongKhiChoDuyet(
+      user,
+      Number(current.level) === repo.LEVEL_SUBWORK ? 'subwork' : 'task'
+    );
+    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message);
     const children = await repo.listDescendants(current.id, client);
     await repo.remove(current.id, client);
     return {

@@ -99,12 +99,27 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
     expect(sua.status).toBe(200);
   });
 
-  it('TC-PQ-06: «cho-duyet» chỉ hợp lệ cho action = create', async () => {
-    const res = await api.put('/api/v1/permissions', {
-      thayDoi: [ghiDe('Trưởng phòng', 'work', 'delete', 'cho-duyet')],
+  it('TC-PQ-06: «cho-duyet» hợp lệ cho Tạo/Sửa/Xoá, chặn với Xem/Duyệt', async () => {
+    // 011: TP/PP được chọn «Chờ duyệt» cho cả Sửa và Xoá (người dùng 2026-08-29).
+    const sua = await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'update', giaTri: 'cho-duyet' }],
     });
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toContain('Tạo');
+    expect(sua.status).toBe(200);
+    const xoa = await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'delete', giaTri: 'cho-duyet' }],
+    });
+    expect(xoa.status).toBe(200);
+    // Xem/Duyệt không có luồng chờ-duyệt.
+    const xem = await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'read', giaTri: 'cho-duyet' }],
+    });
+    expect(xem.status).toBe(400);
+    const duyet = await api.put('/api/v1/permissions', {
+      thayDoi: [
+        { vai: 'Trưởng phòng', entityType: 'work', action: 'approve', giaTri: 'cho-duyet' },
+      ],
+    });
+    expect(duyet.status).toBe(400);
   });
 
   it('TC-PQ-07: chặn ghi đè vai admin và giá trị lạ', async () => {
@@ -179,5 +194,33 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
       ],
     });
     expect(sai.status).toBe(400);
+  });
+
+  it('TC-PQ-11: ghi đè Sửa = «cho-duyet» ⇒ TP sửa Công việc đã duyệt quay về «Chờ duyệt»', async () => {
+    const work = await makeWork({
+      department_id: phong.id,
+      approval_status: 'Đã duyệt',
+    });
+    await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'update', giaTri: 'cho-duyet' }],
+    });
+
+    await api.login(tp.email);
+    const sua = await api.patch(`/api/v1/works/${work.code}`, { name: 'Tên mới' });
+    expect(sua.status).toBe(200);
+    expect(sua.body.data.work.approval_status).toBe('Chờ duyệt');
+    expect(sua.body.data.choDuyetLai).toBe(true);
+  });
+
+  it('TC-PQ-12: ghi đè Xoá = «cho-duyet» ⇒ TP không xoá được, câu nói rõ phải qua duyệt', async () => {
+    const work = await makeWork({ department_id: phong.id });
+    await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'delete', giaTri: 'cho-duyet' }],
+    });
+
+    await api.login(tp.email);
+    const xoa = await api.del(`/api/v1/works/${work.code}`);
+    expect(xoa.status).toBe(403);
+    expect(xoa.body.error.message).toContain('qua duyệt');
   });
 });

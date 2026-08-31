@@ -16,7 +16,14 @@ import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as assignments from '../assignments/service.js';
-import { boCotKhoaDuyet, coSuaDuocKhiChoDuyet, trangThaiDuyetKhiTao } from '../approvals/rules.js';
+import {
+  CHO_DUYET,
+  boCotKhoaDuyet,
+  coSuaDuocKhiChoDuyet,
+  trangThaiDuyetKhiTao,
+  phaiChoDuyetKhiSua,
+  xoaDuocKhongKhiChoDuyet,
+} from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
 import { assertThangDatDuoc } from '../workMonthNames/service.js';
@@ -111,9 +118,26 @@ export async function update(user, ref, patch) {
     return null;
   });
   // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
-  const work = await withPgErrors(() => repo.update(current.id, boCotKhoaDuyet(patch)));
+  // Ghi đè «Chờ duyệt» cho Sửa (011): vai có ghi đè update = 'cho-duyet' sửa mục «Đã duyệt» ⇒
+  // quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — cùng luồng với TP/PP sửa CV con.
+  const phaiDuyetLai = phaiChoDuyetKhiSua(user, 'work', current.approval_status);
+  const work = await withPgErrors(() =>
+    repo.update(
+      current.id,
+      phaiDuyetLai
+        ? {
+            ...boCotKhoaDuyet(patch),
+            approval_status: CHO_DUYET,
+            approver_id: null,
+            approved_at: null,
+            reject_reason: '',
+          }
+        : boCotKhoaDuyet(patch)
+    )
+  );
   return {
     work,
+    choDuyetLai: phaiDuyetLai,
     // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
     changes: diffRows(current, work, repo.WRITABLE),
     warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate'),
@@ -129,6 +153,9 @@ export function remove(user, ref) {
     const current = await mustFind(ref, client);
     assertCan(user, 'delete', current);
     assertSuaDuoc(user, current);
+    // Ghi đè «Chờ duyệt» cho Xoá (011): luồng duyệt-yêu-cầu-xoá chưa có — chặn với câu nói rõ.
+    const xoaOk = xoaDuocKhongKhiChoDuyet(user, 'work');
+    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message);
     const items = await itemsRepo.listByWork(current.id, {}, client);
     await repo.remove(current.id, client);
     return {

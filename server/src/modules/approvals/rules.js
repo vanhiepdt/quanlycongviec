@@ -47,6 +47,43 @@ export function trangThaiDuyetKhiTao(user, level) {
   return CHO_DUYET;
 }
 
+/**
+ * Trạng thái sau khi SỬA với ghi đè «Chờ duyệt» (011): nếu vai người sửa có ghi đè update =
+ * 'cho-duyet' và mục đang «Đã duyệt» ⇒ quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — mở rộng luồng
+ * choDuyetLai (trước đây chỉ TP/PP sửa cấp 2) lên MỌI vai bị ghi đè và mọi cấp.
+ *
+ * Mục đang «Chờ duyệt»/«Từ chối» giữ nguyên — luồng duyệt của việc 5.2 lo, không đụng vào.
+ *
+ * @param {object|null} user người đang sửa
+ * @param {string} entityType 'work' | 'subwork' | 'task'
+ * @param {string} trangThaiHienTai giá trị `approval_status` hiện tại của dòng
+ * @returns {boolean} CÓ hạ về «Chờ duyệt» hay không
+ */
+export function phaiChoDuyetKhiSua(user, entityType, trangThaiHienTai) {
+  if (trangThaiHienTai !== DA_DUYET) return false;
+  const ghiDeTho = user && user.ghiDe ? user.ghiDe[entityType + ':update'] : null;
+  const ghiDe = ghiDeTho && typeof ghiDeTho === 'object' ? ghiDeTho.gia_tri : ghiDeTho;
+  return ghiDe === 'cho-duyet';
+}
+
+/**
+ * Chặn XOÁ khi vai có ghi đè delete = 'cho-duyet' (011): yêu cầu "sửa/xoá của TP/PP phải qua
+ * duyệt" — luồng duyệt-yêu-cầu-xoá chưa có trong phiên bản này nên xoá bị chặn với câu nói rõ
+ * thay vì âm thầm xoá (thà chặn còn hơn mất dữ liệu mà không ai biết phải duyệt ở đâu).
+ *
+ * @returns {{ok: true} | {ok: false, message: string}}
+ */
+export function xoaDuocKhongKhiChoDuyet(user, entityType) {
+  const ghiDeTho = user && user.ghiDe ? user.ghiDe[entityType + ':delete'] : null;
+  const ghiDe = ghiDeTho && typeof ghiDeTho === 'object' ? ghiDeTho.gia_tri : ghiDeTho;
+  if (ghiDe !== 'cho-duyet') return { ok: true };
+  return {
+    ok: false,
+    message:
+      'Quản trị yêu cầu Xoá phải qua duyệt — hãy liên hệ Phó Giám đốc phụ trách để xoá giúp (luồng duyệt yêu cầu xoá chưa có trên hệ thống)',
+  };
+}
+
 /** Bốn cột chỉ luồng duyệt được ghi. Trùng đúng nhóm cột duyệt của `works` và `work_items`. */
 const COT_KHOA_DUYET = Object.freeze([
   'approval_status',

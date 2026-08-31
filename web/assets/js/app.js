@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-5");
+console.info("[QLCV] app.js 20260829-6");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -6029,7 +6029,7 @@ const VAU_BANG = [
   { ten: 'Phó Giám đốc', phamViText: 'Phòng phụ trách' },
   { ten: 'Trưởng phòng', phamViText: 'Phòng mình' },
   { ten: 'Phó phòng', phamViText: 'Phòng mình' },
-  { ten: 'Cán bộ', phamViText: '' },
+  { ten: 'Cán bộ', phamViText: 'Phòng của mình' },
 ];
 const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': 'text-indigo-500', '👁': 'text-gray-400', '✕': 'text-red-400' };
 /** Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc. */
@@ -6040,9 +6040,9 @@ function oPhanQuyenHieuLuc(row, vaiTen, ghiDe) {
     if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: 'Ghi đè: chờ Phó GĐ duyệt' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
     if (gd.gia_tri === 'tu-choi') return { s: '✕', n: 'Ghi đè: đã tắt' };
   }
+  if (vaiTen === 'Cán bộ' && row.entityType) return { s: '👁', n: 'Phòng của mình' };
   return row[vaiTen === 'Phó Giám đốc' ? 'g' : vaiTen === 'Trưởng phòng' ? 'tp' : vaiTen === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
 }
-// __KHOI2__
 // Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → { vai: giá trị }.
 function chiSoGhiDe(danhSach) {
   const kq = {};
@@ -6056,6 +6056,22 @@ function chiSoGhiDe(danhSach) {
 function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
   ghiDe = ghiDe || {};
   macDinh = macDinh || {};
+  // Nhãn option đầu «Đang dùng: X» — hiệu lực hiện tại = ghi đè nếu có, không thì luật gốc.
+  const nhungHieuLuc = (row, vaiTen) => {
+    const gd = (ghiDe[row.entityType + ':' + row.action] || {})[vaiTen];
+    if (gd) return { g: gd.gia_tri, pv: gd.pham_vi === 'tat-ca', ghiDe: true };
+    const bang = macDinh[vaiTen];
+    const cho = bang && bang[row.entityType] && bang[row.entityType].includes(row.action);
+    if (!cho) return { g: 'tu-choi', pv: '', ghiDe: false };
+    const choDuoc = row.action === 'create' && vaiTen !== 'Phó Giám đốc' && vaiTen !== 'admin';
+    return { g: choDuoc ? 'cho-duyet' : 'cho-phep', pv: '', ghiDe: false };
+  };
+  const NHAN_HIEU_LUC = { 'cho-phep': '✓ Đang cho phép', 'cho-duyet': '⏳ Đang chờ duyệt', 'tu-choi': '✕ Đang tắt' };
+  const coNghi = (row, vaiTen) => {
+    const h = nhungHieuLuc(row, vaiTen);
+    const nhan = NHAN_HIEU_LUC[h.g] || '';
+    return nhan + (h.pv ? ' · TẤT CẢ các phòng' : '') + (h.ghiDe ? ' (ghi đè)' : ' (mặc định)');
+  };
   const o = (cell) =>
     '<td class="px-2 py-2 align-top">' +
     '<span class="font-semibold text-sm ' + (MAU_KY_HIEU[cell.s] || 'text-gray-400') + '">' + escapeHtml(cell.s) + '</span>' +
@@ -6067,8 +6083,7 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
       escapeHtml(row.ten) +
       (row.gc ? '<div class="text-[11px] font-normal text-gray-500 mt-0.5 leading-snug">' + escapeHtml(row.gc) + '</div>' : '') +
       '</td>';
-    const adminTd =
-      '<td class="px-2 py-2 align-top"><span class="font-semibold text-sm text-green-600">✓</span></td>';
+    const adminTd = '<td class="px-2 py-2 align-top"><span class="font-semibold text-sm text-green-600">✓</span></td>';
     if (!row.entityType) {
       return '<tr class="border-t border-gray-100">' + tenTd + adminTd + o(row.g) + o(row.tp) + o(row.pp) + o(row.nv) + '</tr>';
     }
@@ -6079,20 +6094,35 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
         const gd = (ghiDe[khoa] || {})[vaiTen] || {};
         const chon = gd.gia_tri || '';
         const chonPv = gd.pham_vi === 'tat-ca' ? 'tat-ca' : '';
+        // «Chờ duyệt»: hàng Tạo (mọi vai trừ admin) + hàng Sửa/Xoá (riêng TP/PP — 011).
+        const coChoDuyet =
+          row.action === 'create' ||
+          ((row.action === 'update' || row.action === 'delete') && (vaiTen === 'Trưởng phòng' || vaiTen === 'Phó phòng'));
+        // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         const oHanhDong =
-          '<select class="form-select text-[11px] w-full" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
-          '<option value="">Mặc định</option>' +
+          '<select class="form-select text-[11px] w-full min-w-0" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
+          '<option value="" title="Chọn để trả về luật gốc">' + escapeHtml(coNghi(row, vaiTen)) + '</option>' +
           '<option value="cho-phep"' + (chon === 'cho-phep' ? ' selected' : '') + '>✓ Cho phép</option>' +
-          (row.action === 'create' ? '<option value="cho-duyet"' + (chon === 'cho-duyet' ? ' selected' : '') + '>⏳ Chờ duyệt</option>' : '') +
+          (coChoDuyet ? '<option value="cho-duyet"' + (chon === 'cho-duyet' ? ' selected' : '') + '>⏳ Chờ duyệt</option>' : '') +
           '<option value="tu-choi"' + (chon === 'tu-choi' ? ' selected' : '') + '>✕ Tắt</option>' +
           '</select>';
-        const oPhamVi = vaiCot.phamViText
-          ? '<select class="form-select text-[10px] w-full mt-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
+        // Chỉ Phó GĐ / Trưởng phòng / Phó phòng có ô phạm vi (Cán bộ: phòng của mình, không nới).
+        const coPhamVi = vaiCot.phamViText && vaiTen !== 'Cán bộ';
+        const oPhamVi = coPhamVi
+          ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '" title="Điều kiện phạm vi dữ liệu">' +
             '<option value="">' + escapeHtml(vaiCot.phamViText) + '</option>' +
-            '<option value="tat-ca"' + (chonPv ? ' selected' : '') + '>Tất cả các phòng</option>' +
+            '<option value="tat-ca"' + (chonPv ? ' selected' : '') + '>Tất cả phòng</option>' +
             '</select>'
           : '';
-        return '<td class="px-2 py-2 align-top">' + oHanhDong + oPhamVi + '</td>';
+        if (!coPhamVi) {
+          return '<td class="px-2 py-2 align-top">' + oHanhDong + '</td>';
+        }
+        return (
+          '<td class="px-2 py-2 align-top"><div class="flex items-center gap-1">' +
+          '<div class="flex-1 min-w-0">' + oHanhDong + '</div>' +
+          '<div class="flex-1 min-w-0">' + oPhamVi + '</div>' +
+          '</div></td>'
+        );
       }
       return o(oPhanQuyenHieuLuc(row, vaiTen, ghiDe));
     }).join('');
@@ -6111,8 +6141,12 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
     '<span class="font-semibold text-indigo-500">↻</span> mượn qua ủy quyền · ' +
     '<span class="font-semibold text-gray-400">👁</span> chỉ xem · ' +
     '<span class="font-semibold text-red-400">✕</span> không được. ' +
-    'Máy chủ là rào chặn cuối — bảng này mô tả đúng luật của hệ thống, không cấp quyền thêm.</div>';
-  return '<div class="overflow-x-auto"><table class="min-w-full">' + thead + '<tbody>' + dong + '</tbody></table></div>' + chuThich;
+    'Cán bộ chỉ thao tác trong phạm vi phòng của mình. Máy chủ là rào chặn cuối — bảng này mô tả đúng luật của hệ thống, không cấp quyền thêm.</div>';
+  // Bọc «col-span-full» để chú thích LUÔN nằm dưới cùng khi khung cha là grid (class the-tai-khoan).
+  return (
+    '<div class="overflow-x-auto"><table class="min-w-full">' + thead + '<tbody>' + dong + '</tbody></table></div>' +
+    '<div class="col-span-full">' + chuThich + '</div>'
+  );
 }
 /** Vẽ bảng phân quyền (động) + trình sửa cho admin; không có khung thì bỏ qua. */
 function veBangPhanQuyen() {
