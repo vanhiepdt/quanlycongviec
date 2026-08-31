@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-11");
+console.info("[QLCV] app.js 20260829-12");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -863,6 +863,10 @@ function canUserEditResource(resourceType, resourceId) {
 }
 function canUserDeleteResource(resourceType, resourceId) {
   if (laQuanTriTrongPhamVi()) return true;
+  // Vòng 12e: máy chủ cho Trưởng phòng / Phó phòng XOÁ work/subwork/task trong phòng mình (ma trận
+  // §6 + `inScope` case 'Trưởng phòng'/'Phó phòng'), nên nút phải mở theo — đối xứng với
+  // canUserEditResource đã mở từ Vòng 12c. Phạm vi phòng do máy chủ bó; ngoài phạm vi thì 403.
+  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork" || resourceType === "task")) return true;
   if (isManager()) {
     if (resourceType === "project") return true;
     if (resourceType === "task") return true;
@@ -1063,7 +1067,7 @@ function createProjectCard(project, showDetails = false) {
     filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
     filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
     num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
-  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
+  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
 /**
  * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
@@ -1282,11 +1286,17 @@ function dongBoOThangNamTasks() {
   const oThang = document.getElementById("tasks-month-select"),
     oNam = document.getElementById("tasks-year-select");
   if (!oThang || !oNam) return;
-  if (oThang.options.length === 0)
+  if (oThang.options.length === 0) {
+    // Vòng 12e: thêm «Tất cả tháng» (value 0) như tab Công việc — trước đây ô này chỉ có 12 tháng
+    // nên mở tab ra đúng tháng không có nhiệm vụ là tưởng «không thấy tháng nào». MẶC ĐỊNH vẫn là
+    // tháng hiện tại; luật lọc không đổi (taskMatchesDateFilter tự bỏ lọc khi tháng ngoài 1..12).
+    const opTatCa = document.createElement("option");
+    opTatCa.value = "0", opTatCa.textContent = "Tất cả tháng", oThang.appendChild(opTatCa);
     for (let i = 1; i <= 12; i++) {
       const op = document.createElement("option");
       op.value = String(i), op.textContent = "Tháng " + i, oThang.appendChild(op);
     }
+  }
   const namHienTai = new Date().getFullYear(),
     cacNam = [];
   for (let y = namHienTai - 2; y <= namHienTai + 3; y++) cacNam.push(y);
@@ -1320,7 +1330,8 @@ function populateTasksDeptFilter() {
 }
 function handleTasksMonthChange(event) {
   const so = parseInt(event.target.value, 10);
-  if (!(so >= 1 && so <= 12)) return;
+  // 0 = «Tất cả tháng» (Vòng 12e) — cùng ngưỡng với handleProjectsMonthChange.
+  if (!(so >= 0 && so <= 12)) return;
   tasksXemThang = so, renderTasks(), renderTaskStats();
 }
 function handleTasksYearChange(event) {
@@ -3146,6 +3157,19 @@ function getUserAllowedProjects() {
     const trongPham = allProjects.filter(project => visibleDepartments.includes(project[COL.P_DEPT]));
     if (trongPham.length > 0) return trongPham;
   }
+  // Vòng 12e: Trưởng phòng / Phó phòng thấy công việc của PHÒNG MÌNH — ma trận §6 cho họ
+  // work:read/update/delete theo phòng và máy chủ (`inScope` case 'Trưởng phòng'/'Phó phòng') đã
+  // trả về đủ; thiếu nhánh này thì họ rơi xuống luật cuối «việc mình đứng tên quản lý hoặc được
+  // giao» ⇒ chỉ thấy 1–2 công việc và rất dễ chẩn đoán nhầm thành lỗi bộ lọc tháng.
+  // Phòng lấy từ `tenPhongTaiKhoan()` — KHÔNG dùng `visibleDepartments` (kênh riêng của Phó GĐ,
+  // bẫy §13.5). Bối cảnh phòng chưa về (tên rỗng) ⇒ rơi về luật cũ, không nới bừa; `
+  // loadDepartmentContext` đã vẽ lại cho TP/PP từ Vòng 12d nên lần vẽ sau là đúng.
+  if (laLanhDaoPhong()) {
+    const phongCuaToi = String(tenPhongTaiKhoan() || "").trim();
+    if (phongCuaToi !== "") {
+      return allProjects.filter(project => String(project[COL.P_DEPT] || "").trim() === phongCuaToi);
+    }
+  }
   if (isManager()) {
     const filteredProjects2 = allProjects.filter(project => project[COL.P_MANAGER] === currentUser.name),
       filteredTasks2 = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name),
@@ -3234,7 +3258,7 @@ function renderGanttChartLegacy() {
         projectEndText = formatDateForGantt(project[COL.P_END]),
         projectDesc = project[COL.P_DESC] || "Không có mô tả",
         projectId = project[COL.P_ID];
-      text3 += "\n            <div class=\"gantt-project-group\" data-project-id=\"" + escapeHtml(projectId) + "\">\n              <div class=\"gantt-item\" data-id=\"" + escapeHtml(projectId) + "\" data-type=\"project\">\n                <div class=\"gantt-item-label\">\n                  <button class=\"gantt-toggle-btn mr-2\" data-project=\"" + escapeHtml(projectId) + "\">\n                    <i class=\"fas fa-chevron-right\"></i>\n                  </button>\n                  <i class=\"fas fa-folder " + escapeHtml(getStatusIconClass(project[COL.P_STATUS])) + " mr-2\"></i>\n                  <span class=\"truncate\">" + escapeHtml(project[COL.P_NAME]) + "</span>\n                  <span class=\"gantt-task-count\">" + filteredTasks.length + "</span>\n                  \n                  <div class=\"gantt-item-actions\">\n                    " + createSubworkFromWorkButtonHtml(projectId, project[COL.P_NAME], "action-btn action-btn-edit mr-1") + "\n                    <button class=\"action-btn action-btn-edit add-task-from-project-btn mr-1\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Thêm nhiệm vụ\">\n                      <i class=\"fas fa-plus\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-view view-project-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xem chi tiết\">\n                      <i class=\"fas fa-eye\"></i>\n                    </button>\n                    " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Tạo bản sao\">\n                        <i class=\"fas fa-copy\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name ? "\n                      <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash\"></i>\n                      </button>\n                    " : "") + "\n                  </div>\n                </div>\n                \n                <div class=\"gantt-item-timeline\">\n                  <div class=\"gantt-bar gantt-bar-project " + (flag ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(projectBarStyle) + "\" data-tooltip=\"" + escapeHtml(project[COL.P_NAME]) + ": " + escapeHtml(projectDesc) + "\">\n                    <div class=\"gantt-bar-label\">" + escapeHtml(projectStartText) + " - " + escapeHtml(projectEndText) + ": " + escapeHtml(projectDesc) + "</div>\n                    <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                  </div>\n                </div>\n              </div>\n              \n              <div class=\"gantt-project-tasks hidden\" id=\"gantt-tasks-" + escapeHtml(projectId) + "\">\n        " + filteredTasks.map(filteredTask => {
+      text3 += "\n            <div class=\"gantt-project-group\" data-project-id=\"" + escapeHtml(projectId) + "\">\n              <div class=\"gantt-item\" data-id=\"" + escapeHtml(projectId) + "\" data-type=\"project\">\n                <div class=\"gantt-item-label\">\n                  <button class=\"gantt-toggle-btn mr-2\" data-project=\"" + escapeHtml(projectId) + "\">\n                    <i class=\"fas fa-chevron-right\"></i>\n                  </button>\n                  <i class=\"fas fa-folder " + escapeHtml(getStatusIconClass(project[COL.P_STATUS])) + " mr-2\"></i>\n                  <span class=\"truncate\">" + escapeHtml(project[COL.P_NAME]) + "</span>\n                  <span class=\"gantt-task-count\">" + filteredTasks.length + "</span>\n                  \n                  <div class=\"gantt-item-actions\">\n                    " + createSubworkFromWorkButtonHtml(projectId, project[COL.P_NAME], "action-btn action-btn-edit mr-1") + "\n                    <button class=\"action-btn action-btn-edit add-task-from-project-btn mr-1\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Thêm nhiệm vụ\">\n                      <i class=\"fas fa-plus\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-view view-project-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xem chi tiết\">\n                      <i class=\"fas fa-eye\"></i>\n                    </button>\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Tạo bản sao\">\n                        <i class=\"fas fa-copy\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n                      <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash\"></i>\n                      </button>\n                    " : "") + "\n                  </div>\n                </div>\n                \n                <div class=\"gantt-item-timeline\">\n                  <div class=\"gantt-bar gantt-bar-project " + (flag ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(projectBarStyle) + "\" data-tooltip=\"" + escapeHtml(project[COL.P_NAME]) + ": " + escapeHtml(projectDesc) + "\">\n                    <div class=\"gantt-bar-label\">" + escapeHtml(projectStartText) + " - " + escapeHtml(projectEndText) + ": " + escapeHtml(projectDesc) + "</div>\n                    <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                  </div>\n                </div>\n              </div>\n              \n              <div class=\"gantt-project-tasks hidden\" id=\"gantt-tasks-" + escapeHtml(projectId) + "\">\n        " + filteredTasks.map(filteredTask => {
         const taskStartDate = parseDateString(filteredTask[COL.T_START]),
           taskDueDate = parseDateString(filteredTask[COL.T_DUE]),
           date2 = new Date(project[COL.P_END]);
@@ -4153,12 +4177,11 @@ function showStaffValidationError(validation) {
   validation.length > 0 ? (staffValidationErrorEl.innerHTML = validation.map(validation2 => "<div class=\"text-red-600 text-sm\">" + escapeHtml(validation2) + "</div>").join(""), staffValidationErrorEl.classList.remove("hidden")) : staffValidationErrorEl.classList.add("hidden");
 }
 function renderTaskStats() {
-  const allTasks2 = (isAdmin() ? allTasks : allTasks.filter(task => {
-      if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
-      const taskPid = task[COL.T_PID],
-        project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
-      return project && project[COL.P_MANAGER] === currentUser.name;
-    })).filter(isCountableRow),
+  // Vòng 12e: 4 thẻ đếm PHẢI cùng phạm vi với danh sách bên dưới. Trước đây chỗ này có bộ lọc
+  // riêng, hẹp hơn (chỉ nhiệm vụ của mình + công việc mình quản lý) nên Phó GĐ/TP/PP thấy nhiệm
+  // vụ trong danh sách mà 4 thẻ trên đầu vẫn hiện 0. Dùng lại `dsNhiemVuToiDuocThay()` — một
+  // nguồn sự thật cho cả tab, thêm vai mới chỉ phải sửa một chỗ.
+  const allTasks2 = dsNhiemVuToiDuocThay().filter(isCountableRow),
     filteredTasks2 = allTasks2.filter(taskMatchesTasksFilters),
     data = {
       pending: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
@@ -6041,9 +6064,15 @@ const VAU_BANG = [
   { ten: 'Cán bộ', vai: 'Nhân viên', phamViText: 'Phòng của mình' },
 ];
 const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': 'text-indigo-500', '👁': 'text-gray-400', '✕': 'text-red-400' };
-/** Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc. */
-function oPhanQuyenHieuLuc(row, vaiTen, ghiDe, macDinh) {
-  const gd = ghiDe[row.entityType + ':' + row.action] && ghiDe[row.entityType + ':' + row.action][vaiTen];
+/**
+ * Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc.
+ *
+ * `vai` là VAI CSDL ('Nhân viên'), KHÔNG phải nhãn cột ('Cán bộ') — máy chủ khoá cả
+ * `permission_overrides` lẫn ma trận `PERMISSIONS` bằng vai CSDL. Tra bằng nhãn là lỗi Vòng 12e:
+ * mọi ô của cột Cán bộ rơi hết về «✕ Tắt» dù ma trận cho `task:create/update/delete`.
+ */
+function oPhanQuyenHieuLuc(row, vai, ghiDe, macDinh) {
+  const gd = ghiDe[row.entityType + ':' + row.action] && ghiDe[row.entityType + ':' + row.action][vai];
   if (gd) {
     if (gd.gia_tri === 'cho-phep') return { s: '✓', n: 'Ghi đè: cho phép ngay' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
     if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: 'Ghi đè: chờ Phó GĐ duyệt' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
@@ -6051,16 +6080,19 @@ function oPhanQuyenHieuLuc(row, vaiTen, ghiDe, macDinh) {
   }
   // Trạng thái gốc đọc từ MA TRẬN máy chủ trả về (GET /permissions) — bảng luôn khớp server
   // kể cả khi Giám đốc vừa lưu ghi đè mới; user khác F5 là thấy ngay.
-  const bangVai = macDinh && macDinh[vaiTen];
+  const bangVai = macDinh && macDinh[vai];
   if (bangVai && bangVai[row.entityType] && bangVai[row.entityType].includes(row.action)) {
     const ghiChu =
-      vaiTen === 'Cán bộ' ? 'Phòng của mình' :
-      vaiTen === 'Phó Giám đốc' ? 'Các phòng phụ trách' :
+      vai === 'Nhân viên' ? 'Phòng của mình' :
+      vai === 'Phó Giám đốc' ? 'Các phòng phụ trách' :
       'Phòng mình';
     return { s: '✓', n: ghiChu };
   }
-  if (vaiTen === 'Cán bộ' && row.entityType) return { s: '👁', n: 'Phòng của mình' };
-  return row[vaiTen === 'Phó Giám đốc' ? 'g' : vaiTen === 'Trưởng phòng' ? 'tp' : vaiTen === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
+  // Ma trận KHÔNG cho: Cán bộ vẫn ĐỌC được cả phòng mình (§6) nên hàng Xem hiện 👁, còn lại ✕.
+  if (vai === 'Nhân viên' && row.entityType) {
+    return row.action === 'read' ? { s: '👁', n: 'Phòng của mình' } : { s: '✕', n: '' };
+  }
+  return row[vai === 'Phó Giám đốc' ? 'g' : vai === 'Trưởng phòng' ? 'tp' : vai === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
 }
 // Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → { vai: giá trị }.
 function chiSoGhiDe(danhSach) {
@@ -6075,19 +6107,25 @@ function chiSoGhiDe(danhSach) {
 function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
   ghiDe = ghiDe || {};
   macDinh = macDinh || {};
-  // Nhãn option đầu «Đang dùng: X» — hiệu lực hiện tại = ghi đè nếu có, không thì luật gốc.
-  const nhungHieuLuc = (row, vaiTen) => {
-    const gd = (ghiDe[row.entityType + ':' + row.action] || {})[vaiTen];
+  // Nhãn option đầu — hiệu lực hiện tại = ghi đè nếu có, không thì luật gốc.
+  // `vai` luôn là VAI CSDL (`VAU_BANG[].vai`, ví dụ 'Nhân viên'), KHÔNG phải nhãn cột ('Cán bộ'):
+  // `permission_overrides` và ma trận `PERMISSIONS` của máy chủ đều khoá bằng vai CSDL. Tra bằng
+  // nhãn là lỗi Vòng 12e — cả cột Cán bộ hiện «✕ Tắt» và bấm Lưu là XOÁ sạch ghi đè của vai đó.
+  const nhungHieuLuc = (row, vai) => {
+    const gd = (ghiDe[row.entityType + ':' + row.action] || {})[vai];
     if (gd) return { g: gd.gia_tri, pv: gd.pham_vi === 'tat-ca', ghiDe: true };
-    const bang = macDinh[vaiTen];
+    const bang = macDinh[vai];
     const cho = bang && bang[row.entityType] && bang[row.entityType].includes(row.action);
     if (!cho) return { g: 'tu-choi', pv: '', ghiDe: false };
-    const choDuoc = row.action === 'create' && vaiTen !== 'Phó Giám đốc' && vaiTen !== 'admin';
+    // Vai KHÔNG có luồng duyệt phía trên thì Tạo là làm ngay: admin/Phó GĐ tự duyệt, còn
+    // 'Nhân viên' bị service chặn 'cho-duyet' (permissions/service.js) nên đừng vẽ ⏳ cho họ.
+    const choDuoc =
+      row.action === 'create' && vai !== 'Phó Giám đốc' && vai !== 'admin' && vai !== 'Nhân viên';
     return { g: choDuoc ? 'cho-duyet' : 'cho-phep', pv: '', ghiDe: false };
   };
   const NHAN_HIEU_LUC = { 'cho-phep': '✓ Cho phép', 'cho-duyet': '⏳ Chờ duyệt', 'tu-choi': '✕ Tắt' };
-  const trangThaiHienTai = (row, vaiTen) => {
-    const h = nhungHieuLuc(row, vaiTen);
+  const trangThaiHienTai = (row, vai) => {
+    const h = nhungHieuLuc(row, vai);
     return {
       g: h.g,
       nhan: (NHAN_HIEU_LUC[h.g] || '') + (h.pv ? ' · TẤT CẢ các phòng' : ''),
@@ -6110,32 +6148,40 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
       return '<tr class="border-t border-gray-100">' + tenTd + adminTd + o(row.g) + o(row.tp) + o(row.pp) + o(row.nv) + '</tr>';
     }
     const cells = VAU_BANG.map((vaiCot) => {
-      const vaiTen = vaiCot.ten;
+      // VAI CSDL cho mọi tra cứu (ghi đè + ma trận + data-vai); `vaiCot.ten` chỉ dùng in tiêu đề.
+      const vai = vaiCot.vai;
       if (laAdmin) {
         const khoa = row.entityType + ':' + row.action;
-        const gd = (ghiDe[khoa] || {})[vaiTen] || {};
+        const gd = (ghiDe[khoa] || {})[vai] || {};
         const chonPv = gd.pham_vi === 'tat-ca' ? 'tat-ca' : '';
-        // «Chờ duyệt»: hàng Tạo (mọi vai trừ admin) + hàng Sửa/Xoá (riêng TP/PP — 011).
+        // «Chờ duyệt» — đúng luật máy chủ (permissions/service.js):
+        //   Tạo   : mọi vai trong bảng (Phó GĐ / TP / PP / Cán bộ)
+        //   Sửa   : TP / PP (011) và Cán bộ (Vòng 12e — yêu cầu người dùng)
+        //   Xoá   : chỉ TP / PP — 'cho-duyet' ở Xoá nghĩa là CHẶN xoá và luồng duyệt-yêu-cầu-xoá
+        //           chưa có, nên không mở cho Cán bộ (họ chỉ xoá được nhiệm vụ của chính mình).
+        const laLanhDao = vai === 'Trưởng phòng' || vai === 'Phó phòng';
         const coChoDuyet =
-          (row.action === 'create' && vaiCot.vai !== 'Nhân viên') ||
-          ((row.action === 'update' || row.action === 'delete') && (vaiTen === 'Trưởng phòng' || vaiTen === 'Phó phòng'));
+          row.action === 'create' ||
+          (row.action === 'update' && (laLanhDao || vai === 'Nhân viên')) ||
+          (row.action === 'delete' && laLanhDao);
         // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         // Option đầu = TRẠNG THÁI ĐANG DÙNG (không lặp lại ở sau); chọn nó = về luật gốc.
-        const hienTai = trangThaiHienTai(row, vaiTen);
+        const hienTai = trangThaiHienTai(row, vai);
         const cacConLai = [
           ...(hienTai.g !== 'cho-phep' ? ["<option value=\"cho-phep\">✓ Cho phép</option>"] : []),
           ...(coChoDuyet && hienTai.g !== 'cho-duyet' ? ["<option value=\"cho-duyet\">⏳ Chờ duyệt</option>"] : []),
           ...(hienTai.g !== 'tu-choi' ? ["<option value=\"tu-choi\">✕ Tắt</option>"] : []),
         ];
         const oHanhDong =
-          '<select class="form-select text-[11px] w-full min-w-0" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiCot.vai || vaiTen) + '">' +
+          '<select class="form-select text-[11px] w-full min-w-0" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vai) + '">' +
           '<option value="' + escapeHtmlAttr(hienTai.giaTri) + '" title="Chọn để trả về luật gốc">' + escapeHtml(hienTai.nhan) + '</option>' +
           cacConLai.join("") +
           '</select>';
-        // Chỉ Phó GĐ / Trưởng phòng / Phó phòng có ô phạm vi (Cán bộ: phòng của mình, không nới).
-        const coPhamVi = vaiCot.phamViText && vaiTen !== 'Cán bộ';
+        // Chỉ Phó GĐ / Trưởng phòng / Phó phòng có ô phạm vi (Cán bộ: phòng của mình, không nới —
+        // service chặn phamVi 'tat-ca' cho vai 'Nhân viên').
+        const coPhamVi = vaiCot.phamViText && vai !== 'Nhân viên';
         const oPhamVi = coPhamVi
-          ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiCot.vai || vaiTen) + '" title="Điều kiện phạm vi dữ liệu">' +
+          ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vai) + '" title="Điều kiện phạm vi dữ liệu">' +
             '<option value="">' + escapeHtml(vaiCot.phamViText) + '</option>' +
             '<option value="tat-ca"' + (chonPv ? ' selected' : '') + '>Tất cả phòng</option>' +
             '</select>'
@@ -6150,7 +6196,7 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
           '</div></td>'
         );
       }
-      return o(oPhanQuyenHieuLuc(row, vaiTen, ghiDe, macDinh));
+      return o(oPhanQuyenHieuLuc(row, vai, ghiDe, macDinh));
     }).join('');
     return '<tr class="border-t border-gray-100">' + tenTd + adminTd + cells + '</tr>';
   }).join('');

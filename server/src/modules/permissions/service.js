@@ -58,11 +58,16 @@ export async function luuGhiDe(user, thayDoi) {
         field: 'giaTri',
       });
     }
-    // «Chờ duyệt» chỉ có ý nghĩa với vai có luồng duyệt phía trên: Phó GĐ / Trưởng phòng / Phó phòng.
-    if (
-      g.giaTri === 'cho-duyet' &&
-      !['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'].includes(g.vai)
-    ) {
+    // «Chờ duyệt» chỉ có ý nghĩa với vai có NGƯỜI DUYỆT phía trên: Phó GĐ / Trưởng phòng / Phó
+    // phòng (cửa duyệt là Phó GĐ phụ trách hoặc Giám đốc), và từ Vòng 12e thêm **Cán bộ**
+    // (`Nhân viên`) cho TẠO và SỬA theo yêu cầu người dùng «riêng cán bộ thì thêm option tạo,
+    // sửa thêm mới duyệt» — việc Cán bộ lập/sửa rơi «Chờ duyệt» chờ cấp trên duyệt lại.
+    // XOÁ vẫn không mở cho Cán bộ: 'cho-duyet' ở delete nghĩa là CHẶN xoá (`xoaDuocKhongKhiChoDuyet`)
+    // mà luồng duyệt-yêu-cầu-xoá chưa có, nên với vai chỉ xoá được nhiệm vụ của mình thì thành
+    // khoá cứng không có đường ra.
+    const VAI_CO_CHO_DUYET = ['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'];
+    const canBoChoDuyetDuoc = g.vai === 'Nhân viên' && ['create', 'update'].includes(g.action);
+    if (g.giaTri === 'cho-duyet' && !VAI_CO_CHO_DUYET.includes(g.vai) && !canBoChoDuyetDuoc) {
       throw new AppError('VALIDATION_ERROR', `Vai "${g.vai}" không có luồng «Chờ duyệt»`, {
         field: 'giaTri',
       });

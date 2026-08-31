@@ -363,4 +363,66 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
       expect(sel.selectedOptions[0]).toBe(sel.options[0]);
     }
   });
+
+  // ----------------------------------------------------------------------------------------
+  // TC-TKPQ-11..15 (Vòng 12e) — cột «Cán bộ» phải tra ghi đè/ma trận bằng VAI CSDL.
+  //
+  // Lỗi thật: builder tra `ghiDe`/`macDinh` bằng NHÃN cột ('Cán bộ') còn máy chủ khoá bằng vai
+  // CSDL ('Nhân viên') ⇒ mọi ô của cột Cán bộ hiện «✕ Tắt» dù ma trận cho task:create/update/
+  // delete, và option đầu mang value="" nên bấm Lưu là gửi 'mac-dinh' ⇒ XOÁ SẠCH ghi đè vừa đặt.
+  // Người dùng thấy đúng như «không sửa được chức năng nào của Cán bộ».
+  // ----------------------------------------------------------------------------------------
+  /** Ô cột Cán bộ (cột cuối) của hàng có tên chức năng `tenHang`. */
+  const oCanBo = (html, tenHang) => {
+    const hang = html.split('<tr').find((tr) => tr.includes(tenHang));
+    expect(hang, `không thấy hàng «${tenHang}»`).toBeTruthy();
+    return '<td' + hang.split('<td').pop();
+  };
+
+  it('TC-TKPQ-11: ma trận cho «Nhân viên» work:read ⇒ ô Cán bộ hàng Xem là ✓, KHÔNG phải ✕', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    const o = oCanBo(bang, 'Xem Công việc');
+    expect(o).toContain('data-vai="Nhân viên"');
+    expect(o).toContain('✓ Cho phép');
+    // Trước Vòng 12e ô này hiện «✕ Tắt» vì tra bằng nhãn 'Cán bộ' — không được tái diễn.
+    expect(o).not.toContain('>✕ Tắt</option><option');
+  });
+
+  it('TC-TKPQ-12: ghi đè vai «Nhân viên» hiện ra ô Cán bộ VÀ option đầu giữ giá trị ghi đè', () => {
+    const ghiDe = { 'task:update': { 'Nhân viên': { gia_tri: 'tu-choi', pham_vi: 'phong' } } };
+    const o = oCanBo(window.buildBangPhanQuyenHtml(ghiDe, MAC_DINH, true), 'Sửa Nhiệm vụ (cấp 3)');
+    expect(o).toContain('✕ Tắt');
+    // value="tu-choi", KHÔNG phải value="" — value rỗng nghĩa là «về mặc định» nên bấm Lưu
+    // ngay sau khi mở bảng sẽ xoá mất ghi đè này (đúng lỗi người dùng báo).
+    expect(o).toContain('<option value="tu-choi"');
+  });
+
+  it('TC-TKPQ-13: cột Cán bộ CÓ ⏳ ở hàng Tạo và Sửa, KHÔNG có ở hàng Xoá', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    // Yêu cầu người dùng Vòng 12e: «riêng cán bộ thì thêm option tạo, sửa thêm mới duyệt».
+    expect(oCanBo(bang, 'Tạo Nhiệm vụ (cấp 3)')).toContain('value="cho-duyet"');
+    expect(oCanBo(bang, 'Sửa Nhiệm vụ (cấp 3)')).toContain('value="cho-duyet"');
+    // Xoá: 'cho-duyet' nghĩa là CHẶN xoá mà chưa có luồng duyệt-yêu-cầu-xoá ⇒ server chặn.
+    expect(oCanBo(bang, 'Xoá Nhiệm vụ (cấp 3)')).not.toContain('value="cho-duyet"');
+  });
+
+  it('TC-TKPQ-14: cột Cán bộ KHÔNG có select phạm vi (server chặn «tat-ca» cho Nhân viên)', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    expect(oCanBo(bang, 'Xem Công việc')).not.toContain('data-pv="1"');
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(12 * 3); // 3 vai, không có Cán bộ
+  });
+
+  it('TC-TKPQ-15: badge của NGƯỜI THƯỜNG ở cột Cán bộ đọc ma trận + ghi đè, không phải 👁 cứng', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
+    // task:update có trong ma trận của 'Nhân viên' ⇒ ✓, không phải 👁.
+    expect(oCanBo(bang, 'Sửa Nhiệm vụ (cấp 3)')).toContain('✓');
+    // work:update KHÔNG có ⇒ ✕; riêng hàng Xem thì Cán bộ đọc cả phòng mình ⇒ 👁/✓.
+    expect(oCanBo(bang, 'Sửa Công việc (cấp 1)')).toContain('✕');
+    const ghiDe = { 'work:update': { 'Nhân viên': { gia_tri: 'cho-phep', pham_vi: 'phong' } } };
+    const oGhiDe = oCanBo(
+      window.buildBangPhanQuyenHtml(ghiDe, MAC_DINH, false),
+      'Sửa Công việc (cấp 1)'
+    );
+    expect(oGhiDe).toContain('Ghi đè: cho phép ngay');
+  });
 });
