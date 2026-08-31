@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-6");
+console.info("[QLCV] app.js 20260829-7");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -6066,11 +6066,11 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
     const choDuoc = row.action === 'create' && vaiTen !== 'Phó Giám đốc' && vaiTen !== 'admin';
     return { g: choDuoc ? 'cho-duyet' : 'cho-phep', pv: '', ghiDe: false };
   };
-  const NHAN_HIEU_LUC = { 'cho-phep': '✓ Đang cho phép', 'cho-duyet': '⏳ Đang chờ duyệt', 'tu-choi': '✕ Đang tắt' };
+  const NHAN_HIEU_LUC = { 'cho-phep': '✓ Cho phép', 'cho-duyet': '⏳ Chờ duyệt', 'tu-choi': '✕ Tắt' };
   const coNghi = (row, vaiTen) => {
     const h = nhungHieuLuc(row, vaiTen);
     const nhan = NHAN_HIEU_LUC[h.g] || '';
-    return nhan + (h.pv ? ' · TẤT CẢ các phòng' : '') + (h.ghiDe ? ' (ghi đè)' : ' (mặc định)');
+    return nhan + (h.pv ? ' · TẤT CẢ các phòng' : '');
   };
   const o = (cell) =>
     '<td class="px-2 py-2 align-top">' +

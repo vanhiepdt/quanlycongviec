@@ -79,3 +79,12 @@ TC-TKPQ viết lại cho builder động. **1373 test / 81 file xanh**; pin **95
 Bẫy gặp lần nữa: **quên import** 2 hàm mới vào workItems/service.js ⇒ 37 test 500 INTERNAL khi
 chạy full (đơn lẻ vẫn xanh tới khi đụng đúng đường) — thêm hàm vào rules.js phải rà cả hai service.
 
+## 6. VÒNG 12 (cùng ngày) — option đầu dropdown chỉ là TRẠNG THÁI gọn
+
+Người dùng: «Bỏ luôn dòng đang cho phép, đang chờ duyệt, đang tắt… lựa chọn đang như nào thì
+hiển thị như thế thôi». Đã bỏ nhãn «Đang dùng:…» và đuôi «(ghi đè)/(mặc định)»; option đầu của
+dropdown giờ chỉ là trạng thái hiệu lực hiện tại, gọn: **«✓ Cho phép» / «⏳ Chờ duyệt» /
+«✕ Tắt»** (+ «· TẤT CẢ các phòng» nếu ô đang nới phạm vi). Value rỗng vẫn có nghĩa trả về luật
+gốc (title «Chọn để trả về luật gốc»). Người thường vẫn thấy badge mô tả đầy đủ («Ghi đè: …»)
+bên ngoài dropdown. Banner `app.js 20260829-7`, buster `-7`; pin giữ **95/696**; full suite xanh.
+
