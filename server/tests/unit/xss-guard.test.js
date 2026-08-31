@@ -258,11 +258,12 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // `buildTrinhSuaPhanQuyenHtml` (dropdown data-entity/action/vai, toàn bộ qua escapeHtml/
     // escapeHtmlAttr trực tiếp); bỏ helper o() của bảng tĩnh vòng 8. Giá trị option của trình sửa
     // là HẰNG, gán selected bằng JS sau render. Vòng 10-11: bảng ĐỘNG 15 chức năng, dropdown 1
-    // hàng (hành động + phạm vi ngang), option đầu «Đang dùng: X», Cán bộ badge «Phòng của mình»
-    // — 95 chỗ / 696 giá trị. Chi tiết: docs/NHAT-KY-GANTT-THEO-THANG.md mục Vòng 9-11.
+    // hàng (hành động + phạm vi ngang), option đầu «Đang dùng: X», Cán bộ badge «Phòng của mình».
+    // Vòng 13: nút Lưu render lại trong veBangPhanQuyen (+1 sink hằng, +2 giá trị nút), option
+    // đầu = trạng thái gọn không lặp ⇒ 96 chỗ / 698 giá trị. Chi tiết: NHAT-KY mục Vòng 9-13.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 95, gia_tri: 696 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 96, gia_tri: 698 });
   });
 });
 

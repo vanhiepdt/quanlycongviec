@@ -282,6 +282,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > dropdown; chú thích ký hiệu xuống dưới cùng (khung hết grid 2 cột). Ròng **95 chỗ / 696 giá
 > trị** (TC-SEC-17).
 
+> **Cập nhật 2026-08-29 (vòng 13 — nút Lưu trở lại + dropdown hết lặp option).** Vòng 10 bỏ trình
+> sửa cũ nhưng quên render lại nút Lưu ⇒ admin không thể lưu. `veBangPhanQuyen` giờ tự render nút
+> «Lưu bảng phân quyền» cho admin (+1 sink, +2 giá trị). Dropdown: option đầu là trạng thái hiện
+> tại (giá trị rỗng = về luật gốc), các lựa chọn sau LOẠI TRỪ trạng thái đó — hết dòng trùng.
+> ⇒ **96 chỗ / 698 giá trị** (TC-SEC-17).
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

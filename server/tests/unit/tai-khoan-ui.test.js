@@ -326,4 +326,35 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
     expect(bang.lastIndexOf('Ký hiệu:')).toBeGreaterThan(bang.indexOf('</table>'));
   });
+
+  it('TC-TKPQ-09: admin thấy NÚT LƯU sau khi nạp bảng (Vòng 13 — nút từng bị mất)', async () => {
+    window.__tk('currentUser', { name: 'Admin', code: 'NV001', email: 'a@x.vn', role: 'admin' });
+    window.fetch = vi.fn(() => ({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve({ data: { macDinh: MAC_DINH, ghiDe: [] } }),
+    }));
+    window.veBangPhanQuyen();
+    await vi.waitFor(() => expect(document.getElementById('pq-save-btn')).toBeTruthy());
+    expect(document.getElementById('pq-save-btn').textContent).toContain('Lưu bảng phân quyền');
+  });
+
+  it('TC-TKPQ-10: dropdown KHÔNG lặp option đang chọn — mỗi select một tập giá trị duy nhất', async () => {
+    window.__tk('currentUser', { name: 'Admin', code: 'NV001', email: 'a@x.vn', role: 'admin' });
+    window.fetch = vi.fn(() => ({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve({ data: { macDinh: MAC_DINH, ghiDe: [] } }),
+    }));
+    window.veBangPhanQuyen();
+    await vi.waitFor(() => expect(document.querySelector('select[data-gd="1"]')).toBeTruthy());
+    const cacSelect = [...document.querySelectorAll('#account-permission-table select[data-gd]')];
+    expect(cacSelect.length).toBeGreaterThan(0);
+    for (const sel of cacSelect) {
+      const giaTri = [...sel.options].map((o) => o.value);
+      expect(new Set(giaTri).size).toBe(giaTri.length);
+      // Option đầu (đang dùng) phải là option được chọn và KHÔNG xuất hiện lần thứ hai.
+      expect(sel.selectedOptions[0]).toBe(sel.options[0]);
+    }
+  });
 });

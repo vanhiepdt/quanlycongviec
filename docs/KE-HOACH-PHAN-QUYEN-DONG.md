@@ -88,3 +88,22 @@ dropdown giờ chỉ là trạng thái hiệu lực hiện tại, gọn: **«✓
 gốc (title «Chọn để trả về luật gốc»). Người thường vẫn thấy badge mô tả đầy đủ («Ghi đè: …»)
 bên ngoài dropdown. Banner `app.js 20260829-7`, buster `-7`; pin giữ **95/696**; full suite xanh.
 
+## 7. VÒNG 13 (cùng ngày) — NÚT LƯU TỪNG BIẾN MẤT + dropdown lặp option (2 lỗi thật)
+
+Phản hồi người dùng: «Không có nút lưu lại gì thay đổi à» + «dropdown hiển thị lựa chọn đang
+dùng ở đầu nhưng sau đó vẫn bị thêm 1 dòng lựa chọn hiện tại nữa».
+
+Kiểm tra ra **2 lỗi thật**:
+1. **Nút Lưu biến mất từ Vòng 10**: khi thay toàn bộ khối Bảng phân quyền, trình sửa cũ bị xoá
+   nhưng nút «Lưu bảng phân quyền» KHÔNG được render lại — `veBangPhanQuyen` chỉ gắn listener cho
+   `#pq-save-btn` mà không có ai dựng nút ⇒ admin chỉnh xong không có cách lưu. Đã sửa:
+   `veBangPhanQuyen` tự `insertAdjacentHTML` nút Lưu sau bảng rồi mới gắn listener (chỉ admin).
+2. **Dropdown lặp option đang chọn**: option đầu (trạng thái hiệu lực) rồi lại theo sau bởi
+   3 option tĩnh gồm chính nó. Đã viết lại: option đầu = trạng thái hiện tại (giá trị rỗng = về
+   luật gốc), các option sau **loại trừ** trạng thái đó.
+
+Test mới: TC-TKPQ-09 (nút Lưu render cho admin — fetch giả), TC-TKPQ-10 (mỗi select giá trị
+duy nhất + option đầu là option được chọn). **1375 test / 81 file xanh**; lint + format sạch;
+pin **96/698** (+1 sink nút Lưu); banner `app.js 20260829-8`, buster `-8`. Bẫy: thay cả một khối
+lớn trong app.js phải rà lại MỌI id/hàm mà khối cũ liên quan tới (nút Lưu bị rơi là bằng chứng).
+
