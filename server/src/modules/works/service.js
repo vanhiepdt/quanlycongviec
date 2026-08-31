@@ -20,6 +20,7 @@ import {
   CHO_DUYET,
   boCotKhoaDuyet,
   coSuaDuocKhiChoDuyet,
+  thayDuocNhap,
   trangThaiDuyetKhiTao,
   phaiChoDuyetKhiSua,
   xoaDuocKhongKhiChoDuyet,
@@ -57,7 +58,10 @@ async function mustFind(ref, client = null) {
 /** Danh sách công việc, đã lọc bỏ những dòng ngoài phạm vi người đang xem. */
 export async function list(user, filter = {}) {
   const rows = await repo.list(filter);
-  const thayDuoc = rows.filter((row) => can(user, 'read', 'work', row).ok);
+  // `thayDuocNhap` bó thêm đúng trạng thái «Nháp» (012): bản nháp chỉ người lập và admin thấy.
+  const thayDuoc = rows.filter(
+    (row) => can(user, 'read', 'work', row).ok && thayDuocNhap(user, row)
+  );
   // Tên theo tháng đi KÈM dòng chứ không phải một lời gọi riêng: hai tab giao diện nạp dữ liệu MỘT
   // lần rồi đổi tháng ngay trên máy khách, nên nếu tên tháng phải xin thêm thì mỗi lần đổi tháng là
   // một vòng mạng. Truy vấn thêm là một câu `= ANY(...)`, chỉ cho các dòng đã lọc quyền.
@@ -68,6 +72,9 @@ export async function list(user, filter = {}) {
 export async function getOne(user, ref) {
   const work = await mustFind(ref);
   assertCan(user, 'read', work);
+  // Bản NHÁP (012): `can()` không biết gì về nháp nên đọc THẲNG theo mã vẫn lọt nếu không chặn ở
+  // đây. Trả 404 chứ không 403 — nói «có một bản nháp mà bạn không được xem» đã là tiết lộ.
+  if (!thayDuocNhap(user, work)) throw notFound(`Không tìm thấy công việc "${ref}"`);
   return work;
 }
 
@@ -98,7 +105,8 @@ export async function create(user, input) {
   const work = await withPgErrors(() =>
     repo.insert({
       ...boCotKhoaDuyet(input),
-      approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK),
+      // `luuNhap` (012): người lập bấm «Lưu nháp» ⇒ 'Nháp', chưa gửi ai duyệt, chưa vào thống kê.
+      approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK, { luuNhap: input.luuNhap === true }),
       ...origin,
     })
   );

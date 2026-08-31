@@ -17,6 +17,7 @@ import { pool } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { banDoTenThang, ganTenThang } from '../../utils/monthNames.js';
 import * as logsRepo from '../activityLogs/repo.js';
+import { thayDuocNhap } from '../approvals/rules.js';
 import * as approvalsService from '../approvals/service.js';
 import * as appsService from '../apps/service.js';
 import { publicUser } from '../auth/service.js';
@@ -222,7 +223,11 @@ export async function cayChoUser(user, works = null) {
         ...row,
         work_department_id: workById.get(row.work_id)?.department_id,
         work_manager_id: workById.get(row.work_id)?.manager_id,
-      }).ok
+      }).ok &&
+      // Bản NHÁP (012) chỉ người lập và admin thấy. `danhSach` đã lọc ở cấp 1 qua
+      // `worksService.list`, nhưng dòng cấp 2/3 để nháp RIÊNG trong một công việc đã duyệt thì
+      // chỉ chỗ này bắt được — đây là đường đọc của cả gói bootstrap và cầu RPC `getTasks`.
+      thayDuocNhap(user, row)
   );
   // Tên theo tháng của cấp 2/cấp 3 gắn Ở ĐÂY, không phải trong `attachReminders`: đây là chỗ duy
   // nhất cả gói bootstrap và cầu RPC `getTasks` cùng đi qua, nên gắn một lần là cả hai đường đọc có.

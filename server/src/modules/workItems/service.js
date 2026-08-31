@@ -22,6 +22,8 @@ import {
   boCotKhoaDuyet,
   CHO_DUYET,
   coSuaDuocKhiChoDuyet,
+  NHAP,
+  thayDuocNhap,
   trangThaiDuyetKhiTao,
   phaiChoDuyetKhiSua,
   xoaDuocKhongKhiChoDuyet,
@@ -168,6 +170,10 @@ export async function list(user, { workRef, level = null }) {
   const work = await mustFindWork(workRef);
   const verdict = can(user, 'read', 'work', work);
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+  // Cả công việc cấp 1 là bản NHÁP của người khác ⇒ không có đường nào vào cây con của nó (012).
+  // Chặn ở đây chứ không chỉ lọc từng dòng: lọc từng dòng vẫn trả 200 kèm `work` — tức là đã nói
+  // «có bản nháp tên này» cho người không được xem.
+  if (!thayDuocNhap(user, work)) throw notFound(`Không tìm thấy công việc "${workRef}"`);
   const rows = await repo.listByWork(work.id, { level });
   const visible = rows.filter(
     (row) =>
@@ -175,7 +181,9 @@ export async function list(user, { workRef, level = null }) {
         ...row,
         work_department_id: work.department_id,
         work_manager_id: work.manager_id,
-      }).ok
+      }).ok &&
+      // Bản NHÁP (012) chỉ người lập và admin thấy — cùng cổng với `works/service.list`.
+      thayDuocNhap(user, row)
   );
   return { work, items: await attachMonthNames(await attachReminders(visible)) };
 }
@@ -183,6 +191,10 @@ export async function list(user, { workRef, level = null }) {
 export async function getOne(user, ref) {
   const row = await mustFindItem(ref);
   assertCan(user, 'read', row);
+  // Bản NHÁP (012) — xem chú thích ở `works/service.getOne`: `can()` không biết gì về nháp.
+  if (!thayDuocNhap(user, row)) {
+    throw notFound(`Không tìm thấy công việc con/nhiệm vụ "${ref}"`);
+  }
   const [withReminders] = await attachReminders([row]);
   return withReminders;
 }
@@ -319,7 +331,16 @@ export function create(user, input) {
           work_id: work.id,
           parent_id: parent?.id ?? null,
           level,
-          approval_status: trangThaiDuyetKhiTao(user, level),
+          // «Lưu nháp» (012): người lập tự bấm, HOẶC dòng mới sinh ra bên trong một cây đang là
+          // bản nháp. Trạng thái của cha do MÁY CHỦ đọc, không nhận từ thân request — nếu không
+          // thì thêm một nhiệm vụ vào bản nháp là nhiệm vụ đó lọt ngay vào thống kê trong khi cả
+          // công việc chưa ai gửi duyệt (đúng kiểu sót mà view 004 sinh ra để chặn).
+          approval_status: trangThaiDuyetKhiTao(user, level, {
+            luuNhap:
+              input.luuNhap === true ||
+              work.approval_status === NHAP ||
+              parent?.approval_status === NHAP,
+          }),
           sort_order: sortOrder,
           ...origin,
         },

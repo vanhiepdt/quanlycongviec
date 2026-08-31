@@ -11,6 +11,7 @@
 //     (TC-TREE-24).
 //  2. Bản cũ đếm chung cấp 2 và cấp 3 vào `tasks`. `totals` ở đây đếm rạch ròi từng cấp (bẫy §13.5).
 import { can } from '../../middleware/rbac.js';
+import { thayDuocNhap } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as repo from './repo.js';
 
@@ -98,9 +99,18 @@ export function assemble(works, items) {
  * dòng con một lần nữa.
  */
 export async function getTree(user, filter = {}) {
-  const works = (await repo.list(filter)).filter((row) => can(user, 'read', 'work', row).ok);
+  // `thayDuocNhap` (012): cây của bản NHÁP chỉ người lập và admin thấy. Lọc ở cấp 1 là đủ cho cả
+  // cây — `assemble` bỏ mọi dòng con không tìm được `work_id` trong danh sách công việc đọc được.
+  const works = (await repo.list(filter)).filter(
+    (row) => can(user, 'read', 'work', row).ok && thayDuocNhap(user, row)
+  );
   const items = await itemsRepo.listForWorks(works.map((w) => w.id));
-  return assemble(works, items);
+  // Công việc con / nhiệm vụ tạo riêng rồi để nháp (không nằm trong cây nháp của cấp 1) cũng phải
+  // bó theo đúng luật đó.
+  return assemble(
+    works,
+    items.filter((row) => thayDuocNhap(user, row))
+  );
 }
 
 export default getTree;

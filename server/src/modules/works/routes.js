@@ -38,6 +38,10 @@ const createSchema = z.object({
   approvalStatus: approvalInput,
   rejectReason: text(2000).optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  // «Lưu nháp» (012, Vòng 13): cờ Ý ĐỊNH của người lập, không phải giá trị trạng thái. Service
+  // đổi nó thành `approval_status = 'Nháp'` qua `trangThaiDuyetKhiTao` — client không tự đặt được
+  // khoá duyệt (`boCotKhoaDuyet` vẫn gỡ `approvalStatus` gửi lên).
+  saveAsDraft: z.boolean().optional(),
 });
 
 // PATCH: mọi trường đều tuỳ chọn, kể cả tên — không truyền thì không ghi (§5.2).
@@ -89,6 +93,10 @@ function toRow(body) {
     approvalStatus: 'approval_status',
     rejectReason: 'reject_reason',
     sortOrder: 'sort_order',
+    // `saveAsDraft` KHÔNG phải cột: nó là cờ ý định, service đọc `input.luuNhap` rồi tự quyết
+    // `approval_status`. Đặt tên đích là `luuNhap` để `repo.insert` bỏ qua (không có trong
+    // `WRITABLE`) mà service vẫn đọc được — cùng đường với mọi trường khác, không thêm tham số.
+    saveAsDraft: 'luuNhap',
   };
   const row = {};
   for (const [key, column] of Object.entries(map)) {

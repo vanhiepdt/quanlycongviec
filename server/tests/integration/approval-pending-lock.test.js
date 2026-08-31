@@ -182,13 +182,22 @@ describe('Việc 5.6 — không phải người lập thì không SỬA được
     expect((await trangThai(work.code)).name).toBe('Đã duyệt nên sửa được');
   });
 
-  it('Mục bị TỪ CHỐI không bị khoá — người lập phải sửa được để gửi lại', async () => {
+  it('Mục được TRẢ LẠI ĐỂ SỬA về bản Nháp — chỉ NGƯỜI LẬP sửa được (012)', async () => {
+    // Từ 012: «Từ chối» là XOÁ HẲN cả cây nên không còn dòng nào để sửa. Cửa cho người lập sửa
+    // rồi gửi lại là «Trả lại để sửa» (`/return`) — nó đưa cả cây về bản Nháp của người tạo.
+    // Và bản nháp chặt hơn «Chờ duyệt»: người cùng phòng KHÔNG sửa được nữa, chỉ người lập + admin.
     const work = await vietChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
       reason: 'Chưa nêu rõ sản phẩm đầu ra',
     });
-    const res = await apiPp.patch(`/api/v1/works/${work.code}`, { name: 'Sửa theo góp ý' });
-    expect(res.status).toBe(200);
+
+    const nguoiKhac = await apiPp.patch(`/api/v1/works/${work.code}`, { name: 'PP sửa hộ' });
+    expect(nguoiKhac.status).toBe(403);
+    expect(nguoiKhac.body.error.message).toContain('bản nháp');
+
+    const nguoiLap = await apiTp.patch(`/api/v1/works/${work.code}`, { name: 'Sửa theo góp ý' });
+    expect(nguoiLap.status).toBe(200);
+    expect((await trangThai(work.code)).name).toBe('Sửa theo góp ý');
   });
 });
 

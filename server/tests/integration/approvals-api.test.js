@@ -47,6 +47,12 @@ async function khoaDuyet(bang, code) {
   return rows[0] ?? null;
 }
 
+/** Dòng còn tồn tại trong CSDL hay không — từ 012, Từ chối là XOÁ HẲN. */
+async function conTonTai(bang, code) {
+  const { rows } = await pool.query(`SELECT 1 FROM ${bang} WHERE code = $1`, [code]);
+  return rows.length > 0;
+}
+
 async function thongBaoCua(userId) {
   const { rows } = await pool.query(
     'SELECT content, type, ref_type, ref_id, is_read FROM notifications WHERE user_id = $1 ORDER BY id',
@@ -101,12 +107,14 @@ afterAll(async () => {
 });
 
 describe('Gửi duyệt (submit) — việc 5.2', () => {
-  it('Việc bị từ chối gửi lại được, và lý do từ chối cũ bị xoá', async () => {
+  it('Việc bị TRẢ LẠI gửi lại được, và ghi chú của lần trả lại bị xoá', async () => {
+    // Từ 012: «Từ chối» là XOÁ HẲN nên không còn gì để gửi lại — cửa gửi lại đi qua «Trả lại để
+    // sửa» (`/return`), thứ đưa cả cây về bản nháp của người tạo.
     const work = await taoViecChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
       reason: 'Chưa nêu rõ sản phẩm đầu ra của công việc',
     });
-    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Từ chối');
+    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Nháp');
 
     const res = await apiTp.post(`/api/v1/approvals/work/${work.code}/submit`);
     expect(res.status).toBe(200);
@@ -127,7 +135,7 @@ describe('Gửi duyệt (submit) — việc 5.2', () => {
 
   it('Gửi duyệt sinh thông báo cho Phó Giám đốc phụ trách phòng (việc 5.7)', async () => {
     const work = await taoViecChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
       reason: 'Thiếu mốc thời gian hoàn thành',
     });
     const res = await apiTp.post(`/api/v1/approvals/work/${work.code}/submit`);
@@ -190,33 +198,42 @@ describe('TC-APR-08/09 — từ chối phải có lý do ≥ 10 ký tự', () =>
       reason: 'Chua dat!!',
     });
     expect(muoi.status).toBe(200);
-    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Từ chối');
+    // Từ 012: từ chối là XOÁ HẲN — không còn dòng nào để đọc trạng thái.
+    expect(await conTonTai('works', work.code)).toBe(false);
   });
 
-  it('TC-APR-09: có lý do ⇒ Từ chối + lưu lý do + thông báo cho người tạo', async () => {
+  it('TC-APR-09: có lý do ⇒ XOÁ HẲN cả cây + thông báo kèm lý do cho người tạo (012)', async () => {
     const work = await taoViecChoDuyet();
+    const con = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 2,
+      name: 'Công việc con',
+    });
+    const conCode = con.body.data.item.code;
     const lyDo = 'Thiếu dự toán kinh phí, đề nghị bổ sung trước ngày 30';
     const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, { reason: lyDo });
 
     expect(res.status).toBe(200);
-    const sau = await khoaDuyet('works', work.code);
-    expect(sau.approval_status).toBe('Từ chối');
-    expect(sau.reject_reason).toBe(lyDo);
-    expect(Number(sau.approver_id)).toBe(Number(pgdA.id));
-    expect(sau.approved_at).not.toBeNull();
+    expect(res.body.data.daXoa).toBe(true);
+    // Cả cha và con cháu biến mất khỏi CSDL — người dùng đã xác nhận rõ đây là xoá vĩnh viễn.
+    expect(await conTonTai('works', work.code)).toBe(false);
+    expect(await conTonTai('work_items', conCode)).toBe(false);
 
+    // Thông báo gửi TRƯỚC khi xoá nên người tạo vẫn đọc được lý do; không trỏ liên kết chết.
     const tb = await thongBaoCua(tp.id);
     expect(tb).toHaveLength(1);
     expect(tb[0].type).toBe('approval_rejected');
     expect(tb[0].content).toContain(lyDo);
+    expect(tb[0].ref_type).toBe('');
+    expect(tb[0].ref_id).toBeNull();
   });
 
-  it('Lý do được cắt trắng hai đầu trước khi lưu', async () => {
+  it('Lý do được cắt trắng hai đầu trước khi trả về', async () => {
     const work = await taoViecChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
       reason: '   Chưa đúng mẫu quy định   ',
     });
-    expect((await khoaDuyet('works', work.code)).reject_reason).toBe('Chưa đúng mẫu quy định');
+    expect(res.body.data.row.reject_reason).toBe('Chưa đúng mẫu quy định');
   });
 });
 
@@ -235,6 +252,8 @@ describe('TC-APR-10/11 — quyền duyệt (việc 5.3)', () => {
     });
     expect(res.status).toBe(403);
     expect((await khoaDuyet('works', work.code)).approval_status).toBe('Chờ duyệt');
+    // Từ chối là XOÁ HẲN nên cổng quyền sai ở đây là mất dữ liệu của phòng khác — phải còn nguyên.
+    expect(await conTonTai('works', work.code)).toBe(true);
   });
 
   it('TC-APR-11: Nhân viên gọi thẳng API duyệt ⇒ 403', async () => {
@@ -316,7 +335,7 @@ describe('TC-APR-14 — duyệt hai lần', () => {
     expect(tb[0].type).toBe('approval_approved');
   });
 
-  it('Đổi quyết định (đã duyệt ⇒ từ chối) vẫn làm được', async () => {
+  it('Đổi quyết định (đã duyệt ⇒ từ chối) vẫn làm được — và XOÁ HẲN (012)', async () => {
     const work = await taoViecChoDuyet();
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
     const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
@@ -324,16 +343,16 @@ describe('TC-APR-14 — duyệt hai lần', () => {
     });
 
     expect(res.status).toBe(200);
-    const sau = await khoaDuyet('works', work.code);
-    expect(sau.approval_status).toBe('Từ chối');
-    expect(sau.reject_reason).toContain('CV009');
+    expect(res.body.data.row.reject_reason).toContain('CV009');
+    expect(await conTonTai('works', work.code)).toBe(false);
   });
 
-  it('Duyệt lại sau khi từ chối thì xoá lý do từ chối', async () => {
+  it('Trả lại để sửa rồi gửi lại thì ghi chú cũ bị xoá', async () => {
     const work = await taoViecChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
       reason: 'Thiếu chữ ký của người phụ trách',
     });
+    await apiTp.post(`/api/v1/approvals/work/${work.code}/submit`);
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
 
     const sau = await khoaDuyet('works', work.code);
@@ -342,8 +361,11 @@ describe('TC-APR-14 — duyệt hai lần', () => {
   });
 });
 
-describe('TC-APR-16 — duyệt cấp 1 KHÔNG lan xuống cây', () => {
-  it('Công việc con Chờ duyệt bên trong vẫn Chờ duyệt sau khi duyệt công việc cha', async () => {
+describe('TC-APR-16 — duyệt cấp 1 LAN XUỐNG CẢ CÂY (012, người dùng chốt 2026-08-31)', () => {
+  // Luật CŨ là «không lan», lý lẽ: người duyệt cấp 1 chưa chắc đọc từng mục con. Nay cả cây được
+  // GỬI một lần từ bản nháp và người duyệt có nút «Xem chi tiết» đọc hết trước khi ký, nên một
+  // quyết định cho cả cây mới đúng việc thật — và tránh phải ký 1+N+M lần cho một cây 3 tầng.
+  it('Duyệt công việc cha ⇒ công việc con và nhiệm vụ bên trong cũng Đã duyệt', async () => {
     const work = await taoViecChoDuyet();
     const con = await apiTp.post('/api/v1/work-items', {
       workRef: work.code,
@@ -351,15 +373,44 @@ describe('TC-APR-16 — duyệt cấp 1 KHÔNG lan xuống cây', () => {
       name: 'Công việc con',
     });
     const conCode = con.body.data.item.code;
+    const chau = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 3,
+      parentRef: conCode,
+      name: 'Nhiệm vụ trong công việc con',
+    });
+    const chauCode = chau.body.data.item.code;
+    // Cấp 2 do TP lập ⇒ 'Chờ duyệt'; cấp 3 luôn 'Đã duyệt' (việc 5.1) — không đổi ở 012.
     expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Chờ duyệt');
 
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.soCon).toBe(1); // chỉ dòng ĐANG chờ duyệt bị kéo theo
 
     expect((await khoaDuyet('works', work.code)).approval_status).toBe('Đã duyệt');
-    expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Chờ duyệt');
+    expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Đã duyệt');
+    expect((await khoaDuyet('work_items', chauCode)).approval_status).toBe('Đã duyệt');
   });
 
-  it('Duyệt công việc con là một hành động riêng, có thông báo riêng', async () => {
+  it('Mục đã duyệt từ trước KHÔNG bị ghi lại người duyệt mới', async () => {
+    const work = await taoViecChoDuyet();
+    const con = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 2,
+      name: 'Công việc con',
+    });
+    const conCode = con.body.data.item.code;
+    // Duyệt riêng công việc con trước, rồi mới duyệt cha: lần duyệt cha không được đụng vào nó.
+    await apiPgdA.post(`/api/v1/approvals/work-item/${conCode}/approve`);
+    const truoc = await khoaDuyet('work_items', conCode);
+
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    expect(res.body.data.soCon).toBe(0);
+    const sau = await khoaDuyet('work_items', conCode);
+    expect(sau.approved_at).toEqual(truoc.approved_at);
+  });
+
+  it('Duyệt công việc con vẫn là một hành động riêng, có thông báo riêng', async () => {
     const work = await taoViecChoDuyet();
     const con = await apiTp.post('/api/v1/work-items', {
       workRef: work.code,
@@ -378,6 +429,139 @@ describe('TC-APR-16 — duyệt cấp 1 KHÔNG lan xuống cây', () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// TC-APR-17..19 (012, Vòng 13) — bản NHÁP, gửi duyệt CẢ CÂY, trả lại để sửa.
+//
+// Yêu cầu người dùng: «phần tạo mới công việc cấp 1 thêm phần lưu (lưu tức là lưu thôi chưa gửi đi
+// duyệt, chưa được tính là công việc) và cho phép sửa chữa, sau khi xem lại có thể sửa và gửi đi
+// duyệt» + «duyệt công việc cha là duyệt tất cả công việc con và nhiệm vụ bên trong, không hiển thị
+// công việc, nhiệm vụ đấy ra bên ngoài nữa».
+// ---------------------------------------------------------------------------------------------
+describe('TC-APR-17..19 — bản Nháp và gửi duyệt cả cây', () => {
+  /** Công việc cấp 1 lưu NHÁP kèm một công việc con và một nhiệm vụ bên trong. */
+  async function taoCayNhap() {
+    const res = await apiTp.post('/api/v1/works', {
+      name: 'Việc soạn nháp',
+      departmentId: phongA.id,
+      saveAsDraft: true,
+    });
+    expect(res.status).toBe(200);
+    const work = res.body.data.work;
+    const con = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 2,
+      name: 'Công việc con trong nháp',
+    });
+    const conCode = con.body.data.item.code;
+    const nv = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 3,
+      parentRef: conCode,
+      name: 'Nhiệm vụ trong nháp',
+    });
+    return { work, conCode, nvCode: nv.body.data.item.code };
+  }
+
+  it('TC-APR-17: «Lưu nháp» ⇒ Nháp, và dòng tạo BÊN TRONG cây nháp cũng là Nháp', async () => {
+    const { work, conCode, nvCode } = await taoCayNhap();
+    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Nháp');
+    // Máy chủ đọc trạng thái CHA để quyết, client không phải gửi cờ — nếu không thì thêm một
+    // nhiệm vụ vào bản nháp là nhiệm vụ đó lọt ngay vào thống kê (view 004 sinh ra để chặn đúng thế).
+    expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Nháp');
+    expect((await khoaDuyet('work_items', nvCode)).approval_status).toBe('Nháp');
+  });
+
+  it('TC-APR-17: bản nháp KHÔNG vào hộp chờ duyệt và KHÔNG vào badge', async () => {
+    await taoCayNhap();
+    expect((await apiPgdA.get('/api/v1/approvals/pending-count')).body.data.total).toBe(0);
+    expect((await apiPgdA.get('/api/v1/approvals/pending')).body.data.items).toHaveLength(0);
+  });
+
+  it('TC-APR-18: gửi duyệt ở cấp 1 ⇒ CẢ CÂY sang Chờ duyệt, hộp chờ duyệt chỉ MỘT dòng gốc', async () => {
+    const { work, conCode, nvCode } = await taoCayNhap();
+    const res = await apiTp.post(`/api/v1/approvals/work/${work.code}/submit`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.soCon).toBe(2);
+
+    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Chờ duyệt');
+    expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Chờ duyệt');
+    expect((await khoaDuyet('work_items', nvCode)).approval_status).toBe('Chờ duyệt');
+
+    // Người duyệt thấy MỘT dòng cho cả cây (bấm «Xem chi tiết» để đọc bên trong), không phải 3.
+    const hop = await apiPgdA.get('/api/v1/approvals/pending');
+    expect(hop.body.data.items).toHaveLength(1);
+    expect(hop.body.data.items[0]).toMatchObject({ kind: 'work', code: work.code, level: 1 });
+    // Badge vẫn đếm ĐỦ mọi mục phải xử — hai câu hỏi khác nhau.
+    expect((await apiPgdA.get('/api/v1/approvals/pending-count')).body.data.total).toBe(3);
+  });
+
+  it('TC-APR-18: công việc con gửi LẺ (cha đã duyệt) vẫn hiện, kèm tên công việc cấp 1', async () => {
+    const work = await taoViecChoDuyet();
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    const con = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 2,
+      name: 'Công việc con thêm sau',
+    });
+    const conCode = con.body.data.item.code;
+
+    const hop = await apiPgdA.get('/api/v1/approvals/pending');
+    expect(hop.body.data.items).toHaveLength(1);
+    expect(hop.body.data.items[0]).toMatchObject({ kind: 'item', code: conCode, level: 2 });
+    // `work_name` cho tooltip «thuộc công việc …» — không có thì người duyệt thấy tên trơ.
+    expect(hop.body.data.items[0].work_name).toBe(work.name);
+  });
+
+  it('TC-APR-19: trả lại để sửa ⇒ cả cây về Nháp, giữ ghi chú, KHÔNG mất dữ liệu', async () => {
+    const { work, conCode, nvCode } = await taoCayNhap();
+    await apiTp.post(`/api/v1/approvals/work/${work.code}/submit`);
+    const ghiChu = 'Bổ sung dự toán và mốc thời gian rồi gửi lại';
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
+      reason: ghiChu,
+    });
+
+    expect(res.status).toBe(200);
+    const sau = await khoaDuyet('works', work.code);
+    expect(sau.approval_status).toBe('Nháp');
+    expect(sau.reject_reason).toBe(ghiChu);
+    expect(sau.approver_id).toBeNull();
+    expect(sau.approved_at).toBeNull();
+    // Cả cây về tay người tạo, không dòng nào mất.
+    expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Nháp');
+    expect((await khoaDuyet('work_items', nvCode)).approval_status).toBe('Nháp');
+
+    // Người tạo được báo, kèm ghi chú để biết phải sửa gì.
+    const tb = await thongBaoCua(tp.id);
+    expect(tb.at(-1).content).toContain(ghiChu);
+  });
+
+  it('TC-APR-19: ghi chú trả lại dưới 10 ký tự ⇒ 400, không đổi trạng thái', async () => {
+    const work = await taoViecChoDuyet();
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
+      reason: 'sua lai',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.field).toBe('reason');
+    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Chờ duyệt');
+  });
+
+  it('TC-APR-19: Trưởng phòng KHÔNG trả lại được (quyền bằng quyền duyệt) ⇒ 403', async () => {
+    const work = await taoViecChoDuyet();
+    const res = await apiTp.post(`/api/v1/approvals/work/${work.code}/return`, {
+      reason: 'Tôi tự trả lại việc của mình',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('TC-APR-19: trả lại mục đang là Nháp ⇒ 409', async () => {
+    const { work } = await taoCayNhap();
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
+      reason: 'Trả lại lần nữa cho chắc',
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
 describe('TC-APR-15 — badge chờ duyệt (việc 5.5)', () => {
   it('Đúng số và giảm ngay sau khi duyệt', async () => {
     const truoc = await apiPgdA.get('/api/v1/approvals/pending-count');
@@ -390,9 +574,10 @@ describe('TC-APR-15 — badge chờ duyệt (việc 5.5)', () => {
     const dangCho = await apiPgdA.get('/api/v1/approvals/pending-count');
     expect(dangCho.body.data).toMatchObject({ works: 1, items: 1, total: 2 });
 
+    // Từ 012 duyệt cha LAN xuống cây ⇒ badge về 0 luôn, không còn đọng công việc con.
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
     const sau = await apiPgdA.get('/api/v1/approvals/pending-count');
-    expect(sau.body.data).toMatchObject({ works: 0, items: 1, total: 1 });
+    expect(sau.body.data).toMatchObject({ works: 0, items: 0, total: 0 });
   });
 
   it('Phó Giám đốc chỉ đếm phòng mình phụ trách', async () => {
@@ -435,19 +620,21 @@ describe('Lý do từ chối là dữ liệu người dùng nhập — coi như 
     const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, { reason: DOC });
 
     expect(res.status).toBe(200);
+    // Từ 012 dòng bị xoá nên chỉ còn bản chụp trong phản hồi để đối chiếu — không đọc lại CSDL.
     expect(res.body.data.row.reject_reason).toBe(DOC);
-    expect((await khoaDuyet('works', work.code)).reject_reason).toBe(DOC);
     expect(res.text).not.toContain('&amp;lt;');
   });
 
   it('Chuỗi tiêm SQL trong lý do chỉ là chữ, không đổi được dữ liệu', async () => {
     const work = await taoViecChoDuyet();
+    const khac = await taoViecChoDuyet();
     const doc = "'; UPDATE works SET approval_status = 'Đã duyệt'; --";
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, { reason: doc });
+    const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, { reason: doc });
 
-    const sau = await khoaDuyet('works', work.code);
-    expect(sau.approval_status).toBe('Từ chối');
-    expect(sau.reject_reason).toBe(doc);
+    expect(res.status).toBe(200);
+    expect(res.body.data.row.reject_reason).toBe(doc);
+    // Câu lệnh trong chuỗi KHÔNG chạy: công việc khác vẫn nguyên trạng «Chờ duyệt».
+    expect((await khoaDuyet('works', khac.code)).approval_status).toBe('Chờ duyệt');
   });
 
   it('Nội dung thông báo giữ nguyên văn lý do, không dựng HTML ở máy chủ', async () => {
@@ -477,8 +664,8 @@ describe('Khoá duyệt không đổi được bằng đường vòng', () => {
 
   it('Người duyệt và thời điểm duyệt do máy chủ ghi, không nhận từ thân request', async () => {
     const work = await taoViecChoDuyet();
-    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/reject`, {
-      reason: 'Lý do hợp lệ đủ mười ký tự',
+    // Đường DUYỆT (từ chối đã xoá dòng nên không đọc lại được cột nào).
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`, {
       approverId: 999999,
       approvedAt: '1999-01-01',
     });

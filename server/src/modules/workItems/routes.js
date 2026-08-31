@@ -45,6 +45,9 @@ const createSchema = z.object({
   approvalStatus: approvalInput,
   rejectReason: text(2000).optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  // «Lưu nháp» (012): cờ ý định, xem chú thích ở `works/routes.js`. Dòng tạo BÊN TRONG một cây
+  // đang là nháp tự khắc thành nháp — service đọc trạng thái cha, không cần client gửi cờ.
+  saveAsDraft: z.boolean().optional(),
 });
 
 // PATCH: mọi trường tuỳ chọn. `workRef` ở đây mang nghĩa "chuyển sang công việc này" (§7 việc 3.4).
@@ -88,6 +91,7 @@ function toRow(body) {
     approvalStatus: 'approval_status',
     rejectReason: 'reject_reason',
     sortOrder: 'sort_order',
+    saveAsDraft: 'luuNhap',
   };
   const row = {};
   for (const [key, column] of Object.entries(map)) {

@@ -16,7 +16,8 @@
 // việc" (Công việc / Công việc con). Nhiệm vụ nằm dưới một khối chưa duyệt vẫn không được đếm —
 // phần đó do `v_countable_items` lo (004_countable_views.sql), không phải do cột của chính nó.
 
-/** Ba giá trị hợp lệ của cột `approval_status` (CHECK ở 001_init.sql). */
+/** Bốn giá trị hợp lệ của cột `approval_status` (CHECK ở 001_init.sql, nới bởi 012). */
+export const NHAP = 'Nháp';
 export const CHO_DUYET = 'Chờ duyệt';
 export const DA_DUYET = 'Đã duyệt';
 export const TU_CHOI = 'Từ chối';
@@ -34,7 +35,11 @@ const LEVEL_TASK = 3;
  * @param {number} level 1 = Công việc, 2 = Công việc con, 3 = Nhiệm vụ
  * @returns {'Chờ duyệt'|'Đã duyệt'}
  */
-export function trangThaiDuyetKhiTao(user, level) {
+export function trangThaiDuyetKhiTao(user, level, { luuNhap = false } = {}) {
+  // «Lưu nháp» (012, Vòng 13) thắng MỌI luật khác: người lập chủ động nói «chưa gửi đi duyệt».
+  // Đặt trước cả ghi đè vì ghi đè trả lời câu «việc này có phải chờ ai duyệt không», còn nháp
+  // trả lời câu «đã gửi cho ai chưa» — hai câu khác nhau, nháp là câu đứng trước.
+  if (luuNhap === true) return NHAP;
   // Ghi đè «Bảng phân quyền» (009): admin ép Tạo = ✓ (Đã duyệt ngay) hoặc ⏳ (Chờ duyệt) cho vai.
   // Giá trị ghi đè có thể là chuỗi (test thuần) hoặc { gia_tri, pham_vi } (session nạp từ 009/010).
   const entityType = Number(level) === 1 ? 'work' : Number(level) === 2 ? 'subwork' : 'task';
@@ -131,6 +136,15 @@ const VAI_SUA_MUC_CHO_DUYET = Object.freeze(['admin', 'Phó Giám đốc']);
  * @param {object} row dòng hiện tại trong CSDL (cần `approval_status`, `created_by`)
  */
 export function coSuaDuocKhiChoDuyet(user, row) {
+  // Bản NHÁP (012): chỉ người lập và admin sửa được — kể cả Phó Giám đốc phụ trách cũng không,
+  // vì nháp chưa gửi cho ai thì chưa ai có việc gì với nó. Chặt hơn nhánh «Chờ duyệt» bên dưới.
+  if (row && row.approval_status === NHAP) {
+    if (!user) return { ok: false, message: 'Bạn chưa đăng nhập' };
+    if (user.role === 'admin') return { ok: true };
+    if (row.created_by == null) return { ok: true };
+    if (Number(row.created_by) === Number(user.id)) return { ok: true };
+    return { ok: false, message: 'Đây là bản nháp của người khác, bạn không sửa được' };
+  }
   if (!row || row.approval_status !== CHO_DUYET) return { ok: true };
   if (!user) return { ok: false, message: 'Bạn chưa đăng nhập' };
   if (VAI_SUA_MUC_CHO_DUYET.includes(user.role)) return { ok: true };
@@ -142,4 +156,30 @@ export function coSuaDuocKhiChoDuyet(user, row) {
     ok: false,
     message: 'Mục này đang chờ duyệt, chỉ người lập mới sửa được',
   };
+}
+
+/**
+ * Bản NHÁP có được LỌT vào danh sách của người này không (012, Vòng 13).
+ *
+ * Nguồn sự thật DUY NHẤT của câu «ai thấy nháp»: chỉ người lập và admin. Mọi đường đọc danh sách
+ * phải gọi hàm này SAU `can(user,'read',…)` — `works/service.list`, `works/tree.getTree`,
+ * `workItems/service.list`, `bootstrap/service`. Bỏ sót một đường là nháp rò ra cho cả phòng thấy,
+ * và đó là kiểu lỗi im lặng: không ai báo lỗi, chỉ có dữ liệu chưa xong hiện ra chỗ không nên hiện.
+ *
+ * Khác `coSuaDuocKhiChoDuyet` ở chỗ: hàm kia canh đường GHI, hàm này canh đường ĐỌC. Phó Giám đốc
+ * phụ trách phòng sửa được mục «Chờ duyệt» nhưng KHÔNG thấy bản nháp của người khác.
+ *
+ * Dòng không phải nháp ⇒ luôn `true`: hàm này không thay `can()`, chỉ bó thêm đúng trạng thái nháp.
+ *
+ * @param {object|null} user người đang đọc
+ * @param {object} row dòng có `approval_status`, `created_by`
+ */
+export function thayDuocNhap(user, row) {
+  if (!row || row.approval_status !== NHAP) return true;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  // `created_by` rỗng ở dữ liệu nhập từ bản cũ (§13.8): không khoá được theo người lập thì thà
+  // hiện — cùng cách xử lý với `coSuaDuocKhiChoDuyet`, và dữ liệu cũ không có dòng nháp nào.
+  if (row.created_by == null) return true;
+  return Number(row.created_by) === Number(user.id);
 }

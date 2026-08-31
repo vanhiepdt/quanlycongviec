@@ -175,6 +175,10 @@ export function projectFromLegacy(data = {}) {
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
     endDate: Object.hasOwn(data, 'endDate') ? dateOrNull(data.endDate) : undefined,
     status: pick(data, 'status'),
+    // «Lưu nháp» (012, Vòng 13): cờ Ý ĐỊNH của người lập, không phải giá trị trạng thái. Chỉ
+    // chuyển tiếp khi form thực sự gửi — thiếu khoá thì `undefined` và `dropUndefined` bỏ đi, nên
+    // đường sửa (PATCH) không bao giờ vô tình hạ một mục đã gửi duyệt về bản nháp.
+    saveAsDraft: data.saveAsDraft === true ? true : undefined,
   });
 }
 
@@ -206,6 +210,8 @@ export function taskFromLegacy(data = {}) {
     target: pick(data, 'target'),
     output: pick(data, 'output'),
     notes: pick(data, 'notes'),
+    // «Lưu nháp» (012) — xem chú thích ở `projectFromLegacy`.
+    saveAsDraft: data.saveAsDraft === true ? true : undefined,
   });
   if (Object.hasOwn(data, 'projectId') && data.projectId !== '') out.workRef = data.projectId;
   if (Object.hasOwn(data, 'resultLinks')) out.resultLinks = splitLinks(data.resultLinks);

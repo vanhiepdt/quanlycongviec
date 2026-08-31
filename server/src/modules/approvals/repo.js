@@ -22,17 +22,22 @@ const db = (client) => client ?? pool;
  *
  * Không có điều kiện nào ⇒ trả `null` để người gọi khỏi chạy truy vấn: mệnh đề rỗng mà nối vào
  * `WHERE` sẽ thành đếm TẤT CẢ, tức đúng ngược với ý định.
+ *
+ * `alias` là tiền tố bảng, cần cho câu có JOIN (012: nhánh `work_items` JOIN `works` để lấy tên
+ * công việc cha ⇒ `department_id` trở thành nhập nhằng). Tiền tố phải gắn vào TỪNG cột, không gắn
+ * vào cả mệnh đề — `i.(a OR b)` không phải SQL.
  */
-function phamVi({ all, departmentIds, createdBy }, values) {
+function phamVi({ all, departmentIds, createdBy }, values, alias = '') {
   if (all) return 'true';
+  const p = alias ? `${alias}.` : '';
   const parts = [];
   if (Array.isArray(departmentIds) && departmentIds.length > 0) {
     values.push(departmentIds);
-    parts.push(`department_id = ANY($${values.length}::bigint[])`);
+    parts.push(`${p}department_id = ANY($${values.length}::bigint[])`);
   }
   if (createdBy != null) {
     values.push(createdBy);
-    parts.push(`created_by = $${values.length}`);
+    parts.push(`${p}created_by = $${values.length}`);
   }
   return parts.length > 0 ? `(${parts.join(' OR ')})` : null;
 }
@@ -74,31 +79,49 @@ export async function countPending(scope = {}, client = null) {
 /**
  * Danh sách mục đang chờ duyệt trong phạm vi của một người, mới nhất trước.
  *
+ * CHỈ TRẢ GỐC CÂY (012, Vòng 13 — yêu cầu người dùng «không hiển thị công việc, nhiệm vụ đấy ra
+ * bên ngoài nữa»): một cây gửi duyệt một lần thì hộp chờ duyệt hiện MỘT dòng, người duyệt bấm
+ * «Xem chi tiết» để đọc bên trong rồi ký một lần cho cả cây. Nên dòng cấp 2/3 nào có cha (công
+ * việc cấp 1, hoặc công việc con) cũng đang chờ duyệt thì bị loại — nó không phải gốc.
+ *
+ * Badge (`countPending`) thì vẫn đếm ĐỦ mọi dòng: nó trả lời «còn bao nhiêu mục phải xử», khác
+ * câu hỏi của danh sách này là «còn bao nhiêu việc phải bấm».
+ *
+ * `work_name` đi kèm để giao diện hiện tooltip «thuộc công việc …» cho dòng cấp 2/3 gửi lẻ (công
+ * việc con tạo sau khi cha đã duyệt) — nếu không người duyệt thấy một cái tên trơ không rõ của ai.
+ *
  * Trả cả hai cấp trong MỘT kết quả (`kind` cho biết dòng đến từ bảng nào) để giao diện dựng được
  * một hộp "chờ bạn duyệt" duy nhất. Chặn trên ở 200 vì đây là hộp việc cần xử, không phải bảng
  * dữ liệu — quá con số này thì lọc theo phòng chứ không cuộn.
  */
 export async function listPending(scope = {}, { limit = 50 } = {}, client = null) {
+  const bo = {
+    all: scope.all === true,
+    departmentIds: scope.departmentIds ?? [],
+    createdBy: scope.createdBy ?? null,
+  };
   const values = [CHO_DUYET];
-  const where = phamVi(
-    {
-      all: scope.all === true,
-      departmentIds: scope.departmentIds ?? [],
-      createdBy: scope.createdBy ?? null,
-    },
-    values
-  );
-  if (!where) return [];
+  // Hai mệnh đề phạm vi riêng vì nhánh dưới có JOIN: cùng điều kiện, khác tiền tố bảng. Gọi hai
+  // lần đẩy tham số hai lần — thứ tự đẩy phải khớp thứ tự xuất hiện trong câu, và `limit` đẩy CUỐI.
+  const whereWorks = phamVi(bo, values);
+  const whereItems = phamVi(bo, values, 'i');
+  if (!whereWorks || !whereItems) return [];
   values.push(Math.min(200, Math.max(1, Number(limit) || 50)));
 
   const { rows } = await db(client).query(
     `SELECT 'work' AS kind, id, code, name, 1 AS level, department_id,
-            created_by, created_by_name, created_at
-       FROM works WHERE approval_status = $1 AND ${where}
+            created_by, created_by_name, created_at, name AS work_name
+       FROM works WHERE approval_status = $1 AND ${whereWorks}
      UNION ALL
-     SELECT 'item' AS kind, id, code, name, level, department_id,
-            created_by, created_by_name, created_at
-       FROM work_items WHERE approval_status = $1 AND ${where}
+     SELECT 'item' AS kind, i.id, i.code, i.name, i.level, i.department_id,
+            i.created_by, i.created_by_name, i.created_at, w.name AS work_name
+       FROM work_items i
+       JOIN works w ON w.id = i.work_id
+      WHERE i.approval_status = $1 AND ${whereItems}
+        -- Không phải gốc thì không hiện: cha cấp 1 đang chờ duyệt, hoặc công việc con cha đang chờ.
+        AND w.approval_status <> $1
+        AND NOT EXISTS (SELECT 1 FROM work_items p
+                         WHERE p.id = i.parent_id AND p.approval_status = $1)
       ORDER BY created_at DESC, code
       LIMIT $${values.length}`,
     values
