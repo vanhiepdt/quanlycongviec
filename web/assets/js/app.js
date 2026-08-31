@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-9");
+console.info("[QLCV] app.js 20260829-10");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -830,6 +830,9 @@ function canUserEditResource(resourceType, resourceId) {
   // 2026-08-27: Phó Giám đốc sửa được công việc/công việc con/nhiệm vụ (§6) — phạm vi phòng phụ
   // trách do máy chủ kiểm (`inScope`), ở đây chỉ mở nút. Đề xuất KHÔNG đổi: vẫn của người tạo.
   if (laQuanTriTrongPhamVi()) return true;
+  // Vòng 12c: Trưởng phòng / Phó phòng sửa được công việc & CV con phòng mình (§6; TP/PP sửa
+  // CV con đã duyệt sẽ tự về «Chờ duyệt» — máy chủ lo). Không phụ thuộc phân công ba lớp.
+  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork")) return true;
   if (isManager()) {
     if (resourceType === "project") return true;
     if (resourceType === "task") return true;
@@ -1086,12 +1089,16 @@ function dsPhongToiPhuTrach() {
 function dsNhiemVuToiDuocThay() {
   if (isAdmin()) return allTasks;
   const phongPhuTrach = dsPhongToiPhuTrach();
+  // Vòng 12c: Trưởng phòng / Phó phòng xem nhiệm vụ của PHÒNG MÌNH (ma trận §6 cho read theo
+  // phòng — máy chủ `inScope` đã trả đúng; client lọc theo tên phòng của công việc cha).
+  const phongCuaToi = laLanhDaoPhong() ? String(tenPhongTaiKhoan() || '').trim() : '';
   return allTasks.filter(task => {
     if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
     const project = allProjects.find(project2 => project2[COL.P_ID] === task[COL.T_PID]);
     if (!project) return false;
     if (project[COL.P_MANAGER] === currentUser.name) return true;
     const phongCongViec = String(project[COL.P_DEPT] || "").trim();
+    if (laLanhDaoPhong() && phongCuaToi !== "" && phongCongViec === phongCuaToi) return true;
     return phongCongViec !== "" && phongPhuTrach.includes(phongCongViec);
   });
 }
@@ -6008,7 +6015,7 @@ function tenPhongTaiKhoan() {
 // ============================================================================
 const BANG_PHAN_QUYEN = [
   { ten: 'Xem Công việc / Công việc con / Nhiệm vụ', entityType: 'work', action: 'read' },
-  { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create' },
+  { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create', gc: 'Trưởng phòng / Phó phòng tạo ⇒ chờ Phó GĐ duyệt rồi mới vào thống kê.' },
   { ten: 'Tạo Công việc con (cấp 2)', entityType: 'subwork', action: 'create' },
   { ten: 'Tạo Nhiệm vụ (cấp 3)', entityType: 'task', action: 'create', gc: 'Nhiệm vụ KHÔNG qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con.' },
   { ten: 'Sửa Công việc (cấp 1)', entityType: 'work', action: 'update' },
@@ -6033,12 +6040,22 @@ const VAU_BANG = [
 ];
 const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': 'text-indigo-500', '👁': 'text-gray-400', '✕': 'text-red-400' };
 /** Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc. */
-function oPhanQuyenHieuLuc(row, vaiTen, ghiDe) {
+function oPhanQuyenHieuLuc(row, vaiTen, ghiDe, macDinh) {
   const gd = ghiDe[row.entityType + ':' + row.action] && ghiDe[row.entityType + ':' + row.action][vaiTen];
   if (gd) {
     if (gd.gia_tri === 'cho-phep') return { s: '✓', n: 'Ghi đè: cho phép ngay' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
     if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: 'Ghi đè: chờ Phó GĐ duyệt' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
     if (gd.gia_tri === 'tu-choi') return { s: '✕', n: 'Ghi đè: đã tắt' };
+  }
+  // Trạng thái gốc đọc từ MA TRẬN máy chủ trả về (GET /permissions) — bảng luôn khớp server
+  // kể cả khi Giám đốc vừa lưu ghi đè mới; user khác F5 là thấy ngay.
+  const bangVai = macDinh && macDinh[vaiTen];
+  if (bangVai && bangVai[row.entityType] && bangVai[row.entityType].includes(row.action)) {
+    const ghiChu =
+      vaiTen === 'Cán bộ' ? 'Phòng của mình' :
+      vaiTen === 'Phó Giám đốc' ? 'Các phòng phụ trách' :
+      'Phòng mình';
+    return { s: '✓', n: ghiChu };
   }
   if (vaiTen === 'Cán bộ' && row.entityType) return { s: '👁', n: 'Phòng của mình' };
   return row[vaiTen === 'Phó Giám đốc' ? 'g' : vaiTen === 'Trưởng phòng' ? 'tp' : vaiTen === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
@@ -6131,7 +6148,7 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
           '</div></td>'
         );
       }
-      return o(oPhanQuyenHieuLuc(row, vaiTen, ghiDe));
+      return o(oPhanQuyenHieuLuc(row, vaiTen, ghiDe, macDinh));
     }).join('');
     return '<tr class="border-t border-gray-100">' + tenTd + adminTd + cells + '</tr>';
   }).join('');

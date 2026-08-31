@@ -209,21 +209,21 @@ describe('icon bút chì sửa công việc con — hiển thị và hành độ
     }
   });
 
-  it('Phó GĐ nêu trong «Ban lãnh đạo kiểm soát» của CV con nào thì chỉ thấy icon CV con đó', () => {
+  it('Phó GĐ thấy icon ở MỌI CV con (Vòng 12c: subwork:update theo phạm vi, không phụ thuộc phân công)', () => {
     const goc = vaiMoChiTiet('Phó GĐ Một', 'Phó Giám đốc');
     const cacNut = goc.querySelectorAll('.edit-subwork-btn');
-    expect(cacNut.length).toBe(1);
+    expect(cacNut.length).toBe(2);
     const khoi = cacNut[0].closest('[class*="rounded-xl"]');
     expect(khoi && khoi.textContent).toContain('Chuẩn bị hậu cần');
     // 2026-08-29: bỏ mã khỏi tên hiển thị — mã chỉ còn ở id/data-* (sw-tasks-CV001-01…).
     expect(khoi && khoi.textContent).not.toContain('(CV001-01)');
   });
 
-  it('lãnh đạo phòng của CV con thấy icon đúng CV con mình; người ngoài cuộc không thấy gì', () => {
+  it('TP/PP phòng thấy icon mọi CV con (Vòng 12c); nhân viên ngoài cuộc không thấy gì', () => {
     const gocTp = vaiMoChiTiet('Trưởng phòng A', 'Trưởng phòng');
-    expect(gocTp.querySelectorAll('.edit-subwork-btn').length).toBe(1);
+    expect(gocTp.querySelectorAll('.edit-subwork-btn').length).toBe(2);
     const gocPp = vaiMoChiTiet('Phó phòng A', 'Phó phòng');
-    expect(gocPp.querySelectorAll('.edit-subwork-btn').length).toBe(1);
+    expect(gocPp.querySelectorAll('.edit-subwork-btn').length).toBe(2);
     const gocNv = vaiMoChiTiet('Nguyễn Văn An', 'Nhân viên');
     expect(gocNv.querySelectorAll('.edit-subwork-btn').length).toBe(0);
   });

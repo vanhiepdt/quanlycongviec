@@ -112,6 +112,10 @@ function tenTrongDanhSach(ten, chuoiDanhSach) {
 function coQuyenSuaCongViecCon(sw) {
   if (!isAuthenticated || !currentUser || !sw) return false;
   if (isAdmin()) return true;
+  // Ma trận §6: Phó GĐ/Trưởng phòng/Phó phòng đều có subwork:update trong phạm vi phòng mình
+  // (máy chủ `inScope` chặn phạm vi) — không phụ thuộc việc có nằm trong phân công ba lớp hay không.
+  if (laQuanTriTrongPhamVi()) return true;
+  if (['Trưởng phòng', 'Phó phòng'].includes(String(currentUser.role || ''))) return true;
   const ten = String(currentUser.name || "").trim();
   if (!ten) return false;
   return tenTrongDanhSach(ten, sw[COL.T_SUP]) || tenTrongDanhSach(ten, sw[COL.T_LEADERS]);
