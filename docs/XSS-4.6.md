@@ -288,6 +288,15 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > tại (giá trị rỗng = về luật gốc), các lựa chọn sau LOẠI TRỪ trạng thái đó — hết dòng trùng.
 > ⇒ **96 chỗ / 698 giá trị** (TC-SEC-17).
 
+> **Cập nhật 2026-08-31 (vòng 12e — bảng phân quyền khoá bằng VAI CSDL + TP/PP thấy công việc
+> phòng mình).** Không thêm/bỏ chỗ ghi HTML nào và không thêm giá trị nội suy nào: bản sửa chỉ đổi
+> **biểu thức điều kiện** và **khoá tra cứu** bên trong builder đã có — `buildBangPhanQuyenHtml`
+> tra `ghiDe`/`macDinh` bằng `vaiCot.vai` ('Nhân viên') thay vì nhãn `vaiCot.ten` ('Cán bộ'),
+> `oPhanQuyenHieuLuc` nhận vai CSDL, `coChoDuyet` mở ⏳ cho Cán bộ ở Tạo/Sửa, ba điều kiện nút
+> ✎/⧉/🗑 của `createProjectCard` + Gantt thêm `laLanhDaoPhong()`. Hai option mới của ô Tháng tab
+> Nhiệm vụ dựng bằng `document.createElement` + `textContent` (đường DOM, không phải chuỗi HTML)
+> nên cũng không vào phép đếm. ⇒ giữ **96 chỗ / 698 giá trị** (TC-SEC-17).
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

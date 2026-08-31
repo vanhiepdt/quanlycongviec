@@ -143,3 +143,69 @@ Test: TC-TASKUI-17 viết lại theo luật mới (TP thấy nhiệm vụ phòng
 dùng `visibleDepartments` của PGD), thêm TC-TASKUI-19 (bối cảnh rỗng ⇒ trống; bối cảnh về ⇒ thấy).
 **1376 test / 81 file xanh**; banner `app.js 20260829-11`, buster `-11`.
 
+## 10. VÒNG 12e — 3 lỗi người dùng báo + SOÁT TOÀN BỘ hiển thị theo vai
+
+Phản hồi người dùng: «1. Phòng Quản lý Đào tạo có 4 công việc nhưng PHÓ PHÒNG chỉ thấy công việc
+tháng 12, nhiệm vụ không thấy tháng nào · 2. Đang không sửa được chức năng nào của CÁN BỘ ·
+3. Soát lại toàn bộ hiển thị theo đối tượng». Bổ sung giữa session: «riêng cán bộ thì thêm option
+tạo, sửa thêm mới duyệt».
+
+**Máy chủ KHÔNG sai** — đo trước khi sửa: `bootstrap.getBundle()` cho `pp01@test.local` (Phó phòng
+PH01) trả **đủ 4 công việc** + 11 nhiệm vụ cấp 3; `departmentContext` trả
+`myDepartment = 'Quản lý Đào tạo'`, `isDepartmentHead = true`. Toàn bộ mất mát ở trình duyệt.
+
+| Lỗi | Nguyên nhân ĐO ĐƯỢC | Bản sửa |
+|---|---|---|
+| A1 — PP chỉ thấy 1 công việc | `getUserAllowedProjects()` có nhánh admin, Phó GĐ (`visibleDepartments`), `isManager()`, rồi rơi xuống luật cuối «việc mình đứng tên quản lý hoặc được giao» — **TP/PP không có nhánh nào**. Chạy app.js thật trong jsdom với dữ liệu PH01: trả `["CV008"]` thay vì cả 4. CV008 là công việc duy nhất PP đứng tên, chạy 01/12→31/12 ⇒ đúng cảm nhận «chỉ thấy tháng 12». **Trùng hợp dữ liệu, KHÔNG phải lỗi lọc tháng** (`workMatchesMonth` đã đúng luật giao khoảng) | Thêm nhánh TP/PP thấy công việc **phòng mình**, phòng lấy từ `tenPhongTaiKhoan()` — KHÔNG dùng `visibleDepartments` (kênh của Phó GĐ, bẫy §13.5). Tên phòng rỗng ⇒ giữ luật cũ |
+| A2 — «nhiệm vụ không thấy tháng nào» | `dsNhiemVuToiDuocThay()` **chạy đúng** (Vòng 12c) — đo được cả 5 nhiệm vụ; lọc tháng cũng đúng: T6→1, T7→1, T8→3, T9→1, **T12→0**. Dữ liệu PH01 không có nhiệm vụ tháng 12, mà ô Tháng tab Nhiệm vụ **không có «Tất cả tháng»** (chỉ 1..12, mặc định tháng hiện tại) ⇒ mở tab ra đúng tháng trống | Thêm option «Tất cả tháng» (value 0) vào `dongBoOThangNamTasks`, nới `handleTasksMonthChange` xuống `so >= 0`. **Mặc định vẫn là tháng hiện tại**. Luật lọc không đổi |
+| A3 — (chưa ai báo) 4 thẻ đếm nhiệm vụ = 0 | `renderTaskStats()` có bộ lọc RIÊNG hẹp hơn (chỉ việc của mình + công việc mình quản lý) ⇒ PGĐ/TP/PP thấy danh sách có nhiệm vụ mà 4 thẻ trên đầu hiện 0 | Dùng lại `dsNhiemVuToiDuocThay()` — một nguồn sự thật cho cả tab |
+| B — «không sửa được chức năng nào của Cán bộ» | KHÔNG phải thiếu dropdown (Vòng 12b đã có 12 select `data-vai="Nhân viên"`). Lỗi thật: `buildBangPhanQuyenHtml` tra `ghiDe`/`macDinh` bằng **NHÃN cột** `'Cán bộ'` còn máy chủ khoá bằng **vai CSDL** `'Nhân viên'`. Đo được: hàng «Xem Công việc» hiện «✕ Tắt» dù ma trận cho `Nhân viên: work:read`; đặt ghi đè `work:update = cho-phep` vai `Nhân viên` thì ô đó **vẫn** «✕ Tắt». Nặng nhất: option đầu mang `value=""` ⇒ bấm Lưu gửi `'mac-dinh'` = **XOÁ SẠCH ghi đè vừa đặt** | Toàn bộ tra cứu đổi sang `vaiCot.vai`; `vaiCot.ten` chỉ còn để in `<th>`. `oPhanQuyenHieuLuc` nhận vai CSDL, bỏ nhánh chặn `=== 'Cán bộ'`; badge người thường giờ đọc ma trận + ghi đè thật (hàng Xem của Cán bộ là `👁 Phòng của mình` vì §6 cho họ đọc cả phòng) |
+| B2 — Cán bộ cần ⏳ | Người dùng chốt giữa session | Server `permissions/service.js`: vai `Nhân viên` được `cho-duyet` ở **create + update**. **KHÔNG mở delete** — `'cho-duyet'` ở delete nghĩa là CHẶN xoá (`xoaDuocKhongKhiChoDuyet`) mà luồng duyệt-yêu-cầu-xoá chưa có, với vai chỉ xoá được nhiệm vụ của mình thì thành khoá cứng không có đường ra. Client: cột Cán bộ có ⏳ ở hàng Tạo/Sửa, không có ở Xoá. Không cần migration — CHECK `po_cho_duyet` (011) đã cho create/update/delete |
+| C — ô lệch client↔server | Máy chủ cho TP/PP `update` **và** `delete` trên cả 3 cấp trong phòng mình (`PERMISSIONS` + `inScope` case `'Trưởng phòng'/'Phó phòng'`), nhưng thẻ công việc + Gantt chỉ hiện ✎/⧉/🗑 cho `laQuanTriTrongPhamVi()` hoặc người đứng tên, và `canUserDeleteResource` **không có nhánh TP/PP nào** | Thêm `laLanhDaoPhong()` vào `canUserDeleteResource` (project/subwork/task) và vào 3 điều kiện nút của `createProjectCard` + cụm Gantt. Máy chủ `inScope` vẫn bó phạm vi ⇒ ngoài phạm vi thì 403, đúng thiết kế đã ghi ở app.js «mở nút, không cấp quyền» |
+
+### 10.1 MA TRẬN CHÂN LÝ 5 vai — client PHẢI khớp server
+
+Nguồn sự thật: `PERMISSIONS` + `inScope()` (`server/src/middleware/rbac.js`) và ghi đè
+(`modules/permissions`). Không ô nào của client được rộng hơn server.
+
+| | tab Công việc thấy gì | tab Nhiệm vụ thấy gì | nút ✎/🗑 thẻ CV | icon ✎ CV con (modal) | Bảng phân quyền | TC chốt |
+|---|---|---|---|---|---|---|
+| **admin (Giám đốc)** | TẤT CẢ | TẤT CẢ | có | có | dropdown + nút Lưu; **không** tự ghi đè mình được | TC-TKPQ-06/09, TC-TASKUI-17, TC-PQ-07 |
+| **Phó Giám đốc** | công việc các phòng mình phụ trách (`visibleDepartments`) | nhiệm vụ các phòng đó, kể cả giao người khác | có | có | badge trạng thái hiệu lực (đọc `GET /permissions`) | TC-PGD-UI-03, TC-TASKUI-14/15/16, TC-TKPQ-07 |
+| **Trưởng phòng** | công việc **phòng mình** | nhiệm vụ phòng mình | có (Vòng 12e) | có (Vòng 12c) | badge | TC-TP-CV-01..05, TC-TASKUI-17, TC-TKPQ-15 |
+| **Phó phòng** | như Trưởng phòng (§6 Quyết định 5) | như Trưởng phòng | có (Vòng 12e) | có | badge | TC-TP-CV-01..05 |
+| **Cán bộ (`Nhân viên`)** | chỉ việc mình đứng tên / được giao nhiệm vụ | nhiệm vụ của mình | **không** | **không** | badge; ô Xem là `👁 Phòng của mình`, task:create/update/delete là ✓ | TC-TP-CV-04, TC-TKPQ-15, `project-details-phan-cong` |
+
+Ô «Bảng phân quyền» cho admin: 12 hàng × 4 cột đều là dropdown mang **vai CSDL**; ô phạm vi
+(«Tất cả phòng») chỉ có ở Phó GĐ/TP/PP — server chặn `phamVi: 'tat-ca'` cho `Nhân viên`
+(TC-PQ-10, TC-TKPQ-14). ⏳ có ở: Tạo (mọi vai), Sửa (TP/PP + Cán bộ), Xoá (chỉ TP/PP) —
+TC-TKPQ-13, TC-PQ-06, TC-PQ-13.
+
+### 10.2 Hai bộ lọc THÁNG — cùng luật giao khoảng
+
+| | tab Công việc | tab Nhiệm vụ |
+|---|---|---|
+| Hàm lọc | `workMatchesMonth(project, thang)` | `taskMatchesDateFilter(task)` |
+| «Tất cả tháng» | có (value 0, **mặc định**) | có từ Vòng 12e (value 0; mặc định vẫn là tháng hiện tại) |
+| Nằm trọn tháng | hiện | hiện |
+| Vắt biên tháng | hiện (bắt đầu ≤ cuối tháng và kết thúc ≥ đầu tháng) | hiện |
+| Không có ngày nào | **ẩn** khi đang lọc tháng | **ẩn** khi đang lọc tháng |
+
+Cách so ngày khác nhau nhưng cùng kết quả: tab Công việc so chuỗi `'yyyy-mm-dd'`, tab Nhiệm vụ so
+**số thứ tự ngày** (`soThuTuNgay`) — cả hai đều tránh bẫy `'yyyy-mm-dd'` = 00:00 UTC = 07:00 ICT
+(§13.5). Chốt bằng TC-TASKUI-01..04 và TC-CV-BL.
+
+Test: TC-TKPQ-11..15 (cột Cán bộ đọc vai CSDL, option đầu giữ giá trị ghi đè, ⏳ Tạo/Sửa không
+Xoá, không có ô phạm vi, badge người thường), TC-TP-CV-01..05 (PP/TP thấy đủ 4 công việc phòng
+mình, bối cảnh rỗng không nới, không dùng `visibleDepartments`, TP/PP sửa+xoá cả 3 cấp),
+TC-PQ-13 (server cho Cán bộ `cho-duyet` ở create/update, chặn delete và chặn vai «Quản lý công
+việc»), TC-TASKUI-12 (ô Tháng 13 option, mặc định vẫn tháng đang xem).
+**1386 test / 81 file xanh**; lint + format sạch; pin XSS giữ **96/698** (chỉ đổi biểu thức
+điều kiện, không thêm chỗ ghi HTML); banner `app.js 20260829-12`, buster `-12`;
+`project-details.js` KHÔNG đổi nên không bump.
+
+Bẫy mới (§13.5): **bảng phân quyền phải khoá bằng VAI CSDL** (`users.role`), nhãn hiển thị chỉ
+để in. Tra bằng nhãn thì bảng vừa hiện sai vừa **âm thầm xoá ghi đè** khi bấm Lưu — không có
+thông báo lỗi nào, vì `giaTri: 'mac-dinh'` là một lệnh hợp lệ.
+
+
