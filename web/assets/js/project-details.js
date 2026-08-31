@@ -8,6 +8,29 @@
 // Toàn bộ HTML dựng bằng builder có escape (quy ước chống XSS §4.6: build*/create*/render*).
 "use strict";
 
+/**
+ * Modal này có đang mở ở CHẾ ĐỘ DUYỆT — CHỈ ĐỌC hay không (012, Vòng 13).
+ *
+ * Cờ nằm ở `app.js` (`laCheDoDuyetChiDoc`); bọc lại ở đây để file này không vỡ khi nạp riêng
+ * trong test jsdom cũ chưa có hàm đó.
+ */
+function chiDocDuyet() {
+  return typeof laCheDoDuyetChiDoc === "function" && laCheDoDuyetChiDoc() === true;
+}
+
+/** Dải nhắc trên đầu modal khi đang đọc để duyệt — cho người duyệt biết vì sao không có nút sửa. */
+function buildDaiCheDoDuyetHtml() {
+  if (!chiDocDuyet()) return "";
+  return (
+    '<div class="bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2 mb-3 text-xs">' +
+    '<i class="fas fa-hourglass-half mr-2"></i>' +
+    escapeHtml(
+      "Đang xem để DUYỆT — chỉ đọc. Mục đang chờ duyệt được tô vàng. Muốn đổi nội dung thì bấm «Trả lại để sửa» ở hộp chờ duyệt."
+    ) +
+    "</div>"
+  );
+}
+
 /** Ô "nhãn trên — giá trị dưới" của modal chi tiết (dạng thẻ nhỏ, hết kiểu lệch hai đầu). */
 function buildDetailRowHtml(label, value, trongRong) {
   const raw = String(value ?? "").trim();
@@ -111,6 +134,9 @@ function tenTrongDanhSach(ten, chuoiDanhSach) {
  */
 function coQuyenSuaCongViecCon(sw) {
   if (!isAuthenticated || !currentUser || !sw) return false;
+  // CHẾ ĐỘ DUYỆT — CHỈ ĐỌC (012, Vòng 13): người duyệt mở modal này từ hộp chờ duyệt để ĐỌC cả cây
+  // trước khi ký. Không ai sửa gì ở đây, kể cả admin — muốn đổi nội dung thì «Trả lại để sửa».
+  if (typeof laCheDoDuyetChiDoc === "function" && laCheDoDuyetChiDoc()) return false;
   if (isAdmin()) return true;
   // Ma trận §6: Phó GĐ/Trưởng phòng/Phó phòng đều có subwork:update trong phạm vi phòng mình
   // (máy chủ `inScope` chặn phạm vi) — không phụ thuộc việc có nằm trong phân công ba lớp hay không.
@@ -161,8 +187,27 @@ function createSubworkDetailHtml(sw, tatCaNV) {
   const canBoThucHien = [
     ...new Set(nvTrong.map(t => t[COL.T_ASSIGNEE]).filter(v => v && v !== "Chưa gán")),
   ].join(", ");
+  // Mục đang CHỜ DUYỆT tô màu khác hẳn (012, Vòng 13): khung vàng thay khung xanh + nhãn chữ.
+  // Dùng `COL.T_APPROVAL` — cùng khoá mà `isPendingApproval` của app.js đọc, không tự đoán tên cột.
+  const trangThaiDuyetCon = String((sw && sw[COL.T_APPROVAL]) || "");
+  const conChoDuyet = trangThaiDuyetCon === "Chờ duyệt";
+  const conNhap = trangThaiDuyetCon === "Nháp";
+  const khungNgoai = conChoDuyet
+    ? "bg-amber-50/70 border border-amber-300"
+    : conNhap
+      ? "bg-gray-50 border border-gray-300"
+      : "bg-blue-50/60 border border-blue-100";
+  const nhanDuyetCon = conChoDuyet
+    ? '<span class="cv-con-cho-duyet status-badge status-awaiting whitespace-nowrap"><i class="fas fa-hourglass-half mr-1"></i>' +
+      escapeHtml("đang chờ duyệt") +
+      "</span>"
+    : conNhap
+      ? '<span class="cv-con-nhap status-badge status-draft whitespace-nowrap"><i class="fas fa-pen-nib mr-1"></i>' +
+        escapeHtml("Nháp") +
+        "</span>"
+      : "";
   return (
-    '<div class="bg-blue-50/60 border border-blue-100 rounded-xl p-3 mb-3">' +
+    '<div class="' + khungNgoai + ' rounded-xl p-3 mb-3">' +
     // KHUNG TIÊU ĐỀ RIÊNG (vòng lần 3): tên công việc con nằm trong hộp trắng viền xanh — rõ
     // ranh giới với danh sách nhiệm vụ bên dưới, bỏ kiểu chữ trôi trên nền xanh.
     '<div class="cv-con-tieu-de bg-white/90 border border-blue-200 rounded-lg px-3 py-2 shadow-sm flex items-center justify-between cursor-pointer select-none gap-2" onclick="batTatNhiemVuTrongCVCon(\'' +
@@ -179,6 +224,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     '<span class="text-xs px-2 py-0.5 rounded-full bg-white border border-blue-100 text-blue-600 whitespace-nowrap">' +
     nvTrong.length +
     " nhiệm vụ</span>" +
+    nhanDuyetCon +
     "</div>" +
     '<div class="text-xs text-gray-500 whitespace-nowrap">Tiến độ ' +
     escapeHtml(sw[COL.T_COMPLETION] || 0) +
@@ -270,6 +316,7 @@ function showProjectDetailsModal(projectId, projectName) {
     '            <button type="button" class="close-modal text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times text-lg"></i></button>\n' +
     "        </div>\n" +
     '        <div class="flex-1 overflow-y-auto p-5 space-y-4">\n' +
+    buildDaiCheDoDuyetHtml() +
     '            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">\n' +
     buildStatCardHtml(tatCaNV.length, "Nhiệm vụ", "text-blue-600") +
     buildStatCardHtml(hoanThanh, "Hoàn thành", "text-green-600") +
@@ -300,14 +347,18 @@ function showProjectDetailsModal(projectId, projectName) {
     '                <div class="flex items-center justify-between mb-3">\n' +
     '                    <h5 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">Cây công việc</h5>\n' +
     "                    " +
-    (canUserCreateTask()
-      ? '<button type="button" class="btn-primary py-1.5 text-xs mr-2 add-task-from-project-btn" data-project-id="' +
-        escapeHtml(projectId) +
-        '" data-project-name="' +
-        escapeHtml(projectName) +
-        '" title="+ Nhiệm vụ"><i class="fas fa-plus mr-1"></i>+ Nhiệm vụ</button>'
-      : "") +
-    createSubworkFromWorkButtonHtml(projectId, projectName, "btn-secondary py-1.5 text-xs", true) +
+    (chiDocDuyet()
+      ? ""
+      : canUserCreateTask()
+        ? '<button type="button" class="btn-primary py-1.5 text-xs mr-2 add-task-from-project-btn" data-project-id="' +
+          escapeHtml(projectId) +
+          '" data-project-name="' +
+          escapeHtml(projectName) +
+          '" title="+ Nhiệm vụ"><i class="fas fa-plus mr-1"></i>+ Nhiệm vụ</button>'
+        : "") +
+    (chiDocDuyet()
+      ? ""
+      : createSubworkFromWorkButtonHtml(projectId, projectName, "btn-secondary py-1.5 text-xs", true)) +
     "\n" +
     "                </div>\n" +
     swHtml +

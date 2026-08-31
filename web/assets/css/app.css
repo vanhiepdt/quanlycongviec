@@ -1042,6 +1042,15 @@
         border: 1px solid rgba(245, 158, 11, 0.35);
     }
 
+    /* Nhãn XÁM "Nháp" (012, Vòng 13) — bản lưu chưa gửi đi duyệt, chỉ người lập thấy.
+       Xám nhạt hơn hẳn status-awaiting: vàng nghĩa là "đang chờ ai đó", xám nghĩa là
+       "chưa gửi cho ai". Người dùng phải phân biệt được hai thứ đó bằng mắt, không phải đọc chữ. */
+    .status-draft {
+        background: rgba(107, 114, 128, 0.12);
+        color: #4b5563;
+        border: 1px dashed rgba(107, 114, 128, 0.45);
+    }
+
     /* Priority Badges */
     .priority-low {
         background: rgba(34, 197, 94, 0.1);

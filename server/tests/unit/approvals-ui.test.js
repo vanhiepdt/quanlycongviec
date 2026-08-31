@@ -105,6 +105,15 @@ describe('panel «Chờ duyệt» — chỉ người duyệt thấy, hành độ
     window.__vaoVai('Quản trị Hệ thống', 'admin');
     window.__duLieuChoDuyet([ITEM_WORK]);
     window.__batPost();
+    // Từ 012 «Từ chối» là XOÁ HẲN cả cây nên có một bước hỏi lại. jsdom không dựng `confirm` thật
+    // (nó ném "Not implemented") ⇒ phải thay bằng hàm giả, và đây cũng là chỗ chốt rằng bước hỏi
+    // lại có thật: bỏ nó đi thì `daHoi` còn 0 và test đỏ.
+    let daHoi = 0;
+    window.confirm = (loi) => {
+      daHoi += 1;
+      expect(loi).toContain('XOÁ HẲN');
+      return true;
+    };
     await window.renderChoDuyetPanel();
     window.goiNutChoDuyetPanel();
     const hang = document.querySelector('.approval-row');
@@ -119,17 +128,38 @@ describe('panel «Chờ duyệt» — chỉ người duyệt thấy, hành độ
       .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 0));
     expect(window.__daGoi()).toHaveLength(0);
+    expect(daHoi).toBe(0); // lý do chưa đủ thì chưa hỏi tới bước xác nhận xoá
     oLyDo.value = 'Thiếu chứng từ quyết toán, đề nghị bổ sung hồ sơ đầy đủ';
     hang
       .querySelector('.approval-reject-confirm')
       .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 0));
+    expect(daHoi).toBe(1);
     const daGoi = window.__daGoi();
     expect(daGoi.length).toBe(1);
     expect(daGoi[0].path).toBe('/api/v1/approvals/work/CV004/reject');
     expect(daGoi[0].body).toEqual({
       reason: 'Thiếu chứng từ quyết toán, đề nghị bổ sung hồ sơ đầy đủ',
     });
+  });
+
+  it('Từ chối: bấm Huỷ ở bước hỏi lại ⇒ KHÔNG gọi REST (012 — xoá không lấy lại được)', async () => {
+    window.__vaoVai('Quản trị Hệ thống', 'admin');
+    window.__duLieuChoDuyet([ITEM_WORK]);
+    window.__batPost();
+    window.confirm = () => false;
+    await window.renderChoDuyetPanel();
+    window.goiNutChoDuyetPanel();
+    const hang = document.querySelector('.approval-row');
+    hang
+      .querySelector('.approval-reject-toggle')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    hang.querySelector('.approval-reason').value = 'Trùng với công việc đã có trong kế hoạch';
+    hang
+      .querySelector('.approval-reject-confirm')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(window.__daGoi()).toHaveLength(0);
   });
 
   it('người KHÔNG phải người duyệt (Nhân viên): panel bị ẩn', async () => {

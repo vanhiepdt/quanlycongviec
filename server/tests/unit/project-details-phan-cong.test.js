@@ -33,6 +33,7 @@ const EXPORTS = `;Object.assign(window, {
     showProjectDetailsModal(id, ten);
     return document.getElementById('modals-container');
   },
+  moChiTietCheDoDuyet,
 });`;
 
 /** Nạp app.js + project-details.js trong MỘT lời gọi (mọi biến chia sẻ cùng phạm vi hàm). */
@@ -236,5 +237,72 @@ describe('icon bút chì sửa công việc con — hiển thị và hành độ
     expect(formEl).toBeTruthy();
     const oMa = formEl.querySelector('input[name="id"]');
     expect(oMa && oMa.value).toBe('CV001-01');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// TC-DUYET-UI (012, Vòng 13) — CHẾ ĐỘ DUYỆT / CHỈ ĐỌC của modal chi tiết.
+//
+// Yêu cầu người dùng: «Trên phần duyệt sẽ thêm xem chi tiết công việc, màn hình sẽ xem công việc
+// cấp 1 và cấp 2, công việc cấp 2 được tạo gửi đi duyệt ấy sẽ hiển thị mầu khác và ghi đang chờ
+// duyệt … tại các màn hình này ko cho sửa công việc và nhiệm vụ».
+// ---------------------------------------------------------------------------------------------
+describe('TC-DUYET-UI — modal chi tiết ở chế độ duyệt (chỉ đọc)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="modals-container"></div><div id="toast-container"></div>';
+    khoiDong();
+    const C = window.COL;
+    const { cv, tasks } = duLieu(C);
+    // Công việc con thứ hai đang CHỜ DUYỆT, thứ nhất đã duyệt — để so được hai màu cạnh nhau.
+    tasks[1][C.T_APPROVAL] = 'Chờ duyệt';
+    window.datDuLieu(cv, tasks);
+  });
+
+  /** Mở modal bằng đường mà nút «Xem chi tiết» của hộp chờ duyệt dùng. */
+  function moCheDoDuyet(ten, vai) {
+    window.dangNhapTen(ten, vai);
+    window.moChiTietCheDoDuyet('CV001', 'Chuẩn bị hội nghị');
+    return document.getElementById('modals-container');
+  }
+
+  it('TC-DUYET-UI-01: admin mở ở chế độ duyệt ⇒ KHÔNG có nút sửa/thêm nào', () => {
+    const goc = moCheDoDuyet('Quản trị Hệ thống', 'admin');
+    // admin bình thường thấy 2 icon bút chì (test ở nhóm trên) — ở chế độ duyệt phải là 0.
+    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(0);
+    expect(goc.querySelectorAll('.add-task-from-project-btn').length).toBe(0);
+    expect(goc.querySelectorAll('.add-subwork-from-work-btn').length).toBe(0);
+  });
+
+  it('TC-DUYET-UI-02: có dải nhắc «Đang xem để DUYỆT — chỉ đọc»', () => {
+    const goc = moCheDoDuyet('Phó GĐ Một', 'Phó Giám đốc');
+    expect(goc.textContent).toContain('Đang xem để DUYỆT');
+    expect(goc.textContent).toContain('Trả lại để sửa');
+  });
+
+  it('TC-DUYET-UI-03: CV con đang chờ duyệt tô MÀU KHÁC + ghi «đang chờ duyệt»', () => {
+    const goc = moCheDoDuyet('Phó GĐ Một', 'Phó Giám đốc');
+    const nhan = goc.querySelectorAll('.cv-con-cho-duyet');
+    expect(nhan.length).toBe(1); // đúng một CV con đang chờ duyệt
+    expect(nhan[0].textContent).toContain('đang chờ duyệt');
+    expect(nhan[0].className).toContain('status-awaiting');
+    // Khung ngoài của khối đó đổi sang vàng; khối đã duyệt giữ khung xanh.
+    expect(goc.innerHTML).toContain('bg-amber-50/70');
+    expect(goc.innerHTML).toContain('bg-blue-50/60');
+  });
+
+  it('TC-DUYET-UI-04: cả CÂY vẫn hiện đủ — cấp 2 và nhiệm vụ cấp 3 bên trong', () => {
+    const goc = moCheDoDuyet('Phó GĐ Một', 'Phó Giám đốc');
+    expect(goc.querySelectorAll('.cv-con-tieu-de').length).toBe(2);
+    expect(goc.textContent).toContain('Chuẩn bị hậu cần');
+    expect(goc.textContent).toContain('Đặt bàn ghế'); // nhiệm vụ cấp 3
+  });
+
+  it('TC-DUYET-UI-05: đóng modal thì tắt cờ — lần mở sau bằng đường thường lại có nút sửa', () => {
+    const goc = moCheDoDuyet('Quản trị Hệ thống', 'admin');
+    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(0);
+    document.querySelector('#project-details-modal .close-modal').click();
+    // Không tắt cờ thì người dùng mất nút sửa ở mọi lần mở sau mà không hiểu vì sao.
+    const lai = window.moChiTiet('CV001', 'Chuẩn bị hội nghị');
+    expect(lai.querySelectorAll('.edit-subwork-btn').length).toBe(2);
   });
 });

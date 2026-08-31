@@ -48,6 +48,25 @@ const CO_Y_KHONG_BOC = [
     so: 2,
     ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
   },
+  // 012 (Vòng 13) — nhãn XÁM «Nháp» + nút «Gửi duyệt». Cùng lý do với `pendingApprovalBadge`: hàm
+  // TRẢ VỀ HTML (span + button) chứ không trả dữ liệu, và bên trong nó mọi giá trị (mã công việc,
+  // tiêu đề, nhãn) tự đi qua escapeHtml/escapeHtmlAttr. Hai chỗ gọi: thẻ công việc và dải cấp 1.
+  {
+    ctx: 'text',
+    ma: 'nhapBadge(project)',
+    so: 2,
+    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
+  },
+  // Nút «Lưu nháp» của form tạo — builder trả HTML hằng đã thoát, chỉ hiện khi TẠO MỚI. `so: 0` vì
+  // bộ soát KHÔNG tính nó là một lỗ riêng: nó nằm trong một biểu thức chuỗi lớn của form mà bộ soát
+  // đã ghi nhận ở chỗ khác. Giữ mục này trong danh sách để nếu lần sau chỗ gọi đổi hình và trở
+  // thành một lỗ thật thì TC-SEC-11 đỏ ngay, chứ không lặng lẽ lọt.
+  {
+    ctx: 'text',
+    ma: 'buildLuuNhapNutHtml(isEdit)',
+    so: 0,
+    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
+  },
   {
     ctx: 'text',
     ma: 'luaChon(n.e, a, v)',
@@ -261,9 +280,15 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // hàng (hành động + phạm vi ngang), option đầu «Đang dùng: X», Cán bộ badge «Phòng của mình».
     // Vòng 13: nút Lưu render lại trong veBangPhanQuyen (+1 sink hằng, +2 giá trị nút), option
     // đầu = trạng thái gọn không lặp ⇒ 96 chỗ / 698 giá trị. Chi tiết: NHAT-KY mục Vòng 9-13.
+    // 2026-08-31 (012, luồng NHÁP + duyệt cả cây — docs/KE-HOACH-DUYET-CAY.md): +17 giá trị,
+    // KHÔNG thêm chỗ ghi HTML nào (mọi thứ dựng trong builder đã có). Cụ thể: `nhapBadge` 4 (tiêu
+    // đề nhãn, chữ «Nháp», `data-id`, tiêu đề nút + chữ «Gửi duyệt» — 5 lỗ trừ 1 vì mã dùng lại),
+    // `buildLuuNhapNutHtml` 2 (tiêu đề + nhãn nút), 2 lời gọi `nhapBadge(project)` ở thẻ công việc
+    // và dải cấp 1, `buildPendingApprovalRowHtml` +9 (`data-name`, `data-work-code`, tiêu đề loại
+    // kèm tên công việc cấp 1, và 4 tiêu đề nút Xem chi tiết/Duyệt/Trả lại/Từ chối).
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 96, gia_tri: 698 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 96, gia_tri: 715 });
   });
 });
 

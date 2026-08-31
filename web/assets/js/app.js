@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-12");
+console.info("[QLCV] app.js 20260831-1");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -624,6 +624,17 @@ function setupEventListeners() {
         name = target.dataset.name || id;
       canUserCopyResource(type, id) ? openCopyModal(type, id, name) : showToast("Bạn không có quyền tạo bản sao mục này", "error");
     }
+    if (event.target.matches(".gui-duyet-btn") || event.target.closest(".gui-duyet-btn")) {
+      // «Gửi duyệt» trên thẻ bản nháp (012): gửi CẢ CÂY một lần, người duyệt thấy đúng một dòng.
+      const target = event.target.matches(".gui-duyet-btn") ? event.target : event.target.closest(".gui-duyet-btn"),
+        entity = target.dataset.entity || "work",
+        id = target.dataset.id;
+      if (id) {
+        target.disabled = true;
+        guiDuyetCaCay(entity, id);
+      }
+      return;
+    }
     if (event.target.matches(".view-project-btn") || event.target.closest(".view-project-btn")) {
       const target = event.target.matches(".view-project-btn") ? event.target : event.target.closest(".view-project-btn"),
         id = target.dataset.id,
@@ -704,13 +715,17 @@ function setupOverviewProjectFilter() {
  * Khớp `v_countable_works` / `v_countable_items`.
  */
 function isCountableRow(row) {
-  if (!row || isPendingApproval(row)) return false;
+  // Bản NHÁP (012) bị loại y như «Chờ duyệt», ở CẢ dòng của chính nó và cả nhánh trên nó — cùng
+  // luật với hai view `v_countable_*` của máy chủ. Đây là bản đối chiếu phía trình duyệt cho
+  // những khung tính tại chỗ; máy chủ vẫn là nguồn sự thật của mọi con số thống kê.
+  const chuaQuaCua = (r) => isPendingApproval(r) || laNhap(r);
+  if (!row || chuaQuaCua(row)) return false;
   const work = allProjects.find(project => project[COL.P_ID] === row[COL.T_PID]);
-  if (work && isPendingApproval(work)) return false;
+  if (work && chuaQuaCua(work)) return false;
   const parentCode = row[COL.T_PARENT];
   if (parentCode) {
     const parent = allTasks.find(task => task[COL.T_ID] === parentCode);
-    if (parent && isPendingApproval(parent)) return false;
+    if (parent && chuaQuaCua(parent)) return false;
   }
   return true;
 }
@@ -1067,7 +1082,7 @@ function createProjectCard(project, showDetails = false) {
     filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
     filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
     num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
-  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
+  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
 /**
  * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
@@ -1147,7 +1162,7 @@ function createTasksWorkSeparatorHtml(maCongViec, tenCongViec, project, soNhiemV
     // Tên theo tháng đang lọc ở tab Nhiệm vụ; nút «+ Công việc con» phía dưới vẫn nhận TÊN GỐC.
     tenTheoThang = tenTheoThangCuaDong(project, tenCongViec, thangLocNhiemVu()),
     tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, tenCongViec, thangLocNhiemVu());
-  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
+  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
 }
 /**
  * Xếp các dòng của MỘT công việc cấp 1 thành khối theo CÔNG VIỆC CON (cấp 2).
@@ -1822,9 +1837,20 @@ function openModal(type, data = null) {
   const el4 = document.getElementById(text);
   el4.classList.add("active");
   const el5 = el4.querySelector("form");
-  el5 && el5.addEventListener("submit", function (event) {
-    event.preventDefault(), flag ? handleEdit(type, data) : handleAdd(type);
-  });
+  if (el5) {
+    // «Lưu nháp» (012): đánh dấu ngay lúc bấm, xoá sau khi xử để lần submit sau không kế thừa.
+    el5.querySelectorAll("button[data-nhap]").forEach((nut) => {
+      nut.addEventListener("click", () => {
+        el5.dataset.luuNhap = "1";
+      });
+    });
+    el5.addEventListener("submit", function (event) {
+      event.preventDefault();
+      const luuNhap = el5.dataset.luuNhap === "1";
+      delete el5.dataset.luuNhap;
+      flag ? handleEdit(type, data) : handleAdd(type, { luuNhap });
+    });
+  }
   const closeButtons = el4.querySelectorAll(".close-modal");
   closeButtons.forEach(closeButton => {
     closeButton.addEventListener("click", event => {
@@ -2271,7 +2297,7 @@ function createProjectModal(isEdit, project) {
         // nạp phân công — không thì ô phòng trống vĩnh viễn cho tới khi đóng/mở lại modal.
         Array.isArray(allDepartments) && allDepartments.length > 0 ? veLaiPhong() : loadDepartmentContext(veLaiPhong);
       }
-    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project", thangSuaDuocCuaDauViec(project[COL.P_START], project[COL.P_END]).length > 0) : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) + buildKhungTenThang("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
+    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project", thangSuaDuocCuaDauViec(project[COL.P_START], project[COL.P_END]).length > 0) : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  " + buildLuuNhapNutHtml(isEdit) + "\n                  <button type=\"submit\" class=\"btn-primary\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) + buildKhungTenThang("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
 }
 function createTaskModal(isEdit, task) {
   const draft = isEdit ? null : pendingTaskCreate;
@@ -2778,7 +2804,7 @@ function createStaffModal(isEdit, staff) {
     el4 && (el4.addEventListener("change", toggleFields), toggleFields());
   }, 100), "\n  <div id=\"staff-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          <form id=\"staff-form\">\n          <div id=\"staff-validation-error\" class=\"hidden mb-4\"></div>\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(staff[COL.S_ID]) + "\">" : "") + "\n\n              <!-- Row 1: Đối tượng | Họ tên -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Đối tượng</label>\n                      <select name=\"objectType\" class=\"form-select\">\n                          <option value=\"Người dùng\" " + (staffObjectType === "Người dùng" ? "selected" : "") + ">Người dùng</option>\n                          <option value=\"Nhà cung cấp\" " + (staffObjectType === "Nhà cung cấp" ? "selected" : "") + ">Nhà cung cấp</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\" id=\"staff-name-label\">Họ tên *</label>\n                      <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(staff[COL.S_NAME]) || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 2: Email | Chức vụ -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Email</label>\n                      <input type=\"email\" name=\"email\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(staff[COL.S_EMAIL]) || "" : "") + "\">\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Chức vụ</label>\n                      <input type=\"text\" name=\"position\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(staff[COL.S_POS]) || "" : "") + "\">\n                  </div>\n              </div>\n              \n              <!-- Row 3: Phân quyền | Mật khẩu -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Phân quyền</label>\n                      <select name=\"role\" class=\"form-select\">\n                          <option value=\"Nhân viên\" " + (isEdit && staff[COL.S_ROLE] === "Nhân viên" ? "selected" : "selected") + ">Nhân viên</option>\n                          <option value=\"Quản lý\" " + (isEdit && staff[COL.S_ROLE] === "Quản lý" ? "selected" : "") + ">Quản lý</option>\n                          <option value=\"Phó Giám đốc\" " + (isEdit && staff[COL.S_ROLE] === "Phó Giám đốc" ? "selected" : "") + ">Phó Giám đốc</option>\n                          <option value=\"Admin\" " + (isEdit && staff[COL.S_ROLE] === "Admin" ? "selected" : "") + ">Admin</option>\n                      </select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Mật khẩu *</label>\n                      <input type=\"text\" name=\"password\" class=\"form-input\" required \n                              value=\"" + (isEdit ? escapeHtml(staff[COL.S_PASSWORD]) || "" : "") + "\"\n                              placeholder=\"Nhập mật khẩu\">\n                  </div>\n              </div>\n\n              <!-- Row 4: Phòng | Vai trò phòng -->\n              <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 user-field\">\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Phòng</label>\n                      <select name=\"department\" class=\"form-select\">" + buildDepartmentOptions(isEdit && staff ? staff[COL.S_DEPT] : "") + "</select>\n                  </div>\n                  <div class=\"form-group mb-0\">\n                      <label class=\"form-label\">Vai trò phòng</label>\n                      <select name=\"deptRole\" class=\"form-select\">" + buildDeptRoleOptions(isEdit && staff ? staff[COL.S_DEPT_ROLE] : "") + "</select>\n                  </div>\n              </div>\n\n              <!-- Ghi chú cho Nhà cung cấp  -->\n              <div class=\"form-group supplier-field hidden\">\n                  <label class=\"form-label\">Ghi chú</label>\n                  <textarea name=\"notes\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? escapeHtml(staff[COL.S_NOTES]) || "" : "") + "</textarea>\n              </div>\n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  <button type=\"submit\" class=\"btn-accent\">" + escapeHtml(text2) + "</button>\n              </div>\n          </form>\n      </div>\n  </div>\n";
 }
-function handleAdd(type) {
+function handleAdd(type, { luuNhap = false } = {}) {
   if (!isAuthenticated) {
     showToast("Vui lòng đăng nhập", "error");
     return;
@@ -2829,6 +2855,9 @@ function handleAdd(type) {
       mapped = Array.from(els).map(item => item.value);
     data[COL.A_PERMISSIONS] = mapped.join(", ");
   }
+  // «Lưu nháp» (012) chỉ có nghĩa với công việc/nhiệm vụ — cầu RPC chuyển thẳng khoá này thành
+  // `saveAsDraft` của REST (rpc/table.js). Vai nào tạo cũng lưu nháp được (người dùng chốt cả 3 cấp).
+  if (luuNhap && (type === "project" || type === "task")) data.saveAsDraft = true;
   const text = "TEMP_" + Date.now();
   addOptimisticUpdate(type, data, text), closeModal(type + "-modal"), showToast(type.charAt(0).toUpperCase() + type.slice(1) + " đang được tạo...", "info"), setButtonLoading(el2, true);
   let text2 = "";
@@ -3030,8 +3059,78 @@ function filterCards(selector, searchTerm) {
  * "Trạng thái duyệt" (COL.P_APPROVAL === COL.T_APPROVAL). Máy chủ trả chuỗi này nguyên văn ở
  * `projectToLegacy` / `taskToLegacy`; dữ liệu cũ chưa có cột duyệt thì rỗng ⇒ không phải chờ duyệt.
  */
+/**
+ * Nút «Lưu nháp» (012, Vòng 13): «lưu thôi chưa gửi đi duyệt, chưa được tính là công việc».
+ *
+ * Chỉ hiện khi TẠO MỚI. Vai admin / Phó Giám đốc tạo là «Đã duyệt» ngay (họ chính là người duyệt)
+ * nên vẫn cho lưu nháp — người dùng chốt «cả 3 cấp» — nhưng nút không hiện ở form SỬA: một mục đã
+ * gửi đi thì đường về bản nháp là «Trả lại để sửa» của người duyệt, không phải nút lưu.
+ */
+function buildLuuNhapNutHtml(isEdit) {
+  if (isEdit) return "";
+  return (
+    "<button type=\"submit\" data-nhap=\"1\" class=\"btn-secondary\" title=\"" +
+    escapeHtmlAttr("Lưu lại để sửa tiếp — chưa gửi ai duyệt, chưa vào thống kê") +
+    "\"><i class=\"fas fa-pen-nib mr-2\"></i>" + escapeHtml("Lưu nháp") + "</button>"
+  );
+}
+/**
+ * CHẾ ĐỘ DUYỆT — CHỈ ĐỌC của modal chi tiết (012, Vòng 13).
+ *
+ * Người duyệt bấm «Xem chi tiết» trên hộp chờ duyệt để đọc CẢ CÂY (công việc cấp 1 → công việc con
+ * → nhiệm vụ) trước khi ký một lần cho cả cây. Ở màn đó KHÔNG cho sửa gì: người duyệt đọc rồi
+ * quyết, muốn đổi nội dung thì bấm «Trả lại để sửa» cho người lập.
+ *
+ * Là một cờ toàn cục chứ không phải tham số vì hàm dựng modal nằm ở `project-details.js` và gọi
+ * xuống nhiều builder con (`coQuyenSuaCongViecCon`, `createSubworkFromWorkButtonHtml`…); luồn tham
+ * số qua từng tầng thì phải sửa mọi chữ ký, mà chỉ để trả lời một câu hỏi duy nhất.
+ * Máy chủ vẫn là rào chặn cuối: mở nút bằng tay vẫn không ghi được (`coSuaDuocKhiChoDuyet`).
+ */
+let cheDoDuyetChiDoc = false;
+function laCheDoDuyetChiDoc() {
+  return cheDoDuyetChiDoc === true;
+}
+/** Mở modal chi tiết công việc ở chế độ chỉ đọc, và tự tắt cờ khi modal đóng. */
+function moChiTietCheDoDuyet(maCongViec, tenCongViec) {
+  cheDoDuyetChiDoc = true;
+  showProjectDetailsModal(maCongViec, tenCongViec);
+  const modal = document.getElementById("project-details-modal");
+  if (!modal) {
+    cheDoDuyetChiDoc = false;
+    return;
+  }
+  // Tắt cờ khi modal bị bỏ khỏi DOM (closeModal xoá node sau 300ms) — không tắt thì lần mở modal
+  // sau bằng đường thường vẫn còn chỉ-đọc, và người dùng mất nút sửa mà không hiểu vì sao.
+  modal.querySelectorAll(".close-modal").forEach((nut) => {
+    nut.addEventListener("click", () => {
+      cheDoDuyetChiDoc = false;
+    });
+  });
+}
 function isPendingApproval(row) {
   return (row && row[COL.P_APPROVAL]) === "Chờ duyệt";
+}
+/**
+ * Bản NHÁP (012, Vòng 13): «lưu thôi chưa gửi đi duyệt, chưa được tính là công việc». Máy chủ chỉ
+ * trả bản nháp cho NGƯỜI LẬP và admin (`thayDuocNhap` — approvals/rules.js), nên hễ dòng này tới
+ * được trình duyệt thì người đang xem có quyền thấy nó; ở đây chỉ lo vẽ.
+ */
+function laNhap(row) {
+  return (row && row[COL.P_APPROVAL]) === "Nháp";
+}
+/** Nhãn XÁM «Nháp» + nút «Gửi duyệt» — chuỗi HTML đã thoát, dán thẳng vào innerHTML được. */
+function nhapBadge(row) {
+  if (!laNhap(row)) return "";
+  const ma = (row && row[COL.P_ID]) || "";
+  return (
+    "<span class=\"status-badge status-draft ml-1\" title=\"" +
+    escapeHtmlAttr("Bản nháp — chỉ bạn thấy, chưa gửi ai duyệt và chưa vào thống kê") +
+    "\"><i class=\"fas fa-pen-nib mr-1\"></i>" + escapeHtml("Nháp") + "</span>" +
+    "<button type=\"button\" class=\"gui-duyet-btn status-badge ml-1 text-blue-600 hover:underline\" data-entity=\"work\" data-id=\"" +
+    escapeHtmlAttr(ma) +
+    "\" title=\"" + escapeHtmlAttr("Gửi cả cây (công việc con + nhiệm vụ bên trong) đi duyệt") +
+    "\"><i class=\"fas fa-paper-plane mr-1\"></i>" + escapeHtml("Gửi duyệt") + "</button>"
+  );
 }
 /**
  * Nhãn vàng "Chờ duyệt" — CHUỖI HTML đã thoát, dán được thẳng vào innerHTML.
@@ -5611,17 +5710,32 @@ function laNguoiDuyetHeThong() {
   return isAuthenticated && !!currentUser && (isAdmin() || currentUser.role === "Phó Giám đốc");
 }
 
-/** BUILDER: một dòng trong «Chờ duyệt» — mọi giá trị user-data đều qua escape. */
+/**
+ * BUILDER: một dòng trong «Chờ duyệt» — mọi giá trị user-data đều qua escape.
+ *
+ * Vòng 13: cả CÂY gửi duyệt một lần nên máy chủ chỉ trả GỐC cây (`repo.listPending`), và dòng có
+ * ba nút — Xem chi tiết (đọc cả cây trước khi ký) / Duyệt / Trả lại để sửa — cùng nút Từ chối vốn
+ * có. Dòng cấp 2/3 gửi LẺ mang `title` là tên công việc cấp 1 (`work_name`): thiếu nó thì người
+ * duyệt thấy một cái tên trơ, không rõ thuộc việc nào.
+ */
 function buildPendingApprovalRowHtml(item) {
   const laWork = item.kind === "work";
   const loai = laWork ? "Công việc" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  const tenCongViecCha = String((item && item.work_name) || "").trim();
+  const tieuDeLoai = laWork || tenCongViecCha === "" ? "" : "Thuộc công việc: " + tenCongViecCha;
   return (
     '\n<div class="approval-row flex flex-wrap items-center gap-2 py-2 border-b border-gray-100" data-entity="' +
     escapeHtml(laWork ? "work" : "work-item") +
     '" data-id="' +
     escapeHtml(item.code || String(item.id)) +
+    '" data-name="' +
+    escapeHtmlAttr(item.name || "") +
+    '" data-work-code="' +
+    escapeHtmlAttr(laWork ? item.code || "" : item.work_code || "") +
     '">' +
-    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">' +
+    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"' +
+    (tieuDeLoai ? ' title="' + escapeHtmlAttr(tieuDeLoai) + '"' : "") +
+    ">" +
     escapeHtml(loai) +
     "</span>" +
     '<span class="font-medium text-gray-800 text-sm truncate">' +
@@ -5634,12 +5748,26 @@ function buildPendingApprovalRowHtml(item) {
     escapeHtml(item.created_by_name || "—") +
     "</span>" +
     '<span class="flex items-center gap-2">' +
-    '<button type="button" class="approval-approve btn-primary py-1 px-3 text-xs"><i class="fas fa-check mr-1"></i>Duyệt</button>' +
-    '<button type="button" class="approval-reject-toggle btn-secondary py-1 px-3 text-xs text-red-600"><i class="fas fa-times mr-1"></i>Từ chối</button>' +
+    '<button type="button" class="approval-detail btn-secondary py-1 px-3 text-xs" title="' +
+    escapeHtmlAttr("Xem cả công việc con và nhiệm vụ bên trong (chỉ đọc)") +
+    '"><i class="fas fa-eye mr-1"></i>Xem chi tiết</button>' +
+    '<button type="button" class="approval-approve btn-primary py-1 px-3 text-xs" title="' +
+    escapeHtmlAttr("Duyệt cả cây: công việc này và mọi mục bên trong") +
+    '"><i class="fas fa-check mr-1"></i>Duyệt</button>' +
+    '<button type="button" class="approval-return-toggle btn-secondary py-1 px-3 text-xs text-amber-700" title="' +
+    escapeHtmlAttr("Trả cả cây về bản nháp của người lập để sửa — không mất dữ liệu") +
+    '"><i class="fas fa-rotate-left mr-1"></i>Trả lại để sửa</button>' +
+    '<button type="button" class="approval-reject-toggle btn-secondary py-1 px-3 text-xs text-red-600" title="' +
+    escapeHtmlAttr("Từ chối là XOÁ HẲN công việc này và mọi mục bên trong") +
+    '"><i class="fas fa-times mr-1"></i>Từ chối</button>' +
     "</span>" +
+    '<div class="approval-return-box hidden w-full flex items-center gap-2">' +
+    '<input type="text" class="approval-return-reason form-input py-1 px-2 text-xs flex-1" placeholder="Cần sửa gì (ít nhất 10 ký tự)...">' +
+    '<button type="button" class="approval-return-confirm btn-secondary py-1 px-3 text-xs text-amber-700">Trả lại</button>' +
+    "</div>" +
     '<div class="approval-reject-box hidden w-full flex items-center gap-2">' +
-    '<input type="text" class="approval-reason form-input py-1 px-2 text-xs flex-1" placeholder="Lý do từ chối (ít nhất 10 ký tự)...">' +
-    '<button type="button" class="approval-reject-confirm btn-secondary py-1 px-3 text-xs text-red-600">Xác nhận</button>' +
+    '<input type="text" class="approval-reason form-input py-1 px-2 text-xs flex-1" placeholder="Lý do từ chối — SẼ XOÁ HẲN cả cây (ít nhất 10 ký tự)...">' +
+    '<button type="button" class="approval-reject-confirm btn-secondary py-1 px-3 text-xs text-red-600">Xác nhận xoá</button>' +
     "</div></div>"
   );
 }
@@ -5671,10 +5799,52 @@ async function duyetMucChoDuyet(entity, ref) {
     "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/approve"
   );
   if (ketQua) {
-    showToast("Đã duyệt " + ((ketQua.row && ketQua.row.code) || ""), "success");
-    await renderChoDuyetPanel();
-    typeof renderProjects === "function" && renderProjects();
+    const soCon = Number(ketQua.soCon || 0);
+    showToast(
+      "Đã duyệt " + ((ketQua.row && ketQua.row.code) || "") + (soCon > 0 ? " kèm " + soCon + " mục bên trong" : ""),
+      "success"
+    );
+    await napLaiSauDuyet();
   }
+}
+
+/**
+ * Gửi duyệt CẢ CÂY từ một bản nháp (012): công việc cấp 1 + mọi công việc con và nhiệm vụ bên
+ * trong cùng sang «Chờ duyệt», và hộp chờ duyệt của người duyệt chỉ hiện MỘT dòng.
+ */
+async function guiDuyetCaCay(entity, ref) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/submit"
+  );
+  if (ketQua) {
+    const soCon = Number(ketQua.soCon || 0);
+    showToast(
+      "Đã gửi duyệt " + ((ketQua.row && ketQua.row.code) || "") + (soCon > 0 ? " kèm " + soCon + " mục bên trong" : ""),
+      "success"
+    );
+    await napLaiSauDuyet();
+  }
+}
+
+/**
+ * TRẢ LẠI ĐỂ SỬA (012) — cửa mềm giữa Duyệt và Từ chối: cả cây về bản nháp của người lập, KHÔNG
+ * mất dữ liệu, ghi chú lưu lại để họ biết phải sửa gì. Máy chủ đòi ghi chú ≥ 10 ký tự.
+ */
+async function traLaiDeSuaMuc(entity, ref, ghiChu) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/return",
+    { reason: ghiChu }
+  );
+  if (ketQua) {
+    showToast("Đã trả lại " + ((ketQua.row && ketQua.row.code) || "") + " cho người lập sửa", "info");
+    await napLaiSauDuyet();
+  }
+}
+
+/** Nạp lại đúng những khung phụ thuộc luồng duyệt — một chỗ cho cả bốn hành động. */
+async function napLaiSauDuyet() {
+  await renderChoDuyetPanel();
+  typeof napLaiDuLieu === "function" ? napLaiDuLieu() : typeof renderProjects === "function" && renderProjects();
 }
 
 /** Từ chối một mục — lý do ≥ 10 ký tự (máy chủ kiểm tra lại lần nữa). */
@@ -5684,9 +5854,12 @@ async function tuChoiMucChoDuyet(entity, ref, lyDo) {
     { reason: lyDo }
   );
   if (ketQua) {
-    showToast("Đã từ chối " + ((ketQua.row && ketQua.row.code) || ""), "info");
-    await renderChoDuyetPanel();
-    typeof renderProjects === "function" && renderProjects();
+    const soCon = Number(ketQua.soCon || 0);
+    showToast(
+      "Đã từ chối và XOÁ " + ((ketQua.row && ketQua.row.code) || "") + (soCon > 0 ? " cùng " + soCon + " mục bên trong" : ""),
+      "info"
+    );
+    await napLaiSauDuyet();
   }
 }
 
@@ -5702,9 +5875,28 @@ function goiNutChoDuyetPanel() {
     if (!rowEl) return;
     const entity = rowEl.dataset.entity,
       ref = rowEl.dataset.id;
-    if (nut.classList.contains("approval-approve")) {
+    if (nut.classList.contains("approval-detail")) {
+      // Xem chi tiết (012): mở modal chi tiết ở chế độ CHỈ ĐỌC — người duyệt đọc cả cây trước khi
+      // ký. Dòng cấp 2/3 mở theo công việc cấp 1 của nó (`data-work-code`) vì modal chi tiết vẽ
+      // theo cây của cấp 1; không có mã đó thì mở theo chính nó.
+      const maCongViec = rowEl.dataset.workCode || ref;
+      const congViec = allProjects.find((p) => p[COL.P_ID] === maCongViec);
+      moChiTietCheDoDuyet(maCongViec, (congViec && congViec[COL.P_NAME]) || rowEl.dataset.name || maCongViec);
+    } else if (nut.classList.contains("approval-approve")) {
       nut.disabled = true;
       await duyetMucChoDuyet(entity, ref);
+    } else if (nut.classList.contains("approval-return-toggle")) {
+      const box = rowEl.querySelector(".approval-return-box");
+      box && box.classList.toggle("hidden");
+    } else if (nut.classList.contains("approval-return-confirm")) {
+      const oGhiChu = rowEl.querySelector(".approval-return-reason"),
+        ghiChu = ((oGhiChu && oGhiChu.value) || "").trim();
+      if (ghiChu.length < 10) {
+        showToast("Ghi chú cần ít nhất 10 ký tự để người lập biết phải sửa gì", "error");
+        return;
+      }
+      nut.disabled = true;
+      await traLaiDeSuaMuc(entity, ref, ghiChu);
     } else if (nut.classList.contains("approval-reject-toggle")) {
       const box = rowEl.querySelector(".approval-reject-box");
       box && box.classList.toggle("hidden");
@@ -5713,6 +5905,11 @@ function goiNutChoDuyetPanel() {
         lyDo = ((oLyDo && oLyDo.value) || "").trim();
       if (lyDo.length < 10) {
         showToast("Lý do từ chối cần ít nhất 10 ký tự", "error");
+        return;
+      }
+      // Từ chối là XOÁ HẲN cả cây (012) — không lấy lại được, nên hỏi lại một lần.
+      const ten = rowEl.dataset.name || ref;
+      if (!confirm("Từ chối sẽ XOÁ HẲN «" + ten + "» và mọi công việc con, nhiệm vụ bên trong.\nKhông thể phục hồi. Tiếp tục?")) {
         return;
       }
       nut.disabled = true;

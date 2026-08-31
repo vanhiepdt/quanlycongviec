@@ -19,6 +19,7 @@ const EXPORTS = `;Object.assign(window, {
   COL, thangLocCongViec, workMatchesMonth, workMatchesProjectsDept, dongBoOThangNamProjects,
   populateProjectsDeptFilter, handleProjectsMonthChange, handleProjectsYearChange,
   handleProjectsDeptFilter, renderProjects, setupProjectsFilterControls,
+  isCountableRow, laNhap,
   __pq: (ten, giaTri) => {
     ({
       projectsXemThang: () => { projectsXemThang = giaTri; },
@@ -214,5 +215,89 @@ describe('TC-CV-BL — danh sách phòng trong ô lọc không rộng hơn phạ
     oThang.value = '6';
     oThang.dispatchEvent(new window.Event('change'));
     expect(window.__docPq().thang).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// TC-CV-NHAP (012, Vòng 13) — thẻ BẢN NHÁP trên tab «Quản lý công việc».
+//
+// Yêu cầu người dùng: «phần tạo mới công việc cấp 1 thêm phần lưu (lưu tức là lưu thôi chưa gửi đi
+// duyệt, chưa được tính là công việc) và cho phép sửa chữa, sau khi xem lại có thể sửa và gửi đi
+// duyệt». Máy chủ chỉ trả bản nháp cho NGƯỜI LẬP và admin (`thayDuocNhap`) — phần đó do
+// `nhap-api.test.js` canh; ở đây canh phần VẼ: nhãn xám + nút Gửi duyệt + không vào thẻ đếm.
+// ---------------------------------------------------------------------------------------------
+describe('TC-CV-NHAP — thẻ bản nháp trên tab Công việc', () => {
+  const C = {
+    P_ID: 'Mã dự án',
+    P_NAME: 'Tên dự án',
+    P_STATUS: 'Trạng thái dự án',
+    P_APPROVAL: 'Trạng thái duyệt',
+    P_DEPT: 'Phòng',
+    P_START: 'Ngày bắt đầu',
+    P_END: 'Ngày kết thúc',
+  };
+  const congViec = (ma, khoaDuyet) => ({
+    [C.P_ID]: ma,
+    [C.P_NAME]: 'Công việc ' + ma,
+    [C.P_STATUS]: 'Đang thực hiện',
+    [C.P_APPROVAL]: khoaDuyet,
+    [C.P_DEPT]: 'Phòng Kỹ thuật',
+    [C.P_START]: '2026-08-01',
+    [C.P_END]: '2026-08-31',
+  });
+
+  beforeEach(() => {
+    window.__pq('allProjects', [
+      congViec('CV001', 'Đã duyệt'),
+      congViec('CV002', 'Nháp'),
+      congViec('CV003', 'Chờ duyệt'),
+    ]);
+    window.__pq('allTasks', []);
+    window.__pq('projectsXemThang', 0); // «Tất cả tháng»
+    window.__pq('projectsLocPhong', '');
+  });
+
+  it('TC-CV-NHAP-01: thẻ nháp có nhãn xám «Nháp» + nút «Gửi duyệt» mang đúng mã', () => {
+    window.renderProjects();
+    const grid = document.getElementById('projects-grid');
+    const the = grid.querySelector('[data-id="CV002"]');
+    expect(the).toBeTruthy();
+    expect(the.querySelector('.status-draft')).toBeTruthy();
+    expect(the.textContent).toContain('Nháp');
+    const nut = the.querySelector('.gui-duyet-btn');
+    expect(nut).toBeTruthy();
+    expect(nut.dataset.id).toBe('CV002');
+    expect(nut.dataset.entity).toBe('work');
+  });
+
+  it('TC-CV-NHAP-02: mục Đã duyệt và Chờ duyệt KHÔNG có nhãn nháp hay nút Gửi duyệt', () => {
+    window.renderProjects();
+    const grid = document.getElementById('projects-grid');
+    for (const ma of ['CV001', 'CV003']) {
+      const the = grid.querySelector(`[data-id="${ma}"]`);
+      expect(the.querySelector('.status-draft')).toBeNull();
+      expect(the.querySelector('.gui-duyet-btn')).toBeNull();
+    }
+    // Mục chờ duyệt vẫn giữ nhãn VÀNG của luồng duyệt — hai nhãn khác nhau, không lẫn.
+    expect(grid.querySelector('[data-id="CV003"] .status-awaiting')).toBeTruthy();
+  });
+
+  it('TC-CV-NHAP-03: nháp KHÔNG được tính là công việc (isCountableRow = false)', () => {
+    // «chưa được tính là công việc» — cùng luật với hai view `v_countable_*` của máy chủ.
+    expect(window.isCountableRow(congViec('CV002', 'Nháp'))).toBe(false);
+    expect(window.isCountableRow(congViec('CV003', 'Chờ duyệt'))).toBe(false);
+    expect(window.isCountableRow(congViec('CV001', 'Đã duyệt'))).toBe(true);
+  });
+
+  it('TC-CV-NHAP-04: nhiệm vụ nằm trong cây nháp cũng không được đếm', () => {
+    const nv = {
+      'Mã nhiệm vụ': 'CV002-01',
+      'Mã dự án': 'CV002',
+      Cấp: 3,
+      'Mã cha': '',
+      'Trạng thái duyệt': 'Đã duyệt', // cấp 3 luôn «Đã duyệt» — bẫy của view 004
+    };
+    window.__pq('allTasks', [nv]);
+    expect(window.isCountableRow(nv)).toBe(false);
   });
 });
