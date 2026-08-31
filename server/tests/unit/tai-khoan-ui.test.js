@@ -315,6 +315,12 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     expect((bang.match(/data-gd="1"/g) || []).length).toBe(12 * 4);
     expect((bang.match(/data-pv="1"/g) || []).length).toBe(12 * 3);
+    // Vòng 12b: dropdown Cán bộ mang vai CSDL «Nhân viên» — không phải nhãn «Cán bộ».
+    expect(bang).toContain('data-vai="Nhân viên"');
+    expect(bang).toContain('data-vai="Phó Giám đốc"');
+    expect(bang).toContain('data-vai="Trưởng phòng"');
+    expect(bang).toContain('data-vai="Phó phòng"');
+    expect(bang).not.toContain('data-vai="Cán bộ"');
   });
 
   it('TC-TKPQ-07: người thường không có dropdown — chỉ badge hiển thị', () => {

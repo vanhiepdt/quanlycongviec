@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260829-8");
+console.info("[QLCV] app.js 20260829-9");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -6026,10 +6026,10 @@ const BANG_PHAN_QUYEN = [
   { ten: 'Xuất Excel', a: { s: '✓', n: 'Theo phạm vi thấy được' }, g: { s: '✓', n: 'Theo phạm vi' }, tp: { s: '✓', n: 'Theo phạm vi' }, pp: { s: '✓', n: 'Theo phạm vi' }, nv: { s: '✓', n: 'Theo phạm vi' } },
 ];
 const VAU_BANG = [
-  { ten: 'Phó Giám đốc', phamViText: 'Phòng phụ trách' },
-  { ten: 'Trưởng phòng', phamViText: 'Phòng mình' },
-  { ten: 'Phó phòng', phamViText: 'Phòng mình' },
-  { ten: 'Cán bộ', phamViText: 'Phòng của mình' },
+  { ten: 'Phó Giám đốc', vai: 'Phó Giám đốc', phamViText: 'Phòng phụ trách' },
+  { ten: 'Trưởng phòng', vai: 'Trưởng phòng', phamViText: 'Phòng mình' },
+  { ten: 'Phó phòng', vai: 'Phó phòng', phamViText: 'Phòng mình' },
+  { ten: 'Cán bộ', vai: 'Nhân viên', phamViText: 'Phòng của mình' },
 ];
 const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': 'text-indigo-500', '👁': 'text-gray-400', '✕': 'text-red-400' };
 /** Ô hiển thị cho người KHÔNG sửa bảng: ghi đè (009/010) ưu tiên, không có thì mô tả gốc. */
@@ -6098,7 +6098,7 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
         const chonPv = gd.pham_vi === 'tat-ca' ? 'tat-ca' : '';
         // «Chờ duyệt»: hàng Tạo (mọi vai trừ admin) + hàng Sửa/Xoá (riêng TP/PP — 011).
         const coChoDuyet =
-          row.action === 'create' ||
+          (row.action === 'create' && vaiCot.vai !== 'Nhân viên') ||
           ((row.action === 'update' || row.action === 'delete') && (vaiTen === 'Trưởng phòng' || vaiTen === 'Phó phòng'));
         // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         // Option đầu = TRẠNG THÁI ĐANG DÙNG (không lặp lại ở sau); chọn nó = về luật gốc.
@@ -6109,14 +6109,14 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
           ...(hienTai.g !== 'tu-choi' ? ["<option value=\"tu-choi\">✕ Tắt</option>"] : []),
         ];
         const oHanhDong =
-          '<select class="form-select text-[11px] w-full min-w-0" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '">' +
+          '<select class="form-select text-[11px] w-full min-w-0" data-gd="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiCot.vai || vaiTen) + '">' +
           '<option value="' + escapeHtmlAttr(hienTai.giaTri) + '" title="Chọn để trả về luật gốc">' + escapeHtml(hienTai.nhan) + '</option>' +
           cacConLai.join("") +
           '</select>';
         // Chỉ Phó GĐ / Trưởng phòng / Phó phòng có ô phạm vi (Cán bộ: phòng của mình, không nới).
         const coPhamVi = vaiCot.phamViText && vaiTen !== 'Cán bộ';
         const oPhamVi = coPhamVi
-          ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiTen) + '" title="Điều kiện phạm vi dữ liệu">' +
+          ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vaiCot.vai || vaiTen) + '" title="Điều kiện phạm vi dữ liệu">' +
             '<option value="">' + escapeHtml(vaiCot.phamViText) + '</option>' +
             '<option value="tat-ca"' + (chonPv ? ' selected' : '') + '>Tất cả phòng</option>' +
             '</select>'
