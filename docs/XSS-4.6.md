@@ -276,6 +276,12 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > qua escapeHtml/escapeHtmlAttr trực tiếp (không qua helper). ⇒ **98 chỗ / 692 giá trị**
 > (TC-SEC-17).
 
+> **Cập nhật 2026-08-29 (vòng 11 — chỉnh 4 điểm bảng phân quyền theo ảnh người dùng).** Option
+> đầu dropdown là «Đang dùng: X» (bỏ nhãn «Mặc định»); TP/PP thêm ⏳ cho Sửa/Xoá (migration 011);
+> dropdown hành động + phạm vi cùng 1 hàng (flex); Cán bộ là badge «Phòng của mình» thay
+> dropdown; chú thích ký hiệu xuống dưới cùng (khung hết grid 2 cột). Ròng **95 chỗ / 696 giá
+> trị** (TC-SEC-17).
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |

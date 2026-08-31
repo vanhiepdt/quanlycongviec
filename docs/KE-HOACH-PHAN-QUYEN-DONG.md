@@ -62,3 +62,20 @@ Câu hỏi chờ người dùng (§13.4): «Tất cả các phòng» có nên gi
 phụ trách tại thời điểm kiểm (giống ủy quyền) hay nới tuyệt đối? Hiện triển khai theo «nới toàn
 bộ inScope» — đơn giản, dễ hiểu, ghi dấu trong nhật ký.
 
+## 5. VÒNG 11 (cùng ngày) — theo phản hồi ảnh: 4 chỉnh trên bảng phân quyền
+
+| Yêu cầu | Triển khai |
+|---|---|
+| Chú thích (khung đỏ) xuống dưới cùng | Khung cha `#account-permission-table` có class `the-tai-khoan` là **grid 2 cột** — bảng và chú thích đứng cạnh nhau (đúng ảnh người dùng gửi). Đổi class khung thành `w-full` + bọc chú thích `col-span-full` ⇒ luôn nằm dưới bảng |
+| Bỏ «Mặc định», thay bằng giá trị đang sử dụng | Option đầu của dropdown là **«Đang dùng: ✓ Đang cho phép / ⏳ Đang chờ duyệt / ✕ Đang tắt» + «(ghi đè)»/«(mặc định)»** — suy từ ghi đè ưu tiên, không có thì luật gốc (trangThaiDuyetKhiTao); value rỗng vẫn là «trả về luật gốc» |
+| TP/PP thêm ⏳ cho Sửa/Xoá | Migration **011** nới CHECK `po_cho_duyet` (create/update/delete); service chặn luồng cho read/approve và cho vai ngoài PGD/TP/PP. Ý nghĩa chạy: **Tạo** ⇒ dòng mới «Chờ duyệt»; **Sửa** ⇒ `phaiChoDuyetKhiSua` (mới) mở rộng luồng choDuyetLai — vai bị ghi đè sửa mục «Đã duyệt» (mọi cấp) quay về «Chờ duyệt»; **Xoá** ⇒ `xoaDuocKhongKhiChoDuyet` (mới) CHẶN xoá với câu «Quản trị yêu cầu Xoá phải qua duyệt…» — luồng duyệt-yêu-cầu-xoá chưa có (§13.4) |
+| Dropdown 1 hàng | Hành động + phạm vi nằm NGANG trong cùng ô (flex gap-1, hai select flex-1) — hết 2 hàng xếp dọc |
+| Cán bộ ghi rõ phòng của mình | Cột Cán bộ ở 12 hàng nghiệp vụ là badge **«👁 Phòng của mình»** (không dropdown, không nới được); chú thích thêm câu «Cán bộ chỉ thao tác trong phạm vi phòng của mình» |
+
+Test: TC-PQ-06 viết lại (cho-duyet hợp lệ Tạo/Sửa/Xoá, chặn Xem/Duyệt), TC-PQ-11 (TP sửa công
+việc đã duyệt ⇒ về «Chờ duyệt», trả `choDuyetLai`), TC-PQ-12 (xoá bị chặn 403 kèm câu rõ), jsdom
+TC-TKPQ viết lại cho builder động. **1373 test / 81 file xanh**; pin **95/696**; banner
+`app.js 20260829-6`, buster `app.js?v=20260829-6`. Deploy: migrate 011 + restart Node + sync web/.
+Bẫy gặp lần nữa: **quên import** 2 hàm mới vào workItems/service.js ⇒ 37 test 500 INTERNAL khi
+chạy full (đơn lẻ vẫn xanh tới khi đụng đúng đường) — thêm hàm vào rules.js phải rà cả hai service.
+
