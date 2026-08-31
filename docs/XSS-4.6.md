@@ -297,6 +297,27 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > Nhiệm vụ dựng bằng `document.createElement` + `textContent` (đường DOM, không phải chuỗi HTML)
 > nên cũng không vào phép đếm. ⇒ giữ **96 chỗ / 698 giá trị** (TC-SEC-17).
 
+> **Cập nhật 2026-08-31 (012, Vòng 13 — luồng NHÁP + duyệt cả cây, `docs/KE-HOACH-DUYET-CAY.md`).**
+> **+17 giá trị nội suy, KHÔNG thêm chỗ ghi HTML nào** — mọi thứ dựng trong builder đã có sẵn.
+> Cụ thể: `nhapBadge` 4 (tiêu đề nhãn, chữ «Nháp», `data-id` của nút, tiêu đề + nhãn nút «Gửi
+> duyệt»); `buildLuuNhapNutHtml` 2 (tiêu đề + nhãn nút); 2 lời gọi `nhapBadge(project)` ở thẻ công
+> việc và dải cấp 1 của tab Nhiệm vụ; `buildPendingApprovalRowHtml` +9 (`data-name`,
+> `data-work-code`, tiêu đề loại kèm tên công việc cấp 1, và 4 tiêu đề của bốn nút Xem chi tiết /
+> Duyệt / Trả lại để sửa / Từ chối). ⇒ **96 chỗ / 715 giá trị** (TC-SEC-17).
+>
+> Hai mục thêm vào danh sách «cố ý không bọc» của `xss-guard.test.js`: `nhapBadge(project)` (so: 2)
+> và `buildLuuNhapNutHtml(isEdit)` (so: 0) — cùng lý do với `pendingApprovalBadge`: hàm TRẢ VỀ HTML
+> đã thoát sẵn, bọc thêm là hiện thẻ ra dưới dạng chữ. `so: 0` của builder nút Lưu nháp là vì bộ
+> soát không tính nó thành một lỗ riêng (nó nằm trong biểu thức chuỗi lớn của form, đã ghi nhận ở
+> chỗ khác); giữ mục đó trong danh sách để nếu chỗ gọi đổi hình và trở thành lỗ thật thì TC-SEC-11
+> đỏ ngay chứ không lặng lẽ lọt.
+>
+> `web/assets/js/project-details.js` cũng thêm HTML ở vòng này (dải nhắc chế độ duyệt, nhãn «đang
+> chờ duyệt»/«Nháp» của khối công việc con, khung màu theo trạng thái) nhưng **không vào phép đếm
+> này**: `tools/dem-xss.mjs` chỉ soi `app.js`. Hành vi thoát của file đó do
+> `tests/unit/project-details-phan-cong.test.js` canh — trong đó có ca bơm `<img src=x onerror=…>`
+> vào tên công việc con.
+
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
 | Hàm | Dùng ở đâu | Vì sao |
