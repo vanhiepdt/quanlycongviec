@@ -132,3 +132,14 @@ chuỗi tĩnh); banner `app.js 20260829-10`, buster `app.js?v=-10`, `project-det
 Bẫy mới (§13.5): **bảng quyền vẽ client phải lấy trạng thái gốc TỪ SERVER** (`GET /permissions`
 trả ma trận) — đoán bằng cột tĩnh sẽ lệch vĩnh viễn với server.
 
+## 9. VÒNG 12d — «Quản lý nhiệm vụ của Trưởng phòng không thấy» (race còn sót)
+
+Tab Nhiệm vụ không hề bị ẩn theo vai — nó **trống**. Nguyên nhân: đúng bẫy race đã vá cho Phó GĐ
+ngày 2026-08-28 nhưng chỉ vá một nửa — `loadDepartmentContext` chỉ vẽ lại khi `isDeputyDirector`
+đổi trạng thái; TP/PP lần vẽ đầu chạy lúc `myDepartment` còn rỗng (bối cảnh phòng về sau) rồi
+**không bao giờ được vẽ lại**. Đã sửa: điều kiện vẽ lại thêm `isDepartmentHeadUser || truocLaHead`.
+
+Test: TC-TASKUI-17 viết lại theo luật mới (TP thấy nhiệm vụ phòng mình qua `myDepartment`, KHÔNG
+dùng `visibleDepartments` của PGD), thêm TC-TASKUI-19 (bối cảnh rỗng ⇒ trống; bối cảnh về ⇒ thấy).
+**1376 test / 81 file xanh**; banner `app.js 20260829-11`, buster `-11`.
+
