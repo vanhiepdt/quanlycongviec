@@ -537,4 +537,8 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   `data-file`); thêm ✎ sửa trực tuyến với **href qua `safeUrl`** (TC-SEC-13 bắt đúng luật);
   buildYKienPanel +10 giá trị ⇒ **99 chỗ / 792 giá trị**.
 - TC-SEC-10: 0 lỗ CAN-THOAT mới (toàn bộ 19 lỗ CAN-THOAT còn lại là các chỗ đã ghi lý do từ trước).
+- **Vòng 14续3 (3 lỗi người dùng báo + data test mới)**: `onlyOffice` là cờ **JSON** ở
+  `GET /work-items/:ref/files` (không sinh HTML) · `canUserEditResource` thêm `'task'` cho TP/PP
+  (chỉ điều kiện, không nội suy) · seed `dev-vong14.sql` là SQL. ⇒ **pin không đổi: 99 chỗ / 792
+  giá trị**; banner `app.js 20260901-6` (buster `index.html` cùng số).
 
