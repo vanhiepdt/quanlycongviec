@@ -15,7 +15,7 @@ const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 
 const EXPORTS = `;Object.assign(window, {
   COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhungKetQua, buildKhoiFile,
   buildBangLuongFile, buildNutVerdictFile, buildBanFileList, giaTriHieuLucFile,
-  coTheNopFile, uploadKetQua,
+  coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile,
   __tf: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -259,5 +259,32 @@ describe('TCKQ — escape và chặn phía client', () => {
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
     await window.uploadKetQua(input);
     expect(fetchDaGoi).toBe(0);
+  });
+
+  it('TCKQ-14: ô «Ý kiến» trong khối file — gắn bản mới nhất (data-ban-cuoi) + nút Gửi ý kiến', () => {
+    window.__tf('allTasks', [
+      { 'Mã nhiệm vụ': 'CV001-002', 'Người thực hiện': 'Nguyễn Văn Cán Bộ' },
+    ]);
+    const khoi = window.buildKhoiFile(NHOM(), 'CV001-002');
+    expect(khoi).toContain('Ý kiến');
+    expect(khoi).toContain('id="task-y-kien-7"');
+    expect(khoi).toContain('data-ban-cuoi="11"');
+    expect(khoi).toContain("guiYKien('7', 'CV001-002')");
+    expect(khoi).toContain('Gửi ý kiến');
+    // Nút ↩ góp ý theo bản đã gỡ — ô «Ý kiến» duy nhất ở khung trên.
+    expect(khoi).not.toContain('↩ góp ý');
+  });
+
+  it('TCKQ-15: verdict đọc ô «Ý kiến» trước — đủ 10 ký tự thì KHÔNG hỏi lại bằng prompt', async () => {
+    document.body.innerHTML =
+      '<textarea id="task-y-kien-7">Bổ sung số liệu đối chiếu hai bảng giúp tôi</textarea>';
+    let promptDaGoi = 0;
+    window.prompt = () => {
+      promptDaGoi += 1;
+      return '';
+    };
+    window.fetch = () => Promise.reject(new Error('không được gọi'));
+    await window.xuLyVerdictFile(7, 'yeu-cau-sua', true, 'CV001-002');
+    expect(promptDaGoi).toBe(0);
   });
 });

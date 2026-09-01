@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260901-3");
+console.info("[QLCV] app.js 20260901-4");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2359,9 +2359,14 @@ async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
   if (hanhDong === "hoan-thanh" && !confirm("Hoàn thành luôn (không trình lãnh đạo)? Tiếp tục?")) return;
   let noiDung = "";
   if (canNoiDung) {
-    noiDung = prompt("Nhập nội dung (tối thiểu 10 ký tự):") || "";
-    if (noiDung.trim().length < 10) {
-      if (noiDung.trim() !== "") showToast("Nội dung cần ít nhất 10 ký tự", "error");
+    // Ưu tiên ô «Ý kiến» của khối file (người dùng chốt); trống hoặc ngắn hơn 10 thì hỏi lại.
+    const oYKien = document.getElementById("task-y-kien-" + fileId);
+    noiDung = String((oYKien && oYKien.value) || "").trim();
+    if (noiDung.length < 10) {
+      noiDung = (prompt("Nhập nội dung (tối thiểu 10 ký tự):") || "").trim();
+    }
+    if (noiDung.length < 10) {
+      if (noiDung !== "") showToast("Nội dung cần ít nhất 10 ký tự", "error");
       return;
     }
   }
@@ -2373,15 +2378,31 @@ async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
   showToast("Đã " + (NHAN_VERDICT_FILE[hanhDong] || hanhDong).toLowerCase(), "success");
   napKetQua(ma);
 }
-/** Góp ý theo bản (TP/PP + Phó GĐ phụ trách + GĐ/admin — máy chủ kiểm vai). */
-async function gopYKetQua(versionId, ma) {
-  const noiDung = prompt("Góp ý cho bản này:") || "";
-  if (!noiDung.trim()) return;
-  const ketQua = await restPost("/api/v1/task-file-versions/" + encodeURIComponent(versionId) + "/comments", {
-    noiDung: noiDung.trim(),
-  });
+/** Gửi Ý KIỆN từ ô nhập của khối file — ghi vào BẢN MỚI NHẤT (data-ban-cuoi); vai máy chủ kiểm. */
+async function guiYKien(fileId, ma) {
+  const oYKien = document.getElementById("task-y-kien-" + fileId);
+  if (!oYKien) return;
+  const noiDung = String(oYKien.value || "").trim();
+  if (!noiDung) {
+    showToast("Nhập ý kiến trước khi gửi", "error");
+    return;
+  }
+  if (noiDung.length > 2000) {
+    showToast("Ý kiến tối đa 2000 ký tự", "error");
+    return;
+  }
+  const banCuoi = oYKien.dataset.banCuoi;
+  if (!banCuoi) {
+    showToast("Chưa có bản nào để gửi ý kiến", "error");
+    return;
+  }
+  const ketQua = await restPost(
+    "/api/v1/task-file-versions/" + encodeURIComponent(banCuoi) + "/comments",
+    { noiDung }
+  );
   if (!ketQua) return;
-  showToast("Đã ghi góp ý", "success");
+  oYKien.value = "";
+  showToast("Đã gửi ý kiến", "success");
   napKetQua(ma);
 }
 /** Xoá NHÓM file — người tạo + admin, chưa «Đã duyệt» (máy chủ kiểm lại). */
@@ -2466,14 +2487,10 @@ function buildBangLuongFile(n) {
     "</tr></thead><tbody class=\"divide-y divide-gray-100\">" + dong + "</tbody></table></div>"
   );
 }
-/** BẢN (v1, v2…) + GÓP Ý thread theo bản. */
-function buildBanFileList(n, ma) {
+/** BẢN (v1, v2…) + GÓP Ý thread theo bản (ô nhập «Ý kiến» nằm ở khung trên — guiYKien). */
+function buildBanFileList(n) {
   const bans = Array.isArray(n.bans) ? n.bans : [];
   const gopY = Array.isArray(n.gopY) ? n.gopY : [];
-  const vai = currentUser && currentUser.role;
-  const duocGopY =
-    vai && ["Trưởng phòng", "Phó phòng", "Phó Giám đốc", "admin"].includes(vai) &&
-    n.trang_thai !== "da-duyet";
   return bans
     .map((b) => {
       const cuaBan = gopY.filter((c) => Number(c.version_id) === Number(b.id));
@@ -2489,10 +2506,6 @@ function buildBanFileList(n, ma) {
             )
             .join("")
         : "<div class=\"ml-4 pl-3 text-xs text-gray-400\">Chưa có góp ý cho bản này.</div>";
-      const nutGopY = duocGopY
-        ? " <button type=\"button\" class=\"text-blue-600 hover:underline text-xs ml-2\" onclick=\"" +
-          "gopYKetQua('" + escapeForInlineHandler(b.id) + "', '" + escapeForInlineHandler(ma) + "')\">↩ góp ý</button>"
-        : "";
       return (
         "<div class=\"border-t border-gray-50 pt-2 mt-2\">" +
         "<div class=\"flex items-center gap-2 text-sm\">" +
@@ -2504,7 +2517,6 @@ function buildBanFileList(n, ma) {
           ? "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" onclick=\"" +
             "xemFileKetQua('" + escapeForInlineHandler(b.id) + "')\">👁 xem</button>"
           : "") +
-        nutGopY +
         "</div>" + thread + "</div>"
       );
     })
@@ -2542,7 +2554,16 @@ function buildKhoiFile(n, ma) {
     escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span></div>" +
     "<div class=\"flex items-center gap-1\">" + nut.join("") + "</div></div>" +
     "<div class=\"text-xs text-gray-500 mb-1\">Người tạo: " + escapeHtml(n.ten_nguoi_tao || "") + "</div>" +
-    buildBanFileList(n, ma) +
+    buildBanFileList(n) +
+    // «Ý kiến» (người dùng chốt 2026-09-01): ô nhập đứng ở khung file, gửi vào BẢN MỚI NHẤT
+    // (data-ban-cuoi); các nút Yêu cầu sửa / Trình / Trả về đọc ô này trước khi hỏi lại.
+    (banCuoi
+      ? "<div class=\"mt-3 border-t border-gray-50 pt-2\">" +
+        "<label class=\"text-xs font-semibold text-gray-500\" for=\"" + escapeHtmlAttr("task-y-kien-" + n.id) + "\">Ý kiến</label>" +
+        "<textarea id=\"task-y-kien-" + escapeHtmlAttr(n.id) + "\" data-ban-cuoi=\"" + escapeHtmlAttr(banCuoi.id) + "\" rows=\"2\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Nhập ý kiến cho bản mới nhất (Yêu cầu sửa / Trình / Trả về cần tối thiểu 10 ký tự)…\"></textarea>" +
+        "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm mt-1\" onclick=\"guiYKien('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "')\">Gửi ý kiến</button>" +
+        "</div>"
+      : "") +
     buildNutVerdictFile(n, ma) +
     buildBangLuongFile(n) +
     "</div>"

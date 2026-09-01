@@ -307,7 +307,11 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // vai, hành động, bản, nội dung — 6 lỗ thoát + 2 lỗ join/ternary thoát), `napKetQua` 6 (lời
     // gọi GET, khung rỗng 2 + nút tải lên 2, 1 lỗ `nhom.map(...).join("")`). Hai hàng mới của
     // BANG_PHAN_QUYEN dựng trong builder có sẵn (không thêm lỗ). ⇒ 100 chỗ / 778 giá trị.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 100, gia_tri: 778 });
+    // 2026-09-01 (bổ sung theo câu trả lời §13.4 mục 21–24): ô «Ý kiến» trong khối file
+    // (label `for` + id + `data-ban-cuoi` qua escapeHtmlAttr, nút Gửi ý kiến qua
+    // escapeForInlineHandler) +5 giá trị; gỡ nút ↩ góp ý theo bản −3 giá trị
+    // ⇒ 100 chỗ / 780 giá trị.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 100, gia_tri: 780 });
   });
 });
 

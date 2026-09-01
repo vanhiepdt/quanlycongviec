@@ -509,7 +509,7 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
 | 3729 | innerHTML | HTML dựng sẵn | `text` |
 | 3741 | insertAdjacentHTML | HTML dựng sẵn | `text3` |
 
-## 2026-09-01 — «KẾT QUẢ NHIỆM VỤ LÀ FILE» (014, docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi HTML · +48 giá trị nội suy ⇒ 100 chỗ / 778 giá trị**
+## 2026-09-01 — «KẾT QUẢ NHIỆM VỤ LÀ FILE» (014, docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi HTML · +50 giá trị nội suy ⇒ 100 chỗ / 780 giá trị**
 
 - **+2 sink** — cả hai trong `napKetQua`: ghi khung RỖNG (hằng + nút tải lên) và ghi danh sách
   NHÓM file (`nhom.map(buildKhoiFile).join("")`). Không sink nào nhận chuỗi ngoài app.js.
@@ -526,5 +526,10 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   (`nutIconFile(icon, title, onclick, mauThem)`) phải bọc `escapeHtmlAttr(onclick)`/`escapeHtml(icon)`/
   `escapeHtmlAttr(mauThem || "")` tại chính lỗ nội suy; helper tạo ô tiêu đề phải mang tiền tố
   `build*` (`buildO`) để bộ soát xếp HTML-LONG thay vì CAN-THOAT từng lời gọi.
+- **Bổ sung cùng ngày (câu trả lời §13.4 mục 21–24)**: ô **«Ý kiến»** trong khối file —
+  `<textarea>` + nút «Gửi ý kiến» (`guiYKien` ghi vào BẢN MỚI NHẤT qua `data-ban-cuoi`), nút
+  verdict có nội dung đọc ô này trước khi hỏi lại bằng `prompt` (+5 giá trị: label `for`, id,
+  `data-ban-cuoi` qua `escapeHtmlAttr`, 2 tham số onclick qua `escapeForInlineHandler`);
+  gỡ nút «↩ góp ý» theo bản (−3 giá trị) ⇒ **100 chỗ / 780 giá trị**.
 - TC-SEC-10: 0 lỗ CAN-THOAT mới (toàn bộ 19 lỗ CAN-THOAT còn lại là các chỗ đã ghi lý do từ trước).
 
