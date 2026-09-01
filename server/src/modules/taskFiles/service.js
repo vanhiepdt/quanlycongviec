@@ -35,13 +35,12 @@ import * as repo from './repo.js';
 /** Giới hạn dung lượng mỗi bản (§13.4 mục 22 — chờ người dùng đổi nếu khác). */
 export const DUNG_LUONG_TOI_DA = 20 * 1024 * 1024; // 20 MB
 
-/** Loại file nhận: đuôi → mimeType. Cả hai phải khớp whitelist, không tin một trong hai. */
+/** Loại file nhận: đuôi → mimeType. Đuôi và mimeType phải LÀ CẶP (xem whitelist trong `nop`). */
 export const DUOI_FILE_HOP_LE = Object.freeze({
   '.doc': 'application/msword',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.pdf': 'application/pdf',
 });
-const MIME_HOP_LE = new Set(Object.values(DUOI_FILE_HOP_LE));
 
 /** Gốc lưu file: server/storage/ket-qua/{itemId}/v{n}-{uuid}.{ext} — đã đưa vào .gitignore. */
 export const GOC_STORAGE = path.resolve(process.cwd(), 'storage', 'ket-qua');
@@ -78,7 +77,7 @@ function assertCan(user, action, row, entityType = 'file') {
 }
 
 /** Gom người nhận (người phải sửa…), bỏ chính người hành động và trùng lặp. */
-async function bao(user, ids, content, type, refId, client) {
+function bao(user, ids, content, type, refId, client) {
   const bo = new Set([user.id, null, undefined]);
   const nguoiNhan = [...new Set(ids.filter((id) => id != null && !bo.has(Number(id))))];
   if (nguoiNhan.length === 0) return [];
@@ -95,7 +94,7 @@ async function bao(user, ids, content, type, refId, client) {
 }
 
 /** Gửi cho một danh sách người có sẵn (TP/PP phòng, Phó GĐ phụ trách). */
-async function baoNguoiNhan(user, rows, content, type, refId, client) {
+function baoNguoiNhan(user, rows, content, type, refId, client) {
   return notificationsRepo.insertMany(
     rows.map((u) => ({
       userId: Number(u.id ?? u.user_id),
@@ -117,11 +116,15 @@ async function baoNguoiNhan(user, rows, content, type, refId, client) {
 export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, moTa = '' }) {
   const item = await mustFindNhiemVu(ref);
 
-  // Whitelist: đuôi + mimeType + dung lượng. TÊN GỐC chỉ để hiển thị, không bao giờ làm đường
-  // dẫn (tên vật lý sinh sẵn bên dưới — cấm path traversal).
+  // Whitelist: đuôi + mimeType + dung lượng. Đuôi và mimeType phải LÀ CẶP đúng (file .pdf mang
+  // mime của Word là dữ liệu dối trá); riêng 'application/octet-stream' được tha cho máy khách
+  // cũ không đặt đúng mime. TÊN GỐC chỉ để hiển thị, không bao giờ làm đường dẫn (tên vật lý
+  // sinh sẵn bên dưới — cấm path traversal).
   const tenSan = String(tenGoc ?? '');
   const duoi = (tenSan.match(/\.(doc|docx|pdf)$/i) ?? [])[0]?.toLowerCase();
-  if (!duoi || !MIME_HOP_LE.has(String(loaiMime ?? ''))) {
+  const mimeChoDuoi = duoi ? DUOI_FILE_HOP_LE[duoi] : null;
+  const mimeGui = String(loaiMime ?? '');
+  if (!duoi || (mimeGui !== mimeChoDuoi && mimeGui !== 'application/octet-stream')) {
     throw badRequest('Chỉ nhận file Word (.doc/.docx) hoặc PDF, dung lượng tối đa 20 MB', 'file');
   }
   const kichThuoc = Number(buffer?.length ?? 0);
@@ -334,7 +337,7 @@ const lyDoQuaNgan = (s) => s.length < DO_DAI_NOI_DUNG_TOI_THIEU;
  * Xử lý một nhóm file: Yêu cầu sửa · Trình · Đẩy về Cán bộ · Hoàn thành (TP/PP) ·
  * Trả về TP/PP · Duyệt (PGD/GĐ). Kiểm VAI + PHẠM VI + GIÁ TRỊ HIỆU LỰC + TRẠNG THÁI hiện tại.
  */
-export async function verdict(user, fileId, { hanhDong, noiDung = '' }) {
+export function verdict(user, fileId, { hanhDong, noiDung = '' }) {
   const luat = BANG_VERDICT[hanhDong];
   if (!luat) {
     throw badRequest(`Hành động "${hanhDong}" không hợp lệ`, 'hanhDong');
@@ -468,7 +471,7 @@ async function thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, cl
  * GÓP Ý theo bản: TP/PP phòng + Phó GĐ phụ trách + GĐ/admin (Cán bộ góp ý bằng nộp bản mới
  * kèm mô tả — đúng luồng người dùng mô tả). Không đổi trạng thái, không gửi thông báo đẩy.
  */
-export async function gomY(user, versionId, { noiDung, trang = null }) {
+export function gomY(user, versionId, { noiDung, trang = null }) {
   const nd = String(noiDung ?? '').trim();
   if (!nd)
     throw new AppError('VALIDATION_ERROR', 'Vui lòng nhập nội dung góp ý', { field: 'noiDung' });

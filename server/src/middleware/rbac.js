@@ -288,6 +288,7 @@ const ENTITY_LABEL = Object.freeze({
   work: 'công việc',
   subwork: 'công việc con',
   task: 'nhiệm vụ',
+  file: 'file kết quả',
   user: 'người dùng',
   department: 'phòng',
 });

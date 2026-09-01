@@ -17,6 +17,7 @@ import { stat } from 'node:fs/promises';
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
+import { AppError } from '../../utils/errors.js';
 import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
@@ -30,6 +31,22 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: service.DUNG_LUONG_TOI_DA, files: 1 },
 });
+
+/**
+ * Multer nổ TRƯỚC khi vào handler (multer tự next(err)) nên bắt lỗi phải là MỘT middleware
+ * đứng sau `upload.single` — đặt trong catch của handler là không bao giờ thấy. Đổi thành 400
+ * tiếng Việt thay vì 500 INTERNAL chung.
+ */
+function chuyenLoiMulter(err, req, res, next) {
+  if (err && err.name === 'MulterError') {
+    const thongDiep =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'File vượt quá dung lượng tối đa 20 MB'
+        : 'Không đọc được file gửi lên, vui lòng thử lại';
+    return next(new AppError('VALIDATION_ERROR', thongDiep, { field: 'file' }));
+  }
+  return next(err);
+}
 
 const verdictSchema = z.object({
   hanhDong: z.enum([
@@ -53,35 +70,52 @@ const downloadSchema = z.object({ inline: z.enum(['0', '1']).optional() });
 taskFilesRouter.use(requireAuth);
 
 /** Nộp bản mới (multipart). Không có `fileId` = mở nhóm mới (v1); có = thêm bản vào nhóm. */
-taskFilesRouter.post('/work-items/:ref/files', upload.single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) {
-      throw Object.assign(new Error('Vui lòng chọn file Word/PDF để nộp'), {
-        expected: true,
-        code: 'VALIDATION_ERROR',
-        status: 400,
-        field: 'file',
+taskFilesRouter.post(
+  '/work-items/:ref/files',
+  upload.single('file'),
+  chuyenLoiMulter,
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw Object.assign(new Error('Vui lòng chọn file Word/PDF để nộp'), {
+          expected: true,
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          field: 'file',
+        });
+      }
+      const fileId = req.body.fileId ? Number(idInput.parse(req.body.fileId)) : null;
+      const ketQua = await service.nop(req.user, req.params.ref, {
+        buffer: req.file.buffer,
+        tenGoc: req.file.originalname,
+        loaiMime: req.file.mimetype,
+        fileId,
+        moTa: typeof req.body.moTa === 'string' ? req.body.moTa.slice(0, 2000) : '',
       });
+      res.locals.audit = {
+        action: 'taskFiles.nop',
+        entityType: 'task',
+        entityId: ketQua.ban.file_id,
+        details: {
+          fileId: ketQua.nhom.id,
+          versionNo: ketQua.ban.version_no,
+          tuDong: ketQua.tuDong,
+        },
+      };
+      return ok(res, ketQua);
+    } catch (err) {
+      // Multer nổ riêng (MulterError) — đổi thành 400 tiếng Việt thay vì 500 INTERNAL chung.
+      if (err && err.name === 'MulterError') {
+        const thongDiep =
+          err.code === 'LIMIT_FILE_SIZE'
+            ? 'File vượt quá dung lượng tối đa 20 MB'
+            : 'Không đọc được file gửi lên, vui lòng thử lại';
+        return next(new AppError('VALIDATION_ERROR', thongDiep, { field: 'file' }));
+      }
+      return next(err);
     }
-    const fileId = req.body.fileId ? Number(idInput.parse(req.body.fileId)) : null;
-    const ketQua = await service.nop(req.user, req.params.ref, {
-      buffer: req.file.buffer,
-      tenGoc: req.file.originalname,
-      loaiMime: req.file.mimetype,
-      fileId,
-      moTa: typeof req.body.moTa === 'string' ? req.body.moTa.slice(0, 2000) : '',
-    });
-    res.locals.audit = {
-      action: 'taskFiles.nop',
-      entityType: 'task',
-      entityId: ketQua.ban.file_id,
-      details: { fileId: ketQua.nhom.id, versionNo: ketQua.ban.version_no, tuDong: ketQua.tuDong },
-    };
-    return ok(res, ketQua);
-  } catch (err) {
-    return next(err);
   }
-});
+);
 
 taskFilesRouter.get('/work-items/:ref/files', async (req, res, next) => {
   try {
