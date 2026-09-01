@@ -136,6 +136,14 @@ taskFilesRouter.get('/task-file-versions/:id/editor', async (req, res, next) => 
     const ketQua = await service.moEditor(req.user, req.params.id);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
+    // GHI ĐÈ CSP của helmet cho ĐÚNG trang này: mặc định `script-src 'self'` chặn `api.js` của
+    // Document Server ⇒ DocsAPI không tồn tại ⇒ MÀN HÌNH TRẮNG không lời giải thích (lỗi người
+    // dùng báo 2026-09-02). Xem `cspEditor()` để biết nới cái gì và vì sao.
+    res.setHeader('Content-Security-Policy', service.cspEditor(ketQua.dsUrl));
+    // Trang này KHÔNG nhúng vào đâu (mở tab riêng), nhưng nó nhúng iframe của DS: hai đầu dưới đây
+    // của helmet chặn tài nguyên khác origin nên phải nới, nếu không khung editor trắng.
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.status(200).send(service.htmlEditor(ketQua));
   } catch (err) {
     // Chưa cấu hình DS: trả trang thông báo có thể đọc được thay vì JSON lỗi.

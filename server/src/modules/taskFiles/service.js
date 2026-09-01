@@ -635,15 +635,20 @@ export async function moEditor(user, versionId) {
   const nhom = await repo.findNhomById(ban.file_id);
   const duocSua = duocSuaTrucTiep(user, nhom, item);
   const callbackBase = env.ONLYOFFICE_CALLBACK_BASE || env.APP_BASE_URL;
+  const duoi = duoiBan(ban.ten_luu);
   const config = {
     document: {
-      fileType: (ban.ten_luu.match(/\.(doc|docx|pdf)$/i)?.[1] ?? 'docx').replace('.', ''),
-      key: `tf-${ban.id}-${ban.kich_thuoc}`,
+      fileType: duoi,
+      // `key` phải ĐỔI mỗi khi nội dung file đổi, nếu không DS lấy lại bản trong bộ đệm của nó
+      // (tài liệu Docs API: tối đa 128 ký tự, chỉ 0-9 a-z A-Z -._=). Ghép id bản + kích thước +
+      // mốc thời gian nộp: cùng một bản thì key ổn định (mở lại vẫn vào đúng phiên đang sửa),
+      // còn lưu ra bản mới thì id khác ⇒ key khác.
+      key: `tf-${ban.id}-${ban.kich_thuoc}-${Date.parse(ban.uploaded_at) || 0}`.slice(0, 128),
       title: ban.ten_goc,
       url: `${callbackBase}/api/v1/task-files-ds/raw/${ban.id}?token=${tokenDs('raw', ban.id)}`,
       permissions: { edit: duocSua, comment: duocSua, download: true },
     },
-    documentType: 'word',
+    documentType: DOCUMENT_TYPE_THEO_DUOI[duoi] ?? 'word',
     editorConfig: {
       callbackUrl: `${callbackBase}/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`,
       lang: 'vi',
@@ -677,6 +682,54 @@ function duocSuaTrucTiep(user, nhom, item) {
   return sameId(item.assignee_id, user.id);
 }
 
+/**
+ * ONLYOFFICE dùng ĐUÔI FILE để chọn bộ soạn thảo. Trước đây ghi cứng `'word'` nên mở file `.pdf`
+ * là DS báo lỗi định dạng — bộ seed Vòng 14 có `quy-che-thi-sat-hach.pdf` nên gặp ngay.
+ * Bảng đuôi → documentType lấy đúng theo tài liệu Docs API (`word` | `cell` | `slide` | `pdf`).
+ */
+const DOCUMENT_TYPE_THEO_DUOI = Object.freeze({
+  doc: 'word',
+  docx: 'word',
+  pdf: 'pdf',
+});
+
+/** Đuôi (chữ thường, không dấu chấm) của một bản đã lưu. Không dò được thì coi là docx. */
+function duoiBan(tenLuu) {
+  return (String(tenLuu ?? '').match(/\.([a-z0-9]+)$/i)?.[1] ?? 'docx').toLowerCase();
+}
+
+/**
+ * CSP RIÊNG cho trang editor — lý do phải có, ghi rõ để không ai siết lại rồi lại trang trắng:
+ *
+ * `helmet()` mặc định đặt `script-src 'self'`, mà trang editor BẮT BUỘC nạp `api.js` từ **origin
+ * của Document Server** (`http://localhost` ở máy dev). Trình duyệt chặn thẻ script đó ⇒ biến
+ * `DocsAPI` không tồn tại ⇒ **màn hình trắng, không một dòng lỗi nào trên giao diện** — đúng
+ * triệu chứng người dùng báo 2026-09-02. Header của helmet đã gửi rồi thì `res.setHeader` ở route
+ * ghi đè được, nên chỉ nới cho ĐÚNG một trang này, phần còn lại của API giữ nguyên CSP chặt.
+ *
+ * Nới những gì và vì sao:
+ *   script-src  + DS origin  : nạp `api.js`; `'unsafe-inline'` cho thẻ script khởi tạo DocEditor.
+ *   frame-src   + DS origin  : `DocsAPI.DocEditor` dựng một <iframe> trỏ về DS — thiếu là khung trắng.
+ *   connect-src + DS + ws/wss: editor giữ kết nối WebSocket với DS để lưu/đồng tác giả.
+ *   img-src/style-src/font-src: biểu tượng, CSS, phông của bộ soạn thảo do DS phục vụ.
+ * KHÔNG có `frame-ancestors` nới: trang này mở ở TAB RIÊNG, không nhúng vào đâu.
+ */
+export function cspEditor(dsUrl) {
+  const ds = String(dsUrl ?? '').replace(/\/$/, '');
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline' ${ds}`,
+    `style-src 'self' 'unsafe-inline' ${ds}`,
+    `img-src 'self' data: blob: ${ds}`,
+    `font-src 'self' data: ${ds}`,
+    `connect-src 'self' ${ds} ws: wss:`,
+    `frame-src 'self' ${ds}`,
+    `media-src 'self' blob: ${ds}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ');
+}
+
 /** Trang editor nhúng DS — HTML riêng, mở trong tab mới (index.html không đụng tới). */
 export function htmlEditor({ dsUrl, token, config }) {
   const cauHinh = JSON.stringify({
@@ -688,12 +741,67 @@ export function htmlEditor({ dsUrl, token, config }) {
     width: '100%',
     height: '100%',
   }).replace(/</g, '\\u003c');
+  const dsJson = JSON.stringify(dsUrl).replace(/</g, '\\u003c');
+  // `events` + khối #loi: trước đây hỏng gì cũng chỉ thấy TRANG TRẮNG. Nay mọi đường thất bại
+  // (script bị chặn, DS chết, DS không tải được file) đều hiện một câu tiếng Việt kèm chỗ cần xem.
   return `<!DOCTYPE html>
 <html lang="vi"><head><meta charset="utf-8"><title>Chỉnh sửa kết quả — Quản lý công việc</title>
-<style>html,body{margin:0;height:100%}#placeholder{position:absolute;inset:0}</style></head>
+<style>
+html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
+#placeholder{position:absolute;inset:0}
+#loi{position:absolute;inset:0;display:none;padding:24px;background:#fff;overflow:auto}
+#loi h3{margin:0 0 8px;color:#b91c1c}
+#loi code{background:#f3f4f6;padding:1px 4px;border-radius:3px}
+#loi li{margin:4px 0}
+</style></head>
 <body><div id="placeholder"></div>
-<script src="${dsUrl}/web-apps/apps/api/documents/api.js"></script>
-<script>window.docEditor = new DocsAPI.DocEditor("placeholder", ${cauHinh});</script>
+<div id="loi" role="alert" aria-live="assertive">
+  <h3>Không mở được trình chỉnh sửa</h3>
+  <p id="loi-chi-tiet"></p>
+  <p>Kiểm theo thứ tự:</p>
+  <ol>
+    <li>Document Server còn sống: mở <code id="loi-ds"></code> — phải thấy chữ <code>true</code>.</li>
+    <li>DS phải tự tải được file từ máy chủ này (biến <code>ONLYOFFICE_CALLBACK_BASE</code> trong
+        <code>deploy/.env</code> — trong Docker Desktop là <code>http://host.docker.internal:3000</code>).</li>
+    <li><code>ONLYOFFICE_JWT_SECRET</code> phải TRÙNG với <code>JWT_SECRET</code> của container DS.</li>
+  </ol>
+</div>
+<script>
+(function () {
+  var DS = ${dsJson};
+  var el = document.getElementById("loi");
+  var ct = document.getElementById("loi-chi-tiet");
+  document.getElementById("loi-ds").textContent = DS + "/healthcheck";
+  window.__hienLoi = function (cau) {
+    ct.textContent = cau;
+    el.style.display = "block";
+  };
+})();
+</script>
+<script src="${dsUrl}/web-apps/apps/api/documents/api.js"
+        onerror="window.__hienLoi('Không nạp được api.js của Document Server — trình duyệt chặn (Content-Security-Policy) hoặc DS không chạy.')"></script>
+<script>
+(function () {
+  if (typeof DocsAPI === "undefined" || !DocsAPI.DocEditor) {
+    window.__hienLoi("Đã nạp trang nhưng thư viện DocsAPI không có — xem tab Console của trình duyệt, thường là bị Content-Security-Policy chặn.");
+    return;
+  }
+  var cauHinh = ${cauHinh};
+  cauHinh.events = {
+    onAppReady: function () { document.getElementById("loi").style.display = "none"; },
+    onError: function (e) {
+      var d = (e && e.data) || {};
+      window.__hienLoi("Document Server báo lỗi " + (d.errorCode ?? "?") + ": " + (d.errorDescription || "không rõ"));
+    },
+    onRequestClose: function () { window.close(); },
+  };
+  try {
+    window.docEditor = new DocsAPI.DocEditor("placeholder", cauHinh);
+  } catch (err) {
+    window.__hienLoi("Lỗi khi khởi tạo trình chỉnh sửa: " + (err && err.message ? err.message : err));
+  }
+})();
+</script>
 </body></html>`;
 }
 
