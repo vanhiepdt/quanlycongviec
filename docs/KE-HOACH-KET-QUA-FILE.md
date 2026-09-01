@@ -23,6 +23,8 @@ xem bằng iframe trình duyệt, DOCX tải về + góp ý trong app (§7 trả
 | Câu hỏi | Người dùng chốt |
 |---|---|
 | Nút chốt «Hoàn thành / Duyệt» của TP/PP (khi `file:approve` = ✓) ghi **trạng thái nào**? | **Ghi `hoan-thanh` + dòng flow `hoan-thanh`** — TP/PP hoàn thành luôn, không cần trình ai; **`da-duyet` (xanh đậm) chỉ do Phó GĐ/GĐ bấm «Duyệt» hoặc TỰ ĐỘNG theo phân quyền ✓**. Đúng nghĩa «Hoàn thành luôn» mục 2(c), dùng đủ 5 trạng thái |
+| Bổ sung 2026-09-01 (trả lời §13.4 mục 21–24) | **(21)** «Trình» = TP/PP **tự chọn** thời điểm — đúng cách đã làm; **(22)** 20 MB OK; **(23)** CÓ editor trực tuyến — session sau theo OnlyOffice (§7), **mọi lần sửa file phải LƯU LẠI thành bản mới trong cùng nhóm để xem được**; **(24)** các dạng Word (.doc VÀ .docx) đều cho sửa + xem trực tuyến |
+| Bổ sung 2026-09-01 («cho thêm phần Ý kiến vào») | Khối file có ô **«Ý kiến»** riêng: nhập ý kiến → «Gửi ý kiến» ghi vào **BẢN MỚI NHẤT** của nhóm; các nút Yêu cầu sửa / Trình / Trả về đọc ô này trước (đủ 10 ký tự thì không hỏi lại) |
 
 ## 1. Sơ đồ trạng thái — 5 trạng thái của NHÓM file (`task_files.trang_thai`)
 
@@ -212,6 +214,14 @@ người dùng lưu → Document Server gọi **callbackUrl** của app với `s
 duyệt/góp ý/bảng luồng hiện có không đổi. (Nguồn: https://api.onlyoffice.com/docs/docs-api/get-started/how-it-works/
 — Document Server gồm editing/command/conversion service, integrator giữ document manager + storage.)
 
+**Yêu cầu người dùng chốt kèm (2026-09-01):**
+1. **Các dạng Word (.doc VÀ .docx) đều cho sửa + xem trực tuyến** — ONLYOFFICE mở `.docx` nguyên
+   bản; `.doc` legacy đi qua **conversion service** (chuyển về `.docx` để sửa) hoặc mở hạn chế tùy
+   phiên bản — kiểm trên bản dựng thật trước khi hứa với người dùng cuối.
+2. **Mọi lần sửa file đều phải LƯU LẠI để xem được**: callback-save ghi thành BẢN MỚI trong cùng
+   nhóm (không ghi đè, không để chỉnh sửa treo trong bộ nhớ editor) — bảng luồng ghi dòng
+   «Nộp bản N» kèm người sửa, đúng luật «lưu lại để xem».
+
 ## 8. Câu hỏi chờ người dùng — đã ghi vào §13.4 `KE-HOACH-VPS.md` (mục 21–24)
 
 1. **(mục 21)** Trình lên TỰ ĐỘNG cho PGD phụ trách (fallback GĐ) hay TP/PP tự chọn thời điểm? —
@@ -223,13 +233,15 @@ duyệt/góp ý/bảng luồng hiện có không đổi. (Nguồn: https://api.o
 
 ## 9. Giả định đã chọn trong session (người dùng có thể đổi — mỗi ý là 1 dòng code/test)
 
-| # | Giả định | Lý do |
+| # | Giả định | Trạng thái |
 |---|---|---|
-| 1 | TP/PP chốt = `hoan-thanh`; `da-duyet` chỉ do PGD/GĐ hoặc tự động | **Người dùng đã chốt** (§0) |
-| 2 | PGD/GĐ nộp file (hiếm): giá trị hiệu lực `file:create` mặc định = ✓ ⇒ nộp là tự động chốt | Họ là cấp chốt cuối; không ai ở trên để «chờ» |
-| 3 | 2 hàng file là dropdown cho cả 3 vai như hàng thường, nhưng option `⏳` chỉ có ở `file:create` × (Cán bộ, TP, PP) và `file:approve` × (TP, PP) | Đúng chữ prompt «'cho-duyet' hợp lệ ở file:create cho Cán bộ/TP/PP; ở file:approve cho TP/PP» |
-| 4 | PGD «Trả về TP/PP» ⇒ trạng thái `cho-xem` (bàn của TP/PP), TP/PP từ đó nộp bản mới hoặc «Đẩy về Cán bộ» | Đúng luồng «TP/PP lúc đó tự chỉnh sửa HOẶC đẩy về nhân viên» |
-| 5 | «Đẩy về Cán bộ» (`tra-ve-cbo`) KHÔNG bắt buộc nội dung | Đúng liệt kê prompt (chỉ yeu-cau-sua/tra-ve-tp/trinh-lanh-dao bắt buộc ≥ 10 ký tự) |
+| 1 | TP/PP chốt = `hoan-thanh`; `da-duyet` chỉ do PGD/GĐ hoặc tự động | ✅ người dùng chốt (§0) |
+| 2 | PGD/GĐ nộp file (hiếm): giá trị hiệu lực `file:create` mặc định = ✓ ⇒ nộp là tự động chốt | ✅ chấp nhận 2026-09-01 |
+| 3 | 2 hàng file là dropdown cho cả 3 vai như hàng thường, nhưng option `⏳` chỉ có ở `file:create` × (Cán bộ, TP, PP) và `file:approve` × (TP, PP) | ✅ chấp nhận 2026-09-01 |
+| 4 | PGD «Trả về TP/PP» ⇒ trạng thái `cho-xem` (bàn của TP/PP), TP/PP từ đó nộp bản mới hoặc «Đẩy về Cán bộ» | ✅ chấp nhận 2026-09-01 |
+| 5 | «Đẩy về Cán bộ» (`tra-ve-cbo`) KHÔNG bắt buộc nội dung | ✅ chấp nhận 2026-09-01 |
+| 6 | «Trình» = TP/PP tự chọn (mục 21) | ✅ chốt — khớp cách đã làm |
+| 7 | Ô **«Ý kiến»** trong khối file: gửi vào bản mới nhất; nút Yêu cầu sửa/Trình/Trả về đọc ô này trước khi hỏi lại (người dùng yêu cầu «cho thêm phần Ý kiến vào») | ✅ đã làm (TCKQ-14/15) |
 
 ## 10. Test thủ công cho người dùng (bấm tay sau khi deploy)
 
