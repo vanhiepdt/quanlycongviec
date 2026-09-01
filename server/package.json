@@ -15,6 +15,7 @@
     "migrate:down": "npm run migrate -- down 1",
     "migrate:redo": "npm run migrate:down && npm run migrate:up",
     "seed:dev": "node src/db/seeds/run.js dev.sql",
+    "seed:v14": "node src/db/seeds/run.js dev-vong14.sql",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
