@@ -45,6 +45,12 @@ export default defineConfig({
       RATE_LIMIT_MAX: '1000',
       LOG_LEVEL: 'silent',
       TZ: 'Asia/Ho_Chi_Minh',
+      // ONLYOFFICE Document Server — origin GIẢ, test không gọi ra ngoài mạng. Có giá trị là tính
+      // năng «sửa trực tuyến» BẬT, nhờ đó TC-TF-16 kiểm được CSP của trang editor (thiếu biến này
+      // thì route trả trang «chưa bật» và cái lỗi màn-hình-trắng lọt qua cổng test).
+      ONLYOFFICE_URL: 'http://onlyoffice.test',
+      ONLYOFFICE_JWT_SECRET: 'bi-mat-jwt-chi-dung-cho-test',
+      ONLYOFFICE_CALLBACK_BASE: 'http://app.test:3000',
     },
     coverage: {
       provider: 'v8',

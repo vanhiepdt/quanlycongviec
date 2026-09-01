@@ -9,9 +9,12 @@
 //     «Duyệt» hoặc tự động. admin đặt ⏳ ở ô «Duyệt kết quả» của TP/PP ⇒ mất nút chốt (403).
 //  4. **Máy chủ là rào chặn cuối**: vai ngoài phòng 403, vai không có quyền verdict 403, file
 //     sai loại/quá 20 MB 400, nhóm đã chốt thì nộp tiếp 409.
+import { rm } from 'node:fs/promises';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { env } from '../../src/config/env.js';
 import { closePool } from '../../src/db/pool.js';
+import { duongBan, tokenDs } from '../../src/modules/taskFiles/service.js';
 import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
@@ -530,5 +533,77 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     const sauChot = await apiTp.get(`/api/v1/task-file-versions/${banDau}/editor`);
     expect(sauChot.status).toBe(200);
     expect(sauChot.text).toContain('"mode":"view"');
+  });
+
+  it('TC-TF-16: trang editor NỚI CSP cho origin Document Server (thiếu = màn hình trắng)', async () => {
+    // Lỗi người dùng báo 2026-09-02 «không thấy màn hình sửa». Gốc: `helmet()` đặt
+    // `script-src 'self'` cho MỌI phản hồi, mà trang editor bắt buộc nạp `api.js` từ origin của
+    // DS ⇒ trình duyệt chặn thẻ script ⇒ `DocsAPI` không tồn tại ⇒ trang TRẮNG, không một dòng lỗi
+    // nào trên giao diện (chỉ hiện ở tab Console). Test này canh đúng cái header đó.
+    const ma = await taoNhiemVuCho('TF-16');
+    await nopFile(apiNv, ma, DOCX);
+    const nhom = (await docFiles(apiNv, ma))[0];
+    const ban = nhom.bans[0].id;
+
+    const trang = await apiNv.get(`/api/v1/task-file-versions/${ban}/editor`);
+    expect(trang.status).toBe(200);
+
+    const ds = env.ONLYOFFICE_URL.replace(/\/$/, '');
+    const csp = trang.headers['content-security-policy'] ?? '';
+    const phan = (ten) =>
+      csp
+        .split(';')
+        .map((p) => p.trim())
+        .find((p) => p.startsWith(`${ten} `)) ?? '';
+    // Thẻ <script src> trỏ về DS, và script-src phải cho phép chính origin đó.
+    expect(trang.text).toContain(`${ds}/web-apps/apps/api/documents/api.js`);
+    expect(phan('script-src')).toContain(ds);
+    // DocEditor dựng iframe trỏ DS + giữ WebSocket ⇒ thiếu hai dòng này là khung editor trắng.
+    expect(phan('frame-src')).toContain(ds);
+    expect(phan('connect-src')).toContain(ds);
+    // Không để helmet chặn tài nguyên khác origin của riêng trang này.
+    expect(trang.headers['cross-origin-embedder-policy']).toBeUndefined();
+    expect(trang.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    // Phải có đường BÁO LỖI ĐỌC ĐƯỢC, không im lặng trắng như trước.
+    expect(trang.text).toContain('Không mở được trình chỉnh sửa');
+    expect(trang.text).toContain('onerror=');
+    expect(trang.text).toContain('onAppReady');
+    // `documentType` theo ĐUÔI, không ghi cứng 'word' — seed có cả .pdf.
+    expect(trang.text).toContain('"documentType":"word"');
+    const pdfMa = await taoNhiemVuCho('TF-16b');
+    await nopFile(apiNv, pdfMa, PDF);
+    const banPdf = (await docFiles(apiNv, pdfMa))[0].bans[0].id;
+    const trangPdf = await apiNv.get(`/api/v1/task-file-versions/${banPdf}/editor`);
+    expect(trangPdf.text).toContain('"documentType":"pdf"');
+    expect(trangPdf.text).toContain('"fileType":"pdf"');
+  });
+
+  it('TC-TF-17: /raw thiếu file trên đĩa ⇒ 404 gọn, KHÔNG làm sập máy chủ', async () => {
+    // Bẫy thật 2026-09-02: `createReadStream(duong).pipe(res)` với đường dẫn không tồn tại phát
+    // sự kiện 'error' KHÔNG AI BẮT ⇒ Node ném «Unhandled error event» và CẢ TIẾN TRÌNH CHẾT. Triệu
+    // chứng ở người dùng vẫn là «không mở được màn hình sửa» — thực ra máy chủ vừa sập nên mọi thứ
+    // khác chết theo. Xảy ra ngay khi DS đòi bản của bộ seed (seed chỉ tạo dòng CSDL, không có file).
+    const ma = await taoNhiemVuCho('TF-17');
+    await nopFile(apiNv, ma, DOCX);
+    const nhom = (await docFiles(apiNv, ma))[0];
+    const ban = nhom.bans[0].id;
+
+    // Xoá file vật lý, GIỮ dòng CSDL — đúng trạng thái của bộ seed.
+    const { rows } = await pool.query(
+      `SELECT v.ten_luu, f.item_id FROM task_file_versions v
+         JOIN task_files f ON f.id = v.file_id WHERE v.id = $1`,
+      [ban]
+    );
+    await rm(duongBan(rows[0].item_id, rows[0].ten_luu), { force: true });
+
+    const r = await apiNv.agent.get(
+      `/api/v1/task-files-ds/raw/${ban}?token=${encodeURIComponent(tokenDs('raw', ban))}`
+    );
+    expect(r.status).toBe(404);
+    // Máy chủ CÒN SỐNG — chốt chính của ca này. `/healthz` là đường công khai không tham số, nên
+    // nó chỉ đỏ khi tiến trình thật sự chết (đường nghiệp vụ có thể 400 vì thiếu tham số).
+    const sau = await apiNv.agent.get('/healthz');
+    expect(sau.status).toBe(200);
+    expect(sau.body.ok).toBe(true);
   });
 });
