@@ -19,7 +19,8 @@ function assertAdmin(req) {
 
 const ghiDeSchema = z.object({
   vai: z.string().min(1),
-  entityType: z.enum(['work', 'subwork', 'task']),
+  // 014: thêm 'file' — 2 hàng «Nộp kết quả (file nhiệm vụ)» / «Duyệt kết quả (file nhiệm vụ)».
+  entityType: z.enum(['work', 'subwork', 'task', 'file']),
   action: z.enum(['read', 'create', 'update', 'delete', 'approve']),
   giaTri: z.enum(['mac-dinh', 'cho-phep', 'tu-choi', 'cho-duyet']),
   phamVi: z.enum(['phong', 'tat-ca']).optional(),

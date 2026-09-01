@@ -1,11 +1,15 @@
-// TC-RBAC-01 — ma trận phân quyền §6: 6 vai × 5 thực thể × 4 hành động = 120 phép kiểm.
+// TC-RBAC-01 — ma trận phân quyền §6: 6 vai × 6 thực thể × 4 hành động = 144 phép kiểm.
 //
-// 120 phép kiểm này KHÔNG được viết tay. Chúng sinh ra từ `PERMISSIONS` — đúng bảng khai báo mà
+// 144 phép kiểm này KHÔNG được viết tay. Chúng sinh ra từ `PERMISSIONS` — đúng bảng khai báo mà
 // `can()` đang dùng. Nghĩa là:
 //   - Sửa bảng ⇒ test đổi theo, không phải sửa hai nơi (bệnh "khai hai nơi" của bản cũ, §13.5).
 //   - `can()` đi chệch bảng ⇒ đỏ ngay, kể cả chệch đúng một ô.
 // Cái mà test này canh là **`can()` phải trung thành với bảng**; còn bảng có đúng §6 hay không
 // thì canh bằng nhóm test "bảng khai báo khớp §6" ở dưới, viết tay từng dòng của §6.
+//
+// TỪ 014 (2026-09-01): thực thể thứ 6 là `file` — kết quả file của nhiệm vụ, 2 hàng mới trong
+// Bảng phân quyền động (file:create / file:approve). Ma trận file có luật riêng: read mọi vai,
+// create cho admin/PGD/TP/PP/Cán bộ, approve chỉ admin/PGD/TP/PP.
 import { describe, expect, it } from 'vitest';
 import {
   ACTIONS,
@@ -17,12 +21,12 @@ import {
 } from '../../src/middleware/rbac.js';
 import { principal, rowInScope } from '../helpers/rbac.js';
 
-describe('TC-RBAC-01: ma trận 6 vai × 5 thực thể × 4 hành động', () => {
-  it('đúng 120 phép kiểm — nếu số này đổi thì §6 hoặc §7 Phase 1 đã đổi, sửa kế hoạch trước', () => {
+describe('TC-RBAC-01: ma trận 6 vai × 6 thực thể × 4 hành động', () => {
+  it('đúng 144 phép kiểm — nếu số này đổi thì §6 hoặc §7 Phase 1 hoặc 014 đã đổi, sửa kế hoạch trước', () => {
     expect(ROLES.length).toBe(6);
-    expect(ENTITIES.length).toBe(5);
+    expect(ENTITIES.length).toBe(6);
     expect(ACTIONS.length).toBe(4);
-    expect(ROLES.length * ENTITIES.length * ACTIONS.length).toBe(120);
+    expect(ROLES.length * ENTITIES.length * ACTIONS.length).toBe(144);
   });
 
   // 120 `it()` sinh tự động. Tên test ghi rõ vai · thực thể · hành động để khi đỏ là biết ngay ô nào.
@@ -82,6 +86,15 @@ describe('bảng khai báo khớp §6', () => {
 
   it('TC-RBAC-06: Phó phòng có quyền GIỐNG HỆT Trưởng phòng (quyết định số 5)', () => {
     expect(PERMISSIONS['Phó phòng']).toEqual(PERMISSIONS['Trưởng phòng']);
+  });
+
+  it('014 — ma trận file: read mọi vai · nộp admin/PGD/TP/PP/Cán bộ · duyệt KHÔNG có Cán bộ', () => {
+    expect(PERMISSIONS['admin'].file).toEqual(['read', 'create', 'approve']);
+    expect(PERMISSIONS['Phó Giám đốc'].file).toEqual(['read', 'create', 'approve']);
+    expect(PERMISSIONS['Trưởng phòng'].file).toEqual(['read', 'create', 'approve']);
+    expect(PERMISSIONS['Phó phòng'].file).toEqual(['read', 'create', 'approve']);
+    expect(PERMISSIONS['Quản lý công việc'].file).toEqual(['read']);
+    expect(PERMISSIONS['Nhân viên'].file).toEqual(['read', 'create']);
   });
 
   it('§6: Nhân viên không tạo công việc và không tạo công việc con, nhưng tạo được nhiệm vụ', () => {

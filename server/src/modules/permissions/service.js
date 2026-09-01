@@ -8,7 +8,7 @@ import { AppError } from '../../utils/errors.js';
 import { PERMISSIONS } from '../../middleware/rbac.js';
 import * as repo from './repo.js';
 
-const THUC_THE_DUOC_SUA = ['work', 'subwork', 'task'];
+const THUC_THE_DUOC_SUA = ['work', 'subwork', 'task', 'file'];
 const HANH_DONG_DUOC_SUA = ['read', 'create', 'update', 'delete', 'approve'];
 const GIA_TRI_HOP_LE = ['cho-phep', 'tu-choi', 'cho-duyet'];
 
@@ -53,10 +53,23 @@ export async function luuGhiDe(user, thayDoi) {
         field: 'giaTri',
       });
     }
-    if (g.giaTri === 'cho-duyet' && !['create', 'update', 'delete'].includes(g.action)) {
-      throw new AppError('VALIDATION_ERROR', '«Chờ duyệt» chỉ áp dụng cho Tạo / Sửa / Xoá', {
-        field: 'giaTri',
-      });
+    // «Chờ duyệt» áp dụng cho Tạo / Sửa / Xoá của mọi thực thể; từ 014 thêm ĐÚNG MỘT cửa nữa:
+    // file:approve của Trưởng phòng/Phó phòng — đặt ⏳ là MẤT nút «Hoàn thành / Duyệt» của họ,
+    // bắt buộc trình Phó GĐ/GĐ. Phó GĐ đặt ⏳ ở 2 hàng file là 400: PGD/GĐ là cấp chốt cuối,
+    // không có ai để «chờ» (service của luồng file cũng chặn theo cùng luật).
+    const choDuyetHopLe =
+      ['create', 'update', 'delete'].includes(g.action) ||
+      (g.entityType === 'file' &&
+        g.action === 'approve' &&
+        ['Trưởng phòng', 'Phó phòng'].includes(g.vai));
+    if (g.giaTri === 'cho-duyet' && !choDuyetHopLe) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        '«Chờ duyệt» chỉ áp dụng cho Tạo / Sửa / Xoá; riêng «Duyệt kết quả (file nhiệm vụ)» chỉ Trưởng phòng/Phó phòng được đặt',
+        {
+          field: 'giaTri',
+        }
+      );
     }
     // «Chờ duyệt» chỉ có ý nghĩa với vai có NGƯỜI DUYỆT phía trên: Phó GĐ / Trưởng phòng / Phó
     // phòng (cửa duyệt là Phó GĐ phụ trách hoặc Giám đốc), và từ Vòng 12e thêm **Cán bộ**

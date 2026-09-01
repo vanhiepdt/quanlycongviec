@@ -7,7 +7,7 @@
 //   'cho-duyet' mở tạo + dòng mới rơi vào «Chờ duyệt» (trangThaiDuyetKhiTao)
 //   không ghi đè ⇒ đúng luật gốc từng chữ
 import { describe, expect, it } from 'vitest';
-import { can } from '../../src/middleware/rbac.js';
+import { can, giaTriHieuLuc } from '../../src/middleware/rbac.js';
 import { trangThaiDuyetKhiTao } from '../../src/modules/approvals/rules.js';
 import { OTHER_DEPT, OWN_DEPT, principal } from '../helpers/rbac.js';
 
@@ -77,5 +77,51 @@ describe('TC-PQ-12: ghi đè «cho-duyet» chỉ đổi trạng thái khi TẠO'
   it('Phó GĐ bị ghi đè cho-duyet ⇒ công việc mình tạo cũng phải chờ duyệt', () => {
     const pgd = principal('Phó Giám đốc', { ghiDe: { 'work:create': 'cho-duyet' } });
     expect(trangThaiDuyetKhiTao(pgd, 1)).toBe('Chờ duyệt');
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────────────────
+// 014 — GIÁ TRỊ HIỆU LỰC của 2 cửa «file» (`giaTriHieuLuc`, rbac.js): ghi đè thắng, mặc định
+// theo vai, admin không chịu ghi đè. Luồng file đọc giá trị này NGAY LÚC HÀNH ĐỘNG DIỄN RA.
+// ────────────────────────────────────────────────────────────────────────────────────────────
+describe('TC-PQ-14: giaTriHieuLuc — mặc định ban đầu của 2 cửa file (014)', () => {
+  it('Cán bộ/TP/PP nộp file mặc định ⏳ chờ duyệt; PGD nộp là chốt luôn', () => {
+    expect(giaTriHieuLuc(principal('Nhân viên'), 'file', 'create')).toBe('cho-duyet');
+    expect(giaTriHieuLuc(principal('Trưởng phòng'), 'file', 'create')).toBe('cho-duyet');
+    expect(giaTriHieuLuc(principal('Phó phòng'), 'file', 'create')).toBe('cho-duyet');
+    expect(giaTriHieuLuc(principal('Phó Giám đốc'), 'file', 'create')).toBe('cho-phep');
+  });
+
+  it('Duyệt file: admin/PGD/TP/PP mặc định ✓; Cán bộ và vai lạ không có', () => {
+    expect(giaTriHieuLuc(principal('admin'), 'file', 'approve')).toBe('cho-phep');
+    expect(giaTriHieuLuc(principal('Phó Giám đốc'), 'file', 'approve')).toBe('cho-phep');
+    expect(giaTriHieuLuc(principal('Trưởng phòng'), 'file', 'approve')).toBe('cho-phep');
+    expect(giaTriHieuLuc(principal('Phó phòng'), 'file', 'approve')).toBe('cho-phep');
+    expect(giaTriHieuLuc(principal('Nhân viên'), 'file', 'approve')).toBe('tu-choi');
+  });
+
+  it('GHI ĐÈ thắng mọi thứ — đổi hiệu lực NGAY cho lần nộp/duyệt sau, cả hai hình dạng giá trị', () => {
+    const chuoi = principal('Nhân viên', { ghiDe: { 'file:create': 'cho-phep' } });
+    const doiTuong = principal('Nhân viên', {
+      ghiDe: { 'file:create': { gia_tri: 'cho-phep', pham_vi: 'phong' } },
+    });
+    expect(giaTriHieuLuc(chuoi, 'file', 'create')).toBe('cho-phep');
+    expect(giaTriHieuLuc(doiTuong, 'file', 'create')).toBe('cho-phep');
+
+    // TP/PP bị ⏳ ở file:approve ⇒ mất nút «Hoàn thành / Duyệt» (chỉ còn Trình).
+    const tp = principal('Trưởng phòng', { ghiDe: { 'file:approve': 'cho-duyet' } });
+    expect(giaTriHieuLuc(tp, 'file', 'approve')).toBe('cho-duyet');
+
+    // Tắt hẳn.
+    const tpTat = principal('Trưởng phòng', { ghiDe: { 'file:approve': 'tu-choi' } });
+    expect(giaTriHieuLuc(tpTat, 'file', 'approve')).toBe('tu-choi');
+  });
+
+  it('admin không chịu ghi đè; không có ghi đè ở work/subwork/task ⇒ trả theo ma trận gốc', () => {
+    expect(
+      giaTriHieuLuc(principal('admin', { ghiDe: { 'file:create': 'tu-choi' } }), 'file', 'create')
+    ).toBe('cho-phep');
+    expect(giaTriHieuLuc(principal('Trưởng phòng'), 'task', 'approve')).toBe('tu-choi');
+    expect(giaTriHieuLuc(principal('Phó Giám đốc'), 'task', 'approve')).toBe('cho-phep');
   });
 });

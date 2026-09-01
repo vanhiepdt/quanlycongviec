@@ -28,16 +28,17 @@ export const ROLES = Object.freeze([
 ]);
 
 /**
- * 5 loại thực thể được canh cổng.
+ * 6 loại thực thể được canh cổng.
  *  - `work`     công việc cấp 1 (bảng works)
  *  - `subwork`  công việc con cấp 2 (work_items level = 2)
  *  - `task`     nhiệm vụ cấp 3 (work_items level = 3)
+ *  - `file`     kết quả file của nhiệm vụ (014 — Bảng phân quyền thêm 2 hàng file:create/approve)
  *  - `user`     người dùng
  *  - `department` phòng
  * Cấp 2 và cấp 3 phải tách ra vì §6 cho Nhân viên tạo **Nhiệm vụ** nhưng không cho tạo
  * **Công việc con** — một loại thực thể chung sẽ xoá mất đúng chỗ khác biệt đó.
  */
-export const ENTITIES = Object.freeze(['work', 'subwork', 'task', 'user', 'department']);
+export const ENTITIES = Object.freeze(['work', 'subwork', 'task', 'file', 'user', 'department']);
 
 /** 4 hành động của ma trận §6. `approve` là hành động thứ 5, xét riêng vì chỉ có ở 3 thực thể. */
 export const ACTIONS = Object.freeze(['read', 'create', 'update', 'delete']);
@@ -59,6 +60,8 @@ export const PERMISSIONS = Object.freeze({
     work: ['read', 'create', 'update', 'delete', 'approve'],
     subwork: ['read', 'create', 'update', 'delete', 'approve'],
     task: ['read', 'create', 'update', 'delete', 'approve'],
+    // Kết quả file của nhiệm vụ (014): Giám đốc nộp/duyệt — giá trị hiệu lực mặc định ✓.
+    file: ['read', 'create', 'approve'],
     user: ['read', 'create', 'update', 'delete'],
     department: ['read', 'create', 'update', 'delete'],
   },
@@ -68,6 +71,8 @@ export const PERMISSIONS = Object.freeze({
     work: ['read', 'create', 'update', 'delete', 'approve'],
     subwork: ['read', 'create', 'update', 'delete', 'approve'],
     task: ['read', 'create', 'update', 'delete', 'approve'],
+    // Phó GĐ là cấp chốt cuối của luồng file ⇒ nộp là chốt luôn, duyệt được (giaTriHieuLuc).
+    file: ['read', 'create', 'approve'],
     user: ['read'],
     department: ['read'],
   },
@@ -77,6 +82,9 @@ export const PERMISSIONS = Object.freeze({
     work: ['read', 'create', 'update', 'delete'],
     subwork: ['read', 'create', 'update', 'delete'],
     task: ['read', 'create', 'update', 'delete'],
+    // 014: TP/PP là NGƯỜI DUYỆT đầu tiên của file kết quả — nút «Hoàn thành / Duyệt» (chốt
+    // 'hoan-thanh') và nút «Trình Phó giám đốc». admin bật ⏳ ô «Duyệt kết quả» ⇒ mất nút chốt.
+    file: ['read', 'create', 'approve'],
     user: ['read'],
     department: ['read'],
   },
@@ -86,6 +94,7 @@ export const PERMISSIONS = Object.freeze({
     work: ['read', 'create', 'update', 'delete'],
     subwork: ['read', 'create', 'update', 'delete'],
     task: ['read', 'create', 'update', 'delete'],
+    file: ['read', 'create', 'approve'],
     user: ['read'],
     department: ['read'],
   },
@@ -94,6 +103,8 @@ export const PERMISSIONS = Object.freeze({
     work: ['read', 'create', 'update', 'delete'],
     subwork: ['read', 'create', 'update', 'delete'],
     task: ['read', 'create', 'update', 'delete'],
+    // 014: vai này KHÔNG nằm trong luồng file (chỉ đọc) — prompt chốt.
+    file: ['read'],
     user: ['read'],
     department: ['read'],
   },
@@ -103,6 +114,9 @@ export const PERMISSIONS = Object.freeze({
     work: ['read'],
     subwork: ['read'],
     task: ['read', 'create', 'update', 'delete'],
+    // 014: Cán bộ NỘP được kết quả của nhiệm vụ mình được giao (⏳ mặc định ⇒ về 'cho-xem'),
+    // nhưng KHÔNG duyệt được — approve không có trong danh sách này.
+    file: ['read', 'create'],
     user: ['read'],
     department: ['read'],
   },
@@ -143,7 +157,13 @@ export function normalizeRow(row) {
   };
 }
 
-/** Người này có quyền trên đúng dòng này không. Chỉ gọi sau khi bảng `PERMISSIONS` đã cho phép. */
+/**
+ * Người này có quyền trên đúng dòng này không. Chỉ gọi sau khi bảng `PERMISSIONS` đã cho phép.
+ *
+ * Dòng của thực thể `file` (014) mang CÙNG các khoá phạm vi với task: `department_id` (phòng của
+ * công việc cha), `assignee_id` (người được giao nhiệm vụ), `manager_id` (người quản lý công việc
+ * cấp 1). `taskFiles/service.js` dựng row từ nhiệm vụ chứa file nên không cần nhánh riêng.
+ */
 function inScope(user, action, entityType, row) {
   // Người dùng và phòng: quản lý chỉ admin làm được (bảng đã chặn). Riêng `read` không giới hạn
   // phạm vi — ai cũng cần danh sách người để chọn người thực hiện và danh sách phòng để lọc.
@@ -362,6 +382,51 @@ export function can(user, action, entityType, row = null) {
 }
 
 export default can;
+
+// ============================================================================
+// GIÁ TRỊ HIỆU LỰC của một «cửa» trong Bảng phân quyền động (009/010/011 + 014).
+//
+// Luồng file KHÔNG có luật cứng riêng: mỗi cửa đọc giá trị hiệu lực NGAY LÚC HÀNH ĐỘNG DIỄN RA —
+//   'cho-phep'  ✓  bỏ qua cửa đó (auto chốt + dòng luồng «Tự động — phân quyền không yêu cầu duyệt»)
+//   'cho-duyet' ⏳  phải gửi đi duyệt (Cán bộ nộp về 'cho-xem'; TP/PP nộp về 'cho-lanh-dao';
+//                  TP/PP mất nút «Hoàn thành / Duyệt» khi đặt ở file:approve)
+//   'tu-choi'   ✕  tắt hẳn (nộp/duyệt bị 403)
+// Ghi đè thắng mọi thứ (đúng luật 009); không có ghi đè thì mặc định theo vai bên dưới. admin
+// không chịu ghi đè (chính người sửa bảng). DUY NHẤT một chỗ cho toàn server.
+// ============================================================================
+
+/**
+ * @param {object|null} user người đăng nhập đã chuẩn hoá (có `role`, có thể có `ghiDe`)
+ * @param {string} entityType một trong ENTITIES
+ * @param {string} action 'read' | 'create' | 'update' | 'delete' | 'approve'
+ * @returns {'cho-phep'|'cho-duyet'|'tu-choi'}
+ */
+export function giaTriHieuLuc(user, entityType, action) {
+  if (!user) return 'tu-choi';
+  if (user.role === 'admin') return 'cho-phep'; // admin không chịu ghi đè (luật 009)
+  const ghiDeTho = user.ghiDe?.[entityType + ':' + action];
+  const giaTriGhiDe = ghiDeTho && typeof ghiDeTho === 'object' ? ghiDeTho.gia_tri : ghiDeTho;
+  if (['cho-phep', 'cho-duyet', 'tu-choi'].includes(giaTriGhiDe)) return giaTriGhiDe;
+
+  // Mặc định ban đầu của 2 cửa MỚI của thực thể 'file' (014) — người dùng chốt bằng lời:
+  if (entityType === 'file' && action === 'create') {
+    // Phó GĐ/Giám đốc là cấp chốt cuối ⇒ nộp là phê duyệt luôn; TP/PP và Cán bộ phải qua duyệt.
+    if (user.role === 'Phó Giám đốc') return 'cho-phep';
+    if (['Trưởng phòng', 'Phó phòng', 'Nhân viên'].includes(user.role)) return 'cho-duyet';
+    return 'tu-choi';
+  }
+  if (entityType === 'file' && action === 'approve') {
+    // Ba vai duyệt được file: admin (trên), Phó GĐ phụ trách và TP/PP. Cán bộ không có.
+    if (['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'].includes(user.role)) return 'cho-phep';
+    return 'tu-choi';
+  }
+
+  // Ngoài 'file' (work/subwork/task/user/department): trả theo ma trận gốc cho đủ hình dạng —
+  // luồng duyệt cây của các thực thể đó đọc ghi đè riêng ở approvals/rules.js (khuôn cũ).
+  const table = Object.hasOwn(PERMISSIONS, user.role) ? PERMISSIONS[user.role] : null;
+  const danhSach = table ? table[entityType] : null;
+  return Array.isArray(danhSach) && danhSach.includes(action) ? 'cho-phep' : 'tu-choi';
+}
 
 // ============================================================================
 // Vỏ Express — mỏng, chỉ đổi kết quả của `can()` thành lỗi HTTP. Mọi logic quyền nằm trên.
