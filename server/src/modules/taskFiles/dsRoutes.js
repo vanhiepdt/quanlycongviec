@@ -2,7 +2,8 @@
 // app.js (DS không có cookie phiên/CSRF); bảo vệ bằng token HMAC của service (tokenDs/kiemTokenDs).
 //   GET  /raw/:id?token=…      DS tải file gốc để mở editor
 //   POST /callback/:id?token=… DS trả bản đã sửa (status=2/6) ⇒ app lưu thành BẢN MỚI
-import { createReadStream } from 'node:fs';
+import { createReadStream, constants } from 'node:fs';
+import { access } from 'node:fs/promises';
 import { Router } from 'express';
 import { ok } from '../../middleware/errorHandler.js';
 import * as service from './service.js';
@@ -21,9 +22,29 @@ taskFilesDsRouter.get('/raw/:id', async (req, res, next) => {
     }
     const { ban, item } = await service.docBanSystem(req.params.id);
     const duong = service.duongBan(item.id, ban.ten_luu);
+    // PHẢI kiểm file có thật TRƯỚC khi tạo stream. `createReadStream(...).pipe(res)` với đường dẫn
+    // không tồn tại phát sự kiện 'error' KHÔNG AI BẮT ⇒ Node ném «Unhandled error event» và
+    // **CẢ MÁY CHỦ CHẾT** — đã xảy ra thật 2026-09-02 khi DS đòi bản của seed (seed chỉ tạo dòng
+    // CSDL, không có file trên đĩa): người dùng thấy «không mở được màn hình sửa», thực chất là
+    // máy chủ vừa sập. Nay trả 404 gọn để DS báo lỗi tải file trong editor.
+    try {
+      await access(duong, constants.R_OK);
+    } catch {
+      throw Object.assign(new Error('File trên máy chủ đã bị mất'), {
+        expected: true,
+        code: 'NOT_FOUND',
+        status: 404,
+      });
+    }
     res.setHeader('Content-Type', ban.loai_mime);
     res.setHeader('Content-Disposition', `filename*=UTF-8''${encodeURIComponent(ban.ten_goc)}`);
-    return createReadStream(duong).pipe(res);
+    const luong = createReadStream(duong);
+    // Chốt thứ hai: file bị xoá/khoá NGAY GIỮA lúc đang truyền thì vẫn không được làm sập tiến trình.
+    luong.on('error', (err) => {
+      if (!res.headersSent) return next(err);
+      return res.destroy(err);
+    });
+    return luong.pipe(res);
   } catch (err) {
     return next(err);
   }
