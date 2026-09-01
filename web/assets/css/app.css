@@ -1051,6 +1051,16 @@
         border: 1px dashed rgba(107, 114, 128, 0.45);
     }
 
+    /* Nhãn ĐỎ "Đang xin xoá" (013, Vòng 13 đợt 2) — có yêu cầu xoá đang chờ duyệt.
+       Đỏ vì đây là thứ SẮP MẤT nếu người duyệt đồng ý, khác hẳn vàng ("đang chờ duyệt nội dung")
+       và xám ("chưa gửi cho ai"). Ba nhãn có thể cùng xuất hiện trên một danh sách nên màu phải
+       tách nhau rõ; mục đang xin xoá VẪN hiện và VẪN được đếm (xem đầu migration 013). */
+    .status-delete-req {
+        background: rgba(239, 68, 68, 0.14);
+        color: #b91c1c;
+        border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
     /* Priority Badges */
     .priority-low {
         background: rgba(34, 197, 94, 0.1);

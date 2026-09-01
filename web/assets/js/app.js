@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260831-1");
+console.info("[QLCV] app.js 20260901-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -63,6 +63,10 @@ const COL = {
   P_APPROVER: "Người duyệt",
   P_APPROVED_DATE: "Ngày duyệt",
   P_REJECT_REASON: "Lý do từ chối",
+  // Yêu cầu xoá (013, Vòng 13 đợt 2) — khoá phải khớp nguyên văn COL của server.
+  P_XOA_BOI: "Người xin xoá",
+  P_XOA_LUC: "Ngày xin xoá",
+  P_XOA_LY_DO: "Lý do xin xoá",
   // Phân công ba lớp (2026-08-26) — khoá PHẢI khớp nguyên văn COL phía server (legacyFields.js):
   // server trả object với key là các chuỗi dưới đây, sai một chữ là đọc ra undefined.
   P_DEPT_ID: "ID phòng",
@@ -76,6 +80,9 @@ const COL = {
   T_APPROVAL: "Trạng thái duyệt",
   T_APPROVER: "Người duyệt",
   T_APPROVED_DATE: "Ngày duyệt",
+  T_XOA_BOI: "Người xin xoá",
+  T_XOA_LUC: "Ngày xin xoá",
+  T_XOA_LY_DO: "Lý do xin xoá",
   D_ID: "Mã phòng",
   D_NAME: "Tên phòng",
   D_DIRECTOR: "Email Phó GĐ phụ trách",
@@ -1082,7 +1089,7 @@ function createProjectCard(project, showDetails = false) {
     filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
     filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
     num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
-  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
+  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
 /**
  * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
@@ -1162,7 +1169,7 @@ function createTasksWorkSeparatorHtml(maCongViec, tenCongViec, project, soNhiemV
     // Tên theo tháng đang lọc ở tab Nhiệm vụ; nút «+ Công việc con» phía dưới vẫn nhận TÊN GỐC.
     tenTheoThang = tenTheoThangCuaDong(project, tenCongViec, thangLocNhiemVu()),
     tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, tenCongViec, thangLocNhiemVu());
-  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
+  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
 }
 /**
  * Xếp các dòng của MỘT công việc cấp 1 thành khối theo CÔNG VIỆC CON (cấp 2).
@@ -2976,6 +2983,16 @@ function handleEdit(type, proposal) {
     setButtonLoading(el2, false), updateOptimisticUpdate(type, id, proposal), showToast("Lỗi: " + error.message, "error");
   })[text](id, data);
 }
+/**
+ * Câu từ chối của máy chủ có phải «Xoá phải được duyệt» hay không (013).
+ *
+ * Nhận biết bằng chuỗi vì đường xoá đi qua cầu RPC, nơi chỉ mang `error` là một câu chữ — không có
+ * `details.canXinXoa`. Chuỗi khớp là phần ổn định nhất của câu (`xoaPhaiQuaDuyet` ở
+ * approvals/rules.js) và có test canh, nên đổi câu ở server là test đỏ ngay.
+ */
+function phaiXinXoa(thongDiep) {
+  return String(thongDiep || "").includes("Xin xoá");
+}
 function confirmDelete(type, id, name) {
   if (!isAuthenticated) {
     showToast("Vui lòng đăng nhập", "error");
@@ -3020,12 +3037,22 @@ function confirmDelete(type, id, name) {
     }
     google.script.run.withSuccessHandler(function (response) {
       if (deleteBtn) setButtonLoading(deleteBtn, false);
+      if (!response.success && phaiXinXoa(response.error) && (type === "project" || type === "task")) {
+        // Vai này bị ghi đè «Xoá phải qua duyệt» (013) ⇒ không phải lỗi, mà là đổi luồng.
+        hoiVaXinXoa(type, id, name);
+        return;
+      }
       response.success ? (showToast((data[type] || type) + " đã được xóa thành công!", "success"), type === "proposal" && updateProposalCounts()) : (showToast(response.error || "Có lỗi xảy ra", "error"), type === "proposal" ? google.script.run.withSuccessHandler(response2 => {
         allProposals = response2, renderProposals();
       }).getProposals() : refreshData());
     }).withFailureHandler(function (error) {
       if (deleteBtn) setButtonLoading(deleteBtn, false);
-      showToast("Lỗi: " + error.message, "error"), type === "proposal" ? google.script.run.withSuccessHandler(response => {
+      const loi = (error && error.message) || String(error || "");
+      if (phaiXinXoa(loi) && (type === "project" || type === "task")) {
+        hoiVaXinXoa(type, id, name);
+        return;
+      }
+      showToast("Lỗi: " + loi, "error"), type === "proposal" ? google.script.run.withSuccessHandler(response => {
         allProposals = response, renderProposals();
       }).getProposals() : refreshData();
     })[text](id);
@@ -3117,6 +3144,38 @@ function isPendingApproval(row) {
  */
 function laNhap(row) {
   return (row && row[COL.P_APPROVAL]) === "Nháp";
+}
+/**
+ * Mục này có YÊU CẦU XOÁ đang chờ duyệt không (013, Vòng 13 đợt 2).
+ *
+ * Khác `laNhap`/`isPendingApproval` ở chỗ: hai hàm kia đọc `approval_status` (một trục), hàm này
+ * đọc cột riêng `P_XOA_BOI` — «xin xoá» là chiều ĐỘC LẬP với luồng duyệt nội dung, nên một mục
+ * hoàn toàn có thể vừa «Đã duyệt» vừa «đang xin xoá». Xem đầu migration 013.
+ */
+function laXinXoa(row) {
+  const nguoi = row && (row[COL.P_XOA_BOI] || row[COL.T_XOA_BOI]);
+  return String(nguoi || "").trim() !== "";
+}
+/**
+ * Nhãn ĐỎ «Đang xin xoá» — chuỗi HTML đã thoát.
+ *
+ * Người dùng chốt: mục đang xin xoá VẪN hiện bình thường và VẪN vào thống kê, chỉ thêm nhãn này.
+ * Chưa ai đồng ý thì việc vẫn phải làm; ẩn ngay thì số liệu nhảy xuống rồi nhảy lại khi bị từ chối,
+ * và tệ hơn là người ta có thể «tự ẩn» việc của mình bằng cách xin xoá.
+ */
+function buildXinXoaBadge(row) {
+  if (!laXinXoa(row)) return "";
+  const nguoi = String((row && (row[COL.P_XOA_BOI] || row[COL.T_XOA_BOI])) || "").trim();
+  const lyDo = String((row && (row[COL.P_XOA_LY_DO] || row[COL.T_XOA_LY_DO])) || "").trim();
+  const tieuDe =
+    "Đang chờ duyệt yêu cầu XOÁ — người xin: " + nguoi + (lyDo ? " · Lý do: " + lyDo : "");
+  return (
+    "<span class=\"status-badge status-delete-req ml-1\" title=\"" +
+    escapeHtmlAttr(tieuDe) +
+    "\"><i class=\"fas fa-trash-can-arrow-up mr-1\"></i>" +
+    escapeHtml("Đang xin xoá") +
+    "</span>"
+  );
 }
 /** Nhãn XÁM «Nháp» + nút «Gửi duyệt» — chuỗi HTML đã thoát, dán thẳng vào innerHTML được. */
 function nhapBadge(row) {
@@ -5772,6 +5831,59 @@ function buildPendingApprovalRowHtml(item) {
   );
 }
 
+/**
+ * BUILDER: một dòng trong «Yêu cầu XOÁ chờ duyệt» (013, Vòng 13 đợt 2).
+ *
+ * Builder RIÊNG chứ không thêm cờ vào `buildPendingApprovalRowHtml`: hai loại dòng có bộ nút khác
+ * nhau hoàn toàn (Duyệt/Trả lại/Từ chối ↔ Đồng ý xoá/Từ chối xoá) và ý nghĩa ngược nhau. Một
+ * builder hai chế độ là chỗ để bấm nhầm nút.
+ *
+ * Mọi giá trị user-data qua escape. `xoa_yeu_cau_ten` và `xoa_ly_do` do `listPendingDeletes` trả kèm.
+ */
+function buildPendingDeleteRowHtml(item) {
+  const laWork = item.kind === "work";
+  const loai = laWork ? "Công việc" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  const tenCongViecCha = String((item && item.work_name) || "").trim();
+  const tieuDeLoai = laWork || tenCongViecCha === "" ? "" : "Thuộc công việc: " + tenCongViecCha;
+  const lyDo = String((item && item.xoa_ly_do) || "").trim();
+  return (
+    '\n<div class="approval-delete-row flex flex-wrap items-center gap-2 py-2 border-b border-red-50" data-entity="' +
+    escapeHtml(laWork ? "work" : "work-item") +
+    '" data-id="' +
+    escapeHtml(item.code || String(item.id)) +
+    '" data-name="' +
+    escapeHtmlAttr(item.name || "") +
+    '">' +
+    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap"' +
+    (tieuDeLoai ? ' title="' + escapeHtmlAttr(tieuDeLoai) + '"' : "") +
+    ">" +
+    escapeHtml(loai) +
+    "</span>" +
+    '<span class="font-medium text-gray-800 text-sm truncate">' +
+    escapeHtml(item.name || "") +
+    "</span>" +
+    '<span class="text-xs text-gray-400 whitespace-nowrap">(' +
+    escapeHtml(item.code || "") +
+    ")</span>" +
+    (lyDo ? '<span class="text-xs text-red-600 truncate">Lý do: ' + escapeHtml(lyDo) + "</span>" : "") +
+    '<span class="text-xs text-gray-400 ml-auto whitespace-nowrap">Người xin: ' +
+    escapeHtml(item.xoa_yeu_cau_ten || "—") +
+    "</span>" +
+    '<span class="flex items-center gap-2">' +
+    '<button type="button" class="delete-approve btn-secondary py-1 px-3 text-xs text-red-600" title="' +
+    escapeHtmlAttr("Đồng ý xoá — mục này và mọi mục bên trong sẽ mất hẳn") +
+    '"><i class="fas fa-trash mr-1"></i>Đồng ý xoá</button>' +
+    '<button type="button" class="delete-reject btn-secondary py-1 px-3 text-xs" title="' +
+    escapeHtmlAttr("Từ chối yêu cầu xoá — mục giữ nguyên, nhãn đỏ biến mất") +
+    '"><i class="fas fa-rotate-left mr-1"></i>Từ chối xoá</button>' +
+    "</span>" +
+    '<div class="delete-reject-box hidden w-full flex items-center gap-2">' +
+    '<input type="text" class="delete-reject-reason form-input py-1 px-2 text-xs flex-1" placeholder="Lý do từ chối (không bắt buộc)...">' +
+    '<button type="button" class="delete-reject-confirm btn-secondary py-1 px-3 text-xs">Xác nhận</button>' +
+    "</div></div>"
+  );
+}
+
 /** Nạp «Chờ duyệt» — chỉ hiện panel cho NGƯỜI DUYỆT; người khác vẫn thấy nhãn vàng ở danh sách. */
 async function renderChoDuyetPanel() {
   const panel = document.getElementById("approvals-panel");
@@ -5791,6 +5903,58 @@ async function renderChoDuyetPanel() {
     (listEl.innerHTML = items.length
       ? items.map(buildPendingApprovalRowHtml).join("")
       : '<div class="text-sm text-gray-400 py-2">Không có mục nào chờ duyệt — tốt lắm!</div>');
+  await renderYeuCauXoaPanel();
+}
+
+/**
+ * Nạp khung «Yêu cầu XOÁ chờ duyệt» (013) — nằm trong cùng panel nhưng là danh sách RIÊNG.
+ *
+ * Ẩn hẳn khung khi không có yêu cầu nào: đây là việc hiếm, để một dòng «không có gì» thường trực
+ * chỉ làm panel dài ra. Khác khung chờ duyệt phía trên — cái đó luôn hiện vì người duyệt cần biết
+ * mình đã xử hết.
+ */
+async function renderYeuCauXoaPanel() {
+  const box = document.getElementById("approvals-delete-box");
+  if (!box) return;
+  const listEl = document.getElementById("approvals-delete-list");
+  const duLieu = await restGet("/api/v1/approvals/pending-deletes");
+  const items = (duLieu && duLieu.items) || [];
+  if (items.length === 0) {
+    box.classList.add("hidden");
+    listEl && (listEl.innerHTML = "");
+    return;
+  }
+  box.classList.remove("hidden");
+  const countEl = document.getElementById("approvals-delete-count");
+  countEl && (countEl.textContent = String(items.length));
+  listEl && (listEl.innerHTML = items.map(buildPendingDeleteRowHtml).join(""));
+}
+
+/** Đồng ý xoá: POST approve-delete → mục mất thật, cả cây bên dưới. */
+async function duyetYeuCauXoa(entity, ref) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/approve-delete"
+  );
+  if (ketQua) {
+    const soCon = Number(ketQua.soCon || 0);
+    showToast(
+      "Đã xoá " + ((ketQua.row && ketQua.row.code) || "") + (soCon > 0 ? " cùng " + soCon + " mục bên trong" : ""),
+      "success"
+    );
+    await napLaiSauDuyet();
+  }
+}
+
+/** Từ chối yêu cầu xoá: mục giữ nguyên, ba cột yêu cầu về rỗng. Lý do KHÔNG bắt buộc. */
+async function tuChoiYeuCauXoa(entity, ref, lyDo) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/reject-delete",
+    { reason: lyDo || "" }
+  );
+  if (ketQua) {
+    showToast("Đã từ chối yêu cầu xoá — mục giữ nguyên", "info");
+    await napLaiSauDuyet();
+  }
 }
 
 /** Duyệt một mục: POST approve → nạp lại panel + danh sách công việc. */
@@ -5845,6 +6009,48 @@ async function traLaiDeSuaMuc(entity, ref, ghiChu) {
 async function napLaiSauDuyet() {
   await renderChoDuyetPanel();
   typeof napLaiDuLieu === "function" ? napLaiDuLieu() : typeof renderProjects === "function" && renderProjects();
+}
+
+/**
+ * XIN XOÁ (013, Vòng 13 đợt 2) — dùng khi máy chủ từ chối xoá thẳng vì vai bị ghi đè
+ * «Xoá phải qua duyệt». Mục KHÔNG mất đi: nó vẫn hiện, chỉ thêm nhãn đỏ «Đang xin xoá» cho tới khi
+ * người duyệt đồng ý (mất thật) hoặc từ chối (nhãn biến mất, mục nguyên trạng).
+ */
+async function xinXoaMuc(entity, ref, lyDo) {
+  const ketQua = await restPost(
+    "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/request-delete",
+    { reason: lyDo }
+  );
+  if (ketQua) {
+    const soCon = Number(ketQua.soCon || 0);
+    showToast(
+      "Đã gửi yêu cầu xoá" + (soCon > 0 ? " (kèm " + soCon + " mục bên trong)" : "") + " — chờ người duyệt xử lý",
+      "success"
+    );
+    await napLaiSauDuyet();
+  }
+}
+
+/**
+ * Máy chủ vừa từ chối xoá vì phải qua duyệt ⇒ hỏi lý do rồi gửi yêu cầu.
+ *
+ * Dùng `prompt` vì hộp thoại xoá hiện tại (`#delete-confirm-modal`) không có ô nhập, và thêm một
+ * modal nữa cho một ô chữ là nhiều việc hơn giá trị nó mang lại. Máy chủ vẫn kiểm lại độ dài.
+ */
+async function hoiVaXinXoa(type, id, name) {
+  const entity = type === "project" ? "work" : "work-item";
+  const lyDo = String(
+    window.prompt(
+      "Xoá «" + name + "» phải được duyệt.\nNhập lý do xin xoá (ít nhất 10 ký tự) để gửi cho người duyệt:",
+      ""
+    ) || ""
+  ).trim();
+  if (lyDo === "") return;
+  if (lyDo.length < 10) {
+    showToast("Lý do xin xoá cần ít nhất 10 ký tự", "error");
+    return;
+  }
+  await xinXoaMuc(entity, id, lyDo);
 }
 
 /** Từ chối một mục — lý do ≥ 10 ký tự (máy chủ kiểm tra lại lần nữa). */
@@ -5920,6 +6126,37 @@ function goiNutChoDuyetPanel() {
   nutRefresh &&
     !nutRefresh.dataset.daNoi &&
     ((nutRefresh.dataset.daNoi = "1"), nutRefresh.addEventListener("click", () => renderChoDuyetPanel()));
+
+  // Khung YÊU CẦU XOÁ (013): listener riêng vì là một phần tử khác, nhưng cùng kiểu delegation
+  // theo class và cùng mốc chống double-bind.
+  const listXoa = document.getElementById("approvals-delete-list");
+  if (!listXoa || listXoa.dataset.duyetBound === "1") return;
+  listXoa.dataset.duyetBound = "1";
+  listXoa.addEventListener("click", async (event) => {
+    const nut = event.target.closest("button");
+    if (!nut) return;
+    const rowEl = nut.closest(".approval-delete-row");
+    if (!rowEl) return;
+    const entity = rowEl.dataset.entity,
+      ref = rowEl.dataset.id;
+    if (nut.classList.contains("delete-approve")) {
+      // Đồng ý xoá là mất thật, cả cây bên dưới — hỏi lại một lần như nút Từ chối của đợt 1.
+      const ten = rowEl.dataset.name || ref;
+      if (!confirm("Đồng ý xoá «" + ten + "» và mọi mục bên trong?\nKhông thể phục hồi. Tiếp tục?")) {
+        return;
+      }
+      nut.disabled = true;
+      await duyetYeuCauXoa(entity, ref);
+    } else if (nut.classList.contains("delete-reject")) {
+      const box = rowEl.querySelector(".delete-reject-box");
+      box && box.classList.toggle("hidden");
+    } else if (nut.classList.contains("delete-reject-confirm")) {
+      // Lý do KHÔNG bắt buộc: từ chối yêu cầu xoá không làm mất gì, khác hẳn từ chối nội dung.
+      const oLyDo = rowEl.querySelector(".delete-reject-reason");
+      nut.disabled = true;
+      await tuChoiYeuCauXoa(entity, ref, ((oLyDo && oLyDo.value) || "").trim());
+    }
+  });
 }
 
 let ganttGroupBy = "department"; // department | deputy | assignee (việc 6.6)
@@ -6239,7 +6476,7 @@ const BANG_PHAN_QUYEN = [
   { ten: 'Xem Công việc / Công việc con / Nhiệm vụ', entityType: 'work', action: 'read' },
   { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create', gc: 'Trưởng phòng / Phó phòng tạo ⇒ chờ Phó GĐ duyệt rồi mới vào thống kê.' },
   { ten: 'Tạo Công việc con (cấp 2)', entityType: 'subwork', action: 'create' },
-  { ten: 'Tạo Nhiệm vụ (cấp 3)', entityType: 'task', action: 'create', gc: 'Nhiệm vụ KHÔNG qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con.' },
+  { ten: 'Tạo Nhiệm vụ (cấp 3)', entityType: 'task', action: 'create', gc: 'Mặc định nhiệm vụ KHÔNG qua duyệt; đặt ⏳ ở đây thì nhiệm vụ mới rơi «Chờ duyệt».' },
   { ten: 'Sửa Công việc (cấp 1)', entityType: 'work', action: 'update' },
   { ten: 'Sửa Công việc con (cấp 2)', entityType: 'subwork', action: 'update', gc: 'TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.' },
   { ten: 'Sửa Nhiệm vụ (cấp 3)', entityType: 'task', action: 'update' },
@@ -6248,6 +6485,8 @@ const BANG_PHAN_QUYEN = [
   { ten: 'Xoá Nhiệm vụ (cấp 3)', entityType: 'task', action: 'delete', gc: 'Cán bộ chỉ xoá nhiệm vụ của mình.' },
   { ten: 'Duyệt Công việc (cấp 1)', entityType: 'work', action: 'approve', gc: 'Chỉ hai vai này được duyệt — nơi những mục ⏳ chờ.' },
   { ten: 'Duyệt Công việc con (cấp 2)', entityType: 'subwork', action: 'approve' },
+  { ten: 'Duyệt Nhiệm vụ (cấp 3)', entityType: 'task', action: 'approve', gc: 'Chỉ cần khi ô «Tạo Nhiệm vụ» đặt ⏳ — không có mục nào chờ thì không có gì để duyệt.' },
+  { ten: 'Duyệt yêu cầu XOÁ (cả 3 cấp)', gc: 'Đi theo quyền Duyệt của từng cấp ở trên, không có ô riêng. Vai bị đặt ⏳ ở hàng Xoá phải bấm «Xin xoá» rồi chờ.', a: { s: '✓', n: '' }, g: { s: '✓', n: 'Phòng phụ trách' }, tp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, pp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, nv: { s: '✕', n: 'Chỉ xin, không duyệt' } },
   { ten: 'Thêm / sửa / xoá Người dùng', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
   { ten: 'Thêm / sửa / xoá Phòng ban', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
   { ten: 'Ủy quyền cho người khác', gc: 'Ngang hoặc xuống cấp, cùng phòng; người nhận phải bấm «Đồng ý».', a: { s: '✕', n: 'Không ủy' }, g: { s: '✓', n: '' }, tp: { s: '✓', n: '' }, pp: { s: '✓', n: '' }, nv: { s: '✓', n: 'Ủy ngang cho Cán bộ khác' } },
@@ -6354,13 +6593,13 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
         // «Chờ duyệt» — đúng luật máy chủ (permissions/service.js):
         //   Tạo   : mọi vai trong bảng (Phó GĐ / TP / PP / Cán bộ)
         //   Sửa   : TP / PP (011) và Cán bộ (Vòng 12e — yêu cầu người dùng)
-        //   Xoá   : chỉ TP / PP — 'cho-duyet' ở Xoá nghĩa là CHẶN xoá và luồng duyệt-yêu-cầu-xoá
-        //           chưa có, nên không mở cho Cán bộ (họ chỉ xoá được nhiệm vụ của chính mình).
+        //   Xoá   : TP / PP (011) và Cán bộ (013 — «Xoá phải qua duyệt»: bấm 🗑 sẽ đổi thành
+        //           «Xin xoá» kèm lý do; mục KHÔNG mất cho tới khi người duyệt đồng ý).
         const laLanhDao = vai === 'Trưởng phòng' || vai === 'Phó phòng';
         const coChoDuyet =
           row.action === 'create' ||
           (row.action === 'update' && (laLanhDao || vai === 'Nhân viên')) ||
-          (row.action === 'delete' && laLanhDao);
+          (row.action === 'delete' && (laLanhDao || vai === 'Nhân viên'));
         // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         // Option đầu = TRẠNG THÁI ĐANG DÙNG (không lặp lại ở sau); chọn nó = về luật gốc.
         const hienTai = trangThaiHienTai(row, vai);

@@ -311,10 +311,12 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(bang).toContain('TẤT CẢ các phòng');
   });
 
-  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 12 hàng × 4 vai + phạm vi cho 3 vai', () => {
+  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 13 hàng × 4 vai + phạm vi cho 3 vai', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
-    expect((bang.match(/data-gd="1"/g) || []).length).toBe(12 * 4);
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(12 * 3);
+    // Vòng 13 đợt 2: +1 hàng dropdown «Duyệt Nhiệm vụ (cấp 3)» (12 → 13); hàng «Duyệt yêu cầu
+    // XOÁ» chỉ hiển thị nên KHÔNG cộng vào hai con số này.
+    expect((bang.match(/data-gd="1"/g) || []).length).toBe(13 * 4);
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(13 * 3);
     // Vòng 12b: dropdown Cán bộ mang vai CSDL «Nhân viên» — không phải nhãn «Cán bộ».
     expect(bang).toContain('data-vai="Nhân viên"');
     expect(bang).toContain('data-vai="Phó Giám đốc"');
@@ -397,19 +399,21 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(o).toContain('<option value="tu-choi"');
   });
 
-  it('TC-TKPQ-13: cột Cán bộ CÓ ⏳ ở hàng Tạo và Sửa, KHÔNG có ở hàng Xoá', () => {
+  it('TC-TKPQ-13: cột Cán bộ CÓ ⏳ ở hàng Tạo, Sửa và Xoá (013 — Xoá phải qua duyệt)', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     // Yêu cầu người dùng Vòng 12e: «riêng cán bộ thì thêm option tạo, sửa thêm mới duyệt».
     expect(oCanBo(bang, 'Tạo Nhiệm vụ (cấp 3)')).toContain('value="cho-duyet"');
     expect(oCanBo(bang, 'Sửa Nhiệm vụ (cấp 3)')).toContain('value="cho-duyet"');
-    // Xoá: 'cho-duyet' nghĩa là CHẶN xoá mà chưa có luồng duyệt-yêu-cầu-xoá ⇒ server chặn.
-    expect(oCanBo(bang, 'Xoá Nhiệm vụ (cấp 3)')).not.toContain('value="cho-duyet"');
+    // Xoá (013): 'cho-duyet' giờ nghĩa là «phải XIN XOÁ» — bấm 🗑 đổi thành hộp nhập lý do gửi
+    // yêu cầu, mục KHÔNG mất. Server đã mở từ 013 (TC-XOA-01 dựa trên nó) ⇒ client phải mở theo,
+    // nếu không admin không thể bật luồng xin xoá cho cán bộ từ giao diện.
+    expect(oCanBo(bang, 'Xoá Nhiệm vụ (cấp 3)')).toContain('value="cho-duyet"');
   });
 
   it('TC-TKPQ-14: cột Cán bộ KHÔNG có select phạm vi (server chặn «tat-ca» cho Nhân viên)', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     expect(oCanBo(bang, 'Xem Công việc')).not.toContain('data-pv="1"');
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(12 * 3); // 3 vai, không có Cán bộ
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(13 * 3); // 3 vai, không có Cán bộ
   });
 
   it('TC-TKPQ-15: badge của NGƯỜI THƯỜNG ở cột Cán bộ đọc ma trận + ghi đè, không phải 👁 cứng', () => {
@@ -424,5 +428,18 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
       'Sửa Công việc (cấp 1)'
     );
     expect(oGhiDe).toContain('Ghi đè: cho phép ngay');
+  });
+
+  it('TC-TKPQ-16: hàng «Duyệt Nhiệm vụ (cấp 3)» có dropdown; hàng «Duyệt yêu cầu XOÁ» chỉ hiển thị', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    // 013: nhiệm vụ có thể rơi «Chờ duyệt» khi admin đặt ⏳ ở ô «Tạo Nhiệm vụ» ⇒ phải có AI ĐÓ
+    // duyệt được — hàng mới với dropdown task:approve như hai hàng Duyệt kia.
+    const hangDuyetNv = oCanBo(bang, 'Duyệt Nhiệm vụ (cấp 3)');
+    expect(hangDuyetNv).toContain('data-entity="task"');
+    expect(hangDuyetNv).toContain('data-action="approve"');
+    // Quyền duyệt yêu cầu xoá đi theo quyền Duyệt của từng cấp ⇒ hàng chỉ hiển thị, không ô riêng.
+    const hangXoa = oCanBo(bang, 'Duyệt yêu cầu XOÁ (cả 3 cấp)');
+    expect(hangXoa).not.toContain('data-gd="1"');
+    expect(hangXoa).toContain('Chỉ xin, không duyệt');
   });
 });

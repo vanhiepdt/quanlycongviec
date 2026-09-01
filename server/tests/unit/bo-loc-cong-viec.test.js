@@ -218,6 +218,33 @@ describe('TC-CV-BL — danh sách phòng trong ô lọc không rộng hơn phạ
   });
 });
 
+// ------------------------------------------------------------------------------------------
+// TC-CV-BL-3 (013, Vòng 13 đợt 2): mục đang XIN XOÁ vẫn hiện + nhãn đỏ, nhưng VẪN vào thống kê —
+// quyết định người dùng: «chưa ai đồng ý cả, việc vẫn phải làm»; ẩn ngay thì số liệu nhảy lên
+// xuống và cán bộ có thể «tự ẩn» việc của mình bằng cách xin xoá.
+// ------------------------------------------------------------------------------------------
+describe('TC-CV-BL-3 — «Đang xin xoá» vẫn vào thống kê (013)', () => {
+  it('thẻ có nhãn đỏ «Đang xin xoá» nhưng isCountableRow vẫn true', () => {
+    const row = congViec('CV05', 'Việc xin xoá', 'Phòng Kế hoạch', '2026-08-01', '2026-08-31');
+    row['Trạng thái duyệt'] = 'Đã duyệt';
+    row['Người xin xoá'] = 'Nguyễn Văn A';
+    row['Lý do xin xoá'] = 'Trùng với kế hoạch phòng khác';
+    window.__pq('allProjects', [row]);
+    window.renderProjects();
+    const html = document.getElementById('projects-grid').innerHTML;
+    expect(html).toContain('Đang xin xoá');
+    expect(html).toContain('status-delete-req');
+    expect(window.isCountableRow(row)).toBe(true);
+  });
+
+  it('nháp/chờ duyệt thì ngược lại — vẫn bị loại khỏi thống kê (luật 012 giữ nguyên)', () => {
+    const row = congViec('CV06', 'Việc nháp', 'Phòng Kế hoạch', '2026-08-01', '2026-08-31');
+    row['Trạng thái duyệt'] = 'Nháp';
+    window.__pq('allProjects', [row]);
+    expect(window.isCountableRow(row)).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------------------------
 // TC-CV-NHAP (012, Vòng 13) — thẻ BẢN NHÁP trên tab «Quản lý công việc».
 //

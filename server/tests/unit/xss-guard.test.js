@@ -116,9 +116,9 @@ const CO_Y_KHONG_BOC = [
 const SINK_DA_SOAT_TAY = [
   {
     ma: '""',
-    so: 9,
+    so: 10,
     ly_do:
-      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc; 2026-08-29: +1 chỗ xoá khung trình sửa phân quyền khi vai không phải admin; Vòng 10: trình sửa cũ đã gỡ nên dòng đó mất, bảng mới xoá rỗng vùng «Đang tải» trước khi nạp)',
+      'xoá rỗng vùng chứa, không có dữ liệu nào đi vào (2026-08-26: +1 chỗ xoá option Năm của Gantt trước khi nạp lại; 2026-08-27: +1 chỗ xoá option Năm của tab Nhiệm vụ; 2026-08-27 ủy quyền: +1 chỗ xoá khung lỗi của modal ủy quyền; 2026-08-28: +1 chỗ xoá option Năm của tab Công việc; 2026-08-29: +1 chỗ xoá khung trình sửa phân quyền khi vai không phải admin; Vòng 10: trình sửa cũ đã gỡ nên dòng đó mất, bảng mới xoá rỗng vùng «Đang tải» trước khi nạp; Vòng 13 đợt 2: +1 chỗ xoá rỗng khung «Yêu cầu xoá» trong renderYeuCauXoaPanel trước khi nạp lại)',
   },
   {
     ma: 'el.dataset.originalContent',
@@ -286,9 +286,16 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // `buildLuuNhapNutHtml` 2 (tiêu đề + nhãn nút), 2 lời gọi `nhapBadge(project)` ở thẻ công việc
     // và dải cấp 1, `buildPendingApprovalRowHtml` +9 (`data-name`, `data-work-code`, tiêu đề loại
     // kèm tên công việc cấp 1, và 4 tiêu đề nút Xem chi tiết/Duyệt/Trả lại/Từ chối).
+    // 2026-09-01 (013, luồng YÊU CẦU XOÁ — docs/KE-HOACH-DUYET-CAY.md mục 8): **+2 chỗ ghi HTML**
+    // và +15 giá trị. Hai chỗ ghi: `renderYeuCauXoaPanel` xoá rỗng khung (hằng `""`) và ghi danh
+    // sách dòng yêu cầu xoá. Giá trị: `buildXinXoaBadge` 2 (tiêu đề + chữ «Đang xin xoá»),
+    // `buildPendingDeleteRowHtml` 11 (`data-entity`, `data-id`, `data-name`, tiêu đề loại kèm tên
+    // công việc cấp 1, nhãn loại, tên, mã, lý do, người xin, 2 tiêu đề nút), 2 lời gọi
+    // `buildXinXoaBadge(project)` ở thẻ công việc và dải cấp 1. Đổi tên từ `xinXoaBadge` vì bộ
+    // soát chỉ nhận helper trả HTML với tiền tố build*/tao*/render* (bẫy §13.5). ⇒ 98 chỗ / 730.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 96, gia_tri: 715 });
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 98, gia_tri: 730 });
   });
 });
 
