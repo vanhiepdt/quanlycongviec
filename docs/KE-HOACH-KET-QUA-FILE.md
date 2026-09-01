@@ -243,6 +243,57 @@ duyệt/góp ý/bảng luồng hiện có không đổi. (Nguồn: https://api.o
 | 6 | «Trình» = TP/PP tự chọn (mục 21) | ✅ chốt — khớp cách đã làm |
 | 7 | Ô **«Ý kiến»** trong khối file: gửi vào bản mới nhất; nút Yêu cầu sửa/Trình/Trả về đọc ô này trước khi hỏi lại (người dùng yêu cầu «cho thêm phần Ý kiến vào») | ✅ đã làm (TCKQ-14/15) |
 
+## 11. ONLYOFFICE ĐÃ NHÚNG THẬT (2026-09-02) — theo `docs-api/get-started/basic-concepts` + `usage-api/config`
+
+Người dùng báo **«KO THẤY MÀN HÌNH SỬA»** và đưa link tài liệu Docs API. Đo trước khi sửa (đường
+`/task-file-versions/:id/editor` trả **200**, HTML đúng, `DocsAPI` khởi tạo đúng cú pháp) rồi tìm ra
+**HAI lỗi xếp lớp** — cái nào cũng cho ra đúng triệu chứng «trang trắng»:
+
+**Lỗi 1 — CSP của `helmet()` chặn `api.js` của Document Server.** `helmet()` đặt
+`script-src 'self'` cho **mọi** phản hồi. Trang editor bắt buộc nạp
+`http://<DS>/web-apps/apps/api/documents/api.js` (đúng đường dẫn tài liệu quy định), origin khác ⇒
+trình duyệt **chặn thẻ script**, biến `DocsAPI` không tồn tại, `new DocsAPI.DocEditor(...)` ném
+`ReferenceError` **trong tab Console** còn trên màn hình chỉ là khoảng trắng. Sửa: `cspEditor(dsUrl)`
++ `res.setHeader('Content-Security-Policy', …)` cho **đúng một** đường editor — nới `script-src`,
+`frame-src` (DocEditor dựng `<iframe>` trỏ DS), `connect-src` (+`ws:`/`wss:` cho kết nối lưu),
+`img-src`/`style-src`/`font-src`/`media-src`; đồng thời bỏ `Cross-Origin-Embedder-Policy` và đặt
+`Cross-Origin-Resource-Policy: cross-origin`. Phần còn lại của API **giữ CSP chặt như trước**.
+
+**Lỗi 2 — `/raw/:id` làm SẬP CẢ MÁY CHỦ khi file không có trên đĩa.**
+`createReadStream(duong).pipe(res)` với đường dẫn không tồn tại phát sự kiện `'error'` **không ai
+bắt** ⇒ Node ném «Unhandled error event» và **tiến trình chết**. Gặp ngay ở bộ seed Vòng 14: seed chỉ
+tạo dòng CSDL, NV-02..05 không có file thật. Người dùng bấm ✎ → DS gọi `/raw` → máy chủ sập → mọi
+thứ khác cùng chết, nên triệu chứng nhìn như «editor không mở». Sửa: `access()` kiểm trước ⇒ **404**
+gọn, cộng listener `'error'` trên stream cho trường hợp file mất **giữa lúc** đang truyền.
+
+**Sửa thêm theo tài liệu** (`usage-api/config/document`):
+- `documentType` **không được ghi cứng `'word'`** — bảng `DOCUMENT_TYPE_THEO_DUOI` cho `pdf → 'pdf'`,
+  `doc/docx → 'word'`. Seed có `.pdf` nên lỗi này gặp ngay ở NV-05.
+- `document.key` phải **đổi khi nội dung đổi**, giới hạn 128 ký tự, chỉ `0-9 a-z A-Z -._=`
+  (tài liệu nói rõ: key trùng ⇒ DS lấy lại bản trong **cache** của nó). Nay ghép
+  `tf-<idBản>-<kíchThước>-<mốcNộp>` rồi `.slice(0, 128)`: mở lại cùng bản thì key ổn định (vào đúng
+  phiên đang sửa), lưu ra bản mới thì id khác ⇒ key khác.
+- Thêm `events.onAppReady` / `onError` / `onRequestClose` + khối `#loi` trên trang: **mọi** đường
+  thất bại nay hiện một câu tiếng Việt kèm 3 bước cần kiểm, thay vì trang trắng không lời giải thích.
+
+**Đã kiểm chứng đầu-cuối, không qua trình duyệt** (`tools/_tam-ds*.mjs`, đã xoá sau khi dùng):
+nộp `.docx` thật vào NV-01 → `GET .../editor` **200** với `script-src … http://localhost` →
+`docker exec busy_merkle wget <raw url>` → **HTTP 200, 7726 byte** → gọi `POST /ConvertService.ashx`
+của DS với JWT ký bằng `ONLYOFFICE_JWT_SECRET` → DS trả **`fileUrl`** (không phải `error`). Ba việc
+đó chứng minh cùng lúc: JWT hai bên **trùng secret**, DS **tải được** file từ app qua
+`host.docker.internal:3000`, và DS **đọc được** nội dung. Editor dùng đúng ba đường ấy.
+
+**Test canh**: TC-TF-16 (CSP có origin DS ở `script-src`/`frame-src`/`connect-src`; không có COEP;
+CORP `cross-origin`; có `onerror=`/`onAppReady`; `documentType` theo đuôi cho cả docx và pdf),
+TC-TF-17 (`/raw` thiếu file ⇒ 404 **và** `/healthz` vẫn 200 — tức máy chủ còn sống).
+`vitest.config.js` nay đặt 3 biến `ONLYOFFICE_*` giả để tính năng **bật** trong test, nếu không thì
+route trả trang «chưa bật» và lỗi màn-hình-trắng lọt qua cổng test.
+
+**Bẫy còn lại cho người deploy**: `ONLYOFFICE_URL` là địa chỉ **trình duyệt** gọi DS;
+`ONLYOFFICE_CALLBACK_BASE` là địa chỉ **DS gọi ngược** về app — hai giá trị này **khác nhau** khi DS
+chạy trong Docker (`http://localhost` và `http://host.docker.internal:3000`). Và app phải nghe trên
+cổng mà container với tới được: máy chủ **tắt** thì DS báo lỗi tải file, không phải lỗi cấu hình.
+
 ## 10. Test thủ công cho người dùng (bấm tay sau khi deploy)
 
 `Ctrl+Shift+R` → Console phải thấy banner `[QLCV] app.js 20260901-3` → mở modal một nhiệm vụ có gán

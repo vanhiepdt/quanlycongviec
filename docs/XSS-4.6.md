@@ -541,4 +541,12 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   `GET /work-items/:ref/files` (không sinh HTML) · `canUserEditResource` thêm `'task'` cho TP/PP
   (chỉ điều kiện, không nội suy) · seed `dev-vong14.sql` là SQL. ⇒ **pin không đổi: 99 chỗ / 792
   giá trị**; banner `app.js 20260901-6` (buster `index.html` cùng số).
+- **Vòng 14续4 (2026-09-02 — «KO THẤY MÀN HÌNH SỬA»)**: trang editor ONLYOFFICE là **HTML của MÁY
+  CHỦ** (`service.htmlEditor`), không nằm trong `web/assets/js/app.js` ⇒ **không vào phép đếm**
+  (bộ `tools/dem-xss.mjs` chỉ soát app.js). Trang đó vẫn phải sạch, và nó sạch theo hai đường:
+  cấu hình đi qua `JSON.stringify(...).replace(/</g, '\\u003c')` — chặn `</script>` chèn từ tên
+  file; ba câu lỗi mới là **chuỗi hằng do lập trình viên viết**, không nội suy dữ liệu người dùng;
+  `dsUrl` cũng qua `JSON.stringify`. **Đây là trang DUY NHẤT được nới CSP** (`cspEditor()` thêm
+  origin Document Server vào `script-src`/`frame-src`/`connect-src`) — nới cho đúng một route bằng
+  `res.setHeader`, phần còn lại của API giữ CSP mặc định của helmet. ⇒ **pin không đổi: 99/792**.
 
