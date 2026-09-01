@@ -62,12 +62,13 @@ export async function luuGhiDe(user, thayDoi) {
     // phòng (cửa duyệt là Phó GĐ phụ trách hoặc Giám đốc), và từ Vòng 12e thêm **Cán bộ**
     // (`Nhân viên`) cho TẠO và SỬA theo yêu cầu người dùng «riêng cán bộ thì thêm option tạo,
     // sửa thêm mới duyệt» — việc Cán bộ lập/sửa rơi «Chờ duyệt» chờ cấp trên duyệt lại.
-    // XOÁ vẫn không mở cho Cán bộ: 'cho-duyet' ở delete nghĩa là CHẶN xoá (`xoaDuocKhongKhiChoDuyet`)
-    // mà luồng duyệt-yêu-cầu-xoá chưa có, nên với vai chỉ xoá được nhiệm vụ của mình thì thành
-    // khoá cứng không có đường ra.
-    const VAI_CO_CHO_DUYET = ['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'];
-    const canBoChoDuyetDuoc = g.vai === 'Nhân viên' && ['create', 'update'].includes(g.action);
-    if (g.giaTri === 'cho-duyet' && !VAI_CO_CHO_DUYET.includes(g.vai) && !canBoChoDuyetDuoc) {
+    //
+    // TỪ 013 (Vòng 13 đợt 2): mở luôn XOÁ cho Cán bộ. Trước đó không mở vì 'cho-duyet' ở delete
+    // chỉ CHẶN xoá mà chưa có luồng duyệt-yêu-cầu-xoá, nên với vai chỉ xoá được nhiệm vụ của mình
+    // thì thành khoá cứng không có đường ra. Nay `xoaPhaiQuaDuyet` + `xinXoa`/`duyetXoa`/`tuChoiXoa`
+    // đã có đường ra, đúng yêu cầu người dùng «thêm phần Chờ duyệt cho cán bộ đối với Xoá Công việc
+    // cấp 1, cấp 2, nhiệm vụ cấp 3» ⇒ mọi vai trong bảng đều dùng được 'cho-duyet' ở cả 3 hành động.
+    if (g.giaTri === 'cho-duyet' && !vaiSuaDuoc(g.vai)) {
       throw new AppError('VALIDATION_ERROR', `Vai "${g.vai}" không có luồng «Chờ duyệt»`, {
         field: 'giaTri',
       });

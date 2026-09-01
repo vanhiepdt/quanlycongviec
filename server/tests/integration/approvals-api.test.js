@@ -149,7 +149,10 @@ describe('Gửi duyệt (submit) — việc 5.2', () => {
     expect(tb[0].is_read).toBe(false);
   });
 
-  it('Nhiệm vụ cấp 3 không có bước duyệt ⇒ 409', async () => {
+  it('Nhiệm vụ cấp 3 «Đã duyệt» không qua bước duyệt ⇒ 409 (013 giữ luật gốc)', async () => {
+    // Cấp 3 mặc định là «Đã duyệt» (việc 5.1) ⇒ gửi duyệt vô nghĩa. Từ 013 điều kiện xét theo
+    // TRẠNG THÁI của dòng, không theo cấp — nhiệm vụ đã bị đưa vào luồng duyệt thì xử được
+    // (TC-APR-21). Ca này canh phần KHÔNG đổi: 99% nhiệm vụ vẫn nằm ngoài luồng duyệt.
     const work = await taoViecChoDuyet();
     const item = await apiTp.post('/api/v1/work-items', {
       workRef: work.code,
@@ -157,9 +160,10 @@ describe('Gửi duyệt (submit) — việc 5.2', () => {
       name: 'Nhiệm vụ',
     });
     const code = item.body.data.item.code;
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Đã duyệt');
     const res = await apiTp.post(`/api/v1/approvals/work-item/${code}/submit`);
     expect(res.status).toBe(409);
-    expect(res.body.error.message).toContain('không có bước duyệt');
+    expect(res.body.error.message).toContain('không qua bước duyệt');
   });
 
   it('Loại thực thể lạ ⇒ 400, không phải 404', async () => {
@@ -672,5 +676,117 @@ describe('Khoá duyệt không đổi được bằng đường vòng', () => {
     const sau = await khoaDuyet('works', work.code);
     expect(Number(sau.approver_id)).toBe(Number(pgdA.id));
     expect(new Date(sau.approved_at).getFullYear()).toBeGreaterThan(2020);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// TC-APR-20..22 (013, Vòng 13 đợt 2) — DUYỆT NHIỆM VỤ CẤP 3.
+//
+// Yêu cầu người dùng: «thêm phần duyệt nhiệm vụ (cấp 3) của cán bộ».
+//
+// Lỗ do đợt 1 để lại: Vòng 12e mở ⏳ cho Cán bộ ở ô «Tạo Nhiệm vụ», nên admin bật được ghi đè để
+// nhiệm vụ mới rơi vào «Chờ duyệt» — mà `assertCoBuocDuyet` chặn cứng theo CẤP nên những mục đó
+// KẸT VĨNH VIỄN, không ai duyệt được. 013 đổi điều kiện sang theo TRẠNG THÁI của chính dòng.
+// ---------------------------------------------------------------------------------------------
+describe('TC-APR-20..22 — duyệt nhiệm vụ cấp 3 khi admin đã bật ⏳', () => {
+  let admin;
+  let apiAdmin;
+  let nv;
+  let apiNv;
+
+  beforeEach(async () => {
+    admin = await makeLoginUser({
+      code: 'NV001',
+      email: 'admin@test.local',
+      role: 'admin',
+      department_id: null,
+    });
+    nv = await makeLoginUser({
+      code: 'NV030',
+      full_name: 'Nguyễn Văn Cán Bộ',
+      email: 'nv-a@test.local',
+      role: 'Nhân viên',
+      department_id: phongA.id,
+    });
+    apiAdmin = await dangNhap(admin);
+    apiNv = await dangNhap(nv);
+  });
+
+  /** admin đặt ⏳ cho ô «Tạo Nhiệm vụ» của một vai (Vòng 12e đã mở đường này). */
+  async function batChoDuyetTaoNhiemVu(vai) {
+    const res = await apiAdmin.put('/api/v1/permissions', {
+      thayDoi: [{ vai, entityType: 'task', action: 'create', giaTri: 'cho-duyet' }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+  }
+
+  /** Một nhiệm vụ cấp 3 do Cán bộ lập, đang «Chờ duyệt» nhờ ghi đè ⏳. */
+  async function taoNhiemVuChoDuyet() {
+    const work = await taoViecChoDuyet();
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    await batChoDuyetTaoNhiemVu('Nhân viên');
+    const res = await apiNv.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 3,
+      name: 'Nhiệm vụ của cán bộ',
+      assigneeId: nv.id,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const code = res.body.data.item.code;
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Chờ duyệt');
+    return { work, code };
+  }
+
+  it('TC-APR-20: ⏳ ở ô «Tạo Nhiệm vụ» ⇒ nhiệm vụ mới «Chờ duyệt» và VÀO badge', async () => {
+    const { code } = await taoNhiemVuChoDuyet();
+    // Trước 013 có một ca khẳng định «nhiệm vụ cấp 3 không bao giờ vào số đếm chờ duyệt» — điều đó
+    // chỉ đúng khi không ai bật ⏳; nay bật rồi thì nó phải hiện ra để có người xử.
+    const badge = await apiPgdA.get('/api/v1/approvals/pending-count');
+    expect(badge.body.data.items).toBeGreaterThanOrEqual(1);
+    const hop = await apiPgdA.get('/api/v1/approvals/pending');
+    expect(hop.body.data.items.map((i) => i.code)).toContain(code);
+  });
+
+  it('TC-APR-21: Phó Giám đốc DUYỆT được nhiệm vụ cấp 3 (trước 013 là 409)', async () => {
+    const { code } = await taoNhiemVuChoDuyet();
+    const res = await apiPgdA.post(`/api/v1/approvals/work-item/${code}/approve`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const sau = await khoaDuyet('work_items', code);
+    expect(sau.approval_status).toBe('Đã duyệt');
+    expect(Number(sau.approver_id)).toBe(Number(pgdA.id));
+    // Người lập được báo kết quả.
+    const tb = await thongBaoCua(nv.id);
+    expect(tb.at(-1).type).toBe('approval_approved');
+  });
+
+  it('TC-APR-21: TRẢ LẠI và TỪ CHỐI cũng chạy trên nhiệm vụ cấp 3', async () => {
+    const { code } = await taoNhiemVuChoDuyet();
+    const traLai = await apiPgdA.post(`/api/v1/approvals/work-item/${code}/return`, {
+      reason: 'Mô tả nhiệm vụ chưa rõ, bổ sung rồi gửi lại',
+    });
+    expect(traLai.status).toBe(200);
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Nháp');
+
+    // Nháp cũng nằm trong luồng duyệt ⇒ người lập gửi lại được, rồi từ chối là XOÁ HẲN (012).
+    await apiNv.post(`/api/v1/approvals/work-item/${code}/submit`);
+    const tuChoi = await apiPgdA.post(`/api/v1/approvals/work-item/${code}/reject`, {
+      reason: 'Nhiệm vụ này trùng với một nhiệm vụ đã có',
+    });
+    expect(tuChoi.status).toBe(200);
+    expect(await conTonTai('work_items', code)).toBe(false);
+  });
+
+  it('TC-APR-22: TP/PP duyệt cấp 3 ⇒ 403; admin ghi đè task:approve ⇒ duyệt được', async () => {
+    const { code } = await taoNhiemVuChoDuyet();
+    // Ma trận §6 KHÔNG cho Trưởng phòng duyệt — 013 không đổi ma trận gốc.
+    const truoc = await apiTp.post(`/api/v1/approvals/work-item/${code}/approve`);
+    expect(truoc.status).toBe(403);
+
+    await apiAdmin.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'task', action: 'approve', giaTri: 'cho-phep' }],
+    });
+    const sau = await apiTp.post(`/api/v1/approvals/work-item/${code}/approve`);
+    expect(sau.status, JSON.stringify(sau.body)).toBe(200);
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Đã duyệt');
   });
 });

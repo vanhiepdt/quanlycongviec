@@ -29,6 +29,11 @@ export const COL = Object.freeze({
   P_APPROVER: 'Người duyệt',
   P_APPROVED_DATE: 'Ngày duyệt',
   P_REJECT_REASON: 'Lý do từ chối',
+  // Yêu cầu xoá (013) — khoá MỚI, không có trong bảng Sheets cũ. Giao diện đọc để vẽ nhãn đỏ
+  // «Đang xin xoá» và tooltip có lý do + người xin.
+  P_XOA_BOI: 'Người xin xoá',
+  P_XOA_LUC: 'Ngày xin xoá',
+  P_XOA_LY_DO: 'Lý do xin xoá',
   // Phân công ba lớp (005_phan_cong.sql) — khoá MỚI, không tồn tại trong bảng Sheets cũ nên
   // đặt tên theo từ vựng hiện hành, không cần giữ tên cột cũ.
   P_DEPT_ID: 'ID phòng',
@@ -58,6 +63,10 @@ export const COL = Object.freeze({
   T_APPROVAL: 'Trạng thái duyệt',
   T_APPROVER: 'Người duyệt',
   T_APPROVED_DATE: 'Ngày duyệt',
+  // Yêu cầu xoá (013) — xem chú thích ở nhóm `P_XOA_*`.
+  T_XOA_BOI: 'Người xin xoá',
+  T_XOA_LUC: 'Ngày xin xoá',
+  T_XOA_LY_DO: 'Lý do xin xoá',
   D_ID: 'Mã phòng',
   D_NAME: 'Tên phòng',
   D_DIRECTOR: 'Email Phó GĐ phụ trách',
@@ -453,6 +462,11 @@ export function projectToLegacy(row, ctx = {}) {
     [COL.P_APPROVER]: ctx.nameById?.get(row.approver_id) ?? '',
     [COL.P_APPROVED_DATE]: dayOf(row.approved_at),
     [COL.P_REJECT_REASON]: row.reject_reason ?? '',
+    // Yêu cầu xoá (013): giao diện vẽ nhãn đỏ theo `P_XOA_BOI` khác rỗng. Tên người xin tra từ
+    // `ctx.nameById` cùng cách với người duyệt — dữ liệu cũ không có ai thì trả rỗng, không phải '#id'.
+    [COL.P_XOA_BOI]: ctx.nameById?.get(row.xoa_yeu_cau_boi) ?? '',
+    [COL.P_XOA_LUC]: dayOf(row.xoa_yeu_cau_luc),
+    [COL.P_XOA_LY_DO]: row.xoa_ly_do ?? '',
     // Phần nguồn gốc (B7) chưa có tên cột cũ; giữ nguyên tên API để giao diện mới dùng được ngay.
     origin: row.origin ?? '',
     createdByName: row.created_by_name ?? '',
@@ -507,6 +521,10 @@ export function taskToLegacy(row, ctx = {}) {
     [COL.T_APPROVAL]: row.approval_status ?? '',
     [COL.T_APPROVER]: ctx.nameById?.get(row.approver_id) ?? '',
     [COL.T_APPROVED_DATE]: dayOf(row.approved_at),
+    // Yêu cầu xoá (013) — xem chú thích ở `projectToLegacy`.
+    [COL.T_XOA_BOI]: ctx.nameById?.get(row.xoa_yeu_cau_boi) ?? '',
+    [COL.T_XOA_LUC]: dayOf(row.xoa_yeu_cau_luc),
+    [COL.T_XOA_LY_DO]: row.xoa_ly_do ?? '',
     origin: row.origin ?? '',
     createdByName: row.created_by_name ?? '',
     assignedByName: row.assigned_by_name ?? '',

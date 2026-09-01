@@ -12,7 +12,8 @@ const db = (client) => client ?? pool;
 const COLUMNS = `id, code, name, description, manager_id, manager_name, department_id,
                  supervisor_id, leader_ids,
                  start_date, end_date, status, approval_status, approver_id, approved_at,
-                 reject_reason, sort_order, created_by, created_by_name,
+                 reject_reason, xoa_yeu_cau_boi, xoa_yeu_cau_luc, xoa_ly_do,
+                 sort_order, created_by, created_by_name,
                  origin, assigned_by_id, assigned_by_name, assigned_at,
                  created_at, updated_at`;
 
@@ -32,6 +33,12 @@ export const WRITABLE = Object.freeze([
   'approver_id',
   'approved_at',
   'reject_reason',
+  // Ba cột yêu cầu xoá (013). Nằm trong WRITABLE vì `approvals/service` ghi chúng qua `update()` —
+  // cùng đường với 4 cột khoá duyệt phía trên. An toàn vì `boCotKhoaDuyet` gỡ cả 7 cột khỏi thân
+  // request PATCH/POST, nên người dùng không có đường nào tự đặt.
+  'xoa_yeu_cau_boi',
+  'xoa_yeu_cau_luc',
+  'xoa_ly_do',
   'sort_order',
 ]);
 

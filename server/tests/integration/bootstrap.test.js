@@ -77,7 +77,9 @@ describe('GET /api/v1/bootstrap', () => {
       }),
     ]);
     expect(data.people.some((p) => p.email === admin.email)).toBe(true);
-    expect(data.pendingCount).toEqual({ works: 0, items: 0, total: 0 });
+    // `deletes` thêm ở 013 (yêu cầu xoá đang treo) và cộng vào `total` — badge trả lời «còn bao
+    // nhiêu việc phải xử», mà một yêu cầu xoá đang chờ đúng là một việc phải xử.
+    expect(data.pendingCount).toEqual({ works: 0, items: 0, deletes: 0, total: 0 });
     expect(data.summaryStats).toEqual({
       totalProjects: 0,
       totalTasks: 0,

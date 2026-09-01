@@ -23,7 +23,7 @@ import {
   thayDuocNhap,
   trangThaiDuyetKhiTao,
   phaiChoDuyetKhiSua,
-  xoaDuocKhongKhiChoDuyet,
+  xoaPhaiQuaDuyet,
 } from '../approvals/rules.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
@@ -161,9 +161,11 @@ export function remove(user, ref) {
     const current = await mustFind(ref, client);
     assertCan(user, 'delete', current);
     assertSuaDuoc(user, current);
-    // Ghi đè «Chờ duyệt» cho Xoá (011): luồng duyệt-yêu-cầu-xoá chưa có — chặn với câu nói rõ.
-    const xoaOk = xoaDuocKhongKhiChoDuyet(user, 'work');
-    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message);
+    // Ghi đè «Chờ duyệt» cho Xoá (011 + 013): vai bị ghi đè phải đi qua YÊU CẦU XOÁ
+    // (`approvalsService.xinXoa`) thay vì xoá thẳng. `canXinXoa` để giao diện biết đây là «phải
+    // qua duyệt» chứ không phải «không có quyền» — hai câu chữ khác nhau cho người dùng.
+    const xoaOk = xoaPhaiQuaDuyet(user, 'work');
+    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message, { canXinXoa: true });
     const items = await itemsRepo.listByWork(current.id, {}, client);
     await repo.remove(current.id, client);
     return {

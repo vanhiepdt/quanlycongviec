@@ -52,28 +52,35 @@ function phamVi({ all, departmentIds, createdBy }, values, alias = '') {
  * lời "còn bao nhiêu mục phải xử", không phải "còn bao nhiêu cây".
  *
  * @param {{all?: boolean, departmentIds?: number[], createdBy?: number|null}} scope
- * @returns {Promise<{works: number, items: number, total: number}>}
+ * @returns {Promise<{works: number, items: number, deletes: number, total: number}>}
  */
 export async function countPending(scope = {}, client = null) {
+  const bo = {
+    all: scope.all === true,
+    departmentIds: scope.departmentIds ?? [],
+    createdBy: scope.createdBy ?? null,
+  };
   const values = [CHO_DUYET];
-  const where = phamVi(
-    {
-      all: scope.all === true,
-      departmentIds: scope.departmentIds ?? [],
-      createdBy: scope.createdBy ?? null,
-    },
-    values
-  );
-  if (!where) return { works: 0, items: 0, total: 0 };
+  const where = phamVi(bo, values);
+  if (!where) return { works: 0, items: 0, deletes: 0, total: 0 };
+  // Yêu cầu xoá (013) đếm bằng mệnh đề RIÊNG vì nó không lọc theo `approval_status` — cùng phạm vi,
+  // khác điều kiện. Gọi `phamVi` lần thứ hai đẩy thêm tham số, nên thứ tự đẩy phải khớp thứ tự
+  // xuất hiện trong câu.
+  const whereXoa = phamVi(bo, values);
 
   const { rows } = await db(client).query(
     `SELECT
        (SELECT count(*) FROM works      WHERE approval_status = $1 AND ${where})::int AS works,
-       (SELECT count(*) FROM work_items WHERE approval_status = $1 AND ${where})::int AS items`,
+       (SELECT count(*) FROM work_items WHERE approval_status = $1 AND ${where})::int AS items,
+       ((SELECT count(*) FROM works      WHERE xoa_yeu_cau_boi IS NOT NULL AND ${whereXoa})
+      + (SELECT count(*) FROM work_items WHERE xoa_yeu_cau_boi IS NOT NULL AND ${whereXoa}))::int
+        AS deletes`,
     values
   );
-  const { works, items } = rows[0];
-  return { works, items, total: works + items };
+  const { works, items, deletes } = rows[0];
+  // `total` gộp cả yêu cầu xoá: badge trả lời «còn bao nhiêu việc phải xử», và một yêu cầu xoá
+  // đang treo đúng là một việc phải xử.
+  return { works, items, deletes, total: works + items + deletes };
 }
 
 /**
@@ -123,6 +130,57 @@ export async function listPending(scope = {}, { limit = 50 } = {}, client = null
         AND NOT EXISTS (SELECT 1 FROM work_items p
                          WHERE p.id = i.parent_id AND p.approval_status = $1)
       ORDER BY created_at DESC, code
+      LIMIT $${values.length}`,
+    values
+  );
+  return rows;
+}
+
+/**
+ * Danh sách YÊU CẦU XOÁ đang chờ duyệt trong phạm vi của một người (013), mới nhất trước.
+ *
+ * Khác `listPending` ở hai điểm, và cả hai đều có lý:
+ *
+ *  1. **Không lọc theo `approval_status`.** Mục xin xoá có thể đang ở bất kỳ trạng thái duyệt nào
+ *     (Đã duyệt / Chờ duyệt / Nháp) — «xin xoá» là một chiều độc lập, xem đầu migration 013. Nên
+ *     điều kiện duy nhất là `xoa_yeu_cau_boi IS NOT NULL`.
+ *  2. **Không cần loại «không phải gốc».** `xinXoa` chỉ ghi cờ lên đúng dòng người dùng bấm và
+ *     KHÔNG lan xuống con cháu, nên mỗi yêu cầu vốn đã là một dòng duy nhất. Không có cảnh một cây
+ *     đọng lại N dòng như luồng duyệt nội dung.
+ *
+ * Trả kèm `xoa_ly_do` và tên người xin để giao diện dựng được dòng đầy đủ mà không phải gọi thêm.
+ */
+export async function listPendingDeletes(scope = {}, { limit = 50 } = {}, client = null) {
+  const bo = {
+    all: scope.all === true,
+    departmentIds: scope.departmentIds ?? [],
+    createdBy: scope.createdBy ?? null,
+  };
+  const values = [];
+  // Cả HAI nhánh đều có JOIN (lấy tên người xin, và tên công việc cha) nên cả hai đều cần tiền tố
+  // bảng — `department_id` xuất hiện ở hơn một bảng trong câu, không tiền tố là nhập nhằng. Mỗi
+  // lời gọi `phamVi` đẩy thêm tham số nên thứ tự đẩy phải khớp thứ tự xuất hiện trong câu.
+  const whereWorks = phamVi(bo, values, 'w');
+  const whereItems = phamVi(bo, values, 'i');
+  if (!whereWorks || !whereItems) return [];
+  values.push(Math.min(200, Math.max(1, Number(limit) || 50)));
+
+  const { rows } = await db(client).query(
+    `SELECT 'work' AS kind, w.id, w.code, w.name, 1 AS level, w.department_id,
+            w.approval_status, w.xoa_yeu_cau_boi, w.xoa_yeu_cau_luc, w.xoa_ly_do,
+            u.full_name AS xoa_yeu_cau_ten, w.name AS work_name
+       FROM works w
+       LEFT JOIN users u ON u.id = w.xoa_yeu_cau_boi
+      WHERE w.xoa_yeu_cau_boi IS NOT NULL AND ${whereWorks}
+     UNION ALL
+     SELECT 'item' AS kind, i.id, i.code, i.name, i.level, i.department_id,
+            i.approval_status, i.xoa_yeu_cau_boi, i.xoa_yeu_cau_luc, i.xoa_ly_do,
+            u.full_name AS xoa_yeu_cau_ten, w.name AS work_name
+       FROM work_items i
+       JOIN works w ON w.id = i.work_id
+       LEFT JOIN users u ON u.id = i.xoa_yeu_cau_boi
+      WHERE i.xoa_yeu_cau_boi IS NOT NULL AND ${whereItems}
+      ORDER BY xoa_yeu_cau_luc DESC, code
       LIMIT $${values.length}`,
     values
   );

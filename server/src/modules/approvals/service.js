@@ -122,14 +122,26 @@ async function ghiKhoaDuyetCaCay(target, patch, tuTrangThai, client) {
   return { row, soCon };
 }
 
-/** Nhiệm vụ cấp 3 không có bước duyệt (việc 5.1) ⇒ mọi hành động duyệt trên nó đều vô nghĩa. */
+/**
+ * Nhiệm vụ cấp 3 có bước duyệt hay không — TÙY dòng, không tùy cấp (013, Vòng 13 đợt 2).
+ *
+ * Luật gốc (việc 5.1) vẫn là «cấp 3 không qua bước duyệt»: `trangThaiDuyetKhiTao` cho cấp 3
+ * `Đã duyệt` ngay, cửa duyệt đặt ở tầng khối việc (cấp 1/cấp 2). Nhưng Vòng 12e mở ⏳ cho Cán bộ ở
+ * ô «Tạo Nhiệm vụ», nên admin bật được ghi đè để nhiệm vụ mới rơi vào `Chờ duyệt` — mà chặn cứng
+ * theo cấp thì những mục đó **kẹt vĩnh viễn, không ai duyệt được**. Đó là lỗ do đợt 1 để lại.
+ *
+ * Nên điều kiện đúng là theo TRẠNG THÁI của chính dòng: nhiệm vụ đang `Chờ duyệt`/`Nháp`/`Từ chối`
+ * là nhiệm vụ đã được đưa vào luồng duyệt ⇒ xử được. Nhiệm vụ `Đã duyệt` (trường hợp thường) thì
+ * gửi/duyệt vẫn là 409 với câu giải thích — giữ nguyên ý nghĩa cũ cho 99% dữ liệu.
+ */
 function assertCoBuocDuyet(target) {
-  if (target.entityType === 'task') {
-    throw conflict(
-      'Nhiệm vụ không có bước duyệt — chỉ Công việc và Công việc con mới cần duyệt',
-      'entity'
-    );
-  }
+  if (target.entityType !== 'task') return;
+  if ([CHO_DUYET, NHAP, TU_CHOI].includes(target.row.approval_status)) return;
+  throw conflict(
+    'Nhiệm vụ này không qua bước duyệt — cửa duyệt đặt ở Công việc / Công việc con. ' +
+      'Muốn nhiệm vụ phải chờ duyệt thì Quản trị đặt «⏳ Chờ duyệt» ở ô «Tạo Nhiệm vụ» của vai đó.',
+    'entity'
+  );
 }
 
 function assertCan(user, action, target) {
@@ -331,6 +343,171 @@ function baoNguoiTao(target, user, content, type, client, { khongTroLien = false
 }
 
 /**
+ * Thông báo cho một NGƯỜI CỤ THỂ (013) — dùng khi người cần báo không phải người tạo, ví dụ người
+ * XIN XOÁ. Tách khỏi `baoNguoiTao` vì hai hàm trả lời hai câu khác nhau; gộp lại rồi truyền cờ thì
+ * chỗ gọi phải đọc cả hàm mới biết ai được báo.
+ */
+function baoNguoi(userId, user, target, content, type, client, { khongTroLien = false } = {}) {
+  if (userId == null || Number(userId) === Number(user.id)) return Promise.resolve([]);
+  return notificationsRepo.insertMany(
+    [
+      {
+        userId,
+        content,
+        type,
+        refType: khongTroLien ? '' : target.kind === 'work' ? 'work' : 'work_item',
+        refId: khongTroLien ? null : target.row.id,
+      },
+    ],
+    client
+  );
+}
+
+/** Mục này có yêu cầu xoá nào đang treo không (013). */
+const dangXinXoa = (row) => row != null && row.xoa_yeu_cau_boi != null;
+
+/**
+ * XIN XOÁ (013, Vòng 13 đợt 2 — yêu cầu người dùng «thêm phần Chờ duyệt cho cán bộ đối với Xoá
+ * Công việc cấp 1, cấp 2, nhiệm vụ cấp 3»).
+ *
+ * Ai xin được: người **xoá được** mục đó (`can(user,'delete',…)`). Không hạ chuẩn xuống 'update':
+ * xin xoá là bước đầu của việc xoá, ai không được xoá thì cũng không được yêu cầu người khác xoá hộ.
+ *
+ * MỘT YÊU CẦU CHO CẢ CÂY (người dùng chốt): xin xoá công việc cấp 1 là xin xoá luôn con cháu —
+ * đối xứng với «duyệt cha = duyệt cả cây» của đợt 1. Con cháu KHÔNG bị ghi cờ: chỉ gốc mang yêu
+ * cầu, nên hộp chờ duyệt hiện một dòng và không có cách nào để con cháu «mồ côi cờ» khi gốc bị xử.
+ *
+ * `approval_status` KHÔNG đổi (xem đầu migration 013): mục đang xin xoá vẫn hiện bình thường và
+ * vẫn vào thống kê, chỉ thêm nhãn đỏ. Chưa ai đồng ý thì việc vẫn phải làm.
+ */
+export function xinXoa(user, entity, ref, lyDo) {
+  const noiDung = String(lyDo ?? '').trim();
+  if (noiDung.length < DO_DAI_LY_DO_TOI_THIEU) {
+    throw new AppError(
+      'VALIDATION_ERROR',
+      `Vui lòng nhập lý do xin xoá, ít nhất ${DO_DAI_LY_DO_TOI_THIEU} ký tự`,
+      { field: 'reason' }
+    );
+  }
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'delete', target);
+
+    if (dangXinXoa(target.row)) {
+      throw conflict(`${moTa(target)} đang có yêu cầu xoá chờ duyệt rồi`, 'xoaYeuCauBoi');
+    }
+
+    const con = await conChauCua(target, client);
+    const row = await ghiKhoaDuyet(
+      target,
+      { xoa_yeu_cau_boi: user.id, xoa_yeu_cau_luc: new Date(), xoa_ly_do: noiDung },
+      client
+    );
+
+    const nguoiNhan = await phoGiamDocPhuTrach(phongCua(target.row), client);
+    const keMuc = con.length > 0 ? ` (xoá sẽ mất kèm ${con.length} mục bên trong)` : '';
+    const notifications = await notificationsRepo.insertMany(
+      nguoiNhan.map((m) => ({
+        userId: m.user_id,
+        content: `${moTa(target)}${keMuc} đang xin XOÁ, chờ bạn duyệt (người xin: ${user.full_name ?? user.code ?? ''}). Lý do: ${noiDung}`,
+        type: notificationsRepo.LOAI.CHO_DUYET,
+        refType: target.kind === 'work' ? 'work' : 'work_item',
+        refId: target.row.id,
+      })),
+      client
+    );
+
+    return { kind: target.kind, row, soCon: con.length, notified: notifications.length };
+  });
+}
+
+/**
+ * DUYỆT YÊU CẦU XOÁ (013) — xoá THẬT, cả cây bên dưới (CASCADE của CSDL lo con cháu).
+ *
+ * Quyền: đúng bằng quyền DUYỆT mục đó (`can(user,'approve',…)`), không thêm ô ghi đè riêng — ai
+ * duyệt được nội dung của một mục thì duyệt được yêu cầu xoá mục đó. Bớt một hàng trong Bảng phân
+ * quyền cũng là bớt 4 ô để cấu hình sai.
+ *
+ * Thông báo cho người XIN XOÁ phải gửi TRƯỚC khi xoá: sau khi xoá không còn dòng nào để đọc
+ * `xoa_yeu_cau_boi`, và `ref_id` trỏ vào id đã mất là liên kết chết ⇒ `refType`/`refId` rỗng.
+ * Cùng bẫy đã gặp ở `tuChoiVaXoaCay` (đợt 1).
+ */
+export function duyetXoa(user, entity, ref) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'approve', target);
+
+    if (!dangXinXoa(target.row)) {
+      throw conflict(`${moTa(target)} không có yêu cầu xoá nào đang chờ`, 'xoaYeuCauBoi');
+    }
+
+    const con = await conChauCua(target, client);
+    const notifications = await baoNguoi(
+      target.row.xoa_yeu_cau_boi,
+      user,
+      target,
+      `Yêu cầu xoá ${moTa(target)} đã được DUYỆT — mục này${con.length > 0 ? ` cùng ${con.length} mục bên trong` : ''} đã bị xoá.`,
+      notificationsRepo.LOAI.DA_DUYET,
+      client,
+      { khongTroLien: true }
+    );
+
+    if (target.kind === 'work') await worksRepo.remove(target.row.id, client);
+    else await itemsRepo.remove(target.row.id, client);
+
+    return {
+      kind: target.kind,
+      // Bản chụp TRƯỚC khi xoá — dòng này không còn trong CSDL, giữ để route ghi nhật ký được.
+      row: target.row,
+      daXoa: true,
+      deletedCodes: con.map((c) => c.code).filter(Boolean),
+      soCon: con.length,
+      notified: notifications.length,
+    };
+  });
+}
+
+/**
+ * TỪ CHỐI YÊU CẦU XOÁ (013) — xoá ba cột yêu cầu, mục trở lại nguyên trạng.
+ *
+ * `approval_status` KHÔNG đổi: đó là lý do 013 dùng ba cột riêng thay vì thêm một giá trị vào
+ * `approval_status` (xem đầu migration). Mục vốn «Đã duyệt» thì vẫn «Đã duyệt», vốn «Nháp» thì vẫn
+ * «Nháp» — không phải đoán xem nên trả về đâu.
+ *
+ * Lý do từ chối là TUỲ CHỌN: người duyệt nói không thì việc vẫn nguyên, không có gì mất đi nên
+ * không cần bắt giải trình như khi từ chối nội dung (thứ xoá hẳn cả cây).
+ */
+export function tuChoiXoa(user, entity, ref, lyDo) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'approve', target);
+
+    if (!dangXinXoa(target.row)) {
+      throw conflict(`${moTa(target)} không có yêu cầu xoá nào đang chờ`, 'xoaYeuCauBoi');
+    }
+
+    const nguoiXin = target.row.xoa_yeu_cau_boi;
+    const row = await ghiKhoaDuyet(
+      target,
+      { xoa_yeu_cau_boi: null, xoa_yeu_cau_luc: null, xoa_ly_do: '' },
+      client
+    );
+
+    const ghiChu = String(lyDo ?? '').trim();
+    const notifications = await baoNguoi(
+      nguoiXin,
+      user,
+      target,
+      `Yêu cầu xoá ${moTa(target)} bị TỪ CHỐI — mục vẫn giữ nguyên.${ghiChu ? ` Lý do: ${ghiChu}` : ''}`,
+      notificationsRepo.LOAI.TU_CHOI,
+      client
+    );
+
+    return { kind: target.kind, row, notified: notifications.length };
+  });
+}
+
+/**
  * TRẢ LẠI ĐỂ SỬA (012, Vòng 13) — cửa mềm giữa Duyệt và Từ chối, người dùng chốt 2026-08-31.
  *
  * Cả cây về «Nháp» của người tạo, KHÔNG mất dữ liệu; ghi chú của người duyệt lưu vào
@@ -437,4 +614,9 @@ export function pendingCount(user) {
 /** Danh sách mục chờ duyệt trong phạm vi người đang xem. */
 export function pendingList(user, { limit = 50 } = {}) {
   return repo.listPending(phamViBadge(user), { limit });
+}
+
+/** Danh sách YÊU CẦU XOÁ đang chờ duyệt trong phạm vi người đang xem (013). */
+export function pendingDeleteList(user, { limit = 50 } = {}) {
+  return repo.listPendingDeletes(phamViBadge(user), { limit });
 }

@@ -72,29 +72,55 @@ export function phaiChoDuyetKhiSua(user, entityType, trangThaiHienTai) {
 }
 
 /**
- * Chặn XOÁ khi vai có ghi đè delete = 'cho-duyet' (011): yêu cầu "sửa/xoá của TP/PP phải qua
- * duyệt" — luồng duyệt-yêu-cầu-xoá chưa có trong phiên bản này nên xoá bị chặn với câu nói rõ
- * thay vì âm thầm xoá (thà chặn còn hơn mất dữ liệu mà không ai biết phải duyệt ở đâu).
+ * Vai này có phải ĐI QUA YÊU CẦU XOÁ thay vì xoá trực tiếp? (ghi đè `delete = 'cho-duyet'`, 011)
  *
- * @returns {{ok: true} | {ok: false, message: string}}
+ * Tách riêng khỏi `xoaPhaiQuaDuyet` để client và server hỏi CÙNG một câu bằng cùng một hàm: giao
+ * diện cần biết «có nên hiện nút Xin xoá» trước khi người dùng bấm, còn service cần biết «có được
+ * xoá thẳng không» lúc ghi. Hai câu đó cùng một điều kiện — viết hai lần là hai chỗ để lệch.
  */
-export function xoaDuocKhongKhiChoDuyet(user, entityType) {
+export function coXinXoaDuoc(user, entityType) {
   const ghiDeTho = user && user.ghiDe ? user.ghiDe[entityType + ':delete'] : null;
   const ghiDe = ghiDeTho && typeof ghiDeTho === 'object' ? ghiDeTho.gia_tri : ghiDeTho;
-  if (ghiDe !== 'cho-duyet') return { ok: true };
+  return ghiDe === 'cho-duyet';
+}
+
+/**
+ * Chặn xoá TRỰC TIẾP khi vai có ghi đè delete = 'cho-duyet' (011) — nhưng từ 013 KHÔNG còn là cửa
+ * đóng: người dùng bấm «Xin xoá» để gửi yêu cầu, người có quyền duyệt xử.
+ *
+ * Trả `canXinXoa: true` để route/giao diện biết đây là «phải qua duyệt» chứ không phải «không có
+ * quyền» — hai thứ khác nhau và câu chữ cho người dùng cũng khác. Trước 013 hàm này tên là
+ * `xoaDuocKhongKhiChoDuyet` và câu thông báo nói «luồng duyệt yêu cầu xoá chưa có trên hệ thống»;
+ * đổi tên vì cái tên cũ đọc như «có xoá được không», còn ý thật là «có phải qua duyệt không».
+ *
+ * @returns {{ok: true} | {ok: false, canXinXoa: true, message: string}}
+ */
+export function xoaPhaiQuaDuyet(user, entityType) {
+  if (!coXinXoaDuoc(user, entityType)) return { ok: true };
   return {
     ok: false,
+    canXinXoa: true,
     message:
-      'Quản trị yêu cầu Xoá phải qua duyệt — hãy liên hệ Phó Giám đốc phụ trách để xoá giúp (luồng duyệt yêu cầu xoá chưa có trên hệ thống)',
+      'Quản trị yêu cầu Xoá phải được duyệt — hãy bấm «Xin xoá» và nhập lý do để gửi yêu cầu cho người duyệt',
   };
 }
 
 /** Bốn cột chỉ luồng duyệt được ghi. Trùng đúng nhóm cột duyệt của `works` và `work_items`. */
+/**
+ * Cột chỉ luồng duyệt được ghi. Trùng đúng nhóm cột duyệt của `works` và `work_items`.
+ *
+ * Ba cột `xoa_*` (013) cũng ở đây: yêu cầu xoá chỉ ghi được qua `xinXoa`/`duyetXoa`/`tuChoiXoa`.
+ * Không chặn thì thêm `xoaYeuCauBoi` vào thân request PATCH là tự gỡ yêu cầu xoá của mình, hoặc
+ * đặt yêu cầu xoá cho người khác — đúng kiểu đường vòng mà `boCotKhoaDuyet` sinh ra để bịt.
+ */
 const COT_KHOA_DUYET = Object.freeze([
   'approval_status',
   'approver_id',
   'approved_at',
   'reject_reason',
+  'xoa_yeu_cau_boi',
+  'xoa_yeu_cau_luc',
+  'xoa_ly_do',
 ]);
 
 /**

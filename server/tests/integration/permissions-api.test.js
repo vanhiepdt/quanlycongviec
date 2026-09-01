@@ -212,7 +212,7 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
     expect(sua.body.data.choDuyetLai).toBe(true);
   });
 
-  it('TC-PQ-12: ghi đè Xoá = «cho-duyet» ⇒ TP không xoá được, câu nói rõ phải qua duyệt', async () => {
+  it('TC-PQ-12: ghi đè Xoá = «cho-duyet» ⇒ TP không xoá THẲNG được, phải xin xoá (013)', async () => {
     const work = await makeWork({ department_id: phong.id });
     await api.put('/api/v1/permissions', {
       thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'delete', giaTri: 'cho-duyet' }],
@@ -221,32 +221,31 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
     await api.login(tp.email);
     const xoa = await api.del(`/api/v1/works/${work.code}`);
     expect(xoa.status).toBe(403);
-    expect(xoa.body.error.message).toContain('qua duyệt');
+    // Trước 013 câu này nói «luồng duyệt yêu cầu xoá chưa có trên hệ thống» — cửa đóng hẳn. Nay
+    // nó chỉ đường: bấm «Xin xoá». Luồng đầy đủ do `xoa-cho-duyet-api.test.js` canh.
+    expect(xoa.body.error.message).toContain('Xin xoá');
   });
 
-  it('TC-PQ-13: Cán bộ được ghi đè «cho-duyet» ở TẠO và SỬA, nhưng KHÔNG ở XOÁ', async () => {
-    // Yêu cầu người dùng Vòng 12e: «riêng cán bộ thì thêm option tạo, sửa thêm mới duyệt».
-    // Xoá vẫn chặn: 'cho-duyet' ở delete nghĩa là CHẶN xoá (xoaDuocKhongKhiChoDuyet) mà luồng
-    // duyệt-yêu-cầu-xoá chưa có ⇒ với vai chỉ xoá được nhiệm vụ của mình thì thành khoá cứng.
-    const tao = await api.put('/api/v1/permissions', {
-      thayDoi: [{ vai: 'Nhân viên', entityType: 'task', action: 'create', giaTri: 'cho-duyet' }],
+  it('TC-PQ-13: MỌI vai trong bảng dùng được «cho-duyet» ở cả Tạo / Sửa / Xoá (013)', async () => {
+    // Vòng 12e mở Tạo/Sửa cho Cán bộ; 013 mở luôn Xoá vì đã có luồng yêu cầu xoá làm đường ra
+    // (trước đó 'cho-duyet' ở delete chỉ CHẶN xoá ⇒ khoá cứng cho vai chỉ xoá được việc của mình).
+    for (const action of ['create', 'update', 'delete']) {
+      const res = await api.put('/api/v1/permissions', {
+        thayDoi: [{ vai: 'Nhân viên', entityType: 'task', action, giaTri: 'cho-duyet' }],
+      });
+      expect(res.status, `${action}: ${JSON.stringify(res.body)}`).toBe(200);
+    }
+    // «Chờ duyệt» vẫn vô nghĩa với Xem / Duyệt — không có gì để chờ ở hai hành động đó.
+    for (const action of ['read', 'approve']) {
+      const res = await api.put('/api/v1/permissions', {
+        thayDoi: [{ vai: 'Nhân viên', entityType: 'task', action, giaTri: 'cho-duyet' }],
+      });
+      expect(res.status).toBe(400);
+    }
+    // Vai admin vẫn không chịu ghi đè nào (chính người sửa bảng).
+    const adminGhiDe = await api.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'admin', entityType: 'task', action: 'create', giaTri: 'cho-duyet' }],
     });
-    expect(tao.status, JSON.stringify(tao.body)).toBe(200);
-    const sua = await api.put('/api/v1/permissions', {
-      thayDoi: [{ vai: 'Nhân viên', entityType: 'task', action: 'update', giaTri: 'cho-duyet' }],
-    });
-    expect(sua.status, JSON.stringify(sua.body)).toBe(200);
-    const xoa = await api.put('/api/v1/permissions', {
-      thayDoi: [{ vai: 'Nhân viên', entityType: 'task', action: 'delete', giaTri: 'cho-duyet' }],
-    });
-    expect(xoa.status).toBe(400);
-    expect(xoa.body.error.message).toContain('Chờ duyệt');
-    // Vai «Quản lý công việc» vẫn không có luồng chờ duyệt nào — chỉ nới đúng cho Cán bộ.
-    const qlcv = await api.put('/api/v1/permissions', {
-      thayDoi: [
-        { vai: 'Quản lý công việc', entityType: 'task', action: 'create', giaTri: 'cho-duyet' },
-      ],
-    });
-    expect(qlcv.status).toBe(400);
+    expect(adminGhiDe.status).toBe(400);
   });
 });

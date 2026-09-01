@@ -26,7 +26,7 @@ import {
   thayDuocNhap,
   trangThaiDuyetKhiTao,
   phaiChoDuyetKhiSua,
-  xoaDuocKhongKhiChoDuyet,
+  xoaPhaiQuaDuyet,
 } from '../approvals/rules.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
@@ -551,12 +551,12 @@ export function remove(user, ref) {
     const current = await mustFindItem(ref, client);
     assertCan(user, 'delete', current);
     assertSuaDuoc(user, current);
-    // Ghi đè «Chờ duyệt» cho Xoá (011): luồng duyệt-yêu-cầu-xoá chưa có — chặn với câu nói rõ.
-    const xoaOk = xoaDuocKhongKhiChoDuyet(
+    // Ghi đè «Chờ duyệt» cho Xoá (011 + 013): phải đi qua YÊU CẦU XOÁ — xem `works/service.remove`.
+    const xoaOk = xoaPhaiQuaDuyet(
       user,
       Number(current.level) === repo.LEVEL_SUBWORK ? 'subwork' : 'task'
     );
-    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message);
+    if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message, { canXinXoa: true });
     const children = await repo.listDescendants(current.id, client);
     await repo.remove(current.id, client);
     return {

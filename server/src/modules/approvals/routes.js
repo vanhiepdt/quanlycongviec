@@ -45,6 +45,22 @@ approvalsRouter.get('/pending', validate(listSchema, 'query'), async (req, res, 
 });
 
 /**
+ * Hộp "yêu cầu XOÁ chờ bạn duyệt" (013) — đường riêng, không gộp vào `/pending`.
+ *
+ * Hai danh sách trả lời hai câu khác nhau và có hành động khác nhau (Duyệt/Trả lại/Từ chối ở một
+ * bên, Đồng ý xoá/Từ chối xoá ở bên kia). Gộp một mảng rồi để giao diện tự phân loại là mời gọi
+ * lỗi «bấm Duyệt trên một dòng yêu cầu xoá».
+ */
+approvalsRouter.get('/pending-deletes', validate(listSchema, 'query'), async (req, res, next) => {
+  try {
+    const items = await service.pendingDeleteList(req.user, { limit: req.validatedQuery?.limit });
+    return ok(res, { items, total: items.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
  * Nhật ký của cả ba hành động ghi vào chính đầu việc, không vào một loại thực thể riêng: mở
  * `/works/:id/history` là thấy luôn "đã duyệt / bị từ chối vì …" trong dòng thời gian (§2.3).
  */
@@ -130,5 +146,77 @@ approvalsRouter.post('/:entity/:id/return', validate(rejectSchema), async (req, 
     return next(err);
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// YÊU CẦU XOÁ (013, Vòng 13 đợt 2) — ba hành động, cùng khuôn với submit/approve/reject ở trên.
+//
+// Vai bị ghi đè `delete = 'cho-duyet'` không xoá thẳng được (`xoaPhaiQuaDuyet`), phải xin xoá rồi
+// người có quyền duyệt mục đó xử. `approval_status` không tham gia — xem đầu migration 013.
+// ---------------------------------------------------------------------------------------------
+
+/** Xin xoá: lý do BẮT BUỘC ≥ 10 ký tự (service kiểm), dùng chung `rejectSchema` vì cùng hình dạng. */
+approvalsRouter.post(
+  '/:entity/:id/request-delete',
+  validate(rejectSchema),
+  async (req, res, next) => {
+    try {
+      const result = await service.xinXoa(
+        req.user,
+        req.params.entity,
+        req.params.id,
+        req.body.reason
+      );
+      res.locals.audit = auditFor('approvals.requestDelete', result, { soCon: result.soCon ?? 0 });
+      return ok(res, { row: result.row, soCon: result.soCon ?? 0, notified: result.notified });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+/** Duyệt yêu cầu xoá ⇒ XOÁ THẬT cả cây. Quyền đúng bằng quyền duyệt mục đó. */
+approvalsRouter.post('/:entity/:id/approve-delete', async (req, res, next) => {
+  try {
+    const result = await service.duyetXoa(req.user, req.params.entity, req.params.id);
+    res.locals.audit = auditFor('approvals.approveDelete', result, {
+      daXoa: true,
+      deletedCount: 1 + (result.soCon ?? 0),
+    });
+    return ok(res, {
+      row: result.row,
+      daXoa: true,
+      deletedCodes: result.deletedCodes ?? [],
+      soCon: result.soCon ?? 0,
+      notified: result.notified,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Từ chối yêu cầu xoá ⇒ ba cột yêu cầu về rỗng, mục nguyên trạng.
+ *
+ * Lý do TUỲ CHỌN (khác `/reject` và `/return`): không có gì mất đi nên không bắt giải trình.
+ * `.partial()` để thân request rỗng cũng hợp lệ.
+ */
+approvalsRouter.post(
+  '/:entity/:id/reject-delete',
+  validate(rejectSchema.partial()),
+  async (req, res, next) => {
+    try {
+      const result = await service.tuChoiXoa(
+        req.user,
+        req.params.entity,
+        req.params.id,
+        req.body?.reason
+      );
+      res.locals.audit = auditFor('approvals.rejectDelete', result);
+      return ok(res, { row: result.row, notified: result.notified });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 export default approvalsRouter;

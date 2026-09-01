@@ -18,6 +18,7 @@ const COLUMNS = `id, code, work_id, parent_id, level, department_id,
                  start_date, due_date, report_date, completion,
                  target, output, notes, result_links,
                  approval_status, approver_id, approved_at, reject_reason,
+                 xoa_yeu_cau_boi, xoa_yeu_cau_luc, xoa_ly_do,
                  sort_order, created_by, created_by_name,
                  origin, assigned_by_id, assigned_by_name, assigned_at,
                  created_at, updated_at`;
@@ -65,6 +66,10 @@ export const WRITABLE = Object.freeze([
   'approver_id',
   'approved_at',
   'reject_reason',
+  // Ba cột yêu cầu xoá (013) — xem chú thích cùng chỗ ở `works/repo.js`.
+  'xoa_yeu_cau_boi',
+  'xoa_yeu_cau_luc',
+  'xoa_ly_do',
   'sort_order',
 ]);
 

@@ -9,21 +9,25 @@ const SERVER_DIR = resolve(import.meta.dirname, '..');
 
 export async function setup() {
   const url = process.env.TEST_DATABASE_URL;
-  const client = new pg.Client({ connectionString: url });
 
   // Container db-test có thể còn đang khởi động khi `npm test` chạy ngay sau `up -d`.
+  // MỖI lần thử phải tạo MỘT client pg MỚI: pg chỉ cho phép connect() MỘT lần trên mỗi client —
+  // kể cả khi lần trước THẤT BẠI — nên tái dùng một client thì lần thử thứ hai ném
+  // "Client has already been connected. You cannot reuse a client." và CHE MẤT lỗi thật
+  // (ECONNREFUSED khi container chưa lên). Từng làm cả bộ test đỏ với thông báo sai.
+  let client;
   let lastErr;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 20 && !client; i++) {
+    const thu = new pg.Client({ connectionString: url });
     try {
-      await client.connect();
-      lastErr = null;
-      break;
+      await thu.connect();
+      client = thu;
     } catch (err) {
       lastErr = err;
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
-  if (lastErr) {
+  if (!client) {
     throw new Error(
       `Không kết nối được CSDL test (${url}). Chạy:\n` +
         '  docker compose -f deploy/docker-compose.dev.yml up -d\n' +
@@ -33,6 +37,7 @@ export async function setup() {
 
   const { rows } = await client.query('SELECT current_database() AS db');
   if (!rows[0].db.endsWith('_test')) {
+    await client.end();
     throw new Error(
       `CSDL "${rows[0].db}" không có hậu tố _test — không xoá. Kiểm TEST_DATABASE_URL.`
     );
