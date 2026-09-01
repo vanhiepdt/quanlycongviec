@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260901-5");
+console.info("[QLCV] app.js 20260901-6");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -856,7 +856,12 @@ function canUserEditResource(resourceType, resourceId) {
   if (laQuanTriTrongPhamVi()) return true;
   // Vòng 12c: Trưởng phòng / Phó phòng sửa được công việc & CV con phòng mình (§6; TP/PP sửa
   // CV con đã duyệt sẽ tự về «Chờ duyệt» — máy chủ lo). Không phụ thuộc phân công ba lớp.
-  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork")) return true;
+  // 2026-09-01 (người dùng báo «trưởng phòng đang không sửa được nhiệm vụ»): THÊM 'task'. Máy chủ
+  // đã cho từ đầu — ma trận §6 cho TP/PP `task:update` và `inScope` bó theo phòng — chỉ client
+  // thiếu nhánh này nên nút ✎ của nhiệm vụ do Cán bộ tạo bị chặn ngay ở trình duyệt (im lặng,
+  // chỉ hiện toast «Bạn không có quyền chỉnh sửa mục này»). Nay đối xứng với canUserDeleteResource
+  // (đã mở 'task' từ Vòng 12e). Ngoài phạm vi phòng thì máy chủ trả 403 — đúng thiết kế.
+  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork" || resourceType === "task")) return true;
   if (isManager()) {
     if (resourceType === "project") return true;
     if (resourceType === "task") return true;

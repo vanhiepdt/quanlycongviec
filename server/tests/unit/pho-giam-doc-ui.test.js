@@ -319,6 +319,11 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
       }
       expect(window.canUserEditResource('project', 'CV001')).toBe(true);
       expect(window.canUserEditResource('subwork', 'CV001')).toBe(true);
+      // 2026-09-01 (Vòng 14): thêm 'task'. Người dùng báo «Trưởng phòng đang không sửa được
+      // nhiệm vụ» — máy chủ vẫn cho (PERMISSIONS['Trưởng phòng'].task có 'update', inScope bó
+      // theo phòng), lỗi nằm ở client: canUserEditResource chỉ mở project/subwork nên nhiệm vụ
+      // do Cán bộ khác phụ trách bị chặn ngay ở trình duyệt bằng toast «không có quyền».
+      expect(window.canUserEditResource('task', 'CV001-002'), `sửa nhiệm vụ với ${vai}`).toBe(true);
     }
     // Cán bộ ngoài cuộc vẫn không được — client KHÔNG nới rộng hơn máy chủ.
     window.__pq('currentUser', { name: 'Cán bộ khác', role: 'Nhân viên' });
