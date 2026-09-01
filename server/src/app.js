@@ -23,6 +23,7 @@ import { notificationsRouter } from './modules/notifications/routes.js';
 import { permissionsRouter } from './modules/permissions/routes.js';
 import { proposalsRouter } from './modules/proposals/routes.js';
 import { statsRouter } from './modules/stats/routes.js';
+import { taskFilesRouter } from './modules/taskFiles/routes.js';
 import { usersRouter } from './modules/users/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
@@ -107,6 +108,9 @@ export function createV1Router() {
   v1.use('/bootstrap', bootstrapRouter);
   v1.use('/departments', departmentsRouter);
   v1.use('/users', usersRouter);
+  // Kết quả file của nhiệm vụ (014) — PHẢI đứng trước `/work-items`: router này cũng khai đường
+  // `/work-items/:ref/files`, và nếu để sau thì workItems Router bắt `:id` trước.
+  v1.use(taskFilesRouter);
   v1.use('/works', worksRouter);
   v1.use('/work-items', workItemsRouter);
   v1.use('/approvals', approvalsRouter);

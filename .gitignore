@@ -33,3 +33,6 @@ tools/uat-server.pid
 # Cấu hình editor cá nhân + file dữ liệu tải về (có thể chứa dữ liệu thật)
 .vscode/
 /file tai xuong tu google sheet.xlsx
+
+# ===== File kết quả nhiệm vụ lưu trên đĩa (014) — dữ liệu người dùng, KHÔNG commit =====
+server/storage/
