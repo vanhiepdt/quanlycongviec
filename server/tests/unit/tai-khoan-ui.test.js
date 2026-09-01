@@ -426,12 +426,22 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     // file:approve × TP/PP: option ⏳ có (đặt ⏳ là mất nút «Hoàn thành / Duyệt»).
     const hangDuyet = bang.split('<tr').find((tr) => tr.includes('Duyệt kết quả (file nhiệm vụ)'));
     expect(hangDuyet, 'không thấy hàng «Duyệt kết quả (file nhiệm vụ)»').toBeTruthy();
-    const oTp = '<td' + hangDuyet.split('<td').filter((td) => td.includes('data-vai="Trưởng phòng"')).join('<td');
+    const oTp =
+      '<td' +
+      hangDuyet
+        .split('<td')
+        .filter((td) => td.includes('data-vai="Trưởng phòng"'))
+        .join('<td');
     expect(oTp).toContain('value="cho-duyet"');
     // file:create × Phó GĐ: KHÔNG có option ⏳ — PGD/GĐ là cấp chốt cuối, không có ai để «chờ»
     // (máy chủ 400, CHECK po_cho_duyet của 014 chặn cùng luật).
     const hangNop = bang.split('<tr').find((tr) => tr.includes('Nộp kết quả (file nhiệm vụ)'));
-    const oPgd = '<td' + hangNop.split('<td').filter((td) => td.includes('data-vai="Phó Giám đốc"')).join('<td');
+    const oPgd =
+      '<td' +
+      hangNop
+        .split('<td')
+        .filter((td) => td.includes('data-vai="Phó Giám đốc"'))
+        .join('<td');
     expect(oPgd).not.toContain('value="cho-duyet"');
     // Mặc định hiển thị (không ghi đè): Cán bộ nộp là ⏳, Phó GĐ nộp là ✓.
     expect(oCanBo(bang, 'Nộp kết quả (file nhiệm vụ)')).toContain('⏳ Chờ duyệt');
