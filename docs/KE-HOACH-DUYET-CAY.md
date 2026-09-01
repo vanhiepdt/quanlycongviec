@@ -124,14 +124,18 @@ Pin XSS: **96 chỗ / 715 giá trị** (+17, không thêm chỗ ghi HTML nào) �
 | `project-details-phan-cong.test.js` | TC-DUYET-UI-01..05: chế độ duyệt ⇒ 0 nút sửa/thêm, có dải nhắc, CV con chờ duyệt tô màu khác + chữ, cả cây vẫn hiện, đóng modal thì tắt cờ |
 | `bo-loc-cong-viec.test.js` | TC-CV-NHAP-01..04: thẻ nháp có nhãn + nút Gửi duyệt, mục khác không có, nháp không được đếm |
 
-## 7. Còn nợ — ĐỢT 2
+## 8. ĐỢT 2 — ĐÃ XONG (2026-09-01): duyệt nhiệm vụ cấp 3 + luồng yêu cầu xoá
 
-1. **Duyệt nhiệm vụ cấp 3.** Hôm nay `assertCoBuocDuyet` chặn mọi hành động duyệt trên cấp 3 với
-   409 («Nhiệm vụ không có bước duyệt»), và `trangThaiDuyetKhiTao` cho cấp 3 luôn `Đã duyệt`.
-   Mở ra cần: một hàng mới trong Bảng phân quyền («Duyệt Nhiệm vụ (cấp 3)», mặc định ✕ cho TP/PP),
-   `PERMISSIONS` hoặc ghi đè cho `task: approve`, bỏ nhánh chặn 409, và rà lại `pendingCount` (hôm
-   nay có một ca khẳng định «nhiệm vụ cấp 3 không bao giờ vào số đếm chờ duyệt»).
-2. **Luồng yêu cầu xoá 3 cấp.** Hôm nay `'cho-duyet'` ở hàng Xoá nghĩa là **chặn xoá**
-   (`xoaDuocKhongKhiChoDuyet`), không có luồng duyệt nào. Cần: cờ/trạng thái «chờ duyệt xoá», hai
-   endpoint (xin xoá / duyệt xoá), 3 hàng mới trong Bảng phân quyền, và quyết định xem mục đang
-   chờ duyệt xoá còn hiện ở danh sách hay không.
+Hai việc «còn nợ» của mục 7 (đã xoá vì làm xong), giữ nguyên 6 quyết định ở mục 1:
+
+| Thành phần | Đã làm |
+|---|---|
+| Migration `013_delete_request.sql` | `works`/`work_items` thêm 3 cột `xoa_yeu_cau_boi`/`xoa_yeu_cau_luc`/`xoa_ly_do` + 2 chỉ mục một phần `WHERE xoa_yeu_cau_boi IS NOT NULL`; **hai view `v_countable_*` dựng lại trong CÙNG migration** (dựng bằng `SELECT *` nên Postgres đóng băng danh sách cột lúc tạo — thêm cột mà không dựng lại thì view trả thiếu cột); up/down/up sạch trên cả 2 CSDL |
+| `approvals/rules.js` | `xoaDuocKhongKhiChoDuyet` → **`xoaPhaiQuaDuyet`** (trả `{ok:false, canXinXoa:true}` — đổi tên vì ý thật là «có phải qua duyệt không»); 3 cột xin xoá vào `COT_KHOA_DUYET` ⇒ PATCH không tự đặt được |
+| `assertCoBuocDuyet` | Bỏ chặn cứng cấp 3: nhiệm vụ đi duyệt được khi đang `Chờ duyệt`/`Nháp`/`Từ chối` (đúng khi admin bật ⏳ ô «Tạo Nhiệm vụ»); nhiệm vụ `Đã duyệt` gửi/duyệt vẫn 409 (TC-APR-20) |
+| `approvals/service.js` + `routes.js` | `xinXoa`/`duyetXoa`/`tuChoiXoa` + `POST /:entity/:id/{request,approve,reject}-delete` + `GET /pending-deletes`; `countPending` cộng `deletes` vào badge; xin xoá cấp 1 = xin cả cây (đếm `soCon`); thông báo hai chiều (gửi TRƯỚC khi xoá — sau xoá không còn dòng để đọc) |
+| `permissions/service.js` | Mở `'cho-duyet'` ở hàng Xoá cho vai `Nhân viên` (lý do chặn ở Vòng 12e — chưa có luồng — đã hết) |
+| Giao diện | `buildXinXoaBadge` — nhãn ĐỎ «Đang xin xoá» (đổi tên từ `xinXoaBadge`: helper trả HTML phải mang tiền tố build*); hộp «Yêu cầu xoá» trong panel Chờ duyệt (`buildPendingDeleteRowHtml` — Đồng ý xoá có `confirm`, Từ chối KHÔNG cần lý do); `confirmDelete` đổi sang luồng «Xin xoá» khi server trả lỗi qua-duyệt; Bảng phân quyền thêm **«Duyệt Nhiệm vụ (cấp 3)»** (dropdown task:approve) + **«Duyệt yêu cầu XOÁ (cả 3 cấp)»** (chỉ hiển thị); option ⏳ ở Xoá mở cho Cán bộ |
+| Test | TC-APR-20..22 (duyệt cấp 3), `xoa-cho-duyet-api.test.js` TC-XOA-01..10 (14 ca: 3 cột giữ `approval_status`, vẫn hiện + vẫn vào thống kê, cả cây, cổng chặn), TC-PQ-12/13 viết lại, TC-TKPQ-06/13/14 cập nhật + **TC-TKPQ-16**, approvals-ui +4 ca, TC-CV-BL-3 «xin xoá vẫn vào thống kê». **1450 test / 83 file xanh** |
+
+Banner `app.js 20260901-2`; buster `app.js?v=20260901-2`, `app.css?v=20260901-1`. Pin XSS **98 chỗ / 730 giá trị**.

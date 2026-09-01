@@ -317,6 +317,17 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > này**: `tools/dem-xss.mjs` chỉ soi `app.js`. Hành vi thoát của file đó do
 > `tests/unit/project-details-phan-cong.test.js` canh — trong đó có ca bơm `<img src=x onerror=…>`
 > vào tên công việc con.
+>
+> **Cập nhật 2026-09-01 (013, Vòng 13 đợt 2 — luồng YÊU CẦU XOÁ + duyệt nhiệm vụ cấp 3,
+> `docs/KE-HOACH-DUYET-CAY.md` mục 8).** **+2 chỗ ghi HTML, +15 giá trị nội suy** ⇒ **98 chỗ / 730
+> giá trị** (TC-SEC-17). Hai chỗ ghi: `renderYeuCauXoaPanel` (xoá rỗng khung yêu cầu xoá — hằng
+> `""` — và ghi danh sách dòng, dựng bằng builder `buildPendingDeleteRowHtml` thoát đủ từng trường).
+> Giá trị: `buildXinXoaBadge` 2 (tiêu đề + chữ «Đang xin xoá»), `buildPendingDeleteRowHtml` 11
+> (`data-entity`, `data-id`, `data-name`, tiêu đề loại kèm tên công việc cấp 1, nhãn loại, tên, mã,
+> lý do, người xin, 2 tiêu đề nút), 2 lời gọi `buildXinXoaBadge(project)` ở thẻ công việc và dải
+> cấp 1. Sink hằng `""` trong SINK_DA_SOAT_TAY 9 → 10 (lý do ghi tại chỗ). Bài học: helper trả HTML
+> đặt sai tiền tố (`xinXoaBadge`) là bộ soát coi mọi chỗ gọi là lỗ CAN-THOAT — đổi tên builder
+> (`buildXinXoaBadge`) thay vì bạch hoá bằng pin; chi tiết ở §13.5.
 
 ## 2. Bốn hàm thoát (app.js, ngay trên `formatDateForDisplay`)
 
