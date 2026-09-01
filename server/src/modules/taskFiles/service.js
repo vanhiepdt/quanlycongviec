@@ -631,7 +631,9 @@ export async function moEditor(user, versionId) {
       'Chưa cấu hình ONLYOFFICE_URL và ONLYOFFICE_JWT_SECRET trong deploy/.env — sửa trực tuyến đang tắt'
     );
   }
-  const { ban } = await docBan(user, versionId);
+  const { ban, item } = await docBan(user, versionId);
+  const nhom = await repo.findNhomById(ban.file_id);
+  const duocSua = duocSuaTrucTiep(user, nhom, item);
   const callbackBase = env.ONLYOFFICE_CALLBACK_BASE || env.APP_BASE_URL;
   const config = {
     document: {
@@ -639,13 +641,13 @@ export async function moEditor(user, versionId) {
       key: `tf-${ban.id}-${ban.kich_thuoc}`,
       title: ban.ten_goc,
       url: `${callbackBase}/api/v1/task-files-ds/raw/${ban.id}?token=${tokenDs('raw', ban.id)}`,
-      permissions: { edit: true, comment: true, download: true },
+      permissions: { edit: duocSua, comment: duocSua, download: true },
     },
     documentType: 'word',
     editorConfig: {
       callbackUrl: `${callbackBase}/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`,
       lang: 'vi',
-      mode: 'edit',
+      mode: duocSua ? 'edit' : 'view',
       user: { id: String(user.id), name: user.full_name },
       customization: { forcesave: true, compactHeader: true },
     },
@@ -655,8 +657,26 @@ export async function moEditor(user, versionId) {
     token: kyJwt(config, env.ONLYOFFICE_JWT_SECRET),
     config,
     ban,
+    duocSua,
   };
 }
+
+/**
+ * Ai được MỞ editor ở chế độ SỬA — cùng luật với nộp bản mới (mỗi lần lưu là một bản mới):
+ *   cho-xem / can-sua : người được giao nhiệm vụ + TP/PP + PGD/GĐ
+ *   cho-lanh-dao      : chỉ TP/PP + PGD/GĐ
+ *   hoan-thanh / da-duyet : CHỈ XEM (kết quả đã chốt) — người thiếu quyền cũng chỉ xem được.
+ */
+function duocSuaTrucTiep(user, nhom, item) {
+  if (!nhom || KET_THUC.includes(nhom.trang_thai)) return false;
+  if (!can(user, 'create', 'file', item).ok) return false;
+  if (nhom.trang_thai === 'cho-lanh-dao') {
+    return ['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role);
+  }
+  if (['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role)) return true;
+  return sameId(item.assignee_id, user.id);
+}
+
 /** Trang editor nhúng DS — HTML riêng, mở trong tab mới (index.html không đụng tới). */
 export function htmlEditor({ dsUrl, token, config }) {
   const cauHinh = JSON.stringify({

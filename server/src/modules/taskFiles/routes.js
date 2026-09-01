@@ -119,7 +119,12 @@ taskFilesRouter.post(
 
 taskFilesRouter.get('/work-items/:ref/files', async (req, res, next) => {
   try {
-    return ok(res, { item: req.params.ref, nhom: await service.doc(req.user, req.params.ref) });
+    return ok(res, {
+      item: req.params.ref,
+      nhom: await service.doc(req.user, req.params.ref),
+      // Cờ bật/tắt ONLYOFFICE — client đọc để hiện/ẩn nút ✎ sửa trực tuyến.
+      onlyOffice: service.onlyOfficeBat(),
+    });
   } catch (err) {
     return next(err);
   }

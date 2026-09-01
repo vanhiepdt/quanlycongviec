@@ -181,7 +181,7 @@ afterAll(async () => {
 });
 
 describe('TC-TF — luồng file kết quả + phân quyền động (014)', () => {
-  it('TC-TF-01: Cán bộ nộp PDF ⇒ nhóm «cho-xem», bản v1, dòng luồng «nop»; tải được file về', async () => {
+  it('TC-TF-01: Cán bộ nộp PDF ⇒ nhóm «cho-xem», bản v1, dòng luồng «nop»; TỬ TẾ: TP NHẬN THÔNG BÁO', async () => {
     const ma = await taoNhiemVuCho('TF-01');
     const res = await nopFile(apiNv, ma, PDF, { moTa: 'Bản đầu tiên' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -195,6 +195,9 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     const luong = await luongCuaNhom(nhom.id);
     expect(luong.map((g) => g.hanh_dong)).toEqual(['nop']);
     expect(luong[0].noi_dung).toBe('Bản đầu tiên');
+    // Phản hồi GET mang cờ ONLYOFFICE để client hiện/ẩn nút ✎ sửa trực tuyến.
+    const doc = await apiNv.get(`/api/v1/work-items/${encodeURIComponent(ma)}/files`);
+    expect(doc.body.data.onlyOffice).toBe(true);
     // Tải về: đúng tên gốc trong Content-Disposition, đúng nội dung (parser nhị phân vì .pdf
     // không phải text/JSON — supertest mặc định không đặt body cho loại đó).
     const tai = await apiNv.agent
@@ -210,6 +213,13 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(tai.headers['content-disposition']).toContain('attachment');
     expect(tai.headers['content-disposition']).toContain(encodeURIComponent(PDF.ten));
     expect(tai.body.toString('binary')).toBe(PDF.noiDung);
+    // ⭐ TP/PP phòng NHẬN THÔNG BÁO «chờ xem» — đúng yêu cầu người dùng (2026-09-01).
+    const baoTp = await thongBaoCua(tp.id);
+    expect(
+      baoTp.some(
+        (x) => x.type === 'approval_pending' && x.content.includes('chờ Trưởng phòng/Phó phòng xem')
+      )
+    ).toBe(true);
   });
 
   it('TC-TF-02: TP/PP góp ý theo bản ⇒ ghi task_file_comments + dòng luồng «gom-y»', async () => {
@@ -476,5 +486,49 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       .set('x-csrf-token', token)
       .field('moTa', '');
     expect(rong.status).toBe(400);
+  });
+
+  it('TC-TF-15: TRƯỞNG PHÒNG sửa được nhiệm vụ do Cán bộ tạo (phân quyền §6) + editor mode', async () => {
+    // NV tạo nhiệm vụ trong công việc của phòng A — nhiệm vụ auto «Đã duyệt».
+    const cv = await apiTp.post('/api/v1/works', {
+      name: 'Việc phòng A — TF-15',
+      departmentId: phongA.id,
+    });
+    const work = cv.body.data.work;
+    await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    const tao = await apiNv.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 3,
+      name: 'Nhiệm vụ của Cán bộ — TF-15',
+      assigneeId: nv.id,
+    });
+    expect(tao.status, JSON.stringify(tao.body)).toBe(200);
+    const ma = tao.body.data.item.code;
+    // ⭐ TP (không phải người lập) SỬA được nhiệm vụ trong phòng mình — lỗi người dùng báo 2026-09-01.
+    const sua = await apiTp.patch(`/api/v1/work-items/${encodeURIComponent(ma)}`, {
+      name: 'Nhiệm vụ của Cán bộ — TF-15 (đã sửa bởi TP)',
+      notes: 'TP chỉnh mô tả yêu cầu',
+    });
+    expect(sua.status, JSON.stringify(sua.body)).toBe(200);
+    expect(sua.body.data.item.name).toContain('đã sửa bởi TP');
+    // Editor: Cán bộ (người được giao) + TP = mode edit; NGOÀI PHÒNG bị 403 ngay ở can(read,'task');
+    // nhóm đã chốt (da-duyet) thì mọi người chỉ XEM.
+    await nopFile(apiNv, ma, PDF);
+    const nhom = (await docFiles(apiNv, ma))[0];
+    const banDau = nhom.bans[0].id;
+    const nvTrang = await apiNv.get(`/api/v1/task-file-versions/${banDau}/editor`);
+    expect(nvTrang.status).toBe(200);
+    expect(nvTrang.text).toContain('"mode":"edit"');
+    const trangTp = await apiTp.get(`/api/v1/task-file-versions/${banDau}/editor`);
+    expect(trangTp.status).toBe(200);
+    expect(trangTp.text).toContain('"mode":"edit"');
+    // Ngoài phạm vi phòng: KHÔNG mở được editor (403) — rào chặn của can(read,'task').
+    const trangNgoai = await apiNvNgoai.get(`/api/v1/task-file-versions/${banDau}/editor`);
+    expect(trangNgoai.status).toBe(403);
+    // Kết quả đã chốt ⇒ chỉ XEM, kể cả TP.
+    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, { hanhDong: 'hoan-thanh' });
+    const sauChot = await apiTp.get(`/api/v1/task-file-versions/${banDau}/editor`);
+    expect(sauChot.status).toBe(200);
+    expect(sauChot.text).toContain('"mode":"view"');
   });
 });
