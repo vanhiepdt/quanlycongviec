@@ -508,3 +508,23 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
 | 3701 | innerHTML | HTML dựng sẵn | `"<div class=\"col-span-full text-center text-gray-500 py-8\"` |
 | 3729 | innerHTML | HTML dựng sẵn | `text` |
 | 3741 | insertAdjacentHTML | HTML dựng sẵn | `text3` |
+
+## 2026-09-01 — «KẾT QUẢ NHIỆM VỤ LÀ FILE» (014, docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi HTML · +48 giá trị nội suy ⇒ 100 chỗ / 778 giá trị**
+
+- **+2 sink** — cả hai trong `napKetQua`: ghi khung RỖNG (hằng + nút tải lên) và ghi danh sách
+  NHÓM file (`nhom.map(buildKhoiFile).join("")`). Không sink nào nhận chuỗi ngoài app.js.
+- **Giá trị mới, đều thoát tại lỗ**: `buildKhungKetQua` 2 (id + `data-ma`); nút tab «Kết quả &
+  Luồng» 3; `buildKhoiFile` 7 (tên file, người tạo, badge trạng thái, class màu badge qua
+  `escapeHtmlAttr`, 3 nút icon với `title`/`onclick` qua `escapeHtmlAttr` — onclick dựng từ
+  `escapeForInlineHandler` bên gọi); `buildBanFileList` 13 (bản số, người nộp, thời điểm, thread
+  góp ý 4, nút ⬇/👁/↩ góp ý 5, 1 lỗ `bans.map(...).join("")`); `buildNutVerdictFile` 2 (1 lỗ
+  `nut.join("")` + 1 lỗ return — 5 giá trị bên trong mỗi nút đều thoát); `buildBangLuongFile` 12
+  (5 cột qua `buildO`/`escapeHtml` + 6 ô mỗi dòng + 1 lỗ `luong.map(...).join("")`);
+  `napKetQua` 9 (lời gọi API, câu dẫn, nút «Tải file lên», ô `<input type=file>` 5 thuộc tính).
+- **Bài học mới (bẫy §13.5)**: bộ soát coi **biểu thức điều kiện `(a ? b : c)`** và **biến trung
+  gian chưa qua escape** tại lỗ là `CAN-THOAT` — helper nhận chuỗi onclick dựng sẵn
+  (`nutIconFile(icon, title, onclick, mauThem)`) phải bọc `escapeHtmlAttr(onclick)`/`escapeHtml(icon)`/
+  `escapeHtmlAttr(mauThem || "")` tại chính lỗ nội suy; helper tạo ô tiêu đề phải mang tiền tố
+  `build*` (`buildO`) để bộ soát xếp HTML-LONG thay vì CAN-THOAT từng lời gọi.
+- TC-SEC-10: 0 lỗ CAN-THOAT mới (toàn bộ 19 lỗ CAN-THOAT còn lại là các chỗ đã ghi lý do từ trước).
+

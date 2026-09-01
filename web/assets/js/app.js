@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260901-2");
+console.info("[QLCV] app.js 20260901-3");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2122,26 +2122,35 @@ function chuyenTabNhatKy(kieu, tab) {
   const than = document.getElementById(kieu === "project" ? "project-form" : "task-form-body"),
     khung = document.getElementById(kieu + "-nhat-ky-panel"),
     khungTen = document.getElementById(kieu + "-ten-thang-panel"),
+    khungKq = document.getElementById(kieu + "-ket-qua-panel"),
     nutTt = document.getElementById(kieu + "-tab-thong-tin"),
     nutNk = document.getElementById(kieu + "-tab-nhat-ky"),
-    nutTen = document.getElementById(kieu + "-tab-ten-thang");
+    nutTen = document.getElementById(kieu + "-tab-ten-thang"),
+    nutKq = document.getElementById(kieu + "-tab-ket-qua");
   if (!than || !khung) return;
   const xemNhatKy = tab === "nhat-ky",
-    xemTenThang = tab === "ten-thang";
-  than.classList.toggle("hidden", xemNhatKy || xemTenThang);
+    xemTenThang = tab === "ten-thang",
+    xemKetQua = tab === "ket-qua";
+  than.classList.toggle("hidden", xemNhatKy || xemTenThang || xemKetQua);
   khung.classList.toggle("hidden", !xemNhatKy);
   khungTen && khungTen.classList.toggle("hidden", !xemTenThang);
+  khungKq && khungKq.classList.toggle("hidden", !xemKetQua);
   if (nutTt && nutNk) {
     const bat = "px-3 py-2 text-sm font-semibold border-b-2 border-blue-500 text-blue-600",
       tat = "px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500";
-    nutTt.className = xemNhatKy || xemTenThang ? tat : bat;
+    nutTt.className = xemNhatKy || xemTenThang || xemKetQua ? tat : bat;
     nutNk.className = xemNhatKy ? bat : tat;
     if (nutTen) nutTen.className = xemTenThang ? bat : tat;
+    if (nutKq) nutKq.className = xemKetQua ? bat : tat;
   }
   // Nạp một lần rồi thôi: đổi tab qua lại không gọi lại API.
   if (xemNhatKy && khung.dataset.daNap !== "1") {
     khung.dataset.daNap = "1";
     napNhatKy(kieu, khung.dataset.ma || "", kieu + "-nhat-ky-noi-dung");
+  }
+  if (xemKetQua && khungKq && khungKq.dataset.daNap !== "1") {
+    khungKq.dataset.daNap = "1";
+    napKetQua(khungKq.dataset.ma || "");
   }
 }
 function buildThanhTabNhatKy(kieu, coTenThang = false) {
@@ -2153,14 +2162,393 @@ function buildThanhTabNhatKy(kieu, coTenThang = false) {
     // Tab thứ ba chỉ hiện với đầu việc DÀI HƠN MỘT THÁNG: bấm vào một tab trống thì người dùng
     // tưởng chức năng hỏng, còn không có tab thì thấy ngay là đầu việc này không thuộc diện.
     (coTenThang ? "<button type=\"button\" id=\"" + escapeHtmlAttr(kieu) + "-tab-ten-thang\" class=\"px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500\" onclick=\"chuyenTabNhatKy('" + escapeForInlineHandler(kieu) + "', 'ten-thang')\"><i class=\"fas fa-calendar-day mr-1\"></i>Tên theo tháng</button>" : "") +
+    // 2026-09-01: tab «Kết quả & Luồng» CHỈ ở modal NHIỆM VỤ — kết quả của nhiệm vụ là file Word/PDF.
+    (kieu === "task" ? "<button type=\"button\" id=\"" + escapeHtmlAttr(kieu) + "-tab-ket-qua\" class=\"px-3 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500\" onclick=\"chuyenTabNhatKy('" + escapeForInlineHandler(kieu) + "', 'ket-qua')\"><i class=\"fas fa-file-circle-check mr-1\"></i>Kết quả &amp; Luồng</button>" : "") +
     "</div>";
 }
 function buildKhungNhatKy(kieu, ma) {
   // Mã đầu việc đi theo `data-ma` chứ không nhồi vào onclick: đổi tab chỉ cần đọc lại thuộc tính.
   return "<div id=\"" + escapeHtmlAttr(kieu) + "-nhat-ky-panel\" class=\"hidden\" data-ma=\"" + escapeHtmlAttr(ma) + "\">" +
     "<div id=\"" + escapeHtmlAttr(kieu) + "-nhat-ky-noi-dung\" class=\"space-y-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar\">" +
-    "<div class=\"py-8 text-center text-gray-400\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải nhật ký…</div></div></div>";
+    "<div class=\"py-8 text-center text-gray-400\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải nhật ký…</div></div></div>" +
+    // 2026-09-01: modal NHIỆM VỤ có thêm khung «Kết quả & Luồng» ngay sau khung nhật ký — cùng
+    // khuôn: ẩn mặc định, data-ma giữ mã nhiệm vụ, nội dung nạp một lần khi bấm tab.
+    (kieu === "task" ? buildKhungKetQua(ma) : "");
 }
+// ============================================================================
+// KẾT QUẢ NHIỆM VỤ LÀ FILE (014, 2026-09-01) — tab «Kết quả & Luồng» trong modal NHIỆM VỤ.
+//
+// Luồng người dùng chốt: Cán bộ nộp → TP/PP xem + góp ý → Yêu cầu sửa (nộp bản mới, lặp) /
+// Trình Phó GĐ–GĐ / Hoàn thành luôn → PGD/GĐ Duyệt (chốt, khóa upload) hoặc Trả về TP/PP
+// (TP/PP nộp bản mình về «Chờ lãnh đạo» hoặc đẩy về Cán bộ, lặp lại).
+//
+// LUỒNG KHÔNG CÓ LUẬT CỨNG TRONG FILE NÀY: mỗi «cửa» đọc giá trị hiệu lực từ
+// GET /api/v1/permissions (ma trận + ghi đè 009/010/011/014) — giaTriHieuLucFile ở dưới khớp
+// từng chữ với giaTriHieuLuc phía máy chủ:
+//   ✓ cho-phep  = cửa đó bị BỎ QUA (nộp xong là «Tự động — phân quyền không yêu cầu duyệt»)
+//   ⏳ cho-duyet = phải qua duyệt (TP/PP đặt ⏳ ở «Duyệt kết quả» ⇒ MẤT nút «Hoàn thành / Duyệt»)
+//   ✕ tu-choi   = vai đó không làm được
+// Nút ẩn/hiện chỉ để cho đẹp — MÁY CHỦ LÀ RÀO CHẶN CUỐI. PDF xem bằng iframe trình duyệt
+// (?inline=1); DOCX tải về + góp ý trong app. Editor trực tuyến: docs/KE-HOACH-KET-QUA-FILE.md §7.
+// ============================================================================
+const NHAN_TRANG_THAI_FILE = Object.freeze({
+  "cho-xem": "Chờ TP/PP xem",
+  "can-sua": "Cần sửa — nộp bản mới",
+  "cho-lanh-dao": "Chờ Phó GĐ/Giám đốc",
+  "hoan-thanh": "Hoàn thành",
+  "da-duyet": "Đã duyệt",
+});
+const MAU_TRANG_THAI_FILE = Object.freeze({
+  "cho-xem": "bg-yellow-100 text-yellow-700",
+  "can-sua": "bg-red-100 text-red-600",
+  "cho-lanh-dao": "bg-purple-100 text-purple-700",
+  "hoan-thanh": "bg-green-100 text-green-700",
+  "da-duyet": "bg-green-800 text-white",
+});
+const NHAN_LUONG_FILE = Object.freeze({
+  nop: "Nộp bản",
+  "gom-y": "Góp ý",
+  "yeu-cau-sua": "Yêu cầu sửa",
+  "trinh-lanh-dao": "Trình lãnh đạo",
+  "tra-ve-tp": "Trả về TP/PP",
+  "tra-ve-cbo": "Trả về Cán bộ",
+  "duyet-tu-dong": "Phê duyệt tự động",
+  duyet: "Duyệt",
+  "hoan-thanh": "Hoàn thành",
+});
+const NHAN_VERDICT_FILE = Object.freeze({
+  "yeu-cau-sua": "Yêu cầu sửa",
+  "trinh-lanh-dao": "Trình Phó giám đốc",
+  "tra-ve-cbo": "Đẩy về Cán bộ",
+  "hoan-thanh": "Hoàn thành",
+  "tra-ve-tp": "Trả về TP/PP",
+  duyet: "Duyệt",
+});
+// Ma trận + ghi đè nạp từ GET /api/v1/permissions (khuôn oPhanQuyenHieuLuc) — nạp lại MỖI lần mở
+// tab nên admin đổi bảng là người dùng thấy hành vi đổi NGAY cho lần nộp/duyệt tiếp theo.
+let phanQuyenFile = { macDinh: null, ghiDe: {} };
+let fileKetQuaChoBan = null; // nhóm đang chờ nộp bản mới (null = nộp tạo nhóm mới)
+let taskKetQuaMa = "";       // mã nhiệm vụ đang mở tab «Kết quả & Luồng»
+/** Giá trị hiệu lực của một cửa file cho MỘT vai — client khớp server từng chữ. */
+function giaTriHieuLucFile(vai, action) {
+  if (vai === "admin") return "cho-phep";
+  const gd = phanQuyenFile.ghiDe && phanQuyenFile.ghiDe["file:" + action] && phanQuyenFile.ghiDe["file:" + action][vai];
+  if (gd) return gd.gia_tri || gd;
+  if (action === "create") {
+    if (vai === "Phó Giám đốc") return "cho-phep";
+    if (["Trưởng phòng", "Phó phòng", "Nhân viên"].includes(vai)) return "cho-duyet";
+    return "tu-choi";
+  }
+  if (action === "approve") {
+    return ["Phó Giám đốc", "Trưởng phòng", "Phó phòng"].includes(vai) ? "cho-phep" : "tu-choi";
+  }
+  const bang = phanQuyenFile.macDinh && phanQuyenFile.macDinh[vai];
+  return bang && Array.isArray(bang.file) && bang.file.includes(action) ? "cho-phep" : "tu-choi";
+}
+/** Khung ẩn của tab — cùng khuôn buildKhungNhatKy: data-ma giữ mã nhiệm vụ, nạp một lần rồi thôi. */
+function buildKhungKetQua(ma) {
+  return "<div id=\"task-ket-qua-panel\" class=\"hidden\" data-ma=\"" + escapeHtmlAttr(ma) + "\">" +
+    "<div id=\"task-ket-qua-noi-dung\" class=\"space-y-4 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar\">" +
+    "<div class=\"py-8 text-center text-gray-400\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải kết quả…</div></div></div>";
+}
+/** POST REST dạng FormData (upload file) — cùng cơ chế CSRF với restPost; lỗi hiện toast, trả null. */
+async function restUpload(path, formData) {
+  try {
+    const token = await layTokenCsrfChoPost();
+    const res = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "X-CSRF-Token": token },
+      body: formData,
+    });
+    if (res.status === 401) {
+      showLoginModal();
+      return null;
+    }
+    if (!res.ok) {
+      let thongDiep = "HTTP " + res.status;
+      try {
+        const json = await res.json();
+        json && json.error && json.error.message && (thongDiep = json.error.message);
+      } catch (err) {}
+      throw new Error(thongDiep);
+    }
+    const json = await res.json();
+    return json && json.data ? json.data : null;
+  } catch (err) {
+    showToast("Không gửi được file lên máy chủ: " + err.message, "error");
+    return null;
+  }
+}
+/** Nạp (lại) nội dung tab: máy chủ trả nhóm + bản + góp ý + luồng; kèm bảng phân quyền mới nhất. */
+async function napKetQua(ma) {
+  const khung = document.getElementById("task-ket-qua-noi-dung");
+  if (!khung) return;
+  taskKetQuaMa = String(ma || "");
+  const ketQua = await restGet("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files");
+  if (!document.getElementById("task-ket-qua-noi-dung")) return;
+  if (!ketQua) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
+  const phanQuyen = await restGet("/api/v1/permissions");
+  if (phanQuyen) {
+    phanQuyenFile.macDinh = phanQuyen.macDinh || null;
+    phanQuyenFile.ghiDe = phanQuyen.ghiDe || {};
+  }
+  const nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
+  const oChonFile =
+    "<input type=\"file\" id=\"task-file-input\" accept=\".doc,.docx,.pdf\" class=\"hidden\" onchange=\"uploadKetQua(this)\">";
+  if (nhom.length === 0) {
+    khung.innerHTML =
+      "<div class=\"text-xs text-gray-500 mb-3\">Kết quả của nhiệm vụ là file Word/PDF. Nộp bản đầu tiên để bắt đầu luồng góp ý — duyệt.</div>" +
+      (coTheNopFile(null, taskKetQuaMa)
+        ? "<button type=\"button\" class=\"btn-primary py-1.5 px-3 text-sm\" onclick=\"moChonFileKetQua(null)\"><i class=\"fas fa-upload mr-2\"></i>Tải file lên</button>"
+        : "<div class=\"text-xs text-gray-400\">Chỉ người được giao nhiệm vụ (và Trưởng phòng/Phó phòng) mới nộp được file kết quả.</div>") +
+      oChonFile;
+    return;
+  }
+  khung.innerHTML = nhom.map((n) => buildKhoiFile(n, taskKetQuaMa)).join("") + oChonFile;
+}
+/** Ai được nộp file theo TRẠNG THÁI + quyền hiệu lực (máy chủ vẫn là rào chặn cuối). */
+function coTheNopFile(n, ma) {
+  const vai = currentUser && currentUser.role;
+  if (!vai) return false;
+  if (giaTriHieuLucFile(vai, "create") === "tu-choi") return false;
+  const trangThai = n && n.trang_thai ? n.trang_thai : "cho-xem";
+  if (["hoan-thanh", "da-duyet"].includes(trangThai)) return false;
+  if (trangThai === "cho-lanh-dao") {
+    // File đang ở tay lãnh đạo: chỉ TP/PP và Phó GĐ/GĐ nộp được bản mới.
+    return ["Trưởng phòng", "Phó phòng", "Phó Giám đốc", "admin"].includes(vai);
+  }
+  // cho-xem / can-sua: người được giao nhiệm vụ + TP/PP + Phó GĐ/GĐ.
+  if (["Trưởng phòng", "Phó phòng", "Phó Giám đốc", "admin"].includes(vai)) return true;
+  const dong = timDongDauViec("task", ma);
+  return Boolean(dong && dong[COL.T_ASSIGNEE] === (currentUser && currentUser.name));
+}
+/** Mở ô chọn file. fileId null = tạo nhóm mới; số = nộp bản mới vào nhóm đó. */
+function moChonFileKetQua(fileId) {
+  const input = document.getElementById("task-file-input");
+  if (!input) return;
+  fileKetQuaChoBan = fileId ? Number(fileId) : null;
+  input.value = "";
+  input.click();
+}
+/** Gửi FormData lên máy chủ; kiểm đuôi + dung lượng trước cho đỡ mất một vòng gọi. */
+async function uploadKetQua(input) {
+  const file = input && input.files && input.files[0];
+  if (input) input.value = "";
+  if (!file) return;
+  if (!/\.(doc|docx|pdf)$/i.test(file.name)) {
+    showToast("Chỉ nhận file .doc, .docx hoặc .pdf", "error");
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showToast("File vượt quá dung lượng tối đa 20 MB", "error");
+    return;
+  }
+  const fd = new FormData();
+  fd.append("file", file);
+  if (fileKetQuaChoBan != null) fd.append("fileId", String(fileKetQuaChoBan));
+  fileKetQuaChoBan = null;
+  const ketQua = await restUpload("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files", fd);
+  if (!ketQua) return;
+  showToast(ketQua.tuDong ? "Đã nộp và PHÊ DUYỆT LUÔN — phân quyền không yêu cầu duyệt" : "Đã nộp bản mới", "success");
+  napKetQua(taskKetQuaMa);
+}
+/** Một hành động verdict: hỏi nội dung khi bắt buộc, chốt thì xác nhận trước khi khóa. */
+async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
+  if (hanhDong === "duyet" && !confirm("Duyệt sẽ KHÓA kết quả — không nộp thêm được nữa. Tiếp tục?")) return;
+  if (hanhDong === "hoan-thanh" && !confirm("Hoàn thành luôn (không trình lãnh đạo)? Tiếp tục?")) return;
+  let noiDung = "";
+  if (canNoiDung) {
+    noiDung = prompt("Nhập nội dung (tối thiểu 10 ký tự):") || "";
+    if (noiDung.trim().length < 10) {
+      if (noiDung.trim() !== "") showToast("Nội dung cần ít nhất 10 ký tự", "error");
+      return;
+    }
+  }
+  const ketQua = await restPost("/api/v1/task-files/" + encodeURIComponent(fileId) + "/verdict", {
+    hanhDong,
+    noiDung: noiDung.trim(),
+  });
+  if (!ketQua) return;
+  showToast("Đã " + (NHAN_VERDICT_FILE[hanhDong] || hanhDong).toLowerCase(), "success");
+  napKetQua(ma);
+}
+/** Góp ý theo bản (TP/PP + Phó GĐ phụ trách + GĐ/admin — máy chủ kiểm vai). */
+async function gopYKetQua(versionId, ma) {
+  const noiDung = prompt("Góp ý cho bản này:") || "";
+  if (!noiDung.trim()) return;
+  const ketQua = await restPost("/api/v1/task-file-versions/" + encodeURIComponent(versionId) + "/comments", {
+    noiDung: noiDung.trim(),
+  });
+  if (!ketQua) return;
+  showToast("Đã ghi góp ý", "success");
+  napKetQua(ma);
+}
+/** Xoá NHÓM file — người tạo + admin, chưa «Đã duyệt» (máy chủ kiểm lại). */
+async function xoaKetQuaFile(fileId, ma) {
+  if (!confirm("Xoá nhóm file này cùng mọi bản, góp ý và bảng luồng?")) return;
+  const ketQua = await restGhi("DELETE", "/api/v1/task-files/" + encodeURIComponent(fileId));
+  if (ketQua === null) return;
+  showToast("Đã xoá nhóm file", "success");
+  napKetQua(ma);
+}
+function taiFileKetQua(banId) {
+  window.location = "/api/v1/task-files/" + encodeURIComponent(banId) + "/download";
+}
+function xemFileKetQua(banId) {
+  window.open("/api/v1/task-files/" + encodeURIComponent(banId) + "/download?inline=1", "_blank");
+}
+/** Một nút icon + nhãn của khối file. */
+function nutIconFile(icon, title, onclick, mauThem) {
+  // Mọi giá trị nội suy đều qua escape tại lỗ (bộ soát TC-SEC-10); onclick đã dựng từ
+  // escapeForInlineHandler bên gọi — bọc thêm escapeHtmlAttr là vô hại với id/mã ASCII.
+  return (
+    "<button type=\"button\" title=\"" + escapeHtmlAttr(title) + "\" class=\"btn-secondary py-1 px-2 text-sm " +
+    escapeHtmlAttr(mauThem || "") + "\" onclick=\"" + escapeHtmlAttr(onclick) + "\"><i class=\"fas " + escapeHtml(icon) + "\"></i></button>"
+  );
+}
+/** Một nút verdict. */
+function nutVerdictFile(n, ma, hanhDong, nhan, canNoiDung, laChot) {
+  return (
+    "<button type=\"button\" class=\"" + (laChot ? "btn-primary" : "btn-secondary") + " py-1 px-3 text-sm\" onclick=\"" +
+    "xuLyVerdictFile('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(hanhDong) + "', " +
+    (canNoiDung ? "true" : "false") + ", '" + escapeForInlineHandler(ma) + "')\">" +
+    (laChot ? "<i class=\"fas fa-check mr-1\"></i>" : "") + escapeHtml(nhan) + "</button>"
+  );
+}
+/** Nút verdict hiển thị THEO VAI + GIÁ TRỊ HIỆU LỰC + TRẠNG THÁI — máy chủ vẫn kiểm lại. */
+function buildNutVerdictFile(n, ma) {
+  const vai = currentUser && currentUser.role;
+  if (!vai) return "";
+  const tt = n.trang_thai;
+  const laLanhDaoPhong = ["Trưởng phòng", "Phó phòng"].includes(vai);
+  const nut = [];
+  if (laLanhDaoPhong) {
+    if (["cho-xem", "can-sua"].includes(tt)) {
+      nut.push(nutVerdictFile(n, ma, "yeu-cau-sua", "Yêu cầu sửa", true, false));
+      nut.push(nutVerdictFile(n, ma, "trinh-lanh-dao", "Trình Phó giám đốc", true, false));
+      // file:approve = ✓ ⇒ nút chốt «Hoàn thành / Duyệt» hiện (chốt 'hoan-thanh'); ⏳ ⇒ ẨN.
+      if (giaTriHieuLucFile(vai, "approve") === "cho-phep") {
+        nut.push(nutVerdictFile(n, ma, "hoan-thanh", "Hoàn thành / Duyệt", false, true));
+      }
+    }
+    if (["cho-xem", "cho-lanh-dao"].includes(tt)) {
+      nut.push(nutVerdictFile(n, ma, "tra-ve-cbo", "Đẩy về Cán bộ", false, false));
+    }
+  }
+  if (["Phó Giám đốc", "admin"].includes(vai) && tt === "cho-lanh-dao") {
+    nut.push(nutVerdictFile(n, ma, "tra-ve-tp", "Trả về TP/PP", true, false));
+    if (giaTriHieuLucFile(vai, "approve") === "cho-phep") {
+      nut.push(nutVerdictFile(n, ma, "duyet", "Duyệt", false, true));
+    }
+  }
+  return nut.length === 0 ? "" : "<div class=\"flex flex-wrap gap-2 mt-3\">" + nut.join("") + "</div>";
+}
+/** BẢNG LUỒNG: Thời điểm · Người (vai) · Hành động · Bản · Nội dung — mới nhất trên đầu. */
+function buildBangLuongFile(n) {
+  const luong = Array.isArray(n.luong) ? n.luong : [];
+  if (luong.length === 0) return "";
+  const dong = luong
+    .map((g) =>
+      "<tr>" +
+      "<td class=\"px-3 py-2 whitespace-nowrap text-gray-500\">" + escapeHtml(formatDateForDisplay(g.created_at, true)) + "</td>" +
+      "<td class=\"px-3 py-2\">" + escapeHtml(g.ten_nguoi) + " <span class=\"text-gray-400\">(" + escapeHtml(g.vai) + ")</span></td>" +
+      "<td class=\"px-3 py-2\"><span class=\"font-medium text-gray-800\">" + escapeHtml(NHAN_LUONG_FILE[g.hanh_dong] || g.hanh_dong) + "</span></td>" +
+      "<td class=\"px-3 py-2 text-gray-600\">" + (g.version_no ? "bản " + escapeHtml(g.version_no) : "—") + "</td>" +
+      "<td class=\"px-3 py-2 text-gray-600\">" + escapeHtml(g.noi_dung || "") + "</td>" +
+      "</tr>"
+    )
+    .join("");
+  const buildO = (t) => "<th class=\"px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase\">" + escapeHtml(t) + "</th>";
+  return (
+    "<div class=\"mt-3 overflow-x-auto\"><table class=\"min-w-full text-xs\"><thead class=\"bg-gray-50\"><tr>" +
+    buildO("Thời điểm") + buildO("Người (vai)") + buildO("Hành động") + buildO("Bản") + buildO("Nội dung") +
+    "</tr></thead><tbody class=\"divide-y divide-gray-100\">" + dong + "</tbody></table></div>"
+  );
+}
+/** BẢN (v1, v2…) + GÓP Ý thread theo bản. */
+function buildBanFileList(n, ma) {
+  const bans = Array.isArray(n.bans) ? n.bans : [];
+  const gopY = Array.isArray(n.gopY) ? n.gopY : [];
+  const vai = currentUser && currentUser.role;
+  const duocGopY =
+    vai && ["Trưởng phòng", "Phó phòng", "Phó Giám đốc", "admin"].includes(vai) &&
+    n.trang_thai !== "da-duyet";
+  return bans
+    .map((b) => {
+      const cuaBan = gopY.filter((c) => Number(c.version_id) === Number(b.id));
+      const thread = cuaBan.length
+        ? cuaBan
+            .map(
+              (c) =>
+                "<div class=\"ml-4 border-l-2 border-gray-100 pl-3 py-1 text-xs\">" +
+                "<span class=\"font-medium text-gray-700\">" + escapeHtml(c.ten_nguoi) + "</span> " +
+                "<span class=\"text-gray-400\">(" + escapeHtml(c.vai) + ")</span> · " +
+                "<span class=\"text-gray-400\">" + escapeHtml(formatDateForDisplay(c.created_at, true)) + "</span>" +
+                "<div class=\"text-gray-600\">" + escapeHtml(c.noi_dung) + "</div></div>"
+            )
+            .join("")
+        : "<div class=\"ml-4 pl-3 text-xs text-gray-400\">Chưa có góp ý cho bản này.</div>";
+      const nutGopY = duocGopY
+        ? " <button type=\"button\" class=\"text-blue-600 hover:underline text-xs ml-2\" onclick=\"" +
+          "gopYKetQua('" + escapeForInlineHandler(b.id) + "', '" + escapeForInlineHandler(ma) + "')\">↩ góp ý</button>"
+        : "";
+      return (
+        "<div class=\"border-t border-gray-50 pt-2 mt-2\">" +
+        "<div class=\"flex items-center gap-2 text-sm\">" +
+        "<span class=\"font-semibold text-gray-800\">bản " + escapeHtml(b.version_no) + "</span>" +
+        "<span class=\"text-gray-500\">" + escapeHtml(b.ten_nguoi_nop) + " · " + escapeHtml(formatDateForDisplay(b.uploaded_at, true)) + "</span>" +
+        "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" onclick=\"" +
+        "taiFileKetQua('" + escapeForInlineHandler(b.id) + "')\">⬇ tải</button>" +
+        (b.loai_mime === "application/pdf"
+          ? "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" onclick=\"" +
+            "xemFileKetQua('" + escapeForInlineHandler(b.id) + "')\">👁 xem</button>"
+          : "") +
+        nutGopY +
+        "</div>" + thread + "</div>"
+      );
+    })
+    .join("");
+}
+/** MỘT khối FILE: tên + badge + nút tải/xem/xoá + bản + góp ý + bảng luồng + nút verdict. */
+function buildKhoiFile(n, ma) {
+  const bans = Array.isArray(n.bans) ? n.bans : [];
+  const banCuoi = bans.length > 0 ? bans[bans.length - 1] : null;
+  const nut = [];
+  if (banCuoi) {
+    nut.push(nutIconFile("fa-download", "Tải bản mới nhất", "taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
+    if (banCuoi.loai_mime === "application/pdf") {
+      nut.push(nutIconFile("fa-eye", "Xem PDF ngay trong trình duyệt", "xemFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
+    }
+  }
+  if (
+    (isAdmin() || (currentUser && Number(n.created_by) === Number(currentUser.id))) &&
+    n.trang_thai !== "da-duyet"
+  ) {
+    nut.push(
+      nutIconFile(
+        "fa-trash",
+        "Xoá nhóm file (người tạo + Giám đốc, chưa «Đã duyệt»)",
+        "xoaKetQuaFile('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "')",
+        "text-red-500 hover:text-red-600"
+      )
+    );
+  }
+  return (
+    "<div class=\"border border-gray-100 rounded-lg p-3 bg-white shadow-sm\">" +
+    "<div class=\"flex items-start justify-between gap-2 mb-2\">" +
+    "<div class=\"font-semibold text-gray-800\"><i class=\"fas fa-file-alt mr-2 text-blue-500\"></i>" + escapeHtml(n.ten_goc) +
+    " <span class=\"ml-2 align-middle text-[11px] px-2 py-0.5 rounded-full " + escapeHtmlAttr(MAU_TRANG_THAI_FILE[n.trang_thai] || "bg-gray-100 text-gray-600") + "\">" +
+    escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span></div>" +
+    "<div class=\"flex items-center gap-1\">" + nut.join("") + "</div></div>" +
+    "<div class=\"text-xs text-gray-500 mb-1\">Người tạo: " + escapeHtml(n.ten_nguoi_tao || "") + "</div>" +
+    buildBanFileList(n, ma) +
+    buildNutVerdictFile(n, ma) +
+    buildBangLuongFile(n) +
+    "</div>"
+  );
+}
+
 /** Dòng đầu việc TRONG BỘ NHỚ theo mã — nơi duy nhất `monthNames` được cập nhật sau khi ghi. */
 function timDongDauViec(kieu, ma) {
   const khoa = String(ma == null ? "" : ma);
@@ -6486,6 +6874,14 @@ const BANG_PHAN_QUYEN = [
   { ten: 'Duyệt Công việc (cấp 1)', entityType: 'work', action: 'approve', gc: 'Chỉ hai vai này được duyệt — nơi những mục ⏳ chờ.' },
   { ten: 'Duyệt Công việc con (cấp 2)', entityType: 'subwork', action: 'approve' },
   { ten: 'Duyệt Nhiệm vụ (cấp 3)', entityType: 'task', action: 'approve', gc: 'Chỉ cần khi ô «Tạo Nhiệm vụ» đặt ⏳ — không có mục nào chờ thì không có gì để duyệt.' },
+  // 014 — hai cửa mới của luồng «Kết quả nhiệm vụ là file». Nghĩa giá trị (người dùng chốt):
+  //   ⏳ Chờ duyệt = PHẢI gửi đi duyệt (Cán bộ nộp về «Chờ TP/PP xem»; TP/PP nộp về «Chờ lãnh đạo»;
+  //                 TP/PP đặt ⏳ ở «Duyệt kết quả» là MẤT nút «Hoàn thành / Duyệt» — chỉ còn Trình).
+  //   ✓ Cho phép  = PHÊ DUYỆT LUÔN — nộp xong nhóm chuyển thẳng «Đã duyệt» kèm dòng luồng
+  //                 «Tự động — phân quyền không yêu cầu duyệt»; KHÔNG gửi TP/PP/PGD.
+  //   ✕ Tắt       = vai đó không nộp/không duyệt được. Đổi ở đây là hiệu lực NGAY cho lần sau.
+  { ten: 'Nộp kết quả (file nhiệm vụ)', entityType: 'file', action: 'create', gc: '⏳ mặc định cho Cán bộ, TP/PP. ✓ = nộp xong là PHÊ DUYỆT LUÔN («Tự động»). ✕ = vai đó không nộp được.' },
+  { ten: 'Duyệt kết quả (file nhiệm vụ)', entityType: 'file', action: 'approve', gc: '✓ = nút chốt hiện («Hoàn thành / Duyệt» của TP/PP, «Duyệt» của PGD/GĐ). ⏳ = chỉ TP/PP mất nút chốt. ✕ = vai đó không duyệt được.' },
   { ten: 'Duyệt yêu cầu XOÁ (cả 3 cấp)', gc: 'Đi theo quyền Duyệt của từng cấp ở trên, không có ô riêng. Vai bị đặt ⏳ ở hàng Xoá phải bấm «Xin xoá» rồi chờ.', a: { s: '✓', n: '' }, g: { s: '✓', n: 'Phòng phụ trách' }, tp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, pp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, nv: { s: '✕', n: 'Chỉ xin, không duyệt' } },
   { ten: 'Thêm / sửa / xoá Người dùng', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
   { ten: 'Thêm / sửa / xoá Phòng ban', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
@@ -6555,6 +6951,14 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
     if (!cho) return { g: 'tu-choi', pv: '', ghiDe: false };
     // Vai KHÔNG có luồng duyệt phía trên thì Tạo là làm ngay: admin/Phó GĐ tự duyệt, còn
     // 'Nhân viên' bị service chặn 'cho-duyet' (permissions/service.js) nên đừng vẽ ⏳ cho họ.
+    // 014 — 2 cửa file có mặc định RIÊNG (người dùng chốt): Phó GĐ nộp là chốt luôn; TP/PP và
+    // Cán bộ nộp rơi «Chờ duyệt»; approve của TP/PP mặc định ✓ (nút «Hoàn thành / Duyệt» hiện).
+    if (row.entityType === 'file' && row.action === 'create') {
+      return { g: vai === 'Phó Giám đốc' ? 'cho-phep' : 'cho-duyet', pv: '', ghiDe: false };
+    }
+    if (row.entityType === 'file' && row.action === 'approve') {
+      return { g: 'cho-phep', pv: '', ghiDe: false };
+    }
     const choDuoc =
       row.action === 'create' && vai !== 'Phó Giám đốc' && vai !== 'admin' && vai !== 'Nhân viên';
     return { g: choDuoc ? 'cho-duyet' : 'cho-phep', pv: '', ghiDe: false };
@@ -6597,9 +7001,14 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
         //           «Xin xoá» kèm lý do; mục KHÔNG mất cho tới khi người duyệt đồng ý).
         const laLanhDao = vai === 'Trưởng phòng' || vai === 'Phó phòng';
         const coChoDuyet =
-          row.action === 'create' ||
+          (row.action === 'create' &&
+            !(row.entityType === 'file' && vai === 'Phó Giám đốc')) ||
           (row.action === 'update' && (laLanhDao || vai === 'Nhân viên')) ||
-          (row.action === 'delete' && (laLanhDao || vai === 'Nhân viên'));
+          (row.action === 'delete' && (laLanhDao || vai === 'Nhân viên')) ||
+          // 014: riêng 2 hàng file — ⏳ chỉ có ở «Duyệt kết quả (file nhiệm vụ)» × Trưởng phòng/
+          // Phó phòng (đặt ⏳ là mất nút «Hoàn thành / Duyệt», bắt buộc trình lên cấp trên), và
+          // KHÔNG có ở Phó GĐ (cấp chốt cuối — không có ai để «chờ»).
+          (row.entityType === 'file' && row.action === 'approve' && laLanhDao);
         // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         // Option đầu = TRẠNG THÁI ĐANG DÙNG (không lặp lại ở sau); chọn nó = về luật gốc.
         const hienTai = trangThaiHienTai(row, vai);

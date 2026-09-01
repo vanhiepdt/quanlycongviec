@@ -295,7 +295,19 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // soát chỉ nhận helper trả HTML với tiền tố build*/tao*/render* (bẫy §13.5). ⇒ 98 chỗ / 730.
     // Thêm HTML mới thì phải sửa hai số này VÀ docs/XSS-4.6.md — cố ý cho hơi rát, để việc thêm
     // một chỗ dựng HTML là một quyết định, không phải chuyện tình cờ.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 98, gia_tri: 730 });
+    // 2026-09-01 (014, «KẾT QUẢ NHIỆM VỤ LÀ FILE» — docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi
+    // HTML** (cả hai trong `napKetQua`: khung rỗng + danh sách nhóm file) và **+48 giá trị**.
+    // Giá trị: `buildKhungKetQua` 2 (id + `data-ma`), 2 lỗ gọi `buildKhungKetQua` trong
+    // `buildKhungNhatKy` + nút tab «Kết quả & Luồng» 3 (id + onclick, chỉ modal nhiệm vụ),
+    // `buildKhoiFile` 7 (tên, badge, class màu qua escapeHtmlAttr, người tạo, 3 nút icon qua
+    // escapeHtmlAttr — onclick dựng từ escapeForInlineHandler bên gọi), `buildBanFileList` 13
+    // (bản số, người nộp, lúc, 2 nút ⬇/👁 qua onclick, thread góp ý 4, nút góp ý 2, 1 lỗ
+    // `bans.map(...).join("")`), `buildNutVerdictFile` 2 (lỗ join + lỗ return — nút verdict thoát
+    // 5 giá trị bên trong), `buildBangLuongFile` 8 (5 cột `buildO` thoát + 5 ô dòng: lúc, người,
+    // vai, hành động, bản, nội dung — 6 lỗ thoát + 2 lỗ join/ternary thoát), `napKetQua` 6 (lời
+    // gọi GET, khung rỗng 2 + nút tải lên 2, 1 lỗ `nhom.map(...).join("")`). Hai hàng mới của
+    // BANG_PHAN_QUYEN dựng trong builder có sẵn (không thêm lỗ). ⇒ 100 chỗ / 778 giá trị.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 100, gia_tri: 778 });
   });
 });
 
