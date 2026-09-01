@@ -89,6 +89,10 @@ export default [
       // NHAT_KY_HANH_DONG, hết "{}" và hết mã trong mô tả tên theo tháng (TC-HD, 2026-08-29) —
       // app.js thật trong jsdom.
       'tests/unit/hoat-dong-ui.test.js',
+      // task-files-ui.test.js: tab «Kết quả & Luồng» trong modal nhiệm vụ — khung, badge, nút
+      // verdict theo vai + giá trị hiệu lực, bảng luồng, escape + chặn sai đuôi (TCKQ, 014) —
+      // app.js thật trong jsdom, fetch giả.
+      'tests/unit/task-files-ui.test.js',
     ],
     languageOptions: {
       globals: {
@@ -105,6 +109,8 @@ export default [
         DOMParser: 'readonly',
         // Event: project-form-phan-cong.test.js bắn sự kiện change lên ô chọn phòng.
         Event: 'readonly',
+        // File: task-files-ui.test.js dựng File giả để kiểm chặn sai đuôi ở client (TCKQ-13).
+        File: 'readonly',
         // MouseEvent: gantt-ui.test.js bắn mouseover/mouseout lên tên dòng Gantt để test tooltip.
         MouseEvent: 'readonly',
         // Proxy: dùng ở xss-escape.test.js để chạy mã của thuộc tính on* mà không phải đoán tên hàm.

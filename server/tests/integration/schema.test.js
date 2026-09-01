@@ -49,7 +49,7 @@ afterAll(async () => {
 });
 
 describe('001_init — lược đồ', () => {
-  it('TC-DB-01: có đủ 12 bảng nghiệp vụ (13 kể cả pgmigrations của node-pg-migrate)', async () => {
+  it('TC-DB-01: đủ bảng nghiệp vụ + pgmigrations của node-pg-migrate (014 thêm 4 bảng file)', async () => {
     const { rows } = await pool.query(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`

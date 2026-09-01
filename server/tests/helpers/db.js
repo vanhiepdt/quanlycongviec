@@ -18,6 +18,12 @@ const BUSINESS_TABLES = [
   // đó. `schema.test.js` chốt `names.toHaveLength(BUSINESS_TABLES.length + 1)` — thêm bảng mà quên
   // dòng này là test lược đồ đỏ.
   'work_month_names',
+  // Bốn bảng «kết quả nhiệm vụ là file» (014) — task_file_flow/comments trỏ users, versions/files
+  // trỏ task_files rồi work_items: liệt kê trước các bảng được trỏ, cùng cách của delegations.
+  'task_file_flow',
+  'task_file_comments',
+  'task_file_versions',
+  'task_files',
   // Ghi đè Bảng phân quyền (009) trỏ updated_by → users: xoá trước users.
   'permission_overrides',
   'work_items',
