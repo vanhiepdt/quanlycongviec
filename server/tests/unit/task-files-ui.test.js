@@ -13,9 +13,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
-  COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhungKetQua, buildKhoiFile,
+  COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhoiFile, buildYKienPanel, batTatKetQua,
   buildBangLuongFile, buildNutVerdictFile, buildBanFileList, giaTriHieuLucFile,
-  coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile,
+  coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile, createTaskModal,
   __tf: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -26,6 +26,7 @@ const EXPORTS = `;Object.assign(window, {
     phanQuyenFile.macDinh = macDinh;
     phanQuyenFile.ghiDe = ghiDe;
   },
+  __tfDs: (v) => { dsBat = v; },
 });`;
 
 function khoiDong() {
@@ -72,25 +73,29 @@ beforeEach(() => {
   khoiDong();
 });
 
-describe('TCKQ — khung và tab «Kết quả & Luồng»', () => {
-  it('TCKQ-01: khung có id riêng + data-ma + chữ đang tải — cùng khuôn khung nhật ký', () => {
-    const khung = window.buildKhungKetQua('CV001-002');
-    expect(khung).toContain('id="task-ket-qua-panel"');
-    expect(khung).toContain('id="task-ket-qua-noi-dung"');
-    expect(khung).toContain('data-ma="CV001-002"');
-    expect(khung).toContain('Đang tải kết quả…');
-    expect(khung).toContain('class="hidden"');
+describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14续2)', () => {
+  const APP = APP_SRC;
+
+  it('TCKQ-01: modal NHIỆM VỤ có container danh sách file sau nhãn «Kết quả»; hết «Link kết quả»', () => {
+    // Tạo nhiệm vụ ở chế độ sửa — chuỗi form phải chứa container + nhãn đã đổi.
+    const form = window.createTaskModal(true, {
+      'Mã nhiệm vụ': 'CV001-002',
+      'Tên nhiệm vụ': 'Nhiệm vụ thử',
+      'Link kết quả': '',
+      'Kết quả đầu ra': '',
+    });
+    expect(form).toContain('task-ket-qua-danh-sach');
+    expect(form).toContain('Kết quả</label>');
+    expect(form).not.toContain('Link kết quả</label>');
+    // Modal CÔNG VIỆC không có khối file.
+    expect(APP).toContain('task-ket-qua-danh-sach');
   });
 
-  it('TCKQ-02: nút tab «Kết quả & Luồng» CHỈ ở modal nhiệm vụ', () => {
-    const thanhTask = window.buildThanhTabNhatKy('task', false);
-    expect(thanhTask).toContain('task-tab-ket-qua');
-    expect(thanhTask).toContain('Kết quả &amp; Luồng');
-    const thanhProject = window.buildThanhTabNhatKy('project', false);
-    expect(thanhProject).not.toContain('project-tab-ket-qua');
-    // Khung cũng chỉ đính vào modal nhiệm vụ.
-    expect(window.buildKhungNhatKy('task', 'CV001-002')).toContain('task-ket-qua-panel');
-    expect(window.buildKhungNhatKy('project', 5)).not.toContain('project-ket-qua-panel');
+  it('TCKQ-02: tab «Kết quả & Luồng» đã gỡ — thanh tab chỉ còn Thông tin/Nhật ký/Tên theo tháng', () => {
+    const thanh = window.buildThanhTabNhatKy('task', false);
+    expect(thanh).not.toContain('tab-ket-qua');
+    expect(window.buildKhungNhatKy('task', 'CV001-002')).not.toContain('task-ket-qua-panel');
+    expect(APP).not.toContain('buildKhungKetQua');
   });
 
   it('TCKQ-03: badge 5 trạng thái đúng màu — da-duyet xanh đậm, cho-xem vàng, can-sua đỏ nhạt', () => {
@@ -106,6 +111,63 @@ describe('TCKQ — khung và tab «Kết quả & Luồng»', () => {
     const daDuyet = window.buildKhoiFile(NHOM({ trang_thai: 'da-duyet' }), 'CV001-002');
     expect(daDuyet).toContain('bg-green-800 text-white');
     expect(daDuyet).toContain('Đã duyệt');
+  });
+
+  it('TCKQ-03b: mỗi file MỘT DÒNG — data-file + CHỮ «Xem ý kiến» + nút Lịch sử; khung chi tiết ẩn', () => {
+    const dong = window.buildKhoiFile(
+      NHOM({
+        gopY: [
+          {
+            id: 5,
+            version_id: 11,
+            ten_nguoi: 'TP',
+            vai: 'Trưởng phòng',
+            noi_dung: 'x',
+            created_at: '2026-09-01T10:05:00Z',
+          },
+        ],
+      }),
+      'CV001-002'
+    );
+    expect(dong).toContain('data-file="7"');
+    expect(dong).toContain('>Xem ý kiến (1)</button>');
+    expect(dong).toContain('>Lịch sử</button>');
+    expect(dong).toContain("batTatKetQua('7', 'yk')");
+    expect(dong).toContain("batTatKetQua('7', 'ls')");
+    expect(dong).toContain('id="task-kq-yk-7"');
+    expect(dong).toContain('id="task-kq-ls-7"');
+    expect(dong).toContain('class="hidden mt-2 border-t border-gray-50 pt-2"');
+  });
+
+  it('TCKQ-16: batTatKetQua ẩn/hiện khung ý kiến và lịch sử (toggle class hidden)', () => {
+    document.body.innerHTML =
+      '<div id="task-kq-yk-7" class="hidden"></div><div id="task-kq-ls-7" class="hidden"></div>';
+    window.batTatKetQua(7, 'yk');
+    expect(document.getElementById('task-kq-yk-7').classList.contains('hidden')).toBe(false);
+    window.batTatKetQua(7, 'yk');
+    expect(document.getElementById('task-kq-yk-7').classList.contains('hidden')).toBe(true);
+    window.batTatKetQua(7, 'ls');
+    expect(document.getElementById('task-kq-ls-7').classList.contains('hidden')).toBe(false);
+  });
+
+  it('TCKQ-17: ✎ sửa trực tuyến (ONLYOFFICE) CHỈ hiện khi máy chủ đã cấu hình DS', () => {
+    window.__tfDs(true);
+    const co = window.buildKhoiFile(NHOM(), 'CV001-002');
+    expect(co).toContain('/api/v1/task-file-versions/11/editor');
+    expect(co).toContain('Sửa trực tuyến (ONLYOFFICE)');
+    window.__tfDs(false);
+    const khong = window.buildKhoiFile(NHOM(), 'CV001-002');
+    expect(khong).not.toContain('/editor');
+  });
+
+  it('TCKQ-18: panel ý kiến — label gắn bản mới nhất + data-ban-cuoi + Gửi ý kiến', () => {
+    const panel = window.buildYKienPanel(NHOM(), 'CV001-002');
+    expect(panel).toContain('Ý kiến cho bản 1');
+    expect(panel).toContain('id="task-y-kien-7"');
+    expect(panel).toContain('data-ban-cuoi="11"');
+    expect(panel).toContain("guiYKien('7', 'CV001-002')");
+    expect(panel).toContain('Gửi ý kiến');
+    expect(panel).toContain('Chưa có ý kiến nào.');
   });
 });
 

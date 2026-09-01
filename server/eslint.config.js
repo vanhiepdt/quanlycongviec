@@ -17,6 +17,8 @@ export default [
         // Buffer: dùng để đếm ĐỘ DÀI BYTE của mật khẩu (bcrypt cắt sau 72 byte) và để so chuỗi
         // theo thời gian hằng ở cookies.js.
         Buffer: 'readonly',
+        // fetch: dsRoutes dùng fetch tải bản đã sửa từ ONLYOFFICE (Vòng 14).
+        fetch: 'readonly',
       },
     },
     rules: {

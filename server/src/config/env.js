@@ -63,6 +63,13 @@ const optional = {
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
   SMTP_FROM: z.string().default(''),
+  // ONLYOFFICE Document Server (Vòng 14 — sửa file trực tuyến). Trống = TẮT: nút «sửa trực
+  // tuyến» chỉ hiện khi cả URL lẫn JWT secret được cấu hình. Ví dụ máy dev (docker `busy_merkle`,
+  // cổng 80): ONLYOFFICE_URL=http://localhost · ONLYOFFICE_JWT_SECRET=my_jwt_secret ·
+  // ONLYOFFICE_CALLBACK_BASE=http://host.docker.internal:3000 (DS container gọi NGƯỢC về app).
+  ONLYOFFICE_URL: z.string().default(''),
+  ONLYOFFICE_JWT_SECRET: z.string().default(''),
+  ONLYOFFICE_CALLBACK_BASE: z.string().default(''),
 };
 
 const schema = z.object({ ...required, ...optional });

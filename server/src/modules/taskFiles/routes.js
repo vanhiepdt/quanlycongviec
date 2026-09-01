@@ -125,6 +125,30 @@ taskFilesRouter.get('/work-items/:ref/files', async (req, res, next) => {
   }
 });
 
+/** Trang SỬA TRỰC TUYẾN (ONLYOFFICE) — tab mới, người dùng đăng nhập; DS còn cần token riêng. */
+taskFilesRouter.get('/task-file-versions/:id/editor', async (req, res, next) => {
+  try {
+    const ketQua = await service.moEditor(req.user, req.params.id);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(service.htmlEditor(ketQua));
+  } catch (err) {
+    // Chưa cấu hình DS: trả trang thông báo có thể đọc được thay vì JSON lỗi.
+    if (err && err.status === 400 && String(err.message).includes('ONLYOFFICE')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res
+        .status(400)
+        .send(
+          '<!DOCTYPE html><html lang="vi"><meta charset="utf-8"><body style="font-family:sans-serif;padding:24px">' +
+            '<h3>Chưa bật sửa trực tuyến</h3><p>' +
+            String(err.message).replace(/</g, '&lt;') +
+            '</p><p>Xem <code>docs/KE-HOACH-KET-QUA-FILE.md</code> §7.</p></html>'
+        );
+    }
+    return next(err);
+  }
+});
+
 taskFilesRouter.get(
   '/task-files/:id/download',
   validate(downloadSchema, 'query'),

@@ -21,7 +21,7 @@
 //     hành động vẫn qua `can()` + bảng verdict ở đây.
 //  3. **Thông báo nằm trong CÙNG giao dịch** với lần đổi trạng thái (tiền lệ approvals) — hỏng
 //     giữa chừng thì không có «đã duyệt mà người ta không bao giờ biết».
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { withTransaction } from '../../db/pool.js';
@@ -567,9 +567,171 @@ export async function docBan(user, banId) {
   return { ban, item };
 }
 
+/** Bản CHỈ DÀNH cho máy-đối-máy (ONLYOFFICE) — không có người dùng; đã được token HMAC bảo vệ. */
+export async function docBanSystem(banId) {
+  const ban = await repo.findBanById(Number(banId));
+  if (!ban) throw notFound('Không tìm thấy bản file');
+  const nhom = await repo.findNhomById(ban.file_id);
+  if (!nhom) throw notFound('Không tìm thấy nhóm file chứa bản này');
+  const item = await itemsRepo.findById(nhom.item_id);
+  if (!item) throw notFound('Không tìm thấy nhiệm vụ chứa file này');
+  return { ban, item };
+}
+
 /** Đường vật lý của một bản — tên `ten_luu` do máy chủ sinh sẵn, không bao giờ là tên gốc. */
 export function duongBan(itemId, tenLuu) {
   const ten = path.basename(String(tenLuu ?? ''));
   if (ten !== tenLuu) throw badRequest('Tên file lưu không hợp lệ');
   return path.join(GOC_STORAGE, String(itemId), ten);
+}
+
+// ============================================================================
+// SỬA TRỰC TUYẾN với ONLYOFFICE Document Server (Vòng 14 — docker `busy_merkle`, cổng 80).
+//
+// Người dùng chốt 2026-09-01: CÓ editor trực tuyến, mọi lần sửa phải LƯU LẠI thành BẢN MỚI
+// trong cùng nhóm để xem được. Khuôn: tab mới mở trang editor do app dựng (config ký JWT HS256
+// bằng ONLYOFFICE_JWT_SECRET); DS tải file gốc qua `/raw` (token HMAC); người dùng lưu → DS gọi
+// `/callback` với `status=2` + `url` bản đã sửa → app tải về, lưu version_no + 1 trong cùng nhóm.
+// Chưa cấu hình ONLYOFFICE_URL/ONLYOFFICE_JWT_SECRET ⇒ tính năng TẮT (nút ẩn, đường trả câu rõ).
+// ============================================================================
+import { env } from '../../config/env.js';
+import { kyJwt } from '../../utils/jwt.js';
+
+/** DS đã được cấu hình chưa — quyết định nút «✎ sửa trực tuyến» có hiện hay không. */
+export function onlyOfficeBat() {
+  return Boolean(env.ONLYOFFICE_URL && env.ONLYOFFICE_JWT_SECRET);
+}
+
+/**
+ * Token máy-đối-máy cho DS tải/gửi file về: HMAC với SESSION_SECRET (không thêm biến env mới).
+ * Không có thời hạn — id bản là số sinh trong CSDL và token chỉ được dùng trên đúng đường
+ * `raw`/`callback` của CHÍNH id đó; xoá bản là token chết theo.
+ */
+function chuKyDs(action, versionId) {
+  return createHmac('sha256', env.SESSION_SECRET)
+    .update(`ds:${action}:${versionId}`)
+    .digest('base64url');
+}
+
+export function tokenDs(action, versionId) {
+  return chuKyDs(action, Number(versionId));
+}
+
+export function kiemTokenDs(action, versionId, token) {
+  const tinh = chuKyDs(action, Number(versionId));
+  const daGui = String(token ?? '');
+  if (daGui.length !== tinh.length) return false;
+  return timingSafeEqual(Buffer.from(daGui), Buffer.from(tinh));
+}
+
+/** Config editor cho MỘT bản: `document.url` để DS tải, `callbackUrl` để DS trả bản đã sửa. */
+export async function moEditor(user, versionId) {
+  if (!onlyOfficeBat()) {
+    throw badRequest(
+      'Chưa cấu hình ONLYOFFICE_URL và ONLYOFFICE_JWT_SECRET trong deploy/.env — sửa trực tuyến đang tắt'
+    );
+  }
+  const { ban } = await docBan(user, versionId);
+  const callbackBase = env.ONLYOFFICE_CALLBACK_BASE || env.APP_BASE_URL;
+  const config = {
+    document: {
+      fileType: (ban.ten_luu.match(/\.(doc|docx|pdf)$/i)?.[1] ?? 'docx').replace('.', ''),
+      key: `tf-${ban.id}-${ban.kich_thuoc}`,
+      title: ban.ten_goc,
+      url: `${callbackBase}/api/v1/task-files-ds/raw/${ban.id}?token=${tokenDs('raw', ban.id)}`,
+      permissions: { edit: true, comment: true, download: true },
+    },
+    documentType: 'word',
+    editorConfig: {
+      callbackUrl: `${callbackBase}/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`,
+      lang: 'vi',
+      mode: 'edit',
+      user: { id: String(user.id), name: user.full_name },
+      customization: { forcesave: true, compactHeader: true },
+    },
+  };
+  return {
+    dsUrl: env.ONLYOFFICE_URL.replace(/\/$/, ''),
+    token: kyJwt(config, env.ONLYOFFICE_JWT_SECRET),
+    config,
+    ban,
+  };
+}
+/** Trang editor nhúng DS — HTML riêng, mở trong tab mới (index.html không đụng tới). */
+export function htmlEditor({ dsUrl, token, config }) {
+  const cauHinh = JSON.stringify({
+    document: config.document,
+    documentType: config.documentType,
+    token,
+    editorConfig: config.editorConfig,
+    type: 'desktop',
+    width: '100%',
+    height: '100%',
+  }).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>Chỉnh sửa kết quả — Quản lý công việc</title>
+<style>html,body{margin:0;height:100%}#placeholder{position:absolute;inset:0}</style></head>
+<body><div id="placeholder"></div>
+<script src="${dsUrl}/web-apps/apps/api/documents/api.js"></script>
+<script>window.docEditor = new DocsAPI.DocEditor("placeholder", ${cauHinh});</script>
+</body></html>`;
+}
+
+/**
+ * CALLBACK của DS (`status=2/6` + `url`): tải bản đã sửa về, lưu thành BẢN MỚI trong cùng nhóm
+ * — đúng yêu cầu người dùng «sửa lại phải lưu để xem». Trạng thái nhóm KHÔNG đổi: sửa trực
+ * tuyến là chỉnh nội dung một bản, không phải một bước của luồng duyệt.
+ */
+export async function luuTuCallback(versionId, url) {
+  const ban = await repo.findBanById(Number(versionId));
+  if (!ban) throw notFound('Không tìm thấy bản file');
+  const nhom = await repo.findNhomById(ban.file_id);
+  if (!nhom) throw notFound('Không tìm thấy nhóm file chứa bản này');
+  if (KET_THUC.includes(nhom.trang_thai)) {
+    // Kết quả đã chốt — DS còn giữ phiên cũ thì báo bỏ qua (200) để nó thôi gọi lại.
+    return { boQua: true, lyDo: 'Kết quả đã chốt, không nhận bản mới' };
+  }
+  if (!/^https?:\/\//i.test(String(url ?? ''))) {
+    throw badRequest('URL bản đã sửa không hợp lệ');
+  }
+  const phanHoi = await fetch(url);
+  if (!phanHoi.ok) throw badRequest(`ONLYOFFICE trả ${phanHoi.status} khi tải bản đã sửa`);
+  const buffer = Buffer.from(await phanHoi.arrayBuffer());
+  if (buffer.length === 0) throw badRequest('Bản đã sửa rỗng');
+  if (buffer.length > DUNG_LUONG_TOI_DA)
+    throw badRequest('Bản đã sửa vượt quá dung lượng tối đa 20 MB');
+
+  return withTransaction(async (client) => {
+    await repo.lockNhomById(nhom.id, client);
+    const versionNo = (await repo.soBanCaoNhat(nhom.id, client)) + 1;
+    const duoi = path.extname(ban.ten_luu) || '.docx';
+    const tenLuu = `v${versionNo}-${randomUUID()}${duoi}`;
+    const thuMuc = path.join(GOC_STORAGE, String(nhom.item_id));
+    await mkdir(thuMuc, { recursive: true });
+    await writeFile(path.join(thuMuc, tenLuu), buffer);
+    const moi = await repo.themBan(
+      {
+        fileId: nhom.id,
+        versionNo,
+        tenLuu,
+        tenGoc: ban.ten_goc,
+        loaiMime: ban.loai_mime,
+        kichThuoc: buffer.length,
+        uploadedBy: ban.uploaded_by,
+      },
+      client
+    );
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: moi.id,
+        nguoiId: ban.uploaded_by,
+        vai: 'Nhân viên',
+        hanhDong: 'nop',
+        noiDung: 'Sửa trực tuyến — lưu từ ONLYOFFICE',
+      },
+      client
+    );
+    return { boQua: false, version: moi };
+  });
 }

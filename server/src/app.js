@@ -24,6 +24,7 @@ import { permissionsRouter } from './modules/permissions/routes.js';
 import { proposalsRouter } from './modules/proposals/routes.js';
 import { statsRouter } from './modules/stats/routes.js';
 import { taskFilesRouter } from './modules/taskFiles/routes.js';
+import taskFilesDsRouter from './modules/taskFiles/dsRoutes.js';
 import { usersRouter } from './modules/users/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
@@ -68,6 +69,10 @@ export function createApp() {
   //  3. verifyCsrf       — chặn request ghi từ trang khác trước khi nó chạm nghiệp vụ.
   //  4. audit            — chỉ đăng ký `res.on('finish')`, ghi sau khi phản hồi đã gửi.
   api.use(attachSession);
+  // ONLYOFFICE Document Server gọi NGƯỢC vào app (tải file gốc + gửi bản đã sửa) — máy-đối-máy,
+  // KHÔNG có cookie phiên/CSRF: mount TRƯỚC issueCsrfCookie/verifyCsrf, bảo vệ bằng token HMAC
+  // riêng (`tokenDs`) của service. Người dùng thì đi đường thường `/v1/task-file-versions/:id/editor`.
+  api.use('/v1/task-files-ds', taskFilesDsRouter);
   api.use(issueCsrfCookie);
   api.use(verifyCsrf);
   api.use(audit);

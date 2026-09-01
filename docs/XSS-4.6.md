@@ -1,4 +1,4 @@
-# Việc 4.6 — Soát XSS toàn bộ tầng trình duyệt
+﻿# Việc 4.6 — Soát XSS toàn bộ tầng trình duyệt
 
 Bản ghi kết quả soát của `web/assets/js/app.js` (Phase 4, nhánh `vps/phase-4-frontend`).
 Bản Apps Script cũ chạy trong iframe sandbox của Google; bản VPS chạy trên tên miền của mình, nên
@@ -509,7 +509,7 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
 | 3729 | innerHTML | HTML dựng sẵn | `text` |
 | 3741 | insertAdjacentHTML | HTML dựng sẵn | `text3` |
 
-## 2026-09-01 — «KẾT QUẢ NHIỆM VỤ LÀ FILE» (014, docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi HTML · +50 giá trị nội suy ⇒ 100 chỗ / 780 giá trị**
+## 2026-09-01 — «KẾT QUẢ NHIỆM VỤ LÀ FILE» (014, docs/KE-HOACH-KET-QUA-FILE.md): **+2 chỗ ghi HTML · +52 giá trị nội suy ⇒ 99 chỗ / 792 giá trị** (Vòng 14续2: gỡ tab, khối file về tab Thông tin dạng DÒNG)
 
 - **+2 sink** — cả hai trong `napKetQua`: ghi khung RỖNG (hằng + nút tải lên) và ghi danh sách
   NHÓM file (`nhom.map(buildKhoiFile).join("")`). Không sink nào nhận chuỗi ngoài app.js.
@@ -530,6 +530,11 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   `<textarea>` + nút «Gửi ý kiến» (`guiYKien` ghi vào BẢN MỚI NHẤT qua `data-ban-cuoi`), nút
   verdict có nội dung đọc ô này trước khi hỏi lại bằng `prompt` (+5 giá trị: label `for`, id,
   `data-ban-cuoi` qua `escapeHtmlAttr`, 2 tham số onclick qua `escapeForInlineHandler`);
-  gỡ nút «↩ góp ý» theo bản (−3 giá trị) ⇒ **100 chỗ / 780 giá trị**.
+  gỡ nút «↩ góp ý» theo bản (−3 giá trị).
+- **Vòng 14续2 (người dùng chốt: khối file về tab «Thông tin», nhãn «Kết quả»)**: gỡ tab
+  «Kết quả & Luồng» (−1 sink: `napKetQua` gộp còn 1 chỗ ghi; −2 giá trị khung); buildKhoiFile
+  dạng DÒNG (badge, CHỮ «Xem ý kiến (N)», nút «Lịch sử» ẩn/hiện bản+bảng luồng, panel ý kiến,
+  `data-file`); thêm ✎ sửa trực tuyến với **href qua `safeUrl`** (TC-SEC-13 bắt đúng luật);
+  buildYKienPanel +10 giá trị ⇒ **99 chỗ / 792 giá trị**.
 - TC-SEC-10: 0 lỗ CAN-THOAT mới (toàn bộ 19 lỗ CAN-THOAT còn lại là các chỗ đã ghi lý do từ trước).
 

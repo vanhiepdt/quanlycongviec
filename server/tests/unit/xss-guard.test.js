@@ -311,7 +311,11 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // (label `for` + id + `data-ban-cuoi` qua escapeHtmlAttr, nút Gửi ý kiến qua
     // escapeForInlineHandler) +5 giá trị; gỡ nút ↩ góp ý theo bản −3 giá trị
     // ⇒ 100 chỗ / 780 giá trị.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 100, gia_tri: 780 });
+    // 2026-09-01 (Vòng 14续2 — người dùng chốt: khối file về tab «Thông tin», nhãn «Kết quả»):
+    // gỡ tab «Kết quả & Luồng» (−1 sink, −khung+container), buildKhoiFile đổi dạng DÒNG (+✎
+    // sửa trực tuyến, panel ý kiến/lịch sử), napKetQua gộp còn 1 chỗ ghi HTML ⇒ **99 chỗ /
+    // 792 giá trị**. Chi tiết: docs/XSS-4.6.md.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 99, gia_tri: 792 });
   });
 });
 
