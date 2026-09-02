@@ -177,3 +177,100 @@ export async function truongPhongPhoPhong(phongId, client = null) {
   );
   return rows;
 }
+
+/**
+ * LÃNH ĐẠO PHÒNG PHỤ TRÁCH nhiệm vụ — người dùng chốt 2026-09-02: «khi có file lên thì Lãnh đạo
+ * phòng phụ trách của nhiệm vụ đấy sẽ là người xem/sửa/duyệt, đồng thời nhận được thông báo».
+ *
+ * Gộp HAI nguồn, vì hai nguồn trả lời hai câu khác nhau và thiếu một nguồn là mất người:
+ *   `users`               — TP/PP đứng tên ở phòng đó (`truongPhongPhoPhong` ở trên).
+ *   `department_managers` — người được GẮN phụ trách phòng đó với vai 'head'/'vice' (bảng 001).
+ * Một người có thể xuất hiện ở cả hai ⇒ `DISTINCT` theo id. Không lấy 'deputy_director': đó là
+ * Phó Giám đốc, cấp duyệt cuối, đã có `phoGiamDocPhuTrach` riêng.
+ */
+export async function lanhDaoPhuTrach(phongId, client = null) {
+  if (phongId == null) return [];
+  const { rows } = await db(client).query(
+    `SELECT DISTINCT u.id, u.full_name, u.role
+       FROM users u
+      WHERE u.is_active AND (
+              (u.department_id = $1 AND u.role IN ('Trưởng phòng', 'Phó phòng'))
+              OR EXISTS (SELECT 1 FROM department_managers dm
+                          WHERE dm.user_id = u.id AND dm.department_id = $1
+                            AND dm.role IN ('head', 'vice'))
+            )
+      ORDER BY u.id`,
+    [phongId]
+  );
+  return rows;
+}
+
+/**
+ * HÀNG CHỜ PHÊ DUYỆT KẾT QUẢ (tab riêng, người dùng chốt 2026-09-02) — các nhóm file đang chờ
+ * CHÍNH người này xử, kèm tên nhiệm vụ + mã + bản mới nhất.
+ *
+ * Ai thấy gì (khớp `BANG_VERDICT` của service — không có luật quyền thứ hai ở SQL này, chỉ có
+ * PHẠM VI):
+ *   TP/PP        : 'cho-xem' + 'can-sua' của nhiệm vụ trong PHÒNG MÌNH.
+ *   Phó Giám đốc : 'cho-lanh-dao' của nhiệm vụ trong các phòng mình PHỤ TRÁCH.
+ *   admin        : cả ba trạng thái, mọi phòng.
+ * Các vai khác: rỗng — họ không có cửa duyệt nào.
+ *
+ * `phongIds` rỗng với Phó Giám đốc chưa được gắn phòng nào ⇒ trả rỗng, không phải trả tất cả.
+ */
+export async function listChoDuyetKetQua({ vai, phongId, phongIds }, client = null) {
+  let dieuKienTrangThai;
+  let dieuKienPhong;
+  const tham = [];
+  if (vai === 'admin') {
+    dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua', 'cho-lanh-dao')`;
+    dieuKienPhong = 'TRUE';
+  } else if (vai === 'Trưởng phòng' || vai === 'Phó phòng') {
+    if (phongId == null) return [];
+    dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua')`;
+    tham.push(phongId);
+    dieuKienPhong = `i.department_id = $${tham.length}`;
+  } else if (vai === 'Phó Giám đốc') {
+    const ds = (phongIds ?? []).map(Number).filter(Number.isFinite);
+    if (ds.length === 0) return [];
+    dieuKienTrangThai = `f.trang_thai = 'cho-lanh-dao'`;
+    tham.push(ds);
+    dieuKienPhong = `i.department_id = ANY($${tham.length}::bigint[])`;
+  } else {
+    return [];
+  }
+  const { rows } = await db(client).query(
+    `SELECT f.id, f.item_id, f.ten_goc, f.trang_thai, f.created_at,
+            cu.full_name AS ten_nguoi_tao,
+            i.code AS ma_nhiem_vu, i.name AS ten_nhiem_vu, i.department_id,
+            d.name AS ten_phong,
+            v.id AS ban_cuoi_id, v.version_no AS ban_cuoi_so, v.uploaded_at AS ban_cuoi_luc,
+            vu.full_name AS ban_cuoi_nguoi
+       FROM task_files f
+       JOIN users cu       ON cu.id = f.created_by
+       JOIN work_items i   ON i.id = f.item_id
+       LEFT JOIN departments d ON d.id = i.department_id
+       LEFT JOIN LATERAL (
+         SELECT id, version_no, uploaded_at, uploaded_by
+           FROM task_file_versions
+          WHERE file_id = f.id
+          ORDER BY version_no DESC LIMIT 1
+       ) v ON TRUE
+       LEFT JOIN users vu  ON vu.id = v.uploaded_by
+      WHERE ${dieuKienTrangThai} AND ${dieuKienPhong}
+      ORDER BY COALESCE(v.uploaded_at, f.created_at) DESC, f.id DESC
+      LIMIT 200`,
+    tham
+  );
+  return rows;
+}
+
+/** Một người theo id — dùng khi ONLYOFFICE gửi `users[0]` và ta phải biết đó là ai (tên + vai). */
+export async function nguoiTheoId(id, client = null) {
+  if (id == null || !Number.isFinite(Number(id))) return null;
+  const { rows } = await db(client).query(
+    'SELECT id, full_name, role, department_id FROM users WHERE id = $1 AND is_active',
+    [Number(id)]
+  );
+  return rows[0] ?? null;
+}

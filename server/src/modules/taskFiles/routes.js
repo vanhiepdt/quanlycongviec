@@ -162,6 +162,36 @@ taskFilesRouter.get('/task-file-versions/:id/editor', async (req, res, next) => 
   }
 });
 
+/**
+ * GET /task-files/cho-duyet — HÀNG CHỜ PHÊ DUYỆT KẾT QUẢ (tab con thứ hai).
+ * PHẢI đứng TRƯỚC `/task-files/:id/download` và mọi đường có `:id`? Không: Express khớp theo
+ * đường dẫn đầy đủ nên `/task-files/cho-duyet` không đụng `/task-files/:id/download`. Nhưng
+ * `DELETE /task-files/:id` cùng tiền tố lại khác method, nên vẫn an toàn.
+ */
+taskFilesRouter.get('/task-files/cho-duyet', async (req, res, next) => {
+  try {
+    return ok(res, await service.choDuyetKetQua(req.user));
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/** POST /task-file-versions/:id/save — bấm «Lưu thành bản mới» trên trang editor (forcesave). */
+taskFilesRouter.post('/task-file-versions/:id/save', async (req, res, next) => {
+  try {
+    const ketQua = await service.luuNgay(req.user, req.params.id);
+    res.locals.audit = {
+      action: 'taskFiles.luu-ngay',
+      entityType: 'task',
+      entityId: Number(req.params.id),
+      details: { versionId: Number(req.params.id), daLuu: ketQua.daLuu === true },
+    };
+    return ok(res, ketQua);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 taskFilesRouter.get(
   '/task-files/:id/download',
   validate(downloadSchema, 'query'),
