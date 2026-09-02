@@ -293,6 +293,126 @@ route trả trang «chưa bật» và lỗi màn-hình-trắng lọt qua cổng 
 `ONLYOFFICE_CALLBACK_BASE` là địa chỉ **DS gọi ngược** về app — hai giá trị này **khác nhau** khi DS
 chạy trong Docker (`http://localhost` và `http://host.docker.internal:3000`). Và app phải nghe trên
 cổng mà container với tới được: máy chủ **tắt** thì DS báo lỗi tải file, không phải lỗi cấu hình.
+## 12. VÒNG CUỐI 5 (2026-09-02) — lỗi «không lưu được», tên file mất dấu, nút Lưu, hàng chờ phê duyệt
+
+Người dùng gửi ảnh hộp thoại của ONLYOFFICE: **«Không thể lưu tài liệu. Vui lòng kiểm tra cài đặt
+kết nối hoặc liên hệ với quản trị viên của bạn.»** kèm 4 yêu cầu. Từng cái một:
+
+### 12.1 Lỗi «không lưu được» — phản hồi callback sai HÌNH DẠNG (không phải sai kết nối)
+
+Hộp thoại nói «kiểm tra kết nối» nên rất dễ đi tìm sai chỗ (mạng, cổng, JWT). Log của Document
+Server chỉ đúng nguyên nhân:
+
+```
+sendServerRequest returned an error: data = {"ok":true,"data":{"error":0,"boQua":false,"version":{…}}}
+```
+
+Route `/callback/:id` trả qua `ok()` của §5.3 ⇒ `{"ok":true,"data":{"error":0}}`. Tài liệu
+«Callback handler» đòi thân phản hồi là **đúng `{"error":0}` ở CẤP CAO NHẤT**; DS không thấy khoá
+`error` nên coi là **lưu thất bại**, hiện hộp cảnh báo rồi `storeForgotten`. Trong khi đó bản mới
+**vẫn được lưu** (nên «Lịch sử» có bản mới) — chính điều đó làm lỗi khó lần: người dùng thấy cảnh
+báo, còn dữ liệu thì đúng.
+
+Sửa: callback trả `res.status(200).json({ error: 0 })` — **ngoại lệ có chủ ý của §5.3**, vì đây là
+đường máy-đối-máy đi theo hợp đồng của DS chứ không phải API của giao diện. Ghi rõ lý do ngay trên
+route để không ai «sửa cho nhất quán». Canh bằng **TC-TF-18** (status 1 ⇒ `{error:0}` và **không
+có** khoá `ok`; status 2 với url rác ⇒ `{error:1, message}`; token sai ⇒ vẫn 200 + `error:1`).
+
+### 12.2 Tên file mất dấu tiếng Việt — busboy giải bằng latin1
+
+`BÀI 2.docx` hiển thị thành `BÃ€I 2.docx` ở khối «Kết quả», tiêu đề trang sửa và trong thông báo.
+Trình duyệt gửi `filename` trong Content-Disposition của multipart dưới dạng **UTF-8**, busboy (nhân
+của multer) giải bằng **latin1**. multer 2.x không có tuỳ chọn đổi bảng mã ⇒ gỡ ngược tại **một
+chỗ duy nhất**: `tenGocUtf8()` trong service, gọi ở `nop()`.
+
+Ba lớp canh để không làm hỏng tên vốn đã đúng: (1) toàn ASCII ⇒ trả nguyên; (2) có ký tự mã > 0xff
+⇒ chuỗi đã là UTF-8 đúng, trả nguyên; (3) giải ra có `U+FFFD` ⇒ không phải UTF-8, trả nguyên.
+Viết bằng `codePointAt` chứ không phải regex `[^\u0000-\u00ff]` — lớp phủ định đó chứa `\x00` nên
+eslint `no-control-regex` chặn (đúng luật). Canh bằng **TC-TF-19**, đi qua đường thật (FormData →
+multer → CSDL) nên nếu hàm gỡ hỏng thì đỏ ngay, cộng 3 phép kiểm trực tiếp cho ba lớp trên.
+
+### 12.3 «Sửa xong lưu lại vào nhiệm vụ kiểu gì» — thêm nút «Lưu thành bản mới»
+
+Docs API **không có** phương thức JS nào bắt editor lưu (danh sách methods chỉ có `downloadAs`,
+`requestClose`, …). Cách chính thức là **command service**: `POST {dsUrl}/command` với thân
+`{c:'forcesave', key, userdata}` + `token` là JWT của chính thân đó; DS lưu xong sẽ gọi
+`callbackUrl` với `status=6` ⇒ `luuTuCallback` tạo **bản mới**.
+
+Trang editor nay có **thanh trên**: tên nhiệm vụ (mã + tên) · tên file · nút **«Lưu thành bản mới»**
+· nút **«Đóng»**, kèm dòng trạng thái báo «Đang lưu…» / «Đã lưu thành bản mới» / câu lỗi. Nút gọi
+`POST /api/v1/task-file-versions/:id/save` (service `luuNgay`), dịch 6 mã lỗi của DS sang câu tiếng
+Việt nói rõ phải làm gì; **mã 4 = «chưa có thay đổi nào»** không phải lỗi. `document.key` chuyển
+thành hàm `khoaDs(ban)` dùng chung, vì lệnh forcesave **phải gửi đúng key** mà editor đang mở.
+Người chỉ được xem thì không có nút này (`duocSuaTrucTiep` = false ⇒ hiện chữ «Chỉ xem»).
+
+### 12.4 Lãnh đạo phòng phụ trách là người xem/sửa/duyệt và NHẬN THÔNG BÁO
+
+Trước đây danh sách người nhận đọc **chỉ** từ `users` (vai TP/PP + `department_id`). Người được
+**gắn phụ trách phòng** ở `department_managers` với vai `'head'`/`'vice'` mà `users.role` không phải
+TP/PP thì **không hề biết** có file mới. Thêm `repo.lanhDaoPhuTrach(phongId)` gộp hai nguồn
+(`DISTINCT` theo id, **không** lấy `'deputy_director'` — đó là Phó Giám đốc, đã có hàm riêng), dùng
+ở cả `nop()` và `thongBaoVerdict()`.
+
+Sửa trực tuyến cũng gửi thông báo (yêu cầu «đồng thời nhận được thông báo về sửa file»):
+`luuTuCallback` đọc `users[0]`/`actions[0].userid` của DS để biết **ai vừa sửa** — trước đây bản mới
+ghi cứng `uploaded_by = ban.uploaded_by` và vai `'Nhân viên'`, nên Trưởng phòng sửa file của cán bộ
+thì «Lịch sử» hiện **tên cán bộ với vai Nhân viên**. Nay ghi đúng người + đúng vai, hành động mới
+`'sua-truc-tuyen'` (migration **015** nới CHECK của `task_file_flow`, down hạ dữ liệu trước khi siết
+— bẫy đã gặp ở 012/014), và báo cho lãnh đạo phòng + người nộp bản trước. Id lạ (phiên cũ, dữ liệu
+rác) thì lùi về người nộp bản đang sửa: không bao giờ để `uploaded_by` trỏ vào id không tồn tại.
+
+### 12.5 Tách «Hàng chờ phê duyệt» thành trang riêng, 2 tab con
+
+Mục mới trên thanh điều hướng (`#nav-cho-duyet`, có badge số) mở trang `#cho-duyet-section`:
+
+| Tab | Nội dung | Nguồn |
+|---|---|---|
+| Công việc / Nhiệm vụ | **chuyển nguyên** khối `#approvals-panel` + hộp «Yêu cầu XOÁ» từ trang Công việc sang (giữ id nên mọi hàm render/nút cũ chạy y như trước) | `GET /approvals/pending` + `/pending-deletes` |
+| Phê duyệt kết quả | nhóm file 014 đang chờ **chính người này** xử | `GET /task-files/cho-duyet` (mới) |
+
+Ai thấy gì ở tab 2 (khớp `BANG_VERDICT`, phạm vi bó trong SQL — **không** có luật quyền thứ hai):
+TP/PP thấy `cho-xem`+`can-sua` của **phòng mình**; Phó GĐ thấy `cho-lanh-dao` của **các phòng mình
+phụ trách**; admin thấy cả ba, mọi phòng; vai khác **rỗng**. Máy chủ trả kèm `hanhDong[]` — đúng
+những nút vai đó bấm được, tính lại bằng `BANG_VERDICT` + `giaTriHieuLuc` (admin đặt ⏳ ở «Duyệt
+kết quả» ⇒ mất nút chốt ngay trong hàng chờ). Mỗi dòng có ⬇ tải · ✎ sửa trực tuyến · các nút
+verdict · bấm tên nhiệm vụ để mở modal nhiệm vụ. **Không** để lại bản sao `#approvals-panel` ở
+trang Công việc: hai khối cùng id thì `getElementById` chỉ thấy một cái, người dùng bấm cái kia sẽ
+tưởng nút chết.
+
+Test: **TC-HCPD-01..04** (phạm vi TP · dòng chuyển sang PGD sau «Trình» và rời hàng chờ của TP ·
+file đã chốt rời hàng chờ của mọi người + ⏳ làm mất nút chốt · người gắn `'head'` nhận thông báo)
+và **TCKQ-16..19** (builder dòng, ONLYOFFICE tắt ⇒ ẩn ✎, escape HTML, đổi tab chỉ một panel hiện).
+
+### 12.6 Đã kiểm chứng đầu-cuối bằng chính Document Server
+
+Không qua trình duyệt, script tạm đã xoá sau khi dùng:
+
+1. Nộp `.docx` có dấu → CSDL giữ **đúng** `Báo cáo KẾT QUẢ — Đợt 1 (bản chính).docx`; trang editor
+   hiện đúng tên đó ở cả thanh trên và `document.title` của config.
+2. `GET /raw/<ban>?token=…` → **200, 18278 byte**.
+3. `POST http://127.0.0.1/ConvertService.ashx` với JWT ký bằng `ONLYOFFICE_JWT_SECRET`, `url` trỏ
+   `host.docker.internal:3000` → DS trả **`fileUrl`** thật.
+4. `POST /callback/<ban>` với `status=6`, `url` = `fileUrl` đó, `users=[id Trưởng phòng]` →
+   **`{"error":0}`** → CSDL: **v1(Lê Thị Nhân), v2(Trần Thị Trưởng)**; dòng luồng
+   `sua-truc-tuyen/Trưởng phòng/Trần Thị Trưởng`; thông báo gửi cho **Lê Thị Nhân** (người nộp bản
+   trước) và **Ngô Văn Phó** (Phó phòng — lãnh đạo phòng phụ trách).
+
+Bốn bước đó đi qua **đúng** những đường mà nút «Lưu thành bản mới» dùng.
+
+**Bẫy mới ghi lại**: `fetch` của Node 24 phân giải `localhost` sang `::1` trước, container DS chỉ
+bind IPv4 ⇒ `ECONNRESET` **dù** `/healthcheck` trả `true`. Khi gọi DS từ script Node phải dùng
+`127.0.0.1`. (Trình duyệt không bị: nó thử cả hai họ địa chỉ.)
+
+**Bẫy CSDL**: máy chủ dev có thể đang nối `quanlycongviec_uat` (như `chay.bat` đặt) hoặc
+`quanlycongviec` (theo `deploy/.env`) — **hai CSDL khác nhau, hai bộ tài khoản khác nhau**. Bộ seed
+Vòng 14 (`gd/pgd/tp/pp/nv1/nv2/nvb@test.local`) nằm ở `quanlycongviec`; `quanlycongviec_uat` là bộ
+cũ `admin/tp01/nv01@test.local`. Đăng nhập trượt 401 mà mật khẩu đúng thì kiểm CSDL trước khi kiểm
+mật khẩu. Chạy `npm run migrate:up` cho **cả hai** khi thêm migration.
+
+Việt nói rõ phải làm gì; **mã 4 = «chưa có thay đổi nào»** không phải lỗi. `document.key` chuyển
+thành hàm `khoaDs(ban)` dùng chung, vì lệnh forcesave **phải gửi đúng key** mà editor đang mở.
+Người chỉ được xem thì không có nút này (`duocSuaTrucTiep` = false ⇒ hiện chữ «Chỉ xem»).
+
 
 ## 10. Test thủ công cho người dùng (bấm tay sau khi deploy)
 

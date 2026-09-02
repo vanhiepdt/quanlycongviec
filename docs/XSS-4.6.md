@@ -549,4 +549,19 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   `dsUrl` cũng qua `JSON.stringify`. **Đây là trang DUY NHẤT được nới CSP** (`cspEditor()` thêm
   origin Document Server vào `script-src`/`frame-src`/`connect-src`) — nới cho đúng một route bằng
   `res.setHeader`, phần còn lại của API giữ CSP mặc định của helmet. ⇒ **pin không đổi: 99/792**.
+- **Vòng 14续5 (2026-09-02 — «không lưu được», tên file, nút Lưu, hàng chờ phê duyệt)**: pin
+  **99/792 → 101/811** (+2 chỗ ghi HTML, +19 giá trị). Hai chỗ ghi mới đều của tab «Phê duyệt kết
+  quả»: `renderChoDuyetKetQua` (spinner rồi danh sách) và lỗ `return` của
+  `buildDongChoDuyetKetQua`. 19 giá trị: builder thoát 14 — class màu badge + nhãn trạng thái, tên
+  file, **mã + tên nhiệm vụ trong `onclick`** qua `escapeForInlineHandler`, tên phòng, số bản,
+  người nộp, thời điểm, `data-file`, url editor qua `safeUrl` + `escapeHtmlAttr`, id bản của nút
+  tải; lỗ `hanhDong.map(...).join` thoát 3 (id nhóm, mã hành động, nhãn nút); cộng 2 lỗ
+  join/ternary của `items.map(...)`. **Nút trên mỗi dòng do MÁY CHỦ trả về** (`hanhDong[]` tính từ
+  `BANG_VERDICT` + `giaTriHieuLuc`), client không tự suy luật — bớt được một nguồn sự thật thứ hai,
+  và mã hành động là giá trị đóng của enum nên không có đường chèn.
+- **Trang editor thêm thanh trên** (Vòng 14续5): vẫn là HTML **máy chủ**, **không** vào phép đếm của
+  app.js. Tên nhiệm vụ và tên file là dữ liệu người dùng nhập nên nội suy qua `escapeHtmlServer()`
+  mới thêm trong service (hàm riêng vì `escapeHtml` của app.js không dùng được ở máy chủ); mã bản là
+  `Number(...)`; đoạn script của nút Lưu chỉ đọc DOM và cookie CSRF, không nội suy dữ liệu nào.
+
 
