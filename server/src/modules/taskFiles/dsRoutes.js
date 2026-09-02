@@ -5,7 +5,6 @@
 import { createReadStream, constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { Router } from 'express';
-import { ok } from '../../middleware/errorHandler.js';
 import * as service from './service.js';
 
 export const taskFilesDsRouter = Router();
@@ -50,7 +49,17 @@ taskFilesDsRouter.get('/raw/:id', async (req, res, next) => {
   }
 });
 
-/** POST /callback/:id?token=… — DS gửi {status, url}; status 2/6 = có bản đã sửa để lưu. */
+/**
+ * POST /callback/:id?token=… — DS gửi {status, url, users, actions}; status 2/6 = có bản đã sửa.
+ *
+ * HỢP ĐỒNG CỦA DS (tài liệu «Callback handler»): thân phản hồi phải là **ĐÚNG** `{"error":0}` ở
+ * CẤP CAO NHẤT. Trước đây route này trả qua `ok()` của §5.3 ⇒ `{"ok":true,"data":{"error":0}}`,
+ * DS không thấy khoá `error` nên coi là LƯU THẤT BẠI và hiện hộp «Không thể lưu tài liệu. Vui lòng
+ * kiểm tra cài đặt kết nối…» — đúng lỗi người dùng báo 2026-09-02. Log của DS ghi rõ:
+ *   sendServerRequest returned an error: data = {"ok":true,"data":{"error":0,...}}
+ * Bản mới VẪN được lưu (nên «Lịch sử» có bản mới) nhưng DS vẫn báo lỗi rồi `storeForgotten`.
+ * ⇒ Đây là NGOẠI LỆ có chủ ý của §5.3: đường máy-đối-máy đi theo hợp đồng của DS.
+ */
 taskFilesDsRouter.post('/callback/:id', async (req, res, next) => {
   try {
     if (!service.kiemTokenDs('callback', req.params.id, req.query.token)) {
@@ -60,17 +69,24 @@ taskFilesDsRouter.post('/callback/:id', async (req, res, next) => {
         status: 403,
       });
     }
-    const { status, url } = req.body ?? {};
-    // status: 2 = đã lưu sẵn và sẵn sàng lưu, 6 = force-save. Các status khác chỉ xác nhận.
-    if (Number(status) !== 2 && Number(status) !== 6) return ok(res, { error: 0 });
-    const ketQua = await service.luuTuCallback(req.params.id, url);
+    const { status, url, users, actions } = req.body ?? {};
+    // status: 1 = đang cùng sửa, 2 = đã đóng và sẵn sàng lưu, 3 = lỗi khi lưu, 4 = đóng mà không
+    // đổi gì, 6 = force-save (Ctrl+S / nút Lưu / lệnh forcesave), 7 = lỗi khi force-save.
+    // Chỉ 2 và 6 mới có `url` bản đã sửa; các status khác chỉ cần xác nhận đã nhận.
+    if (Number(status) !== 2 && Number(status) !== 6) return res.status(200).json({ error: 0 });
+    // Ai vừa sửa: DS gửi `users` (mảng id người còn/đã mở) hoặc `actions[].userid`. Config của
+    // `moEditor` đặt `editorConfig.user.id = String(user.id)` nên đây chính là id trong `users`.
+    const nguoiSua =
+      (Array.isArray(users) && users.length > 0 ? users[0] : null) ??
+      (Array.isArray(actions) && actions.length > 0 ? actions[0]?.userid : null);
+    const ketQua = await service.luuTuCallback(req.params.id, url, nguoiSua);
     res.locals.audit = {
       action: 'taskFiles.sua-truc-tuyen',
       entityType: 'task',
       entityId: Number(req.params.id),
       details: { versionId: Number(req.params.id), boQua: ketQua.boQua === true },
     };
-    return ok(res, { error: 0, ...ketQua });
+    return res.status(200).json({ error: 0 });
   } catch (err) {
     // DS đọc `error: 1` để biết phải gọi lại — trả đúng hợp đồng của DS, không phải §5.3.
     return res.status(200).json({ error: 1, message: err?.message ?? 'Lỗi không rõ' });

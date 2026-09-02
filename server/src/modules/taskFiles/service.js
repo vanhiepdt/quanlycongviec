@@ -59,6 +59,32 @@ const DO_DAI_NOI_DUNG_TOI_THIEU = 10;
 
 const sameId = (a, b) => a != null && b != null && Number(a) === Number(b);
 
+/**
+ * Tên file gửi lên bị MẤT DẤU TIẾNG VIỆT — sửa ở đúng một chỗ.
+ *
+ * Trình duyệt gửi `filename` trong Content-Disposition của multipart dưới dạng **UTF-8**, nhưng
+ * busboy (nhân của multer) giải mã bằng **latin1** ⇒ `BÀI 2.docx` thành `BÃ€I 2.docx`. Lỗi này
+ * người dùng thấy ngay trên khối «Kết quả» và cả trong tiêu đề trang sửa trực tuyến (2026-09-02).
+ * multer 2.x không có tuỳ chọn đổi bảng mã, nên phải giải ngược tại đây.
+ *
+ * Ba lớp canh để không làm hỏng tên vốn đã đúng:
+ *   1. Toàn ASCII ⇒ không có gì phải sửa.
+ *   2. Có ký tự ngoài latin1 (ví dụ 'À' thật) ⇒ máy khách/đường truyền đã đưa UTF-8 đúng, giữ nguyên.
+ *   3. Giải ra có ký tự thay thế U+FFFD ⇒ không phải UTF-8, giữ nguyên bản gốc.
+ */
+export function tenGocUtf8(ten) {
+  const s = String(ten ?? '');
+  if (!/[\u0080-\u00ff]/.test(s)) return s;
+  // Ký tự nào ngoài dải latin1 (mã > 0xff) ⇒ chuỗi đã là UTF-8 đúng, không đụng tới. Viết bằng
+  // `codePointAt` chứ không phải regex `[^\u0000-\u00ff]`: lớp phủ định đó chứa \x00 nên eslint
+  // báo `no-control-regex` (đúng luật — control char trong regex thường là lỗi đánh máy).
+  for (const kt of s) {
+    if (kt.codePointAt(0) > 0xff) return s;
+  }
+  const lai = Buffer.from(s, 'latin1').toString('utf8');
+  return lai.includes('\ufffd') ? s : lai;
+}
+
 /** Nhiệm vụ chứa nhóm file — đồng thời là dòng xét phạm vi (`can()`/`inScope()`). */
 async function mustFindNhiemVu(ref, client = null) {
   const item = await itemsRepo.findByRef(ref, client);
@@ -119,8 +145,8 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
   // Whitelist: đuôi + mimeType + dung lượng. Đuôi và mimeType phải LÀ CẶP đúng (file .pdf mang
   // mime của Word là dữ liệu dối trá); riêng 'application/octet-stream' được tha cho máy khách
   // cũ không đặt đúng mime. TÊN GỐC chỉ để hiển thị, không bao giờ làm đường dẫn (tên vật lý
-  // sinh sẵn bên dưới — cấm path traversal).
-  const tenSan = String(tenGoc ?? '');
+  // sinh sẵn bên dưới — cấm path traversal); `tenGocUtf8` trả lại dấu tiếng Việt bị busboy làm hỏng.
+  const tenSan = tenGocUtf8(tenGoc);
   const duoi = (tenSan.match(/\.(doc|docx|pdf)$/i) ?? [])[0]?.toLowerCase();
   const mimeChoDuoi = duoi ? DUOI_FILE_HOP_LE[duoi] : null;
   const mimeGui = String(loaiMime ?? '');
@@ -218,7 +244,10 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     const capNhat = await repo.doiTrangThai(nhom.id, trangThaiMoi, client);
 
     // ─── Thông báo (cùng giao dịch) ─────────────────────────────────────────────────────────
-    const tpPp = await repo.truongPhongPhoPhong(item.department_id, client);
+    // LÃNH ĐẠO PHÒNG PHỤ TRÁCH nhiệm vụ (người dùng chốt 2026-09-02): TP/PP đứng tên ở phòng +
+    // người được gắn phụ trách phòng ('head'/'vice' trong department_managers). Trước đây chỉ đọc
+    // `users` nên người được gắn phụ trách mà vai không phải TP/PP thì KHÔNG hề biết có file mới.
+    const tpPp = await repo.lanhDaoPhuTrach(item.department_id, client);
     if (trangThaiMoi === 'da-duyet') {
       await baoNguoiNhan(
         user,
@@ -397,7 +426,7 @@ export function verdict(user, fileId, { hanhDong, noiDung = '' }) {
 
 /** Thông báo của verdict — nội dung riêng từng hành động, cùng giao dịch với lần đổi trạng thái. */
 async function thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, client) {
-  const tpPp = await repo.truongPhongPhoPhong(item.department_id, client);
+  const tpPp = await repo.lanhDaoPhuTrach(item.department_id, client);
   const nguoiPhaiSua = [banCuoi?.uploaded_by, item.assignee_id];
   switch (hanhDong) {
     case 'yeu-cau-sua':
@@ -540,6 +569,43 @@ export async function xoaNhom(user, fileId) {
   return { daXoa: true };
 }
 
+/**
+ * HÀNG CHỜ PHÊ DUYỆT KẾT QUẢ — nguồn dữ liệu cho tab con thứ hai của «Hàng chờ phê duyệt»
+ * (người dùng chốt 2026-09-02: tách «phê duyệt tất cả» thành 2 tab — công việc/nhiệm vụ và kết quả).
+ *
+ * Phạm vi do `repo.listChoDuyetKetQua` bó theo VAI + phòng; ở đây chỉ thêm hai thứ:
+ *   - `hanhDong`: đúng những nút vai này bấm được trên từng dòng, tính LẠI bằng `BANG_VERDICT` +
+ *     `giaTriHieuLuc` — client không tự suy luật lần nữa, và server vẫn kiểm lại khi bấm.
+ *   - `duocSua`: có hiện nút ✎ sửa trực tuyến hay không (cùng hàm với khối «Kết quả»).
+ */
+export async function choDuyetKetQua(user) {
+  if (!user) return { items: [] };
+  const rows = await repo.listChoDuyetKetQua({
+    vai: user.role,
+    phongId: user.department_id,
+    phongIds: user.managedDepartmentIds ?? [],
+  });
+  const coDuyet = giaTriHieuLuc(user, 'file', 'approve') === 'cho-phep';
+  const items = rows.map((r) => {
+    const hanhDong = Object.entries(BANG_VERDICT)
+      .filter(
+        ([, luat]) =>
+          luat.vai.includes(user.role) &&
+          luat.tu.includes(r.trang_thai) &&
+          (!luat.canDuyet || coDuyet)
+      )
+      .map(([ma, luat]) => ({ ma, nhan: NHAN_VERDICT[ma], canNoiDung: luat.canNoiDung }));
+    return { ...r, hanhDong };
+  });
+  return { items, onlyOffice: onlyOfficeBat() };
+}
+
+/** Số dòng đang chờ CHÍNH người này xử — cho con số trên tab, không cần tải cả danh sách. */
+export async function demChoDuyetKetQua(user) {
+  const { items } = await choDuyetKetQua(user);
+  return items.length;
+}
+
 /** Đọc TOÀN BỘ kết quả file của một nhiệm vụ: nhóm + bản + góp ý + bảng luồng. */
 export async function doc(user, ref) {
   const item = await mustFindNhiemVu(ref);
@@ -624,6 +690,16 @@ export function kiemTokenDs(action, versionId, token) {
   return timingSafeEqual(Buffer.from(daGui), Buffer.from(tinh));
 }
 
+/**
+ * `document.key` — PHẢI đổi mỗi khi nội dung file đổi, nếu không DS lấy lại bản trong bộ đệm của
+ * nó (tài liệu Docs API: tối đa 128 ký tự, chỉ 0-9 a-z A-Z -._=). Ghép id bản + kích thước + mốc
+ * thời gian nộp: cùng một bản thì key ổn định (mở lại vẫn vào đúng phiên đang sửa), còn lưu ra bản
+ * mới thì id khác ⇒ key khác. MỘT chỗ duy nhất — lệnh `forcesave` phải gửi ĐÚNG key này.
+ */
+function khoaDs(ban) {
+  return `tf-${ban.id}-${ban.kich_thuoc}-${Date.parse(ban.uploaded_at) || 0}`.slice(0, 128);
+}
+
 /** Config editor cho MỘT bản: `document.url` để DS tải, `callbackUrl` để DS trả bản đã sửa. */
 export async function moEditor(user, versionId) {
   if (!onlyOfficeBat()) {
@@ -639,11 +715,7 @@ export async function moEditor(user, versionId) {
   const config = {
     document: {
       fileType: duoi,
-      // `key` phải ĐỔI mỗi khi nội dung file đổi, nếu không DS lấy lại bản trong bộ đệm của nó
-      // (tài liệu Docs API: tối đa 128 ký tự, chỉ 0-9 a-z A-Z -._=). Ghép id bản + kích thước +
-      // mốc thời gian nộp: cùng một bản thì key ổn định (mở lại vẫn vào đúng phiên đang sửa),
-      // còn lưu ra bản mới thì id khác ⇒ key khác.
-      key: `tf-${ban.id}-${ban.kich_thuoc}-${Date.parse(ban.uploaded_at) || 0}`.slice(0, 128),
+      key: khoaDs(ban),
       title: ban.ten_goc,
       url: `${callbackBase}/api/v1/task-files-ds/raw/${ban.id}?token=${tokenDs('raw', ban.id)}`,
       permissions: { edit: duocSua, comment: duocSua, download: true },
@@ -662,8 +734,62 @@ export async function moEditor(user, versionId) {
     token: kyJwt(config, env.ONLYOFFICE_JWT_SECRET),
     config,
     ban,
+    item,
+    nhom,
     duocSua,
   };
+}
+
+/**
+ * LƯU NGAY thành bản mới — trả lời câu hỏi «sửa xong rồi lưu lại vào nhiệm vụ kiểu gì».
+ *
+ * Docs API KHÔNG có phương thức JS nào bắt editor lưu (xem danh sách methods: chỉ có downloadAs,
+ * requestClose, …). Cách chính thức là gọi **command service**: POST `{dsUrl}/command` với thân
+ * JSON `{c:'forcesave', key, userdata}`, kèm `token` là JWT của chính thân đó. DS lưu xong sẽ gọi
+ * `callbackUrl` với `status=6` ⇒ `luuTuCallback` tạo BẢN MỚI. Nút «Lưu thành bản mới» trên trang
+ * editor gọi đường này rồi đóng tab.
+ *
+ * Mã lỗi của DS (tài liệu «Command service»): 0 không lỗi · 1 không thấy key · 2 callback sai ·
+ * 3 lỗi nội bộ · 4 CHƯA CÓ THAY ĐỔI NÀO · 5 lệnh sai · 6 token sai. Dịch sang câu tiếng Việt nói
+ * rõ phải làm gì; riêng 4 KHÔNG phải lỗi (bấm Lưu khi chưa sửa gì).
+ */
+const LOI_COMMAND_DS = Object.freeze({
+  1: 'Document Server không còn giữ phiên sửa của file này — hãy tải lại trang sửa rồi thử lại.',
+  2: 'Đường callback không đúng — kiểm ONLYOFFICE_CALLBACK_BASE trong deploy/.env.',
+  3: 'Document Server gặp lỗi nội bộ khi lưu — thử lại, nếu vẫn lỗi xem log container DS.',
+  5: 'Lệnh gửi tới Document Server không đúng (lỗi lập trình, không phải do bạn).',
+  6: 'ONLYOFFICE_JWT_SECRET của máy chủ không trùng JWT_SECRET của Document Server.',
+});
+
+export async function luuNgay(user, versionId) {
+  if (!onlyOfficeBat()) {
+    throw badRequest('Sửa trực tuyến đang tắt — chưa cấu hình ONLYOFFICE trong deploy/.env');
+  }
+  const { ban, item } = await docBan(user, versionId);
+  const nhom = await repo.findNhomById(ban.file_id);
+  if (!duocSuaTrucTiep(user, nhom, item)) {
+    throw forbidden('Bạn chỉ được XEM bản này, không lưu được bản mới');
+  }
+  const than = { c: 'forcesave', key: khoaDs(ban), userdata: String(user.id) };
+  const dsUrl = env.ONLYOFFICE_URL.replace(/\/$/, '');
+  let phanHoi;
+  try {
+    phanHoi = await fetch(`${dsUrl}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...than, token: kyJwt(than, env.ONLYOFFICE_JWT_SECRET) }),
+    });
+  } catch (err) {
+    throw badRequest(`Không gọi được Document Server (${dsUrl}): ${err?.message ?? 'không rõ'}`);
+  }
+  if (!phanHoi.ok) throw badRequest(`Document Server trả ${phanHoi.status} cho lệnh lưu`);
+  const ketQua = await phanHoi.json().catch(() => ({}));
+  const ma = Number(ketQua?.error ?? 0);
+  if (ma === 4) return { daLuu: false, lyDo: 'Chưa có thay đổi nào để lưu' };
+  if (ma !== 0) {
+    throw badRequest(LOI_COMMAND_DS[ma] ?? `Document Server trả mã lỗi ${ma} khi lưu`);
+  }
+  return { daLuu: true };
 }
 
 /**
@@ -699,6 +825,20 @@ function duoiBan(tenLuu) {
 }
 
 /**
+ * Thoát HTML cho trang editor — trang này là HTML do MÁY CHỦ dựng nên không dùng được
+ * `escapeHtml` của app.js. Tên nhiệm vụ và tên file đều là dữ liệu người dùng nhập, phải thoát
+ * trước khi nội suy vào thẻ (nếu không là một lỗ XSS ngay trên trang có quyền gọi API).
+ */
+function escapeHtmlServer(giaTri) {
+  return String(giaTri ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * CSP RIÊNG cho trang editor — lý do phải có, ghi rõ để không ai siết lại rồi lại trang trắng:
  *
  * `helmet()` mặc định đặt `script-src 'self'`, mà trang editor BẮT BUỘC nạp `api.js` từ **origin
@@ -731,7 +871,7 @@ export function cspEditor(dsUrl) {
 }
 
 /** Trang editor nhúng DS — HTML riêng, mở trong tab mới (index.html không đụng tới). */
-export function htmlEditor({ dsUrl, token, config }) {
+export function htmlEditor({ dsUrl, token, config, ban, item, duocSua }) {
   const cauHinh = JSON.stringify({
     document: config.document,
     documentType: config.documentType,
@@ -742,19 +882,42 @@ export function htmlEditor({ dsUrl, token, config }) {
     height: '100%',
   }).replace(/</g, '\\u003c');
   const dsJson = JSON.stringify(dsUrl).replace(/</g, '\\u003c');
+  // Thanh trên: TÊN NHIỆM VỤ + tên file + nút «Lưu thành bản mới» — trả lời câu hỏi của người dùng
+  // «tab mới hiện ra rồi thì sửa xong lưu lại vào nhiệm vụ kiểu gì». Nút gọi `POST …/save` (lệnh
+  // forcesave của DS) rồi đóng tab; trang nhiệm vụ tự nạp lại danh sách khi tab này đóng.
+  const nhanNhiemVu = escapeHtmlServer(`${item?.code ?? ''} — ${item?.name ?? ''}`.trim());
+  const nhanFile = escapeHtmlServer(ban?.ten_goc ?? '');
+  const idBan = Number(ban?.id ?? 0);
   // `events` + khối #loi: trước đây hỏng gì cũng chỉ thấy TRANG TRẮNG. Nay mọi đường thất bại
   // (script bị chặn, DS chết, DS không tải được file) đều hiện một câu tiếng Việt kèm chỗ cần xem.
   return `<!DOCTYPE html>
 <html lang="vi"><head><meta charset="utf-8"><title>Chỉnh sửa kết quả — Quản lý công việc</title>
 <style>
 html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
-#placeholder{position:absolute;inset:0}
-#loi{position:absolute;inset:0;display:none;padding:24px;background:#fff;overflow:auto}
+#thanh{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;gap:12px;
+  padding:0 12px;background:#1f2937;color:#fff;font-size:13px;box-sizing:border-box}
+#thanh .ten{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#thanh .file{color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+#thanh button{font:inherit;padding:5px 12px;border:0;border-radius:6px;cursor:pointer}
+#luu{background:#2563eb;color:#fff}
+#luu:disabled{background:#64748b;cursor:default}
+#dong{background:#374151;color:#e5e7eb}
+#tinh{color:#a7f3d0;white-space:nowrap}
+#placeholder{position:absolute;top:44px;left:0;right:0;bottom:0}
+#loi{position:absolute;top:44px;left:0;right:0;bottom:0;display:none;padding:24px;background:#fff;overflow:auto}
 #loi h3{margin:0 0 8px;color:#b91c1c}
 #loi code{background:#f3f4f6;padding:1px 4px;border-radius:3px}
 #loi li{margin:4px 0}
 </style></head>
-<body><div id="placeholder"></div>
+<body>
+<div id="thanh">
+  <span class="ten">${nhanNhiemVu}</span>
+  <span class="file">${nhanFile}</span>
+  <span id="tinh"></span>
+  ${duocSua ? '<button type="button" id="luu">Lưu thành bản mới</button>' : '<span id="tinh-xem">Chỉ xem</span>'}
+  <button type="button" id="dong">Đóng</button>
+</div>
+<div id="placeholder"></div>
 <div id="loi" role="alert" aria-live="assertive">
   <h3>Không mở được trình chỉnh sửa</h3>
   <p id="loi-chi-tiet"></p>
@@ -776,6 +939,51 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
     ct.textContent = cau;
     el.style.display = "block";
   };
+})();
+</script>
+<script>
+(function () {
+  var ID_BAN = ${idBan};
+  var tinh = document.getElementById("tinh");
+  var nutLuu = document.getElementById("luu");
+  var nutDong = document.getElementById("dong");
+  function bao(cau, mau) { tinh.textContent = cau; tinh.style.color = mau || "#a7f3d0"; }
+  // Cookie CSRF đọc được (double-submit) — phải gửi lại ở header, đúng như app.js làm.
+  function layCsrf() {
+    var m = document.cookie.match(/(?:^|; )qlcv_sid_csrf=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  nutDong && nutDong.addEventListener("click", function () { window.close(); });
+  if (!nutLuu) return;
+  nutLuu.addEventListener("click", async function () {
+    nutLuu.disabled = true;
+    bao("Đang lưu…", "#fde68a");
+    try {
+      var res = await fetch("/api/v1/task-file-versions/" + ID_BAN + "/save", {
+        method: "POST",
+        headers: { "X-CSRF-Token": layCsrf() },
+        credentials: "same-origin",
+      });
+      var json = await res.json().catch(function () { return null; });
+      if (!res.ok) {
+        var cau = (json && json.error && json.error.message) || ("Lỗi " + res.status);
+        bao(cau, "#fca5a5");
+        nutLuu.disabled = false;
+        return;
+      }
+      var d = (json && json.data) || {};
+      if (d.daLuu) {
+        bao("Đã lưu thành bản mới — có thể đóng tab.", "#a7f3d0");
+        // Trang nhiệm vụ đang mở ở tab kia: đánh dấu để nó nạp lại danh sách bản.
+        try { localStorage.setItem("qlcv_file_da_luu", String(Date.now())); } catch (e) {}
+      } else {
+        bao(d.lyDo || "Chưa có thay đổi nào để lưu.", "#fde68a");
+      }
+    } catch (err) {
+      bao("Không gửi được yêu cầu lưu: " + (err && err.message ? err.message : err), "#fca5a5");
+    }
+    nutLuu.disabled = false;
+  });
 })();
 </script>
 <script src="${dsUrl}/web-apps/apps/api/documents/api.js"
@@ -809,8 +1017,14 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
  * CALLBACK của DS (`status=2/6` + `url`): tải bản đã sửa về, lưu thành BẢN MỚI trong cùng nhóm
  * — đúng yêu cầu người dùng «sửa lại phải lưu để xem». Trạng thái nhóm KHÔNG đổi: sửa trực
  * tuyến là chỉnh nội dung một bản, không phải một bước của luồng duyệt.
+ *
+ * `nguoiSuaId` (từ `users[0]`/`actions[0].userid` của DS) là NGƯỜI VỪA SỬA. Trước đây bản mới ghi
+ * cứng `uploaded_by = ban.uploaded_by` và vai `'Nhân viên'`, nên Trưởng phòng sửa file của cán bộ
+ * thì «Lịch sử» hiện tên cán bộ với vai Nhân viên — sai người, sai vai. Đọc `users` để ghi đúng,
+ * và gửi thông báo cho lãnh đạo phòng phụ trách + người nộp bản trước (yêu cầu người dùng
+ * 2026-09-02: «đồng thời nhận được thông báo về sửa file»).
  */
-export async function luuTuCallback(versionId, url) {
+export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
   const ban = await repo.findBanById(Number(versionId));
   if (!ban) throw notFound('Không tìm thấy bản file');
   const nhom = await repo.findNhomById(ban.file_id);
@@ -829,6 +1043,12 @@ export async function luuTuCallback(versionId, url) {
   if (buffer.length > DUNG_LUONG_TOI_DA)
     throw badRequest('Bản đã sửa vượt quá dung lượng tối đa 20 MB');
 
+  // Người sửa phải là người CÓ THẬT và còn hoạt động; DS gửi id lạ (phiên cũ, dữ liệu rác) thì lùi
+  // về người nộp bản đang sửa — không bao giờ để `uploaded_by` trỏ vào id không tồn tại.
+  const nguoiSua = nguoiSuaId == null ? null : await repo.nguoiTheoId(Number(nguoiSuaId));
+  const nguoiGhi = nguoiSua ?? { id: ban.uploaded_by, full_name: ban.ten_nguoi_nop, role: '' };
+
+  const item = await itemsRepo.findById(nhom.item_id);
   return withTransaction(async (client) => {
     await repo.lockNhomById(nhom.id, client);
     const versionNo = (await repo.soBanCaoNhat(nhom.id, client)) + 1;
@@ -845,7 +1065,7 @@ export async function luuTuCallback(versionId, url) {
         tenGoc: ban.ten_goc,
         loaiMime: ban.loai_mime,
         kichThuoc: buffer.length,
-        uploadedBy: ban.uploaded_by,
+        uploadedBy: nguoiGhi.id,
       },
       client
     );
@@ -853,13 +1073,29 @@ export async function luuTuCallback(versionId, url) {
       {
         fileId: nhom.id,
         versionId: moi.id,
-        nguoiId: ban.uploaded_by,
-        vai: 'Nhân viên',
-        hanhDong: 'nop',
+        nguoiId: nguoiGhi.id,
+        vai: nguoiGhi.role || 'Nhân viên',
+        hanhDong: 'sua-truc-tuyen',
         noiDung: 'Sửa trực tuyến — lưu từ ONLYOFFICE',
       },
       client
     );
+    // Thông báo trong CÙNG giao dịch (tiền lệ approvals): lãnh đạo phòng phụ trách nhiệm vụ +
+    // người nộp bản trước. Người tự sửa không tự nhận thông báo — `bao()` lọc chính họ ra.
+    if (item) {
+      const cau =
+        `Nhiệm vụ "${item.name}": ${nguoiGhi.full_name} sửa trực tuyến "${ban.ten_goc}" ` +
+        `— đã lưu thành bản ${versionNo}.`;
+      const lanhDao = await repo.lanhDaoPhuTrach(item.department_id, client);
+      await bao(
+        nguoiGhi,
+        [...lanhDao.map((u) => u.id), ban.uploaded_by, item.assignee_id],
+        cau,
+        notificationsRepo.LOAI.CHO_DUYET,
+        nhom.id,
+        client
+      );
+    }
     return { boQua: false, version: moi };
   });
 }
