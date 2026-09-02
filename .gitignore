@@ -29,6 +29,10 @@ coverage/
 # Vẫn nằm trên đĩa để tra lại; muốn lưu riêng thì: git add -f <file>
 tools/_*
 tools/uat-server.pid
+# Bản ghi đầu ra của chay.bat / chay-test.bat khi chạy có chuyển hướng (> _kq*.txt)
+_kq*.txt
+server/_*
+server/tools/_*
 
 # Cấu hình editor cá nhân + file dữ liệu tải về (có thể chứa dữ liệu thật)
 .vscode/

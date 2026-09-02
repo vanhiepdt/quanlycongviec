@@ -1,6 +1,8 @@
 # Hướng dẫn tự tay test giao diện (Phase 4)
 
 Viết ngày 2026-08-25, cho nhánh `vps/phase-4-frontend`.
+Bổ sung **mục 1.0** (script `chay-test.bat`) và **mục 9b** (kết quả nhiệm vụ là file, ONLYOFFICE,
+trang «Hàng chờ phê duyệt») ngày **2026-09-02** trên nhánh `vps/ket-qua-file`.
 
 Mục đích: bạn mở trình duyệt, bấm bằng tay, tự thấy Phase 4 làm được gì. Mọi con số và câu
 thông báo trong tài liệu này đều **đã chạy thật** qua đúng đường người dùng đi
@@ -8,6 +10,9 @@ thông báo trong tài liệu này đều **đã chạy thật** qua đúng đư
 
 **Đọc mục 0 trước.** Phase 4 chỉ chuyển *cầu nối*, chưa chuyển *dữ liệu đầu trang*. Nếu không
 biết điều đó thì mở trang lên sẽ tưởng hỏng.
+
+**Muốn test luôn phần mới nhất** (nộp file kết quả, sửa trực tuyến, hàng chờ phê duyệt) thì đi
+đường ngắn: **1.0 → chọn 4 → mục 9b**. Phần đó độc lập với mục 2→9 và **không** cần gõ Console.
 
 ---
 
@@ -45,9 +50,67 @@ lách: `google.script.run` là API thật mà chính các nút bấm dùng, ch�
 
 ## 1. Dựng môi trường (khoảng 5 phút)
 
-Mở **Git Bash** ở thư mục `e:/quanlycongviec`. Chạy từng khối, đừng dán cả 4 khối một lượt.
+### 1.0 Cách nhanh — một lệnh, có tự kiểm
+
+Từ **2026-09-02** có sẵn script dựng cả stack rồi tự kiểm 8 điểm. Bấm đúp `chay-test.bat` trong
+Explorer, hoặc gõ tên nó trong `cmd`:
+
+```
+chay-test.bat
+```
+
+Nó hỏi bạn chọn bộ dữ liệu:
+
+| Chọn | Làm gì | Dùng khi |
+|---|---|---|
+| **1** | giữ nguyên dữ liệu đang có | quay lại buổi test đang dở |
+| **2** | seed **bộ cũ** §8.3 — 13 tài khoản `TEST001..TEST013` | test mục 2 → 9 của tài liệu này |
+| **3** | `DROP DATABASE` rồi tạo lại (+ seed bộ cũ) | dữ liệu rối quá, muốn về mốc 0 |
+| **4** | seed **bộ Vòng 14** — 7 tài khoản `gd/pgd/tp/pp/nv1/nv2/nvb@test.local`, 5 nhiệm vụ đủ 5 trạng thái file | test **mục 14** (kết quả nhiệm vụ là file) |
+
+**Hai bộ seed loại trừ nhau.** Bộ nào chạy sau thì xoá bộ trước — chọn 4 là mất `TEST001..TEST013`,
+chọn 2 là mất `gd@/tp@/nv1@`. Không có cách nào giữ cả hai cùng lúc, vì cả hai đều `TRUNCATE`
+bảng `users`.
+
+Chạy từ Git Bash hoặc terminal VS Code thì **không bấm chọn được** (không có console thật), phải
+đưa sẵn chế độ bằng cờ, thêm `/f` để không dừng ở chỗ nào:
+
+```
+chay-test.bat /giu /f      chay-test.bat /seed /f
+chay-test.bat /v14 /f      chay-test.bat /reset /f
+```
+
+Bước `[7/7]` in ra 8 dòng tự kiểm; **cả 8 phải xanh** thì mới bấm tay:
+
+```
+  Ban app.js = 20260902-1  (index.html khop).            <- lệch thì trình duyệt chạy bản cũ
+  Migration moi nhat tren quanlycongviec_uat: 015_file_sua_truc_tuyen
+  8099 /healthz OK.
+  May chu dang noi quanlycongviec_uat (1 phien) - dung CSDL test.
+  Nginx dang phuc vu app.js 20260902-1.
+  ONLYOFFICE: BAT  url=http://localhost
+    DS goi nguoc ve app qua: http://host.docker.internal:3000
+    Document Server song (/healthcheck OK).
+  Ket qua file: 6 ban trong CSDL; ban DANG CHO XU: 1 co file that, 5 thieu file.
+```
+
+Ba dòng đáng để ý:
+
+- **`May chu dang noi ... KHAC`** — đây là bẫy tốn thời gian nhất. `/readyz` chỉ nói «db up», không
+  nói *cơ sở dữ liệu nào*, nên script đếm phiên trong `pg_stat_activity`. Bằng 0 nghĩa là máy chủ
+  đang nối cơ sở dữ liệu **dev**, bạn sẽ đăng nhập trượt `401` với mật khẩu đúng vì tài khoản mẫu
+  nằm ở cơ sở dữ liệu khác. Sửa: đóng cửa sổ «QLCV TEST - Node» rồi `chay-test.bat /giu /f`.
+- **`ONLYOFFICE: TAT`** — thiếu `ONLYOFFICE_URL` hoặc `ONLYOFFICE_JWT_SECRET` trong `deploy/.env`
+  thì nút sửa trực tuyến **biến mất lặng lẽ**, không có lỗi nào. Đừng đi tìm lỗi ở chỗ khác.
+- **`ban DANG CHO XU: 0 co file that`** — seed chỉ tạo *dòng cơ sở dữ liệu*, không tạo file trên
+  đĩa. Bấm sửa trực tuyến vào bản của seed thì editor báo không tải được file: **đúng thiết kế**.
+  Muốn thử thật thì tự nộp một file `.docx` (mục 14.1).
+
+Muốn tự dựng từng bước bằng tay thì đọc tiếp 1.1 → 1.4.
 
 ### 1.1 Cơ sở dữ liệu
+
+Mở **Git Bash** ở thư mục `e:/quanlycongviec`. Chạy từng khối, đừng dán cả 4 khối một lượt.
 
 ```bash
 docker compose -f deploy/docker-compose.dev.yml up -d
@@ -523,7 +586,169 @@ nhầm người thực hiện» — chứ không chạy tiếp dưới danh ngh�
 
 ---
 
+## 9b. Màn 9 — Kết quả nhiệm vụ là FILE (Vòng 14, bổ sung 2026-09-02)
+
+Mục này test luồng mới nhất: cán bộ nộp file kết quả, lãnh đạo phòng xem/sửa/duyệt, sửa trực tuyến
+bằng ONLYOFFICE. **Cần bộ seed Vòng 14** — chạy `chay-test.bat` chọn **4** (hoặc `chay-test.bat /v14 /f`).
+
+### 9b.0 Bảy tài khoản và năm nhiệm vụ mẫu
+
+Mật khẩu cả bảy: `Test@12345`. Bộ này **KHÔNG bắt đổi mật khẩu lần đầu** (khác bộ cũ) để bạn đăng
+nhập là vào việc ngay.
+
+| Email | Vai | Phòng | Dùng để thử |
+|---|---|---|---|
+| `gd@test.local` | Giám đốc (admin) | — | thấy tất cả |
+| `pgd@test.local` | Phó Giám đốc | phụ trách **PH01 + PH02** | nhận việc «Trình lãnh đạo», là cấp chốt cuối |
+| `tp@test.local` | Trưởng phòng | PH01 | xem/góp ý/yêu cầu sửa/trình/hoàn thành |
+| `pp@test.local` | Phó phòng | PH01 | quyền **y như** Trưởng phòng |
+| `nv1@test.local` | Cán bộ | PH01 | chủ 5 nhiệm vụ mẫu — **người nộp file** |
+| `nv2@test.local` | Cán bộ | PH01 | cùng phòng nhưng không được giao ⇒ không nộp được |
+| `nvb@test.local` | Cán bộ | PH02 | **ngoài phòng** — mọi đường file phải `403` |
+
+Năm nhiệm vụ nằm trong `CV001` → `CV001-001`, mỗi cái đứng ở một trạng thái khác nhau để bạn thấy
+đủ năm màu badge mà không phải tự dựng:
+
+| Nhiệm vụ | Trạng thái nhóm file | Ý nghĩa |
+|---|---|---|
+| **NV-01** Báo cáo kết quả đào tạo quý 3 | *chưa có file* | chỗ bấm «Tải file lên» để chạy luồng đầy đủ |
+| **NV-02** Biên bản họp hội đồng đào tạo | `cho-xem` | cán bộ vừa nộp bản 1, chờ TP/PP xem |
+| **NV-03** Kế hoạch đào tạo năm 2027 | `can-sua` | TP đã yêu cầu sửa, có ý kiến; cán bộ đã nộp lại bản 2 |
+| **NV-04** Đề án nâng cao chất lượng | `cho-lanh-dao` | TP tự sửa bản 2 rồi trình Phó Giám đốc |
+| **NV-05** Quy chế thi sát hạch nội bộ | `da-duyet` | PGĐ đã duyệt — **khoá**, chỉ xem |
+
+> **Quan trọng:** seed chỉ tạo *dòng trong cơ sở dữ liệu*, **không** tạo file trên đĩa cho NV-02..05.
+> Tải về hoặc bấm sửa trực tuyến trên các bản của seed thì báo không đọc được file — **đúng thiết kế**,
+> không phải lỗi mới. Muốn chạy thật thì tự nộp file ở **NV-01** (mục 9b.1). Dòng `[7/7]` của
+> `chay-test.bat` đã nói trước cho bạn: `ban DANG CHO XU: 0 co file that, 5 thieu file`.
+
+### 9b.1 Nộp file — và soi ngay hai lỗi đã sửa hôm nay
+
+Đăng nhập `nv1@test.local`. Vào **Quản lý nhiệm vụ**, mở **NV-01**, kéo xuống khối «Kết quả».
+
+1. Chuẩn bị một file `.docx` **có tên tiếng Việt đủ dấu**, ví dụ `BÀI 2.docx`. Bấm «Tải file lên».
+2. **Tên file phải hiện đúng dấu** — `BÀI 2.docx`, không phải `BÃ€I 2.docx`. Đây là lỗi đã sửa:
+   trình duyệt gửi tên dạng UTF-8 trong multipart, còn busboy (nhân của multer) giải bằng latin1;
+   multer 2.x không có tuỳ chọn bảng mã nên phải gỡ ngược tên ở tầng dịch vụ.
+3. Trạng thái nhóm chuyển **«Chờ xem»**, badge xanh nhạt.
+
+Kiểm bằng cơ sở dữ liệu cho chắc (tên gốc nằm ở `ten_goc`, tên trên đĩa là `ten_luu` đã bỏ dấu):
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT version_no, ten_goc, ten_luu FROM task_file_versions ORDER BY id DESC LIMIT 3;"
+```
+
+Giới hạn để thử chỗ chặn: chỉ nhận **`.doc` `.docx` `.pdf`**, tối đa **20 MB**. Nộp `.exe`, `.xlsx`
+hoặc file quá cỡ ⇒ báo lỗi bằng câu tiếng Việt, không phải `500`.
+
+### 9b.2 Lãnh đạo phòng phụ trách là người xem/sửa/duyệt
+
+Đây là logic người dùng chốt hôm nay: **có file lên thì lãnh đạo phòng phụ trách của nhiệm vụ đó**
+là người xem/sửa/duyệt, và **nhận thông báo**.
+
+1. Vẫn đang ở `nv1@`: sau khi nộp, mở cơ sở dữ liệu xem thông báo vừa sinh:
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT u.email, n.content FROM notifications n JOIN users u ON u.id = n.user_id
+    ORDER BY n.id DESC LIMIT 4;"
+```
+
+Phải thấy **cả `tp@test.local` và `pp@test.local`** — Trưởng phòng *và* Phó phòng. Trước bản sửa hôm
+nay danh sách người nhận chỉ đọc theo `users.role`, nên người được **gắn** phụ trách phòng trong bảng
+`department_managers` mà vai không phải TP/PP thì không hề biết có file mới; nay gộp cả hai nguồn.
+
+2. Đăng xuất, đăng nhập `tp@test.local` → mở NV-01 → khối «Kết quả» phải có đủ nút
+   **Yêu cầu sửa · Trình Phó giám đốc · Đẩy về Cán bộ · Hoàn thành** (bốn nút của vai TP/PP; hai nút
+   **Trả về TP/PP** và **Duyệt** là của Phó Giám đốc, xem 9b.4).
+3. Đăng nhập `nvb@test.local` (phòng PH02) → NV-01 **không nằm trong danh sách nhiệm vụ**. Thử gọi
+   thẳng API trong Console, phải `403`:
+
+```js
+fetch('/api/v1/task-files/' + '<id nhóm file>', { credentials: 'include' })
+  .then(r => console.log('phải là 403:', r.status));
+```
+
+4. `nv2@test.local` (cùng phòng PH01, không được giao NV-01): **không** thấy nút nộp bản mới.
+
+### 9b.3 Sửa trực tuyến — và câu trả lời «sửa xong lưu lại kiểu gì»
+
+Đây là câu hỏi bạn nêu. Docs API **không có** phương thức JS nào bắt editor lưu, nên trang sửa có
+nút riêng gọi *command service* `forcesave` của Document Server.
+
+Điều kiện: dòng `[7/7]` phải in `ONLYOFFICE: BAT` **và** Document Server sống. Thiếu một trong hai
+biến `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` thì nút sửa **biến mất lặng lẽ**, không báo lỗi.
+
+1. Đăng nhập `tp@test.local`, mở NV-01, bấm nút **bút chì** (✎) trên bản bạn vừa nộp ở 9b.1.
+2. Tab mới mở ra. **Thanh trên** phải có đủ: tên nhiệm vụ · tên file · nút **«Lưu thành bản mới»** ·
+   nút **«Đóng»**, và một dòng trạng thái bên dưới.
+3. Sửa vài chữ trong tài liệu → bấm **«Lưu thành bản mới»**. Dòng trạng thái báo đã lưu.
+4. Đóng tab, quay lại nhiệm vụ, bấm **«Lịch sử»**: phải có **bản 2**, người nộp ghi **Trần Thị Trưởng**
+   (chính người vừa sửa), hành động **«sửa trực tuyến»**.
+
+Bốn điểm đáng để ý ở bước này, đều là lỗi đã sửa hôm nay:
+
+- **Trước đây bấm Lưu ra hộp thoại «Không thể lưu tài liệu. Vui lòng kiểm tra cài đặt kết nối»** —
+  câu đó khiến rất dễ đi tìm sai chỗ. Thật ra bản mới **vẫn được lưu**, nên «Lịch sử» vẫn đúng và
+  lỗi càng khó lần ra. Nguyên nhân: callback trả `{"ok":true,"data":{"error":0}}` theo chuẩn chung
+  của dự án, còn Document Server đòi khoá `error` ở **cấp cao nhất**. Nay callback trả đúng
+  `{"error":0}` — ngoại lệ có chủ ý, vì đây là đường máy-đối-máy.
+- **Bấm Lưu khi chưa sửa gì** ⇒ dòng trạng thái nói «chưa có thay đổi nào», **không** coi là lỗi
+  (mã 4 của DS).
+- **Người chỉ được xem** (ví dụ mở bản của NV-05 đã duyệt): chỗ nút Lưu hiện chữ **«Chỉ xem»**.
+- **Ghi đúng người sửa**: trước đây bản mới ghi cứng người nộp bản gốc với vai `'Nhân viên'`, nên
+  Trưởng phòng sửa file của cán bộ thì Lịch sử lại hiện tên cán bộ.
+
+Muốn xem ai nộp bản nào mà không phải bấm:
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT v.version_no, v.ten_goc, u.full_name FROM task_file_versions v
+     JOIN users u ON u.id = v.uploaded_by ORDER BY v.id;"
+```
+
+### 9b.4 Trang «Hàng chờ phê duyệt» — hai tab con
+
+Người dùng chốt: tách phần phê duyệt ra thành trang riêng, chia hai tab nhỏ.
+
+1. Đăng nhập `tp@test.local`. Thanh điều hướng có mục mới **«Hàng chờ phê duyệt»**, kèm **badge số**.
+2. Bấm vào: có hai tab con **«Công việc / Nhiệm vụ»** và **«Phê duyệt kết quả»**, mỗi tab một badge riêng.
+3. Tab **«Công việc / Nhiệm vụ»** là khối «Chờ duyệt» **chuyển nguyên** từ trang Công việc sang —
+   quay lại trang **Quản lý công việc**, khối đó **không còn ở đó nữa** (không để lại bản sao).
+   Vai không có cửa duyệt nào thì tab này hiện câu giải thích, không phải khung trống.
+4. Tab **«Phê duyệt kết quả»**: chỉ hiện file đang chờ **chính người đang xem**.
+   - `tp@` / `pp@` thấy file phòng PH01 ở `cho-xem` và `can-sua`.
+   - `pgd@` thấy file **đã trình** (`cho-lanh-dao`) của các phòng mình phụ trách.
+   - `nv1@` (cán bộ) **không** thấy dòng nào — cán bộ không có cửa duyệt.
+5. Nút trên mỗi dòng **do máy chủ trả về**, không phải trình duyệt tự đoán. Kiểm bằng cách: đăng nhập
+   `gd@test.local` → **Cấu hình phòng** → ma trận quyền → hàng **«Duyệt kết quả (file nhiệm vụ)»**,
+   cột vai **Trưởng phòng**, đặt **⏳** → quay lại `tp@`: nút chốt **«Hoàn thành» mất luôn** trong
+   hàng chờ, chỉ còn «Yêu cầu sửa» và «Trình Phó giám đốc». Đặt lại **✓** thì nút quay về.
+
+Xem thẳng dữ liệu máy chủ trả cho tab này:
+
+```js
+fetch('/api/v1/task-files/cho-duyet', { credentials: 'include' })
+  .then(r => r.json()).then(j => console.table(j.data.items));
+```
+
+### 9b.5 Đường ngắn nhất nếu bạn chỉ có 5 phút
+
+```
+chay-test.bat /v14 /f
+nv1@test.local  → NV-01 → «Tải file lên» một .docx tên có dấu    (9b.1)
+tp@test.local   → «Hàng chờ phê duyệt» → tab «Phê duyệt kết quả» (9b.4)
+                → bấm ✎ → sửa → «Lưu thành bản mới» → «Lịch sử»  (9b.3)
+```
+
+---
+
 ## 10. Dọn dẹp sau buổi test
+
+Cách nhanh nhất: `chay-test.bat` chọn **2** (về bộ cũ) hoặc **4** (về bộ Vòng 14) — cả hai đều
+`TRUNCATE` rồi dựng lại, nên mật khẩu đã đổi và dòng rác của mục 8 đều mất theo. Muốn giữ dữ liệu mà
+chỉ trả mật khẩu về mốc thì làm bằng tay như dưới.
 
 **Trả cơ sở dữ liệu về đúng trạng thái seed** (quan trọng: mục 5 đã đổi mật khẩu, mục 8 đã thêm dòng):
 
@@ -563,6 +788,12 @@ Muốn làm lại từ đầu hoàn toàn: xoá và nạp lại cơ sở dữ li
 docker exec -i qlcv-dev-db psql -U qlcv -d postgres -c 'DROP DATABASE quanlycongviec_uat'
 ```
 
+Hoặc `chay-test.bat` chọn **3** — nó `DROP` rồi tạo lại, chạy migration và seed luôn.
+
+Riêng file `.docx` bạn nộp ở mục 9b thì nằm ngoài cơ sở dữ liệu, xoá cơ sở dữ liệu không dọn chúng.
+Chúng ở `server\storage\ket-qua\<id nhiệm vụ>\`; để lại cũng vô hại (không dòng nào trỏ tới), muốn
+sạch thì xoá thư mục đó.
+
 ---
 
 ## 11. Bảng tổng kết — cái gì test được hôm nay, cái gì không
@@ -581,6 +812,10 @@ docker exec -i qlcv-dev-db psql -U qlcv -d postgres -c 'DROP DATABASE quanlycong
 | Thêm/sửa/xoá/nhân bản dự án và nhiệm vụ | ✅ | qua Console, hoặc qua nút sau khi đã nạp dữ liệu bằng Console |
 | Nhắc việc: thêm/sửa/xoá + quyền 4 vai | ✅ | mục 7 |
 | Chống XSS ở tên, mô tả, link | ✅ | mục 8 |
+| **Nộp file kết quả nhiệm vụ, tên tiếng Việt đúng dấu** | ✅ | mục **9b.1** — bộ seed Vòng 14 |
+| **Lãnh đạo phòng phụ trách xem/sửa/duyệt + nhận thông báo** | ✅ | mục **9b.2** |
+| **Sửa trực tuyến ONLYOFFICE + «Lưu thành bản mới»** | ✅ | mục **9b.3** — cần `ONLYOFFICE_*` trong `deploy/.env` |
+| **Trang «Hàng chờ phê duyệt» hai tab con** | ✅ | mục **9b.4** |
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |
@@ -611,6 +846,14 @@ bash tools/smoke-8.5.sh    # in mã HTTP từng điểm, tự dọn dòng nó t�
 | Tiếng Việt trong `curl -d '…'` thành `?` hoặc `�` | Git Bash làm hỏng tiếng Việt truyền qua tham số dòng lệnh | mọi thân JSON và câu SQL đi qua **stdin**: `--data-binary @-`, `docker exec -i … psql` |
 | Console ném `Cannot read properties of null (reading 'name')` | chưa gán `currentUser` | làm mục **6.1** trước |
 | Console ném `Cannot read properties of undefined (reading 'split')` | đã gán `currentUser` nhưng thiếu `.name` | thêm dòng `currentUser.name = currentUser.full_name` — mục **6.2** |
+| **Đăng nhập trượt `401` dù mật khẩu đúng** | máy chủ đang nối cơ sở dữ liệu **khác** (thường là dev) nên không có tài khoản mẫu | xem dòng `May chu dang noi ...` ở `[7/7]`; đóng cửa sổ «QLCV TEST - Node» rồi `chay-test.bat /giu /f` |
+| **Không thấy tài khoản `tp@` / `nv1@`** | đang ở bộ seed cũ | `chay-test.bat /v14 /f` (mất bộ `TEST001..013`) |
+| **Không thấy tài khoản `TEST001..013`** | đang ở bộ seed Vòng 14 | `chay-test.bat /seed /f` (mất bộ `gd@/tp@/nv1@`) |
+| **Không có nút sửa trực tuyến (bút chì)** | thiếu `ONLYOFFICE_URL` hoặc `ONLYOFFICE_JWT_SECRET` trong `deploy/.env` — nút **ẩn lặng lẽ**, không báo lỗi | xem dòng `ONLYOFFICE:` ở `[7/7]`; thêm biến rồi khởi động lại máy chủ |
+| **Editor báo không tải được file** | bản đó là của seed, chỉ có dòng cơ sở dữ liệu chứ không có file trên đĩa | đúng thiết kế — tự nộp một `.docx` ở NV-01 (mục **9b.1**) |
+| **Bấm «Lưu thành bản mới» ra «Document Server không còn giữ phiên sửa»** | tab editor mở quá lâu, hoặc DS vừa khởi động lại | tải lại trang sửa rồi bấm lại |
+| **Bấm Lưu báo «chưa có thay đổi nào»** | chưa sửa gì trong tài liệu | không phải lỗi (mã 4 của DS) |
+| **Không thấy mục «Hàng chờ phê duyệt», hoặc trang cũ vẫn còn khối «Chờ duyệt»** | trình duyệt còn `app.js` bản cũ | Ctrl+F5; kiểm dòng `Ban app.js` ở `[7/7]` và banner `[QLCV] app.js` trong Console |
 
 ---
 
@@ -620,3 +863,4 @@ bash tools/smoke-8.5.sh    # in mã HTTP từng điểm, tự dọn dòng nó t�
 - Lệnh môi trường, bẫy riêng của máy này: [docs/BAT-DAU-SESSION.md](BAT-DAU-SESSION.md) mục 4 và 5
 - Danh sách 37 tên hàm và bảng phép thử bảo mật: `KE-HOACH-VPS.md` §5.1 và §8.7
 - Bẫy đã biết, đừng phát hiện lại: `KE-HOACH-VPS.md` §13.5
+- Thiết kế luồng kết quả là file (mục 9b): [docs/KE-HOACH-KET-QUA-FILE.md](KE-HOACH-KET-QUA-FILE.md)
