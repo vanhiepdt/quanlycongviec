@@ -3740,3 +3740,44 @@
     color: #111827;
     word-break: break-word;
 }
+
+/* ============================================================================
+   HÀNG CHỜ PHÊ DUYỆT (2026-09-02) — hai tab con của trang #cho-duyet-section.
+   Kiểu tab gạch chân, cùng tinh thần với các tab của modal nhiệm vụ nhưng khai riêng vì đó là
+   tab TRONG modal (class `.tab-btn`), còn đây là tab của một TRANG.
+   ============================================================================ */
+.tab-cho-duyet {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6b7280;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab-cho-duyet:hover {
+    color: #374151;
+}
+
+.tab-cho-duyet.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+}
+
+/* Một dòng trong «Phê duyệt kết quả» — khung nhẹ, không dùng glass-card lồng nhau. */
+.dong-kq-cho-duyet {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.dong-kq-cho-duyet:last-child {
+    border-bottom: 0;
+}
+

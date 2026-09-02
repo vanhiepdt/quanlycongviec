@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260901-6");
+console.info("[QLCV] app.js 20260902-1");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -242,6 +242,8 @@ function loadDepartmentContext(callback) {
           renderProjects(), renderTasks(), renderProjectStats(), renderTaskStats(), renderStats(), renderPriorityTasksMini();
           currentSection === "gantt" && renderGanttChart();
           currentSection === "projects" && (goiNutChoDuyetPanel(), renderChoDuyetPanel());
+          currentSection === "cho-duyet" && napTrangChoDuyet();
+          capNhatNavChoDuyet();
         } catch (err) {
           console.error("Không vẽ lại được công việc/nhiệm vụ sau khi đổi phòng phụ trách:", err);
         }
@@ -932,7 +934,9 @@ function switchSection(sectionName) {
     departments: "Cấu hình phòng",
     gantt: "Sơ đồ Gantt",
     proposals: "Quản lý Đề nghị",
-    account: "Quản lý tài khoản"
+    account: "Quản lý tài khoản",
+    // 2026-09-02: trang riêng cho hàng chờ phê duyệt (2 tab con).
+    "cho-duyet": "Hàng chờ phê duyệt"
   };
   document.getElementById("page-title").textContent = data[sectionName] || "Dashboard", document.querySelectorAll(".section").forEach(item => {
     item.classList.remove("active");
@@ -940,7 +944,7 @@ function switchSection(sectionName) {
   const overviewFilterContainerEl = document.getElementById("overview-filter-container");
   overviewFilterContainerEl && (sectionName === "overview" ? overviewFilterContainerEl.classList.remove("hidden") : overviewFilterContainerEl.classList.add("hidden")), sectionName === "departments" && renderDepartments(), sectionName === "gantt" && setTimeout(() => {
     renderGanttChart();
-  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), sectionName === "projects" && (setupProjectsFilterControls(), goiNutChoDuyetPanel(), renderChoDuyetPanel()), sectionName === "account" && renderTrangTaiKhoan(), closeMobileMenu();
+  }, 10), sectionName === "overview" && typeof napTongQuanTuServer === "function" && napTongQuanTuServer(), sectionName === "projects" && setupProjectsFilterControls(), sectionName === "cho-duyet" && napTrangChoDuyet(), sectionName === "account" && renderTrangTaiKhoan(), closeMobileMenu();
 }
 function toggleMobileMenu() {
   const sidebarEl = document.getElementById("sidebar"),
@@ -6453,6 +6457,146 @@ async function napLaiSauDuyet() {
   await renderChoDuyetPanel();
   typeof napLaiDuLieu === "function" ? napLaiDuLieu() : typeof renderProjects === "function" && renderProjects();
 }
+// ============================================================================
+// TRANG «HÀNG CHỜ PHÊ DUYỆT» (2026-09-02) — hai tab con.
+//
+// Người dùng chốt: tách phần phê duyệt ra khỏi trang Công việc, chia hai tab nhỏ:
+//   'viec'    — công việc/nhiệm vụ (dùng LẠI renderChoDuyetPanel + hộp yêu cầu xoá, không viết lại)
+//   'ket-qua' — file kết quả nhiệm vụ (014) đang chờ CHÍNH người này xử.
+// ============================================================================
+let tabChoDuyetHienTai = "viec";
+
+/** Bấm tab: đổi lớp `active` + ẩn/hiện panel, rồi nạp đúng panel vừa mở. */
+function moTabChoDuyet(tab) {
+  tabChoDuyetHienTai = tab === "ket-qua" ? "ket-qua" : "viec";
+  document.querySelectorAll(".tab-cho-duyet").forEach((nut) => {
+    nut.classList.toggle("active", nut.dataset.tab === tabChoDuyetHienTai);
+  });
+  const viec = document.getElementById("panel-cho-duyet-viec");
+  const ketQua = document.getElementById("panel-cho-duyet-ket-qua");
+  viec && viec.classList.toggle("hidden", tabChoDuyetHienTai !== "viec");
+  ketQua && ketQua.classList.toggle("hidden", tabChoDuyetHienTai !== "ket-qua");
+  napTrangChoDuyet();
+}
+
+/** Nạp trang: vẽ danh sách của tab đang mở rồi cập nhật badge thanh điều hướng. */
+async function napTrangChoDuyet() {
+  if (!document.getElementById("cho-duyet-section")) return;
+  goiNutChoDuyetPanel(); // gắn listener MỘT lần cho cả hai khung của tab «Công việc / Nhiệm vụ»
+  if (tabChoDuyetHienTai === "viec") {
+    // `renderChoDuyetPanel` tự ẩn panel với người không có cửa duyệt — khi đó hiện câu giải thích
+    // thay cho một khung trống không ai hiểu.
+    await renderChoDuyetPanel();
+    const trong = document.getElementById("cho-duyet-viec-trong");
+    trong && trong.classList.toggle("hidden", laNguoiDuyetHeThong());
+    const dem = document.getElementById("approvals-count");
+    const oTab = document.getElementById("tab-viec-count");
+    oTab && dem && (oTab.textContent = dem.textContent);
+  } else {
+    await renderChoDuyetKetQua();
+  }
+  capNhatNavChoDuyet();
+}
+
+/** Vẽ danh sách «Phê duyệt kết quả» — mỗi nhóm file một dòng, nút do MÁY CHỦ trả về. */
+async function renderChoDuyetKetQua() {
+  const listEl = document.getElementById("cho-duyet-ket-qua-list");
+  if (!listEl) return;
+  listEl.innerHTML = "<div class=\"text-sm text-gray-400 py-2\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải...</div>";
+  const duLieu = await restGet("/api/v1/task-files/cho-duyet");
+  if (!document.getElementById("cho-duyet-ket-qua-list")) return;
+  const items = (duLieu && duLieu.items) || [];
+  dsBat = duLieu ? duLieu.onlyOffice === true : dsBat;
+  const oTab = document.getElementById("tab-ket-qua-count");
+  oTab && (oTab.textContent = String(items.length));
+  listEl.innerHTML = items.length
+    ? items.map(buildDongChoDuyetKetQua).join("")
+    : "<div class=\"text-sm text-gray-400 py-2\">Không có kết quả nào chờ bạn xử — tốt lắm!</div>";
+}
+/** BUILDER: một dòng «Phê duyệt kết quả». Mọi giá trị user-data đều escape tại lỗ. */
+function buildDongChoDuyetKetQua(n) {
+  const nut = (Array.isArray(n.hanhDong) ? n.hanhDong : [])
+    .map((h) =>
+      "<button type=\"button\" class=\"" +
+      (h.ma === "hoan-thanh" || h.ma === "duyet" ? "btn-primary" : "btn-secondary") +
+      " py-1 px-3 text-xs\" onclick=\"xuLyVerdictChoDuyet('" +
+      escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(h.ma) + "', " +
+      (h.canNoiDung ? "true" : "false") + ")\">" + escapeHtml(h.nhan) + "</button>"
+    )
+    .join("");
+  const nutSua =
+    dsBat && n.ban_cuoi_id
+      ? "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + n.ban_cuoi_id)) +
+        "/editor\" target=\"_blank\" title=\"Sửa trực tuyến — lưu là thành bản mới\" class=\"btn-secondary py-1 px-2 text-xs text-blue-600\"><i class=\"fas fa-pen-to-square\"></i></a>"
+      : "";
+  const nutTai = n.ban_cuoi_id
+    ? "<button type=\"button\" class=\"btn-secondary py-1 px-2 text-xs\" title=\"Tải bản mới nhất\" onclick=\"taiFileKetQua('" +
+      escapeForInlineHandler(n.ban_cuoi_id) + "')\"><i class=\"fas fa-download\"></i></button>"
+    : "";
+  return (
+    "<div class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
+    "<span class=\"text-[11px] px-2 py-0.5 rounded-full " +
+    escapeHtmlAttr(MAU_TRANG_THAI_FILE[n.trang_thai] || "bg-gray-100 text-gray-600") + "\">" +
+    escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span>" +
+    "<i class=\"fas fa-file-alt text-blue-500\"></i>" +
+    "<span class=\"font-medium text-gray-800 text-sm\">" + escapeHtml(n.ten_goc) + "</span>" +
+    "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" title=\"Mở nhiệm vụ này\" onclick=\"openEditModal('task', '" +
+    escapeForInlineHandler(n.ma_nhiem_vu) + "')\">" +
+    escapeHtml(n.ten_nhiem_vu) + " (" + escapeHtml(n.ma_nhiem_vu) + ")</button>" +
+    "<span class=\"text-xs text-gray-400\">" + escapeHtml(n.ten_phong || "—") + "</span>" +
+    "<span class=\"text-xs text-gray-400\">bản " + escapeHtml(n.ban_cuoi_so || 1) + " · " +
+    escapeHtml(n.ban_cuoi_nguoi || n.ten_nguoi_tao) + " · " +
+    escapeHtml(formatDateForDisplay(n.ban_cuoi_luc || n.created_at, true)) + "</span>" +
+    "<span class=\"ml-auto flex items-center gap-1 flex-wrap\">" + nutTai + nutSua + nut + "</span>" +
+    "</div>"
+  );
+}
+
+/** Bấm nút verdict từ trang hàng chờ — cùng endpoint với khối «Kết quả» trong modal nhiệm vụ. */
+async function xuLyVerdictChoDuyet(fileId, hanhDong, canNoiDung) {
+  let noiDung = "";
+  if (canNoiDung) {
+    noiDung = (window.prompt("Nhập nội dung (ít nhất 10 ký tự):", "") || "").trim();
+    if (noiDung.length < 10) {
+      showToast("Cần nhập ít nhất 10 ký tự", "error");
+      return;
+    }
+  }
+  const ketQua = await restPost("/api/v1/task-files/" + encodeURIComponent(fileId) + "/verdict", {
+    hanhDong,
+    noiDung,
+  });
+  if (!ketQua) return;
+  showToast("Đã " + (NHAN_VERDICT_FILE[hanhDong] || hanhDong).toLowerCase(), "success");
+  await renderChoDuyetKetQua();
+}
+
+/**
+ * Badge trên thanh điều hướng + mở/ẩn mục «Hàng chờ phê duyệt».
+ * Ai thấy mục này: người duyệt hệ thống (admin/Phó GĐ) HOẶC lãnh đạo phòng (TP/PP — họ có cửa
+ * duyệt kết quả file dù không duyệt cây công việc).
+ */
+async function capNhatNavChoDuyet() {
+  const nav = document.getElementById("nav-cho-duyet");
+  if (!nav || !isAuthenticated || !currentUser) return;
+  const coCua = laNguoiDuyetHeThong() || ["Trưởng phòng", "Phó phòng"].includes(currentUser.role);
+  nav.classList.toggle("hidden", !coCua);
+  if (!coCua) return;
+  const badge = document.getElementById("nav-cho-duyet-badge");
+  if (!badge) return;
+  const kq = await restGet("/api/v1/task-files/cho-duyet");
+  let tong = ((kq && kq.items) || []).length;
+  if (laNguoiDuyetHeThong()) {
+    const dem = await restGet("/api/v1/approvals/pending-count");
+    tong += Number((dem && (dem.total ?? dem.works)) || 0);
+  }
+  badge.textContent = String(tong);
+  badge.classList.toggle("hidden", tong === 0);
+}
+
+
+
+
 
 /**
  * XIN XOÁ (013, Vòng 13 đợt 2) — dùng khi máy chủ từ chối xoá thẳng vì vai bị ghi đè
@@ -6569,6 +6713,13 @@ function goiNutChoDuyetPanel() {
   nutRefresh &&
     !nutRefresh.dataset.daNoi &&
     ((nutRefresh.dataset.daNoi = "1"), nutRefresh.addEventListener("click", () => renderChoDuyetPanel()));
+
+  // Nút «Tải lại» của TRANG «Hàng chờ phê duyệt» (2026-09-02): nạp lại đúng tab đang mở.
+  const nutTaiLaiTrang = document.getElementById("cho-duyet-refresh");
+  nutTaiLaiTrang &&
+    !nutTaiLaiTrang.dataset.daNoi &&
+    ((nutTaiLaiTrang.dataset.daNoi = "1"),
+    nutTaiLaiTrang.addEventListener("click", () => napTrangChoDuyet()));
 
   // Khung YÊU CẦU XOÁ (013): listener riêng vì là một phần tử khác, nhưng cùng kiểu delegation
   // theo class và cùng mốc chống double-bind.

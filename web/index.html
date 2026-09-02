@@ -18,7 +18,7 @@
     <!-- ?v= là dấu vết phiên bản: Nginx cache assets/ 30 ngày (§7 việc 4.8) nhưng KHÔNG cache
          trang này, nên đổi số này là người dùng nhận bản mới ngay lần tải sau. SỬA app.css /
          app.js / api-bridge.js thì PHẢI bump. -->
-    <link rel="stylesheet" href="assets/css/app.css?v=20260901-1">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260902-1">
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen font-inter">
@@ -178,6 +178,23 @@
                 <div
                     class="ml-auto w-2 h-2 rounded-full bg-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 </div>
+            </a>
+
+            <!-- 2026-09-02: HÀNG CHỜ PHÊ DUYỆT — mục riêng trên thanh điều hướng (người dùng chốt:
+                 tách «phê duyệt tất cả» ra khỏi trang Công việc). Bên trong chia 2 tab con:
+                 (1) Công việc/Nhiệm vụ — luồng duyệt cây 012/013;
+                 (2) Kết quả — nhóm file 014 đang chờ chính người này xử.
+                 Ẩn mặc định; `capNhatNavChoDuyet()` mở cho ai có cửa duyệt. -->
+            <a href="#" data-section="cho-duyet"
+                class="nav-link group flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 hidden"
+                id="nav-cho-duyet">
+                <div
+                    class="w-8 h-8 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center mr-3 transition-colors duration-200">
+                    <i class="fas fa-stamp text-rose-600 text-sm"></i>
+                </div>
+                <span>Hàng chờ phê duyệt</span>
+                <span id="nav-cho-duyet-badge"
+                    class="ml-auto text-[11px] bg-rose-600 text-white px-2 py-0.5 rounded-full hidden">0</span>
             </a>
 
             <!-- GĐ1: Cấu hình phòng — chỉ admin, mặc định ẩn, mở bởi loadDepartmentContext() -->
@@ -713,36 +730,88 @@
                         <p class="text-xs text-gray-500">Hủy bỏ</p>
                     </div>
                 </div>
-                <!-- MÀN HÌNH DUYỆT (2026-08-28): «Chờ duyệt» — chỉ hiện với admin / Phó Giám đốc
-                     (người duyệt theo §6). Danh sách do GET /api/v1/approvals/pending trả theo phạm vi. -->
-                <div id="approvals-panel" class="glass-card p-4 mb-4 hidden">
-                    <div class="flex items-center justify-between mb-2">
-                        <h5 class="font-semibold text-gray-800 text-sm">
-                            <i class="fas fa-hourglass-half text-amber-500 mr-2"></i>Chờ duyệt
-                            <span id="approvals-count"
-                                class="ml-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
-                        </h5>
-                        <button type="button" id="approvals-refresh"
-                            class="text-xs text-blue-600 hover:text-blue-800">
-                            <i class="fas fa-sync-alt mr-1"></i>Tải lại
-                        </button>
-                    </div>
-                    <div id="approvals-list"></div>
-                    <!-- Yêu cầu XOÁ chờ duyệt (013, Vòng 13 đợt 2) — khung RIÊNG, không lẫn vào
-                         danh sách trên: hai loại có hành động khác nhau (Duyệt/Trả lại/Từ chối ở
-                         trên, Đồng ý xoá/Từ chối xoá ở đây) nên gộp là mời gọi bấm nhầm. Ẩn khi
-                         không có yêu cầu nào. -->
-                    <div id="approvals-delete-box" class="hidden mt-3 pt-3 border-t border-red-100">
-                        <h6 class="font-semibold text-red-700 text-xs mb-1">
-                            <i class="fas fa-trash-can-arrow-up mr-2"></i>Yêu cầu XOÁ chờ duyệt
-                            <span id="approvals-delete-count"
-                                class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">0</span>
-                        </h6>
-                        <div id="approvals-delete-list"></div>
-                    </div>
-                </div>
+                <!-- MÀN HÌNH DUYỆT: khối «Chờ duyệt» ĐÃ CHUYỂN sang trang «Hàng chờ phê duyệt»
+                     (2026-09-02, theo yêu cầu tách riêng). Không để lại bản sao ở đây: hai khối
+                     cùng id `approvals-panel` thì `getElementById` chỉ thấy một cái và người dùng
+                     bấm vào cái kia sẽ tưởng nút chết. -->
                 <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div class="loading-card">Đang tải công việc...</div>
+                </div>
+            </div>
+
+            <!-- ============================================================================
+                 HÀNG CHỜ PHÊ DUYỆT (2026-09-02) — trang RIÊNG, hai tab con.
+                 Người dùng chốt: «tách riêng phần phê duyệt tất cả thành hàng chờ phê duyệt, tab
+                 này chia ra thành 2 tab nhỏ là hàng chờ phê duyệt công việc/nhiệm vụ, tab nữa là
+                 phê duyệt kết quả».
+                   Tab 1 «Công việc / Nhiệm vụ» — CHUYỂN NGUYÊN khối #approvals-panel từ trang Công
+                     việc sang đây (giữ nguyên id để mọi hàm render/nút cũ chạy y như trước).
+                   Tab 2 «Phê duyệt kết quả»    — nhóm file 014 đang chờ chính người này xử.
+                 ============================================================================ -->
+            <div id="cho-duyet-section" class="section">
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Hàng chờ phê duyệt</h3>
+                    <button type="button" id="cho-duyet-refresh" class="btn-secondary py-2 px-4 text-sm">
+                        <i class="fas fa-sync-alt mr-2"></i>Tải lại
+                    </button>
+                </div>
+
+                <!-- Hai tab con: nút .tab-cho-duyet + khung .panel-cho-duyet, đổi bằng moTabChoDuyet() -->
+                <div class="flex items-center gap-2 border-b border-gray-200 mb-4">
+                    <button type="button" class="tab-cho-duyet active" data-tab="viec" onclick="moTabChoDuyet('viec')">
+                        <i class="fas fa-diagram-project mr-2"></i>Công việc / Nhiệm vụ
+                        <span id="tab-viec-count"
+                            class="ml-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                    <button type="button" class="tab-cho-duyet" data-tab="ket-qua" onclick="moTabChoDuyet('ket-qua')">
+                        <i class="fas fa-file-circle-check mr-2"></i>Phê duyệt kết quả
+                        <span id="tab-ket-qua-count"
+                            class="ml-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                </div>
+
+                <div id="panel-cho-duyet-viec" class="panel-cho-duyet">
+                    <div id="approvals-panel" class="glass-card p-4 mb-4 hidden">
+                        <div class="flex items-center justify-between mb-2">
+                            <h5 class="font-semibold text-gray-800 text-sm">
+                                <i class="fas fa-hourglass-half text-amber-500 mr-2"></i>Chờ duyệt
+                                <span id="approvals-count"
+                                    class="ml-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0</span>
+                            </h5>
+                            <button type="button" id="approvals-refresh"
+                                class="text-xs text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-sync-alt mr-1"></i>Tải lại
+                            </button>
+                        </div>
+                        <div id="approvals-list"></div>
+                        <!-- Yêu cầu XOÁ chờ duyệt (013, Vòng 13 đợt 2) — khung RIÊNG, không lẫn vào
+                             danh sách trên: hai loại có hành động khác nhau (Duyệt/Trả lại/Từ chối ở
+                             trên, Đồng ý xoá/Từ chối xoá ở đây) nên gộp là mời gọi bấm nhầm. Ẩn khi
+                             không có yêu cầu nào. -->
+                        <div id="approvals-delete-box" class="hidden mt-3 pt-3 border-t border-red-100">
+                            <h6 class="font-semibold text-red-700 text-xs mb-1">
+                                <i class="fas fa-trash-can-arrow-up mr-2"></i>Yêu cầu XOÁ chờ duyệt
+                                <span id="approvals-delete-count"
+                                    class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">0</span>
+                            </h6>
+                            <div id="approvals-delete-list"></div>
+                        </div>
+                    </div>
+                    <div id="cho-duyet-viec-trong" class="glass-card p-4 text-sm text-gray-500 hidden">
+                        Vai trò của bạn không có cửa duyệt công việc/nhiệm vụ nào.
+                    </div>
+                </div>
+
+                <div id="panel-cho-duyet-ket-qua" class="panel-cho-duyet hidden">
+                    <div class="glass-card p-4">
+                        <p class="text-xs text-gray-400 mb-2">
+                            File kết quả của nhiệm vụ đang chờ CHÍNH bạn xem / góp ý / duyệt. Bấm tên
+                            nhiệm vụ để mở nhiệm vụ, hoặc dùng nút ngay trên dòng.
+                        </p>
+                        <div id="cho-duyet-ket-qua-list">
+                            <div class="text-sm text-gray-400 py-2">Đang tải...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1159,7 +1228,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260901-6"></script>
+    <script src="assets/js/app.js?v=20260902-1"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260831-1"></script>
 
