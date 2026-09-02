@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { env } from '../../src/config/env.js';
 import { closePool } from '../../src/db/pool.js';
-import { duongBan, tokenDs } from '../../src/modules/taskFiles/service.js';
+import { duongBan, tenGocUtf8, tokenDs } from '../../src/modules/taskFiles/service.js';
 import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
@@ -605,5 +605,167 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     const sau = await apiNv.agent.get('/healthz');
     expect(sau.status).toBe(200);
     expect(sau.body.ok).toBe(true);
+  });
+
+  it('TC-TF-18: callback của DS trả ĐÚNG {"error":0} ở cấp cao nhất (sai = hộp «Không thể lưu tài liệu»)', async () => {
+    // Lỗi người dùng báo 2026-09-02 kèm ảnh: sửa xong bấm lưu thì DS hiện «Không thể lưu tài liệu.
+    // Vui lòng kiểm tra cài đặt kết nối hoặc liên hệ với quản trị viên của bạn.» Gốc: route callback
+    // trả qua `ok()` của §5.3 ⇒ `{"ok":true,"data":{"error":0}}`. Hợp đồng của DS đòi khoá `error`
+    // ở CẤP CAO NHẤT, nó không thấy nên coi là lưu thất bại — log của DS ghi nguyên văn:
+    //   sendServerRequest returned an error: data = {"ok":true,"data":{"error":0,...}}
+    // Bản mới VẪN được lưu nên «Lịch sử» có bản mới, càng khó lần ra. Ca này canh HÌNH DẠNG phản hồi.
+    const ma = await taoNhiemVuCho('TF-18');
+    await nopFile(apiNv, ma, DOCX);
+    const nhom = (await docFiles(apiNv, ma))[0];
+    const ban = nhom.bans[0].id;
+    const duong = `/api/v1/task-files-ds/callback/${ban}?token=${encodeURIComponent(tokenDs('callback', ban))}`;
+
+    // status=1 (đang cùng sửa) — không có `url`, chỉ cần xác nhận đã nhận.
+    const r1 = await apiNv.agent.post(duong).send({ status: 1 });
+    expect(r1.status).toBe(200);
+    expect(r1.body).toEqual({ error: 0 });
+    expect(r1.body.ok).toBeUndefined();
+
+    // status=2 nhưng `url` rác ⇒ vẫn 200 với `error: 1` (DS đọc mã này để gọi lại), KHÔNG phải §5.3.
+    const r2 = await apiNv.agent.post(duong).send({ status: 2, url: 'khong-phai-url' });
+    expect(r2.status).toBe(200);
+    expect(r2.body.error).toBe(1);
+    expect(typeof r2.body.message).toBe('string');
+
+    // Token sai ⇒ vẫn 200 + error:1 (đường máy-đối-máy không trả thân lỗi §5.3 cho DS).
+    const r3 = await apiNv.agent
+      .post(`/api/v1/task-files-ds/callback/${ban}?token=sai`)
+      .send({ status: 2, url: 'http://localhost/x.docx' });
+    expect(r3.status).toBe(200);
+    expect(r3.body.error).toBe(1);
+  });
+
+  it('TC-TF-19: tên file có DẤU TIẾNG VIỆT giữ nguyên (busboy giải latin1 làm hỏng)', async () => {
+    // Người dùng báo 2026-09-02: «Tên file đang hiển thị lỗi tiếng việt». Trình duyệt gửi filename
+    // dạng UTF-8 trong Content-Disposition của multipart, busboy giải bằng latin1 ⇒ `BÀI 2.docx`
+    // thành `BÃ€I 2.docx`. Tên sai hiện ở khối «Kết quả», tiêu đề trang editor và trong thông báo.
+    //
+    // Ca này đi ĐÚNG đường thật: gửi tên có dấu qua FormData như trình duyệt, rồi đọc lại từ CSDL.
+    // Chính busboy trong máy chủ này làm hỏng, nên nếu `tenGocUtf8` không gỡ được thì đỏ ngay.
+    const ma = await taoNhiemVuCho('TF-19');
+    const tenThat = 'Báo cáo KẾT QUẢ — Đợt 1 (bản chính).docx';
+    const res = await nopFile(apiNv, ma, { ...DOCX, ten: tenThat });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const nhom = (await docFiles(apiNv, ma))[0];
+    expect(nhom.ten_goc).toBe(tenThat);
+    expect(nhom.bans[0].ten_goc).toBe(tenThat);
+
+    // Ba lớp canh của chính hàm gỡ: chuỗi latin1-hỏng gỡ được; chuỗi ĐÃ ĐÚNG giữ nguyên (có ký tự
+    // ngoài latin1); chuỗi ASCII không đụng tới. Thiếu hai lớp sau là làm hỏng tên vốn đang đúng.
+    expect(tenGocUtf8(Buffer.from(tenThat, 'utf8').toString('latin1'))).toBe(tenThat);
+    expect(tenGocUtf8(tenThat)).toBe(tenThat);
+    expect(tenGocUtf8('ket-qua-ascii.docx')).toBe('ket-qua-ascii.docx');
+
+    // Tên ASCII đi qua đường thật cũng không được đổi.
+    const ma2 = await taoNhiemVuCho('TF-19b');
+    const res2 = await nopFile(apiNv, ma2, { ...DOCX, ten: 'ket-qua-ascii.docx' });
+    expect(res2.status).toBe(200);
+    expect((await docFiles(apiNv, ma2))[0].ten_goc).toBe('ket-qua-ascii.docx');
+  });
+});
+
+describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2026-09-02)', () => {
+  it('TC-HCPD-01: TP thấy «cho-xem»/«can-sua» của PHÒNG MÌNH, kèm nút đúng vai; phòng khác KHÔNG thấy', async () => {
+    const ma = await taoNhiemVuCho('HCPD-01');
+    await nopFile(apiNv, ma, DOCX);
+
+    const res = await apiTp.get('/api/v1/task-files/cho-duyet');
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const items = res.body.data.items;
+    expect(items).toHaveLength(1);
+    const dong = items[0];
+    // Đủ thông tin để quyết định mà KHÔNG phải mở nhiệm vụ: tên nhiệm vụ + mã + phòng + bản cuối.
+    expect(dong.ma_nhiem_vu).toBe(ma);
+    expect(dong.ten_nhiem_vu).toContain('HCPD-01');
+    expect(dong.ten_phong).toBe('Phòng Kỹ thuật');
+    expect(dong.trang_thai).toBe('cho-xem');
+    expect(dong.ban_cuoi_so).toBe(1);
+    expect(dong.ban_cuoi_nguoi).toBe('Nguyễn Văn Cán Bộ');
+    // Nút của TP ở «cho-xem»: 3 hành động, KHÔNG có 'duyet' (đó là cửa của PGD).
+    const ma3 = dong.hanhDong.map((h) => h.ma).sort();
+    expect(ma3).toEqual(['hoan-thanh', 'tra-ve-cbo', 'trinh-lanh-dao', 'yeu-cau-sua'].sort());
+    expect(dong.hanhDong.find((h) => h.ma === 'yeu-cau-sua').canNoiDung).toBe(true);
+    expect(dong.hanhDong.find((h) => h.ma === 'hoan-thanh').canNoiDung).toBe(false);
+
+    // Cán bộ (không có cửa duyệt nào) và người phòng khác: danh sách RỖNG.
+    expect((await apiNv.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    expect((await apiNvNgoai.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+  });
+
+  it('TC-HCPD-02: PGD chỉ thấy «cho-lanh-dao» của phòng mình PHỤ TRÁCH; TP không thấy dòng đó nữa', async () => {
+    const ma = await taoNhiemVuCho('HCPD-02');
+    await nopFile(apiNv, ma, DOCX);
+    const nhom = (await docFiles(apiTp, ma))[0];
+
+    // Trước khi trình: PGD chưa thấy gì, TP thấy 1 dòng.
+    expect((await apiPgdA.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(1);
+
+    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'trinh-lanh-dao',
+      noiDung: 'Kính trình Phó giám đốc xem xét',
+    });
+
+    // Sau khi trình: dòng chuyển sang hàng chờ của PGD, biến khỏi hàng chờ của TP.
+    const cuaPgd = (await apiPgdA.get('/api/v1/task-files/cho-duyet')).body.data.items;
+    expect(cuaPgd).toHaveLength(1);
+    expect(cuaPgd[0].trang_thai).toBe('cho-lanh-dao');
+    expect(cuaPgd[0].hanhDong.map((h) => h.ma).sort()).toEqual(['duyet', 'tra-ve-tp']);
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+  });
+
+  it('TC-HCPD-03: file đã chốt KHÔNG còn trong hàng chờ của ai; admin đặt ⏳ ⇒ TP mất nút chốt', async () => {
+    const ma = await taoNhiemVuCho('HCPD-03');
+    await nopFile(apiNv, ma, DOCX);
+    const nhom = (await docFiles(apiTp, ma))[0];
+
+    // ⏳ ở «Duyệt kết quả» của Trưởng phòng ⇒ hàng chờ KHÔNG được mời họ bấm nút chốt nữa.
+    await datGhiDe('Trưởng phòng', 'file', 'approve', 'cho-duyet');
+    const sauGhiDe = (await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items[0];
+    expect(sauGhiDe.hanhDong.map((h) => h.ma)).not.toContain('hoan-thanh');
+    expect(sauGhiDe.hanhDong.map((h) => h.ma)).toContain('trinh-lanh-dao');
+
+    // Trả ⏳ về ✓ rồi chốt: dòng phải rời khỏi hàng chờ của mọi người.
+    await datGhiDe('Trưởng phòng', 'file', 'approve', 'cho-phep');
+    const chot = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'hoan-thanh',
+    });
+    expect(chot.status, JSON.stringify(chot.body)).toBe(200);
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    expect((await apiPgdA.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    // admin thấy cả ba trạng thái đang treo — cũng phải rỗng vì file đã chốt.
+    expect((await apiAdmin.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+  });
+
+  it('TC-HCPD-04: nộp file ⇒ LÃNH ĐẠO PHÒNG PHỤ TRÁCH nhận thông báo, kể cả người gắn ở department_managers', async () => {
+    // Người dùng chốt 2026-09-02: «Lãnh đạo phòng phụ trách của nhiệm vụ đấy sẽ là người
+    // xem/sửa/duyệt, đồng thời nhận được thông báo». Người được GẮN phụ trách phòng ('head') mà
+    // vai không phải TP/PP thì trước đây không hề biết có file mới — chỉ đọc `users` là mất họ.
+    const quanLy = await makeLoginUser({
+      code: 'NV040',
+      full_name: 'Đỗ Thị Phụ Trách',
+      email: 'ql-a@test.local',
+      role: 'Quản lý công việc',
+      department_id: phongA.id,
+    });
+    await pool.query(
+      `INSERT INTO department_managers (department_id, user_id, role) VALUES ($1, $2, 'head')`,
+      [phongA.id, quanLy.id]
+    );
+
+    const ma = await taoNhiemVuCho('HCPD-04');
+    await nopFile(apiNv, ma, DOCX);
+
+    // Trưởng phòng (đứng tên ở phòng) VÀ người được gắn phụ trách đều có thông báo.
+    const cuaTp = await thongBaoCua(tp.id);
+    expect(cuaTp.some((t) => t.content.includes('HCPD-04'))).toBe(true);
+    const cuaQuanLy = await thongBaoCua(quanLy.id);
+    expect(cuaQuanLy.some((t) => t.content.includes('HCPD-04'))).toBe(true);
+    expect(cuaQuanLy[0].ref_type).toBe('task_file');
   });
 });

@@ -315,7 +315,14 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // gỡ tab «Kết quả & Luồng» (−1 sink, −khung+container), buildKhoiFile đổi dạng DÒNG (+✎
     // sửa trực tuyến, panel ý kiến/lịch sử), napKetQua gộp còn 1 chỗ ghi HTML ⇒ **99 chỗ /
     // 792 giá trị**. Chi tiết: docs/XSS-4.6.md.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 99, gia_tri: 792 });
+    // 2026-09-02 (Vòng 14续5 — trang «Hàng chờ phê duyệt», 2 tab con): **+2 chỗ ghi HTML** —
+    // `renderChoDuyetKetQua` (spinner rồi danh sách) và `buildDongChoDuyetKetQua` (lỗ return của
+    // builder) — và **+19 giá trị**: builder thoát 14 (badge class + nhãn trạng thái, tên file,
+    // mã + tên nhiệm vụ trong onclick qua escapeForInlineHandler, tên phòng, bản số, người nộp,
+    // thời điểm, `data-file`, url editor qua safeUrl+escapeHtmlAttr, id bản của nút tải), lỗ
+    // `hanhDong.map(...).join` thoát 3 (id nhóm, mã hành động, nhãn nút), 2 lỗ join/ternary của
+    // `items.map(...)` ⇒ **101 chỗ / 811 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 811 });
   });
 });
 

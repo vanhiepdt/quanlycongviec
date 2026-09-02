@@ -16,6 +16,7 @@ const EXPORTS = `;Object.assign(window, {
   COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhoiFile, buildYKienPanel, batTatKetQua,
   buildBangLuongFile, buildNutVerdictFile, buildBanFileList, giaTriHieuLucFile,
   coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile, createTaskModal,
+  buildDongChoDuyetKetQua, moTabChoDuyet, renderChoDuyetKetQua, xuLyVerdictChoDuyet,
   __tf: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -348,5 +349,98 @@ describe('TCKQ — escape và chặn phía client', () => {
     window.fetch = () => Promise.reject(new Error('không được gọi'));
     await window.xuLyVerdictFile(7, 'yeu-cau-sua', true, 'CV001-002');
     expect(promptDaGoi).toBe(0);
+  });
+});
+
+describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết quả» (2026-09-02)', () => {
+  /** Một dòng như MÁY CHỦ trả (repo.listChoDuyetKetQua + service.choDuyetKetQua). */
+  const DONG = (over = {}) => ({
+    id: 7,
+    item_id: 3,
+    ten_goc: 'ket-qua-quy3.docx',
+    trang_thai: 'cho-xem',
+    created_at: '2026-09-01T10:00:00Z',
+    ten_nguoi_tao: 'Nguyễn Văn Cán Bộ',
+    ma_nhiem_vu: 'CV001-002',
+    ten_nhiem_vu: 'Soạn quy chế thi sát hạch',
+    department_id: 1,
+    ten_phong: 'Phòng Kỹ thuật',
+    ban_cuoi_id: 11,
+    ban_cuoi_so: 2,
+    ban_cuoi_luc: '2026-09-02T08:00:00Z',
+    ban_cuoi_nguoi: 'Nguyễn Văn Cán Bộ',
+    hanhDong: [
+      { ma: 'yeu-cau-sua', nhan: 'Yêu cầu sửa', canNoiDung: true },
+      { ma: 'hoan-thanh', nhan: 'Hoàn thành', canNoiDung: false },
+    ],
+    ...over,
+  });
+
+  it('TCKQ-16: dòng hàng chờ có badge trạng thái, tên nhiệm vụ mở được, và ĐÚNG các nút máy chủ trả', () => {
+    window.__tfDs(true);
+    const html = window.buildDongChoDuyetKetQua(DONG());
+    // Badge + màu lấy từ CÙNG bảng với khối «Kết quả» — không có bảng nhãn thứ hai.
+    expect(html).toContain('Chờ TP/PP xem');
+    expect(html).toContain('bg-yellow-100');
+    // Mở nhiệm vụ ngay từ hàng chờ (người dùng cần đọc nội dung trước khi ký).
+    expect(html).toContain("openEditModal('task', 'CV001-002')");
+    expect(html).toContain('Soạn quy chế thi sát hạch');
+    expect(html).toContain('Phòng Kỹ thuật');
+    expect(html).toContain('bản 2');
+    // Chỉ những nút MÁY CHỦ cho phép; `canNoiDung` đi kèm để client biết có hỏi nội dung hay không.
+    expect(html).toContain("xuLyVerdictChoDuyet('7', 'yeu-cau-sua', true)");
+    expect(html).toContain("xuLyVerdictChoDuyet('7', 'hoan-thanh', false)");
+    expect(html).not.toContain("'duyet'");
+    // ✎ sửa trực tuyến + ⬇ tải bản mới nhất, cùng đường với khối «Kết quả».
+    expect(html).toContain('/api/v1/task-file-versions/11/editor');
+    expect(html).toContain("taiFileKetQua('11')");
+  });
+
+  it('TCKQ-17: ONLYOFFICE tắt ⇒ KHÔNG hiện nút ✎; hanhDong rỗng ⇒ không có nút verdict nào', () => {
+    window.__tfDs(false);
+    const html = window.buildDongChoDuyetKetQua(DONG({ hanhDong: [] }));
+    expect(html).not.toContain('/editor');
+    expect(html).not.toContain('xuLyVerdictChoDuyet');
+    // Vẫn tải được bản mới nhất để đọc — xem không phụ thuộc ONLYOFFICE.
+    expect(html).toContain("taiFileKetQua('11')");
+  });
+
+  it('TCKQ-18: tên file / tên nhiệm vụ chứa HTML phải thoát — không dựng được thẻ', () => {
+    window.__tfDs(true);
+    const html = window.buildDongChoDuyetKetQua(
+      DONG({
+        ten_goc: '<img src=x onerror=alert(1)>.docx',
+        ten_nhiem_vu: '<script>alert(2)</script>',
+        ten_phong: '<b>Phòng</b>',
+      })
+    );
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img src=x');
+    expect(html).not.toContain('<script>alert(2)');
+    expect(html).not.toContain('<b>Phòng</b>');
+  });
+
+  it('TCKQ-19: moTabChoDuyet đổi tab — chỉ MỘT panel hiện, nút đang mở mang lớp active', () => {
+    document.body.innerHTML = `
+      <div id="cho-duyet-section">
+        <button class="tab-cho-duyet active" data-tab="viec"></button>
+        <button class="tab-cho-duyet" data-tab="ket-qua"></button>
+        <div id="panel-cho-duyet-viec"></div>
+        <div id="panel-cho-duyet-ket-qua" class="hidden"></div>
+        <div id="cho-duyet-ket-qua-list"></div>
+      </div>`;
+    const nut = (t) => document.querySelector(`.tab-cho-duyet[data-tab="${t}"]`);
+    const panel = (t) => document.getElementById(`panel-cho-duyet-${t}`);
+
+    window.moTabChoDuyet('ket-qua');
+    expect(nut('ket-qua').classList.contains('active')).toBe(true);
+    expect(nut('viec').classList.contains('active')).toBe(false);
+    expect(panel('ket-qua').classList.contains('hidden')).toBe(false);
+    expect(panel('viec').classList.contains('hidden')).toBe(true);
+
+    window.moTabChoDuyet('viec');
+    expect(nut('viec').classList.contains('active')).toBe(true);
+    expect(panel('viec').classList.contains('hidden')).toBe(false);
+    expect(panel('ket-qua').classList.contains('hidden')).toBe(true);
   });
 });
