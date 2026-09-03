@@ -17,6 +17,8 @@ const EXPORTS = `;Object.assign(window, {
   buildBangLuongFile, buildNutVerdictFile, buildBanFileList, giaTriHieuLucFile,
   coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile, createTaskModal,
   buildDongChoDuyetKetQua, moTabChoDuyet, renderChoDuyetKetQua, xuLyVerdictChoDuyet,
+  buildBangChoDuyetKetQua, buildHangCayChoDuyet, moChonFileChoDuyet, veTrangThaiUpload,
+  khoaPhanCongVoiNhanVien,
   __tf: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -378,7 +380,12 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
 
   it('TCKQ-16: dòng hàng chờ có badge trạng thái, tên nhiệm vụ mở được, và ĐÚNG các nút máy chủ trả', () => {
     window.__tfDs(true);
-    const html = window.buildDongChoDuyetKetQua(DONG());
+    // 2026-09-02 (người dùng chốt bảng dạng CÂY): dòng file giờ là một <tr> của bảng; tên + mã nhiệm
+    // vụ nằm ở HÀNG TIÊU ĐỀ cấp 3 (`buildHangCayChoDuyet`) nên kiểm cả hai phần qua bảng đầy đủ.
+    // Tên phòng nằm ở hàng tiêu đề CẤP 1 (mỗi công việc cha in một lần) ⇒ phải có `ma_cong_viec`.
+    const html = window.buildBangChoDuyetKetQua([
+      DONG({ ma_cong_viec: 'CV001', ten_cong_viec: 'Chuẩn bị hội nghị' }),
+    ]);
     // Badge + màu lấy từ CÙNG bảng với khối «Kết quả» — không có bảng nhãn thứ hai.
     expect(html).toContain('Chờ TP/PP xem');
     expect(html).toContain('bg-yellow-100');
@@ -396,6 +403,73 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(html).toContain("taiFileKetQua('11')");
   });
 
+  it('TCKQ-20: bảng xếp theo CÂY — công việc cha → công việc con → nhiệm vụ, mỗi nhóm MỘT hàng tiêu đề', () => {
+    // Người dùng chốt 2026-09-02: «hiển thị công việc cha, bên dưới là công việc con (nếu có),
+    // Nhiệm vụ có file sửa đấy, sau đó là tên file». Hai file cùng nhiệm vụ ⇒ tiêu đề KHÔNG lặp.
+    window.__tfDs(false);
+    const html = window.buildBangChoDuyetKetQua([
+      DONG({
+        ma_cong_viec: 'CV001',
+        ten_cong_viec: 'Chuẩn bị hội nghị',
+        ma_cv_con: 'CV001-A',
+        ten_cv_con: 'Hậu cần',
+      }),
+      DONG({
+        id: 8,
+        ten_goc: 'phu-luc.pdf',
+        ma_cong_viec: 'CV001',
+        ten_cong_viec: 'Chuẩn bị hội nghị',
+        ma_cv_con: 'CV001-A',
+        ten_cv_con: 'Hậu cần',
+      }),
+    ]);
+    expect(html).toContain('hang-cay-1');
+    expect(html).toContain('hang-cay-2');
+    expect(html).toContain('hang-cay-3');
+    // Mỗi cấp đúng MỘT hàng tiêu đề dù có hai file.
+    expect((html.match(/hang-cay-1/g) || []).length).toBe(1);
+    expect((html.match(/hang-cay-2/g) || []).length).toBe(1);
+    expect((html.match(/hang-cay-3/g) || []).length).toBe(1);
+    expect(html).toContain('Chuẩn bị hội nghị');
+    expect(html).toContain('Hậu cần');
+    // Hai dòng file, thụt sâu hơn vì có công việc con ở giữa.
+    expect((html.match(/dong-kq-cho-duyet/g) || []).length).toBe(2);
+    expect(html).toContain('pl-16');
+    expect(html).toContain('phu-luc.pdf');
+  });
+
+  it('TCKQ-21: nút «Nộp bản mới» chỉ hiện khi máy chủ trả duocNop = true', () => {
+    window.__tfDs(false);
+    const co = window.buildDongChoDuyetKetQua(DONG({ duocNop: true }), false);
+    expect(co).toContain("moChonFileChoDuyet('7', 'CV001-002')");
+    const khong = window.buildDongChoDuyetKetQua(DONG(), false);
+    expect(khong).not.toContain('moChonFileChoDuyet');
+  });
+
+  it('TCKQ-22: cột «Ý kiến» chỉ hiện chữ + số, bấm mới mở nhiệm vụ (độ rộng bảng có hạn)', () => {
+    window.__tfDs(false);
+    const co = window.buildDongChoDuyetKetQua(DONG({ so_y_kien: 3 }), false);
+    expect(co).toContain('Xem ý kiến (3)');
+    // Không nhồi nội dung ý kiến vào bảng.
+    const khong = window.buildDongChoDuyetKetQua(DONG({ so_y_kien: 0 }), false);
+    expect(khong).not.toContain('Xem ý kiến');
+  });
+
+  it('TCKQ-18: tên file / tên nhiệm vụ chứa HTML phải thoát — không dựng được thẻ', () => {
+    window.__tfDs(true);
+    const html = window.buildBangChoDuyetKetQua([
+      DONG({
+        ten_goc: '<img src=x onerror=alert(1)>.docx',
+        ten_nhiem_vu: '<script>alert(2)</script>',
+        ten_phong: '<b>Phòng</b>',
+      }),
+    ]);
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img src=x');
+    expect(html).not.toContain('<script>alert(2)');
+    expect(html).not.toContain('<b>Phòng</b>');
+  });
+
   it('TCKQ-17: ONLYOFFICE tắt ⇒ KHÔNG hiện nút ✎; hanhDong rỗng ⇒ không có nút verdict nào', () => {
     window.__tfDs(false);
     const html = window.buildDongChoDuyetKetQua(DONG({ hanhDong: [] }));
@@ -403,21 +477,6 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(html).not.toContain('xuLyVerdictChoDuyet');
     // Vẫn tải được bản mới nhất để đọc — xem không phụ thuộc ONLYOFFICE.
     expect(html).toContain("taiFileKetQua('11')");
-  });
-
-  it('TCKQ-18: tên file / tên nhiệm vụ chứa HTML phải thoát — không dựng được thẻ', () => {
-    window.__tfDs(true);
-    const html = window.buildDongChoDuyetKetQua(
-      DONG({
-        ten_goc: '<img src=x onerror=alert(1)>.docx',
-        ten_nhiem_vu: '<script>alert(2)</script>',
-        ten_phong: '<b>Phòng</b>',
-      })
-    );
-    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
-    expect(html).not.toContain('<img src=x');
-    expect(html).not.toContain('<script>alert(2)');
-    expect(html).not.toContain('<b>Phòng</b>');
   });
 
   it('TCKQ-19: moTabChoDuyet đổi tab — chỉ MỘT panel hiện, nút đang mở mang lớp active', () => {

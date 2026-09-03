@@ -322,7 +322,15 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // thời điểm, `data-file`, url editor qua safeUrl+escapeHtmlAttr, id bản của nút tải), lỗ
     // `hanhDong.map(...).join` thoát 3 (id nhóm, mã hành động, nhãn nút), 2 lỗ join/ternary của
     // `items.map(...)` ⇒ **101 chỗ / 811 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 811 });
+    // 2026-09-02 (Vòng 14续6 — hàng chờ dạng BẢNG CÂY + nộp bản mới + phân công thu gọn):
+    // KHÔNG thêm chỗ ghi HTML nào (bảng vẫn ghi qua 1 lỗ `listEl.innerHTML` cũ; `buildHangCayChoDuyet`
+    // và `buildKhoiPhanCongGonHtml` chỉ TRẢ chuỗi cho lỗ đã đếm). **+19 giá trị**: hàng tiêu đề cây
+    // thoát 6 (class hàng, class thụt, icon, mã trong onclick qua escapeForInlineHandler, tên, mã +
+    // tên phòng), dòng file thêm 4 (class thụt ô đầu, số bản, số ý kiến, mã nhiệm vụ của nút «Xem ý
+    // kiến»), nút «Nộp bản mới» thoát 2 (id nhóm + mã nhiệm vụ), tiêu đề bảng `o()` thoát 2 (class
+    // thêm + nhãn cột), `buildKhoiPhanCongGonHtml` thoát 5 (3 chip × nhãn/giá trị dùng chung 1 hàm
+    // `chip` ⇒ 3 lỗ nhãn + 1 lỗ giá trị + 1 lỗ câu «chưa phân công») ⇒ **101 chỗ / 830 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 830 });
   });
 });
 

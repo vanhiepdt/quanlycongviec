@@ -101,7 +101,7 @@ async function datGhiDe(vai, entityType, action, giaTri) {
 }
 
 /** Một công việc đã duyệt + công việc con + nhiệm vụ gán cho Cán bộ (khuôn taoCayDaDuyet 013). */
-async function taoNhiemVuCho(name) {
+async function taoNhiemVuCho(name, { leaderIdsNv = null, leaderIdsCon = null } = {}) {
   const cv = await apiTp.post('/api/v1/works', {
     name: `Việc phòng A — ${name}`,
     departmentId: phongA.id,
@@ -112,7 +112,12 @@ async function taoNhiemVuCho(name) {
     workRef: work.code,
     level: 2,
     name: `Công việc con — ${name}`,
+    // Luật `LEADER_NOT_IN_SOURCE` (Vòng 12): lãnh đạo phụ trách của nhiệm vụ phải nằm trong danh
+    // sách của công việc con chứa nó ⇒ phải khai từ cấp 2 trước khi gán cho cấp 3. Cấp 2 nhận
+    // NHIỀU người (CHECK `task_leader_single` chỉ bó cấp 3).
+    leaderIds: leaderIdsCon ?? [tp.id],
   });
+  expect(con.status, JSON.stringify(con.body)).toBe(200);
   const conCode = con.body.data.item.code;
   await apiPgdA.post(`/api/v1/approvals/work-item/${conCode}/approve`);
   const nvItem = await apiTp.post('/api/v1/work-items', {
@@ -121,6 +126,11 @@ async function taoNhiemVuCho(name) {
     parentRef: conCode,
     name: `Nhiệm vụ — ${name}`,
     assigneeId: nv.id,
+    // 2026-09-02 — luật SIẾT `leader_ids`: chỉ người được nêu ở ô «Lãnh đạo phòng phụ trách» mới
+    // xem/sửa/duyệt được file của nhiệm vụ. Bộ test này để Trưởng phòng đóng vai đó, nên phải gán
+    // tường minh — nếu bỏ trống thì mọi lời gọi của `apiTp` rơi 403 «không phải lãnh đạo phụ trách».
+    // `leaderIdsNv: []` để CỐ Ý bỏ trống (ca nhiệm vụ chưa gán lãnh đạo).
+    leaderIds: leaderIdsNv ?? [tp.id],
   });
   expect(nvItem.status, JSON.stringify(nvItem.body)).toBe(200);
   return nvItem.body.data.item.code;
@@ -172,10 +182,13 @@ beforeEach(async () => {
   apiNvNgoai = await dangNhap(nvNgoai);
 
   // Phó GĐ phụ trách phòng A — nguồn danh sách người nhận «trình lên» (department_managers).
+  // Trưởng phòng cũng phải có mặt ở đây: `assertLeaders` chỉ nhận id nằm trong danh sách lãnh đạo
+  // phòng (`listManagers` role 'head'), nên thiếu dòng này thì mọi lần gán ô «Lãnh đạo phòng phụ
+  // trách» = TP đều rơi 400 «phải là Trưởng phòng hoặc Phó phòng của phòng này».
   await pool.query(
     `INSERT INTO department_managers (department_id, user_id, role)
-     VALUES ($1, $2, 'deputy_director')`,
-    [phongA.id, pgdA.id]
+     VALUES ($1, $2, 'deputy_director'), ($1, $3, 'head')`,
+    [phongA.id, pgdA.id, tp.id]
   );
 });
 
@@ -499,18 +512,33 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     });
     const work = cv.body.data.work;
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
+    // Nhiệm vụ phải nằm DƯỚI công việc con: luật `validTaskLeaders` chỉ cho ô «Lãnh đạo phòng phụ
+    // trách» của nhiệm vụ chọn trong `leader_ids` của CV con; nhiệm vụ treo thẳng vào công việc cha
+    // thì nguồn hợp lệ là Phó GĐ phụ trách phòng — TP sẽ bị 400 LEADER_NOT_IN_SOURCE.
+    const con = await apiTp.post('/api/v1/work-items', {
+      workRef: work.code,
+      level: 2,
+      name: 'Công việc con — TF-15',
+      leaderIds: [tp.id],
+    });
+    const conCode = con.body.data.item.code;
+    await apiPgdA.post(`/api/v1/approvals/work-item/${conCode}/approve`);
     const tao = await apiNv.post('/api/v1/work-items', {
       workRef: work.code,
       level: 3,
+      parentRef: conCode,
       name: 'Nhiệm vụ của Cán bộ — TF-15',
       assigneeId: nv.id,
     });
     expect(tao.status, JSON.stringify(tao.body)).toBe(200);
     const ma = tao.body.data.item.code;
     // ⭐ TP (không phải người lập) SỬA được nhiệm vụ trong phòng mình — lỗi người dùng báo 2026-09-01.
+    // Nhân đó gán luôn ô «Lãnh đạo phòng phụ trách» = chính TP: nhiệm vụ do Cán bộ tạo mặc định
+    // KHÔNG có `leader_ids`, mà luật siết 2026-09-02 đòi có tên mới cho TP xem/sửa file.
     const sua = await apiTp.patch(`/api/v1/work-items/${encodeURIComponent(ma)}`, {
       name: 'Nhiệm vụ của Cán bộ — TF-15 (đã sửa bởi TP)',
       notes: 'TP chỉnh mô tả yêu cầu',
+      leaderIds: [tp.id],
     });
     expect(sua.status, JSON.stringify(sua.body)).toBe(200);
     expect(sua.body.data.item.name).toContain('đã sửa bởi TP');
@@ -750,7 +778,7 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
       code: 'NV040',
       full_name: 'Đỗ Thị Phụ Trách',
       email: 'ql-a@test.local',
-      role: 'Quản lý công việc',
+      role: 'Phó phòng',
       department_id: phongA.id,
     });
     await pool.query(
@@ -758,14 +786,21 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
       [phongA.id, quanLy.id]
     );
 
-    const ma = await taoNhiemVuCho('HCPD-04');
+    const ma = await taoNhiemVuCho('HCPD-04', {
+      leaderIdsCon: [tp.id, quanLy.id],
+      leaderIdsNv: [quanLy.id],
+    });
+    // Ô «Lãnh đạo phòng phụ trách» của nhiệm vụ = người được GẮN ở `department_managers` (luật siết:
+    // chỉ ai có tên ở đây mới xử được file ⇒ người nhận thông báo cũng đúng danh sách này). Cấp 3
+    // chỉ nhận MỘT id (CHECK `task_leader_single`) nên gán thẳng từ lúc tạo, không PATCH sau.
     await nopFile(apiNv, ma, DOCX);
 
-    // Trưởng phòng (đứng tên ở phòng) VÀ người được gắn phụ trách đều có thông báo.
-    const cuaTp = await thongBaoCua(tp.id);
-    expect(cuaTp.some((t) => t.content.includes('HCPD-04'))).toBe(true);
-    const cuaQuanLy = await thongBaoCua(quanLy.id);
+    // Người được gắn phụ trách ở `department_managers` VÀ đứng tên ô lãnh đạo của nhiệm vụ: có báo.
+    const cuaQuanLy = (await thongBaoCua(quanLy.id)).filter((t) => t.ref_type === 'task_file');
     expect(cuaQuanLy.some((t) => t.content.includes('HCPD-04'))).toBe(true);
-    expect(cuaQuanLy[0].ref_type).toBe('task_file');
+    // Trưởng phòng KHÔNG còn đứng tên nhiệm vụ này ⇒ không nhận báo VỀ FILE (đúng ý người dùng).
+    // Lọc theo `ref_type`: TP vẫn có thông báo duyệt cây công việc cùng tên, đó là chiều khác.
+    const cuaTp = (await thongBaoCua(tp.id)).filter((t) => t.ref_type === 'task_file');
+    expect(cuaTp.some((t) => t.content.includes('HCPD-04'))).toBe(false);
   });
 });

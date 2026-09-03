@@ -142,30 +142,34 @@ describe('modal chi tiết — hàng phân công MỘT hàng + khung tên công 
   });
 
   it('khối «Phân công» của công việc là MỘT container flex với đúng 3 nhóm + 2 dấu chấm ngăn', () => {
+    // 2026-09-02 (người dùng chốt «thu gọn đoạn phân công ... bé đi»): khối phân công của CÔNG VIỆC
+    // CHA đổi sang dạng CHIP một dòng (`.khoi-phan-cong-gon`), phần «Phòng / Thời gian / Số công
+    // việc con / Tiến độ» ẩn sau nút «Chi tiết». Ba nhóm + thứ tự nhãn + nguồn «Cán bộ thực hiện»
+    // giữ nguyên — đó mới là hợp đồng cần canh; `.phan-cong-hang` giờ chỉ còn ở CÔNG VIỆC CON.
     const goc = vaiMoChiTiet('Quản trị Hệ thống', 'admin');
-    const hang = goc.querySelector('.phan-cong-hang');
-    expect(hang && hang.classList.contains('flex')).toBe(true);
-    expect(hang.classList.contains('flex-wrap')).toBe(true);
-    const baNhom = Array.from(hang.children).filter((el) =>
-      el.classList.contains('phan-cong-nhom')
-    );
-    expect(baNhom).toHaveLength(3);
-    expect(hang.querySelectorAll('.phan-cong-cach')).toHaveLength(2);
-    // Đúng thứ tự và nhãn quy định.
-    expect(baNhom.map((n) => n.textContent)).toEqual([
+    const khoi = goc.querySelector('.khoi-phan-cong-gon');
+    expect(khoi).not.toBeNull();
+    const baChip = Array.from(khoi.querySelectorAll('.phan-cong-chip'));
+    expect(baChip).toHaveLength(3);
+    expect(baChip.map((n) => n.textContent)).toEqual([
       expect.stringContaining('Ban lãnh đạo kiểm soát'),
       expect.stringContaining('Lãnh đạo phòng phụ trách'),
       expect.stringContaining('Cán bộ thực hiện'),
     ]);
     // Cán bộ thực hiện gom từ nhiệm vụ ở các công việc con.
-    expect(baNhom[2].textContent).toContain('Nguyễn Văn An');
-    expect(baNhom[2].textContent).toContain('Trần Thị Bình');
+    expect(baChip[2].textContent).toContain('Nguyễn Văn An');
+    expect(baChip[2].textContent).toContain('Trần Thị Bình');
+    // Thông tin phụ vẫn còn nhưng ĐÓNG sẵn — bấm «Chi tiết» mới xoè (đỡ chiếm chỗ của cây).
+    const box = goc.querySelector('#cv-chi-tiet-box');
+    expect(box && box.classList.contains('hidden')).toBe(true);
+    expect(box.textContent).toContain('Phòng A');
+    expect(goc.querySelector('.nut-chi-tiet-phan-cong')).not.toBeNull();
   });
 
   it('mỗi công việc con cũng có hàng phân công riêng dạng 1 hàng 3 nhóm — hết kiểu 3 ô dọc', () => {
     const goc = vaiMoChiTiet('Quản trị Hệ thống', 'admin');
     const cacHang = goc.querySelectorAll('.phan-cong-hang');
-    expect(cacHang.length).toBe(3); // 1 của công việc + 2 của hai công việc con
+    expect(cacHang.length).toBe(2); // 2 công việc con (công việc cha dùng khối chip thu gọn)
     for (const hang of cacHang) {
       const soNhom = Array.from(hang.children).filter((c) =>
         c.classList.contains('phan-cong-nhom')
@@ -174,6 +178,20 @@ describe('modal chi tiết — hàng phân công MỘT hàng + khung tên công 
     }
     // Không còn lưới xếp dọc cũ trong khối «Phân công».
     expect(goc.innerHTML.includes('grid-cols-1 sm:grid-cols-3')).toBe(false);
+  });
+
+  it('cây công việc tách bạch từng nhánh: mỗi CV con là .cay-nhanh, nhiệm vụ nằm trong .cay-la', () => {
+    // Người dùng chốt 2026-09-02: «cây công việc đẹp hơn, thể hiện rõ, nhiệm vụ nào thuộc cây con
+    // nào, tách bạch giữa các cây con». Canh bằng CẤU TRÚC (nhiệm vụ phải nằm TRONG nhánh của nó),
+    // không canh màu — màu đổi thì test không được đỏ oan.
+    const goc = vaiMoChiTiet('Quản trị Hệ thống', 'admin');
+    const nhanh = goc.querySelectorAll('.cay-nhanh');
+    expect(nhanh.length).toBe(2); // 2 công việc con; ví dụ này không có nhiệm vụ trực thuộc công việc
+    const la = goc.querySelector('#sw-tasks-CV001-01');
+    expect(la && la.classList.contains('cay-la')).toBe(true);
+    // Nhiệm vụ của CV con thứ nhất phải nằm TRONG nhánh thứ nhất, không lẫn sang nhánh khác.
+    expect(nhanh[0].contains(la)).toBe(true);
+    expect(nhanh[1].contains(la)).toBe(false);
   });
 
   it('tên công việc con nằm trong KHUNG riêng .cv-con-tieu-de, nhiệm vụ ở NGOÀI khung', () => {
