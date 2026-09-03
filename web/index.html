@@ -815,7 +815,8 @@
                              dòng bấm vào đây. Không dùng chung ô của modal nhiệm vụ vì lúc ở trang
                              hàng chờ thì modal chưa dựng, ô kia không tồn tại trong DOM. -->
                         <input type="file" id="kq-cho-duyet-file-input" class="hidden"
-                            accept=".doc,.docx,.pdf" aria-label="Chọn file kết quả để nộp bản mới"
+                            accept=".doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp"
+                            aria-label="Chọn file kết quả để nộp bản mới"
                             onchange="uploadKetQua(this)">
                         <div id="kq-cho-duyet-trang-thai" class="hidden mt-2 text-xs text-gray-500"></div>
                     </div>
@@ -1235,7 +1236,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260903-1"></script>
+    <script src="assets/js/app.js?v=20260903-2"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260902-1"></script>
 

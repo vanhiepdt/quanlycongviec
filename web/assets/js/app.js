@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260903-1");
+console.info("[QLCV] app.js 20260903-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2283,6 +2283,42 @@ function giaTriHieuLucFile(vai, action) {
   return bang && Array.isArray(bang.file) && bang.file.includes(action) ? "cho-phep" : "tu-choi";
 }
 let dsBat = false; // máy chủ trả `onlyOffice` ở GET files — ONLYOFFICE đã cấu hình hay chưa
+/**
+ * ĐUÔI FILE kết quả được nhận (người dùng chốt 2026-09-03: thêm PowerPoint, Excel và ảnh).
+ * Phải KHỚP `DUOI_FILE_HOP_LE` trong server/src/modules/taskFiles/service.js — máy chủ vẫn là
+ * rào chặn cuối, đây chỉ để `accept=` và câu lỗi sớm cho đỡ mất một vòng gọi. KHÔNG có `.svg`:
+ * SVG chạy được `<script>`, mở inline là lỗ XSS lưu trữ.
+ */
+const DUOI_KET_QUA = Object.freeze([
+  ".doc", ".docx", ".pdf", ".xls", ".xlsx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png", ".gif", ".webp",
+]);
+/** `accept=` của ô chọn file — sinh từ chính danh sách trên. */
+const ACCEPT_KET_QUA = DUOI_KET_QUA.join(",");
+/** Regex kiểm đuôi ở client — cũng sinh từ danh sách trên, khỏi lệch nhau. */
+const RE_DUOI_KET_QUA = new RegExp("\\.(" + DUOI_KET_QUA.map((d) => d.slice(1)).join("|") + ")$", "i");
+/** Dung lượng tối đa mỗi bản — khớp `DUNG_LUONG_TOI_DA` của máy chủ (50 MB). */
+const DUNG_LUONG_KET_QUA = 50 * 1024 * 1024;
+const NHAN_DUNG_LUONG_KET_QUA = "50 MB";
+/**
+ * Mime MỞ XEM được ngay trên trình duyệt (nút 👁) — khớp `MIME_XEM_INLINE` của máy chủ. Chỉ PDF và
+ * ảnh raster; đuôi khác thì chỉ có nút ⬇ tải về.
+ */
+const MIME_XEM_INLINE = Object.freeze([
+  "application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp",
+]);
+/** Bản này có mở xem trên trình duyệt được không (PDF hoặc ảnh). */
+function xemInlineDuoc(b) {
+  return MIME_XEM_INLINE.includes(String((b && b.loai_mime) || ""));
+}
+/**
+ * Bản này có sửa trực tuyến được không — ONLYOFFICE có bộ soạn thảo cho Word/PDF/Excel/PowerPoint
+ * nhưng KHÔNG có cho ảnh, nên nút ✎ phải ẩn ở ảnh (máy chủ trả 400 nếu vẫn gọi).
+ */
+const DUOI_SUA_TRUC_TUYEN = Object.freeze([".doc", ".docx", ".pdf", ".xls", ".xlsx", ".ppt", ".pptx"]);
+function suaTrucTuyenDuoc(ten) {
+  const khop = String(ten || "").match(/\.[a-z0-9]+$/i);
+  return khop ? DUOI_SUA_TRUC_TUYEN.includes(khop[0].toLowerCase()) : false;
+}
 /** Ẩn/hiện khung Ý KIỆN (yk) hoặc LỊCH SỬ (ls) của một dòng file — bấm lần nữa là gập lại. */
 function batTatKetQua(fileId, phan) {
   const el = document.getElementById("task-kq-" + (phan === "yk" ? "yk" : "ls") + "-" + fileId);
@@ -2359,7 +2395,7 @@ async function napKetQua(ma) {
   dsBat = ketQua.onlyOffice === true;
   const nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
   const oChonFile =
-    "<input type=\"file\" id=\"task-file-input\" accept=\".doc,.docx,.pdf\" class=\"hidden\" onchange=\"uploadKetQua(this)\">" +
+    "<input type=\"file\" id=\"task-file-input\" accept=\"" + escapeHtmlAttr(ACCEPT_KET_QUA) + "\" class=\"hidden\" onchange=\"uploadKetQua(this)\">" +
     // Ô trạng thái «đang tải lên» của khối này (trang hàng chờ có ô riêng trong index.html).
     "<div id=\"task-kq-trang-thai\" class=\"hidden\"></div>";
   const nutTai =
@@ -2443,12 +2479,12 @@ async function uploadKetQua(input) {
   const veLaiTrang = dangOTrangChoDuyet;
   dangOTrangChoDuyet = false;
   if (!file) return;
-  if (!/\.(doc|docx|pdf)$/i.test(file.name)) {
-    showToast("Chỉ nhận file .doc, .docx hoặc .pdf", "error");
+  if (!RE_DUOI_KET_QUA.test(file.name)) {
+    showToast("Chỉ nhận file " + DUOI_KET_QUA.join(" "), "error");
     return;
   }
-  if (file.size > 20 * 1024 * 1024) {
-    showToast("File vượt quá dung lượng tối đa 20 MB", "error");
+  if (file.size > DUNG_LUONG_KET_QUA) {
+    showToast("File vượt quá dung lượng tối đa " + NHAN_DUNG_LUONG_KET_QUA, "error");
     return;
   }
   const fd = new FormData();
@@ -2632,7 +2668,7 @@ function buildBanFileList(n) {
         "<span class=\"text-gray-500\">" + escapeHtml(b.ten_nguoi_nop) + " · " + escapeHtml(formatDateForDisplay(b.uploaded_at, true)) + "</span>" +
         "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" onclick=\"" +
         "taiFileKetQua('" + escapeForInlineHandler(b.id) + "')\">⬇ tải</button>" +
-        (b.loai_mime === "application/pdf"
+        (xemInlineDuoc(b)
           ? "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" onclick=\"" +
             "xemFileKetQua('" + escapeForInlineHandler(b.id) + "')\">👁 xem</button>"
           : "") +
@@ -2648,11 +2684,12 @@ function buildKhoiFile(n, ma) {
   const nut = [];
   if (banCuoi) {
     nut.push(nutIconFile("fa-download", "Tải bản mới nhất", "taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
-    if (banCuoi.loai_mime === "application/pdf") {
-      nut.push(nutIconFile("fa-eye", "Xem PDF ngay trong trình duyệt", "xemFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
+    if (xemInlineDuoc(banCuoi)) {
+      nut.push(nutIconFile("fa-eye", "Xem ngay trong trình duyệt (PDF và ảnh)", "xemFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
     }
-    // ✎ sửa trực tuyến (ONLYOFFICE) — mỗi lần lưu ở editor thành BẢN MỚI của nhóm này.
-    if (dsBat) {
+    // ✎ sửa trực tuyến (ONLYOFFICE) — mỗi lần lưu ở editor thành BẢN MỚI của nhóm này. Ảnh không
+    // có bộ soạn thảo nào trong DS nên ẩn nút, khỏi mở ra một trang editor lỗi.
+    if (dsBat && suaTrucTuyenDuoc(n.ten_goc)) {
       nut.push(
         "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + banCuoi.id)) + "/editor\" target=\"_blank\" title=\"Sửa trực tuyến (ONLYOFFICE) — lưu là thành bản mới\" class=\"btn-secondary py-1 px-2 text-sm text-blue-600\"><i class=\"fas fa-pen-to-square\"></i></a>"
       );
@@ -6714,7 +6751,7 @@ function buildDongChoDuyetKetQua(n, coCvCon) {
     )
     .join("");
   const nutSua =
-    dsBat && n.ban_cuoi_id
+    dsBat && n.ban_cuoi_id && suaTrucTuyenDuoc(n.ten_goc)
       ? "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + n.ban_cuoi_id)) +
         "/editor\" target=\"_blank\" title=\"Sửa trực tuyến — lưu là thành bản mới\" class=\"btn-secondary py-1 px-2 text-xs text-blue-600\"><i class=\"fas fa-pen-to-square\"></i></a>"
       : "";
