@@ -3769,15 +3769,120 @@
 
 /* Một dòng trong «Phê duyệt kết quả» — khung nhẹ, không dùng glass-card lồng nhau. */
 .dong-kq-cho-duyet {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 0;
     border-bottom: 1px solid #f3f4f6;
 }
 
-.dong-kq-cho-duyet:last-child {
-    border-bottom: 0;
+.dong-kq-cho-duyet:hover {
+    background: #f9fafb;
+}
+
+/* ============================================================================
+   BẢNG «Phê duyệt kết quả» dạng CÂY (2026-09-02, người dùng chốt: hiện công việc cha →
+   công việc con → nhiệm vụ → file). Ba hàng tiêu đề phân biệt bằng nền + màu chữ, không
+   phải bằng thụt lề đơn thuần — nhìn phát ra ngay cấp nào.
+   ============================================================================ */
+.bang-kq-cho-duyet .hang-cay-1 {
+    background: linear-gradient(to right, #eff6ff, #faf5ff);
+    color: #1e3a8a;
+}
+
+.bang-kq-cho-duyet .hang-cay-2 {
+    background: #f8fafc;
+    color: #334155;
+}
+
+.bang-kq-cho-duyet .hang-cay-3 {
+    background: #fffdf5;
+    color: #78350f;
+}
+
+.bang-kq-cho-duyet .hang-cay-2 td {
+    border-left: 3px solid #cbd5e1;
+}
+
+.bang-kq-cho-duyet .hang-cay-3 td {
+    border-left: 3px solid #fcd34d;
+}
+
+/* ============================================================================
+   KHỐI PHÂN CÔNG THU GỌN của modal chi tiết công việc (2026-09-02: «thu gọn đoạn phân
+   công ... bé đi»). Trước là thẻ trắng cao ~120px với lưới 5 ô; nay là một dòng chip
+   chữ 11px, phần chi tiết ẩn sau nút «Chi tiết».
+   ============================================================================ */
+.khoi-phan-cong-gon {
+    background: #fff;
+    border: 1px solid #f1f5f9;
+    border-radius: 10px;
+    padding: 6px 10px;
+}
+
+.phan-cong-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+    max-width: 100%;
+}
+
+.phan-cong-chip-nhan {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.phan-cong-chip-gia {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    word-break: break-word;
+}
+
+.phan-cong-chip-trong {
+    font-size: 12px;
+    font-style: italic;
+    color: #cbd5e1;
+}
+
+.nut-chi-tiet-phan-cong {
+    font-size: 11px;
+    color: #2563eb;
+    background: transparent;
+    border: 0;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+
+.nut-chi-tiet-phan-cong:hover {
+    text-decoration: underline;
+}
+
+/* ============================================================================
+   CÂY CÔNG VIỆC trong modal chi tiết (2026-09-02: «cây công việc đẹp hơn, thể hiện rõ,
+   nhiệm vụ nào thuộc cây con nào, tách bạch giữa các cây con»).
+   Mỗi công việc con = một NHÁNH có viền trái đậm; nhiệm vụ bên trong thụt vào sau một
+   đường kẻ dọc nhạt nên không thể lẫn nhiệm vụ của nhánh này với nhánh kia.
+   ============================================================================ */
+.cay-nhanh {
+    border-left-width: 4px;
+    border-left-color: #60a5fa;
+    position: relative;
+}
+
+/* Nhánh «Nhiệm vụ trực thuộc công việc» (không qua công việc con) — màu khác để tách bạch. */
+.cay-nhanh-le {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+}
+
+.cay-la {
+    margin-left: 10px;
+    padding-left: 12px;
+    border-left: 2px dashed #cbd5e1;
 }
 

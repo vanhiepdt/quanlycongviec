@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260902-1");
+console.info("[QLCV] app.js 20260902-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -1818,6 +1818,11 @@ function renderActivity(activities) {
   recentActivityEl.innerHTML = activities.slice(0, 22).map(createHoatDongItemHtml).join("");
 }
 function openTaskModalForProject(projectId, projectName, opts) {
+  // Mở form từ TRONG modal chi tiết công việc ⇒ ghi nhớ để `closeModal` vẽ lại modal đó (kèm dòng
+  // vừa tạo). Không phụ thuộc nút nào gọi: hễ modal chi tiết đang mở thì đường về là nó.
+  if (document.getElementById("project-details-modal")) {
+    openedFromProjectDetails = { projectId: String(projectId || ""), projectName: String(projectName || "") };
+  }
   pendingTaskCreate = {
     level: opts && Number(opts.level) === 2 ? 2 : 3,
     parentId: opts && opts.parentId ? String(opts.parentId) : "",
@@ -1874,6 +1879,33 @@ function openModal(type, data = null) {
     });
   });
 }
+/**
+ * VẼ LẠI modal chi tiết công việc sau khi vừa ghi (tạo/sửa công việc con hoặc nhiệm vụ).
+ *
+ * Người dùng báo 2026-09-02: «khi tạo mới công việc, công việc con đang ko cập nhật trực tiếp hiển
+ * thị trên công việc cha mà phải tắt đi mở lại mới thấy». Nguyên nhân: `showProjectDetailsModal`
+ * đọc `allTasks` trong bộ nhớ, còn dòng mới chỉ về sau `refreshData()` (đặt hẹn 1 giây trong
+ * `handleAdd`) ⇒ modal vẽ lại từ dữ liệu CŨ, thiếu đúng dòng vừa tạo.
+ *
+ * Nay gọi `refreshData()` trước và vẽ trong `withSuccessHandler` của chính lượt nạp đó —
+ * `handleSuccessfulLogin` đã gán xong `allProjects`/`allTasks` trước khi mình vẽ. Lỗi mạng thì vẫn
+ * vẽ từ dữ liệu đang có (thà thiếu một dòng còn hơn mất luôn modal).
+ */
+function veLaiChiTietSauKhiGhi(projectId, projectName) {
+  if (!isAuthenticated) {
+    showProjectDetailsModal(projectId, projectName);
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function (response) {
+      if (response && response.success) handleSuccessfulLogin(response);
+      showProjectDetailsModal(projectId, projectName);
+    })
+    .withFailureHandler(function () {
+      showProjectDetailsModal(projectId, projectName);
+    })
+    .getDataForUser();
+}
 function openEditModal(type, id) {
   let project = null;
   if (type === "project") project = allProjects.find(project2 => project2[COL.P_ID] === id);else {
@@ -1894,7 +1926,8 @@ function closeModal(modalId) {
         projectId: openedFromProjectDetails2,
         projectName: openedFromProjectDetails3
       } = openedFromProjectDetails;
-      openedFromProjectDetails = null, showProjectDetailsModal(openedFromProjectDetails2, openedFromProjectDetails3);
+      openedFromProjectDetails = null;
+      veLaiChiTietSauKhiGhi(openedFromProjectDetails2, openedFromProjectDetails3);
     }
   }, 300));
 }
@@ -2317,7 +2350,9 @@ async function napKetQua(ma) {
   dsBat = ketQua.onlyOffice === true;
   const nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
   const oChonFile =
-    "<input type=\"file\" id=\"task-file-input\" accept=\".doc,.docx,.pdf\" class=\"hidden\" onchange=\"uploadKetQua(this)\">";
+    "<input type=\"file\" id=\"task-file-input\" accept=\".doc,.docx,.pdf\" class=\"hidden\" onchange=\"uploadKetQua(this)\">" +
+    // Ô trạng thái «đang tải lên» của khối này (trang hàng chờ có ô riêng trong index.html).
+    "<div id=\"task-kq-trang-thai\" class=\"hidden\"></div>";
   const nutTai =
     coTheNopFile(null, taskKetQuaMa)
       ? "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"moChonFileKetQua(null)\"><i class=\"fas fa-upload mr-2\"></i>Tải file lên</button>"
@@ -2357,10 +2392,47 @@ function moChonFileKetQua(fileId) {
   input.value = "";
   input.click();
 }
-/** Gửi FormData lên máy chủ; kiểm đuôi + dung lượng trước cho đỡ mất một vòng gọi. */
+/**
+ * THANH TRẠNG THÁI tải file (người dùng chốt 2026-09-02: «thêm trạng thái load tải file lên để
+ * người dùng biết là đang tải file lên»). Một hàm cho cả hai chỗ nộp — id ô trạng thái khác nhau
+ * nên nhận sẵn phần tử; `null` (chưa mở khung) thì bỏ qua, không nổ.
+ */
+function veTrangThaiUpload(el, ten, xong, loi) {
+  if (!el) return;
+  el.classList.remove("hidden");
+  if (loi) {
+    el.className = "mt-2 text-xs text-red-600";
+    el.textContent = "Tải lên thất bại: " + ten;
+    return;
+  }
+  if (xong) {
+    el.className = "mt-2 text-xs text-green-600";
+    el.textContent = "Đã tải lên xong: " + ten;
+    setTimeout(() => el.classList.add("hidden"), 4000);
+    return;
+  }
+  el.className = "mt-2 text-xs text-blue-600";
+  // Chỉ dùng textContent — tên file là dữ liệu người dùng, KHÔNG nội suy vào innerHTML.
+  el.textContent = "";
+  const icon = document.createElement("i");
+  icon.className = "fas fa-spinner fa-spin mr-2";
+  el.appendChild(icon);
+  el.appendChild(document.createTextNode("Đang tải lên: " + ten));
+}
+/**
+ * Gửi FormData lên máy chủ; kiểm đuôi + dung lượng trước cho đỡ mất một vòng gọi.
+ *
+ * Dùng ở HAI nơi: khối «Kết quả» trong modal nhiệm vụ và trang «Hàng chờ phê duyệt» — cờ
+ * `dangOTrangChoDuyet` quyết định vẽ lại cái nào sau khi xong (modal có thể chưa dựng).
+ */
 async function uploadKetQua(input) {
   const file = input && input.files && input.files[0];
   if (input) input.value = "";
+  const oTrangThai = document.getElementById(
+    dangOTrangChoDuyet ? "kq-cho-duyet-trang-thai" : "task-kq-trang-thai"
+  );
+  const veLaiTrang = dangOTrangChoDuyet;
+  dangOTrangChoDuyet = false;
   if (!file) return;
   if (!/\.(doc|docx|pdf)$/i.test(file.name)) {
     showToast("Chỉ nhận file .doc, .docx hoặc .pdf", "error");
@@ -2374,10 +2446,22 @@ async function uploadKetQua(input) {
   fd.append("file", file);
   if (fileKetQuaChoBan != null) fd.append("fileId", String(fileKetQuaChoBan));
   fileKetQuaChoBan = null;
-  const ketQua = await restUpload("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files", fd);
-  if (!ketQua) return;
+  veTrangThaiUpload(oTrangThai, file.name, false, false);
+  let ketQua;
+  try {
+    ketQua = await restUpload("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files", fd);
+  } catch (err) {
+    veTrangThaiUpload(oTrangThai, String((err && err.message) || "lỗi không rõ"), false, true);
+    throw err;
+  }
+  if (!ketQua) {
+    veTrangThaiUpload(oTrangThai, "máy chủ từ chối", false, true);
+    return;
+  }
+  veTrangThaiUpload(oTrangThai, file.name, true, false);
   showToast(ketQua.tuDong ? "Đã nộp và PHÊ DUYỆT LUÔN — phân quyền không yêu cầu duyệt" : "Đã nộp bản mới", "success");
-  napKetQua(taskKetQuaMa);
+  if (veLaiTrang) renderChoDuyetKetQua();
+  else napKetQua(taskKetQuaMa);
 }
 /** Một hành động verdict: hỏi nội dung khi bắt buộc, chốt thì xác nhận trước khi khóa. */
 async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
@@ -2760,17 +2844,29 @@ function createTaskModal(isEdit, task) {
     text = isEdit ? "Chỉnh sửa nhiệm vụ" : createLevel === 2 ? "Tạo công việc con" : "Tạo nhiệm vụ mới",
     text2 = isEdit ? "Cập nhật" : createLevel === 2 ? "Tạo công việc con" : "Tạo nhiệm vụ";
   let list = [];
-  if (isAdmin()) list = allStaff;else {
-    if (isManager()) list = allStaff.filter(staff => {
+  // 2026-09-02 — Trưởng phòng/Phó phòng KHÔNG chọn được «Cán bộ trực tiếp» khi tạo nhiệm vụ: họ
+  // không qua isAdmin()/isManager() nên rơi vào nhánh cuối («chỉ chính mình»), rồi bộ lọc
+  // role === "Nhân viên" ở dưới cắt sạch ⇒ dropdown rỗng. Nay có nhánh riêng: ứng viên là NHÂN
+  // VIÊN CÙNG PHÒNG. Máy chủ vẫn bó lại theo inScope — giao diện không nới quyền.
+  if (isAdmin()) list = allStaff;else if (isManager() || laQuanTriTrongPhamVi()) list = allStaff.filter(staff => {
+    const lower = (staff[COL.S_ROLE] || "").toLowerCase();
+    return !lower.includes("admin");
+  });else if (laLanhDaoPhong()) {
+    const phongToi = tenPhongCuaToi();
+    list = allStaff.filter(staff => {
+      const lower = (staff[COL.S_ROLE] || "").toLowerCase();
+      if (lower.includes("admin")) return false;
+      // Chưa tra được tên phòng của mình (allDepartments chưa nạp) ⇒ giữ cả danh sách để ô không
+      // rỗng; chọn người ngoài phòng thì máy chủ trả 403.
+      if (phongToi === "") return true;
+      return String(staff[COL.S_DEPT] || "").trim() === phongToi;
+    });
+  } else {
+    const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === currentUser.name);
+    hasMatch ? list = allStaff.filter(staff => {
       const lower = (staff[COL.S_ROLE] || "").toLowerCase();
       return !lower.includes("admin");
-    });else {
-      const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === currentUser.name);
-      hasMatch ? list = allStaff.filter(staff => {
-        const lower = (staff[COL.S_ROLE] || "").toLowerCase();
-        return !lower.includes("admin");
-      }) : list = allStaff.filter(staff => staff[COL.S_NAME] === currentUser.name);
-    }
+    }) : list = allStaff.filter(staff => staff[COL.S_NAME] === currentUser.name);
   }
   list = list.filter(list2 => list2[COL.S_OBJECT_TYPE] !== "Nhà cung cấp")
       .filter(canBo => canBo[COL.S_ROLE] === "Nhân viên"); // Ứng viên «Cán bộ trực tiếp»: chỉ Nhân viên (ẩn Trưởng/Phó phòng/Phó GĐ)
@@ -2848,7 +2944,7 @@ function createTaskModal(isEdit, task) {
         selectedSupervisor: isEdit && task ? task.supervisorId : "",
         selectedLeaders: isEdit && task ? task.leaderIds || [] : [],
         applyDefault: true
-      });
+      }).then(() => khoaPhanCongVoiNhanVien(supSel, leadBox, leadSel));
     };
     projectSel.addEventListener("change", napPhanCongTask);
     napPhanCongTask();
@@ -2904,6 +3000,37 @@ function buildLeaderCheckboxesHtml(list, selectedIds) {
   return list.map(l => "<label class=\"inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-blue-300\"><input type=\"checkbox\" class=\"leader-opt accent-blue-600\" value=\"" + escapeHtmlAttr(l.id) + "\"" + (dangChon.has(String(l.id)) ? " checked" : "") + "><span class=\"text-sm\">" + escapeHtml(l.name) + "</span></label>").join("");
 }
 
+/**
+ * KHOÁ ô phân công với NHÂN VIÊN (người dùng báo 2026-09-02: «sửa lại nhân viên không được sửa
+ * Lãnh đạo phòng phụ trách»).
+ *
+ * Ô «Lãnh đạo phòng phụ trách» quyết định AI xử được file kết quả của nhiệm vụ (luật `leader_ids`),
+ * nên để Cán bộ tự đổi là tự chọn người duyệt cho mình. Máy chủ đã chặn (`assignments.assertTaskLeader`
+ * + ma trận §6), nhưng client vẫn gửi ô đó lên ⇒ Cán bộ sửa nhiệm vụ của mình là gặp 403 mà không
+ * hiểu vì sao. Nay khoá ô ngay trên form và ghi rõ lý do; `disabled` thì trình duyệt KHÔNG gửi
+ * trường đó nữa, máy chủ giữ nguyên giá trị cũ (patch không có khoá `leaderIds`).
+ *
+ * Vai được sửa: admin · Phó Giám đốc · Trưởng phòng · Phó phòng (đúng nhóm `laLanhDaoPhong()` +
+ * `laQuanTriTrongPhamVi()`); mọi vai còn lại chỉ xem.
+ */
+function khoaPhanCongVoiNhanVien(supervisorSelect, leadersBox, singleLeaderSelect) {
+  if (laQuanTriTrongPhamVi() || laLanhDaoPhong()) return;
+  const ghiChu = "Chỉ Trưởng phòng / Phó phòng / Phó Giám đốc / Giám đốc đổi được ô này.";
+  if (singleLeaderSelect) {
+    singleLeaderSelect.disabled = true;
+    singleLeaderSelect.title = ghiChu;
+  }
+  if (supervisorSelect) {
+    supervisorSelect.disabled = true;
+    supervisorSelect.title = ghiChu;
+  }
+  if (leadersBox) {
+    leadersBox.querySelectorAll(".leader-opt").forEach((o) => {
+      o.disabled = true;
+    });
+    leadersBox.title = ghiChu;
+  }
+}
 /** Đọc checkbox đang chọn rồi ghi danh sách id (phân tách dấu phẩy) vào hidden input. */
 function capNhatLeaderInput(leadersBoxEl, leadersInputEl) {
   if (!leadersBoxEl || !leadersInputEl) return;
@@ -6510,11 +6637,64 @@ async function renderChoDuyetKetQua() {
   const oTab = document.getElementById("tab-ket-qua-count");
   oTab && (oTab.textContent = String(items.length));
   listEl.innerHTML = items.length
-    ? items.map(buildDongChoDuyetKetQua).join("")
+    ? buildBangChoDuyetKetQua(items)
     : "<div class=\"text-sm text-gray-400 py-2\">Không có kết quả nào chờ bạn xử — tốt lắm!</div>";
 }
+/**
+ * BẢNG «Phê duyệt kết quả» xếp theo CÂY (người dùng chốt 2026-09-02: «hiển thị công việc cha, bên
+ * dưới là công việc con (nếu có), Nhiệm vụ có file sửa đấy, sau đó là tên file và các thông tin»).
+ *
+ * Máy chủ đã ORDER BY mã công việc → mã CV con → mã nhiệm vụ, nên chỉ cần chèn HÀNG TIÊU ĐỀ mỗi
+ * lần đổi nhóm — KHÔNG sắp lại ở client để bảng luôn khớp thứ tự máy chủ trả.
+ */
+function buildBangChoDuyetKetQua(items) {
+  // Tên phải có tiền tố build* để bộ soát XSS coi là hàm DỰNG HTML (đã escape bên trong) —
+  // tên ngắn kiểu `o(...)` bị đếm thành lỗ nội suy chưa bọc (TC-SEC-10).
+  const buildOTieuDeChoDuyet = (t, them) => "<th class=\"px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase " + escapeHtmlAttr(them || "") + "\">" + escapeHtml(t) + "</th>";
+  let chaHienTai = "", conHienTai = "", nvHienTai = "";
+  const dong = [];
+  items.forEach((n) => {
+    const cha = String(n.ma_cong_viec || ""), con = String(n.ma_cv_con || ""), nv = String(n.ma_nhiem_vu || "");
+    if (cha !== chaHienTai) {
+      chaHienTai = cha; conHienTai = ""; nvHienTai = "";
+      dong.push(buildHangCayChoDuyet(1, n.ten_cong_viec, cha, n.ten_phong));
+    }
+    if (con !== conHienTai) {
+      conHienTai = con; nvHienTai = "";
+      if (con !== "") dong.push(buildHangCayChoDuyet(2, n.ten_cv_con, con, ""));
+    }
+    if (nv !== nvHienTai) {
+      nvHienTai = nv;
+      dong.push(buildHangCayChoDuyet(3, n.ten_nhiem_vu, nv, "", con !== ""));
+    }
+    dong.push(buildDongChoDuyetKetQua(n, con !== ""));
+  });
+  return (
+    "<div class=\"overflow-x-auto\"><table class=\"min-w-full text-sm bang-kq-cho-duyet\"><thead class=\"bg-gray-50\"><tr>" +
+    buildOTieuDeChoDuyet("Công việc / Nhiệm vụ / File") + buildOTieuDeChoDuyet("Trạng thái") + buildOTieuDeChoDuyet("Bản mới nhất") + buildOTieuDeChoDuyet("Ý kiến") + buildOTieuDeChoDuyet("Hành động", "text-right") +
+    "</tr></thead><tbody class=\"divide-y divide-gray-100\">" + dong.join("") + "</tbody></table></div>"
+  );
+}
+/** HÀNG TIÊU ĐỀ của cây: cấp 1 công việc · cấp 2 công việc con · cấp 3 nhiệm vụ (§0.1 từ vựng). */
+function buildHangCayChoDuyet(cap, ten, ma, tenPhong, coCvCon) {
+  const kieu = {
+    1: { lop: "hang-cay-1", icon: "fa-folder", thut: "" },
+    2: { lop: "hang-cay-2", icon: "fa-folder-open", thut: "pl-6" },
+    3: { lop: "hang-cay-3", icon: "fa-list-check", thut: coCvCon ? "pl-12" : "pl-6" },
+  }[cap];
+  return (
+    "<tr class=\"" + escapeHtmlAttr(kieu.lop) + "\"><td colspan=\"5\" class=\"px-3 py-2 " + escapeHtmlAttr(kieu.thut) + "\">" +
+    "<i class=\"fas " + escapeHtml(kieu.icon) + " mr-2 opacity-60\"></i>" +
+    (cap === 3
+      ? "<button type=\"button\" class=\"text-blue-700 hover:underline font-medium\" title=\"Mở nhiệm vụ này\" onclick=\"openEditModal('task', '" + escapeForInlineHandler(ma) + "')\">" + escapeHtml(ten || ma) + "</button>"
+      : "<span class=\"font-semibold\">" + escapeHtml(ten || ma) + "</span>") +
+    "<span class=\"text-xs text-gray-400 ml-2\">" + escapeHtml(ma) + "</span>" +
+    (tenPhong ? "<span class=\"text-xs text-gray-400 ml-2\">· " + escapeHtml(tenPhong) + "</span>" : "") +
+    "</td></tr>"
+  );
+}
 /** BUILDER: một dòng «Phê duyệt kết quả». Mọi giá trị user-data đều escape tại lỗ. */
-function buildDongChoDuyetKetQua(n) {
+function buildDongChoDuyetKetQua(n, coCvCon) {
   const nut = (Array.isArray(n.hanhDong) ? n.hanhDong : [])
     .map((h) =>
       "<button type=\"button\" class=\"" +
@@ -6533,25 +6713,56 @@ function buildDongChoDuyetKetQua(n) {
     ? "<button type=\"button\" class=\"btn-secondary py-1 px-2 text-xs\" title=\"Tải bản mới nhất\" onclick=\"taiFileKetQua('" +
       escapeForInlineHandler(n.ban_cuoi_id) + "')\"><i class=\"fas fa-download\"></i></button>"
     : "";
+  // «Nộp bản mới» ngay trong hàng chờ — người dùng chốt: người sửa file được up bản mới của nó.
+  const nutNop =
+    n.duocNop === true
+      ? "<button type=\"button\" class=\"btn-secondary py-1 px-2 text-xs\" title=\"Tải lên bản mới của file này\" onclick=\"moChonFileChoDuyet('" +
+        escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(n.ma_nhiem_vu) + "')\"><i class=\"fas fa-upload\"></i></button>"
+      : "";
+  const soYKien = Number(n.so_y_kien || 0);
   return (
-    "<div class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
-    "<span class=\"text-[11px] px-2 py-0.5 rounded-full " +
+    "<tr class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
+    "<td class=\"px-3 py-2 " + escapeHtmlAttr(coCvCon ? "pl-16" : "pl-10") + "\">" +
+    "<i class=\"fas fa-file-alt text-blue-500 mr-2\"></i>" +
+    "<span class=\"font-medium text-gray-800\">" + escapeHtml(n.ten_goc) + "</span>" +
+    "<span class=\"text-xs text-gray-400 ml-2\">" + escapeHtml(n.so_ban || 1) + " bản</span>" +
+    "</td>" +
+    "<td class=\"px-3 py-2 whitespace-nowrap\"><span class=\"text-[11px] px-2 py-0.5 rounded-full " +
     escapeHtmlAttr(MAU_TRANG_THAI_FILE[n.trang_thai] || "bg-gray-100 text-gray-600") + "\">" +
-    escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span>" +
-    "<i class=\"fas fa-file-alt text-blue-500\"></i>" +
-    "<span class=\"font-medium text-gray-800 text-sm\">" + escapeHtml(n.ten_goc) + "</span>" +
-    "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" title=\"Mở nhiệm vụ này\" onclick=\"openEditModal('task', '" +
-    escapeForInlineHandler(n.ma_nhiem_vu) + "')\">" +
-    escapeHtml(n.ten_nhiem_vu) + " (" + escapeHtml(n.ma_nhiem_vu) + ")</button>" +
-    "<span class=\"text-xs text-gray-400\">" + escapeHtml(n.ten_phong || "—") + "</span>" +
-    "<span class=\"text-xs text-gray-400\">bản " + escapeHtml(n.ban_cuoi_so || 1) + " · " +
-    escapeHtml(n.ban_cuoi_nguoi || n.ten_nguoi_tao) + " · " +
-    escapeHtml(formatDateForDisplay(n.ban_cuoi_luc || n.created_at, true)) + "</span>" +
-    "<span class=\"ml-auto flex items-center gap-1 flex-wrap\">" + nutTai + nutSua + nut + "</span>" +
-    "</div>"
+    escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span></td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-500 whitespace-nowrap\">bản " + escapeHtml(n.ban_cuoi_so || 1) + " · " +
+    escapeHtml(n.ban_cuoi_nguoi || n.ten_nguoi_tao) + "<br>" +
+    escapeHtml(formatDateForDisplay(n.ban_cuoi_luc || n.created_at, true)) + "</td>" +
+    "<td class=\"px-3 py-2 whitespace-nowrap\">" +
+    (soYKien > 0
+      ? "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs\" title=\"Mở nhiệm vụ để đọc ý kiến\" onclick=\"openEditModal('task', '" +
+        escapeForInlineHandler(n.ma_nhiem_vu) + "')\">Xem ý kiến (" + escapeHtml(soYKien) + ")</button>"
+      : "<span class=\"text-xs text-gray-300\">—</span>") +
+    "</td>" +
+    "<td class=\"px-3 py-2 text-right\"><span class=\"inline-flex items-center gap-1 flex-wrap justify-end\">" +
+    nutTai + nutSua + nutNop + nut + "</span></td>" +
+    "</tr>"
   );
 }
 
+/**
+ * NỘP BẢN MỚI ngay trong trang «Hàng chờ phê duyệt» (người dùng chốt 2026-09-02: «người sửa file
+ * nhiệm vụ có thể up file lên để thể hiện bản mới của nó»).
+ *
+ * Dùng LẠI `uploadKetQua` của khối «Kết quả» — chỉ đặt trước hai biến ngữ cảnh (`fileKetQuaChoBan`,
+ * `taskKetQuaMa`) rồi bật cờ để sau khi tải xong thì vẽ lại BẢNG hàng chờ, không phải khối trong
+ * modal (lúc này modal chưa mở). Nhờ vậy phần kiểm đuôi/dung lượng + thanh trạng thái dùng chung.
+ */
+let dangOTrangChoDuyet = false;
+function moChonFileChoDuyet(fileId, maNhiemVu) {
+  const input = document.getElementById("kq-cho-duyet-file-input");
+  if (!input) return;
+  fileKetQuaChoBan = fileId ? Number(fileId) : null;
+  taskKetQuaMa = String(maNhiemVu || "");
+  dangOTrangChoDuyet = true;
+  input.value = "";
+  input.click();
+}
 /** Bấm nút verdict từ trang hàng chờ — cùng endpoint với khối «Kết quả» trong modal nhiệm vụ. */
 async function xuLyVerdictChoDuyet(fileId, hanhDong, canNoiDung) {
   let noiDung = "";

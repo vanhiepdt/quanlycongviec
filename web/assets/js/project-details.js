@@ -106,6 +106,64 @@ function buildStatCardHtml(so, nhan, mauChu) {
 const PHAN_CONG_CACH_HTML =
   '<span class="phan-cong-cach select-none self-center px-2 sm:px-3 text-gray-300" aria-hidden="true">·</span>';
 
+/**
+ * KHỐI PHÂN CÔNG THU GỌN (người dùng chốt 2026-09-02: «thu gọn đoạn phân công ... bé đi»).
+ *
+ * Trước đây khối này là một thẻ trắng cao gần bằng phần cây công việc: tiêu đề riêng, hàng phân
+ * công cỡ chữ thường, rồi một lưới 5 ô «Phòng / Thời gian / Số công việc con / Tiến độ». Cây công
+ * việc — thứ người dùng thực sự cần nhìn — bị đẩy xuống dưới màn hình.
+ *
+ * Nay gộp TẤT CẢ vào MỘT dòng gấp khúc chữ nhỏ (11px), mặc định ĐÓNG phần chi tiết; bấm «Chi tiết»
+ * mới xoè lưới thông tin phụ. Không bỏ dữ liệu nào — chỉ đổi chỗ để cây lên trên.
+ */
+function buildKhoiPhanCongGonHtml(project, canBoThamGia, cvCons, tongTienDo) {
+  const chip = (nhan, giaTri, trong) => {
+    const raw = String(giaTri == null ? '' : giaTri).trim();
+    const co = raw !== '' && raw !== 'null' && raw !== 'undefined';
+    return (
+      '<span class="phan-cong-chip">' +
+      '<span class="phan-cong-chip-nhan">' + escapeHtml(nhan) + '</span>' +
+      (co
+        ? '<span class="phan-cong-chip-gia">' + escapeHtml(raw) + '</span>'
+        : '<span class="phan-cong-chip-trong">' + escapeHtml(trong || '—') + '</span>') +
+      '</span>'
+    );
+  };
+  return (
+    '<div class="khoi-phan-cong-gon">' +
+    '<div class="flex flex-wrap items-center gap-x-1 gap-y-1">' +
+    chip('Ban lãnh đạo kiểm soát', project[COL.P_SUP], 'Chưa phân công') +
+    chip('Lãnh đạo phòng phụ trách', project[COL.P_LEADERS], 'Chưa phân công') +
+    chip('Cán bộ thực hiện', canBoThamGia.join(', '), 'Chưa giao cho cán bộ nào') +
+    '<button type="button" class="nut-chi-tiet-phan-cong" ' +
+    'onclick="batTatChiTietCongViec()" title="Ẩn/hiện thông tin phụ của công việc">' +
+    '<i id="cv-chi-tiet-caret" class="fas fa-chevron-down mr-1"></i>Chi tiết</button>' +
+    '</div>' +
+    '<div id="cv-chi-tiet-box" class="hidden grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 mt-2">' +
+    buildDetailRowHtml('Phòng', escapeHtml(project[COL.P_DEPT]), 'Công việc chung') +
+    buildPhanCongApprovalRowsHtml(project) +
+    buildDetailRowHtml(
+      'Thời gian',
+      escapeHtml(formatDateForDisplay(project[COL.P_START])) +
+        ' → ' +
+        escapeHtml(formatDateForDisplay(project[COL.P_END]))
+    ) +
+    buildDetailRowHtml('Số công việc con', escapeHtml(cvCons.length)) +
+    buildDetailRowHtml('Tiến độ chung', escapeHtml(tongTienDo) + '%') +
+    '</div>' +
+    '</div>'
+  );
+}
+
+/** Ẩn/hiện lưới thông tin phụ của công việc cha (khối phân công thu gọn). */
+function batTatChiTietCongViec() {
+  const box = document.getElementById('cv-chi-tiet-box');
+  if (!box) return;
+  box.classList.toggle('hidden');
+  const caret = document.getElementById('cv-chi-tiet-caret');
+  if (caret) caret.style.transform = box.classList.contains('hidden') ? 'rotate(-90deg)' : '';
+}
+
 /** Icon BÚT CHỈ vẽ tay (SVG inline) cho nút sửa công việc con — KHÔNG nạp thư viện nào mới. */
 function buildButChiIconHtml() {
   return (
@@ -207,7 +265,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
         "</span>"
       : "";
   return (
-    '<div class="' + khungNgoai + ' rounded-xl p-3 mb-3">' +
+    '<div class="' + khungNgoai + ' cay-nhanh rounded-xl p-3 mb-4">' +
     // KHUNG TIÊU ĐỀ RIÊNG (vòng lần 3): tên công việc con nằm trong hộp trắng viền xanh — rõ
     // ranh giới với danh sách nhiệm vụ bên dưới, bỏ kiểu chữ trôi trên nền xanh.
     '<div class="cv-con-tieu-de bg-white/90 border border-blue-200 rounded-lg px-3 py-2 shadow-sm flex items-center justify-between cursor-pointer select-none gap-2" onclick="batTatNhiemVuTrongCVCon(\'' +
@@ -251,7 +309,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     "</div>" +
     '<div id="sw-tasks-' +
     escapeHtml(sw[COL.T_ID]) +
-    '" class="mt-3 space-y-2 hidden">' +
+    '" class="cay-la mt-3 space-y-2 hidden">' +
     (nvTrong.length
       ? nvTrong.map(t => createTaskListItem(t)).join("")
       : '<p class="text-sm text-gray-400 italic py-2">Chưa có nhiệm vụ nào trong công việc con này</p>') +
@@ -300,8 +358,9 @@ function showProjectDetailsModal(projectId, projectName) {
     : '<div class="text-center py-10 text-gray-400"><i class="fas fa-folder-open text-3xl mb-2 opacity-30"></i><p class="text-sm">Chưa có công việc con nào</p></div>';
 
   const orphanHtml = nvMoiCoi.length
-    ? '<h5 class="font-semibold text-gray-700 mt-4 mb-2 text-xs uppercase tracking-wide">Nhiệm vụ trực thuộc công việc (không qua công việc con)</h5>' +
-      nvMoiCoi.map(t => createTaskListItem(t)).join("")
+    ? '<div class="cay-nhanh cay-nhanh-le rounded-xl p-3 mb-4"><h5 class="font-semibold text-gray-600 mb-2 text-xs uppercase tracking-wide"><i class="fas fa-list-check mr-2 opacity-60"></i>Nhiệm vụ trực thuộc công việc (không qua công việc con)</h5><div class="cay-la space-y-2">' +
+      nvMoiCoi.map(t => createTaskListItem(t)).join("") +
+      "</div></div>"
     : "";
 
   
@@ -323,26 +382,7 @@ function showProjectDetailsModal(projectId, projectName) {
     buildStatCardHtml(dangLam, "Đang làm", "text-amber-600") +
     buildStatCardHtml(treHan, "Trễ hạn", "text-red-500") +
     "            </div>\n" +
-    '            <div class="bg-white rounded-xl p-4 border border-gray-100">\n' +
-    '                <h5 class="font-semibold text-gray-800 mb-2 text-sm">Phân công</h5>\n' +
-        '                <div class="phan-cong-hang flex flex-wrap items-start gap-y-1">\n' +
-    buildPhanCongNhomHtml("Ban lãnh đạo kiểm soát", project[COL.P_SUP], "Chưa phân công") + PHAN_CONG_CACH_HTML +
-    buildPhanCongNhomHtml("Lãnh đạo phòng phụ trách", project[COL.P_LEADERS], "Chưa phân công") + PHAN_CONG_CACH_HTML +
-    buildPhanCongNhomHtml("Cán bộ thực hiện", canBoThamGia.join(", "), "Chưa giao cho cán bộ nào") +
-    "                </div>\n" +
-    '                <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mt-3">\n' +
-    buildDetailRowHtml("Phòng", escapeHtml(project[COL.P_DEPT]), "Công việc chung") +
-    buildPhanCongApprovalRowsHtml(project) +
-    buildDetailRowHtml(
-      "Thời gian",
-      escapeHtml(formatDateForDisplay(project[COL.P_START])) +
-        " → " +
-        escapeHtml(formatDateForDisplay(project[COL.P_END]))
-    ) +
-    buildDetailRowHtml("Số công việc con", escapeHtml(cvCons.length)) +
-    buildDetailRowHtml("Tiến độ chung", escapeHtml(tongTienDo) + "%") +
-    "                </div>\n" +
-    "            </div>\n" +
+    buildKhoiPhanCongGonHtml(project, canBoThamGia, cvCons, tongTienDo) +
     '            <div>\n' +
     '                <div class="flex items-center justify-between mb-3">\n' +
     '                    <h5 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">Cây công việc</h5>\n' +

@@ -18,7 +18,7 @@
     <!-- ?v= là dấu vết phiên bản: Nginx cache assets/ 30 ngày (§7 việc 4.8) nhưng KHÔNG cache
          trang này, nên đổi số này là người dùng nhận bản mới ngay lần tải sau. SỬA app.css /
          app.js / api-bridge.js thì PHẢI bump. -->
-    <link rel="stylesheet" href="assets/css/app.css?v=20260902-1">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260902-2">
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen font-inter">
@@ -811,6 +811,13 @@
                         <div id="cho-duyet-ket-qua-list">
                             <div class="text-sm text-gray-400 py-2">Đang tải...</div>
                         </div>
+                        <!-- Ô chọn file RIÊNG của trang này (2026-09-02): nút «Nộp bản mới» trên từng
+                             dòng bấm vào đây. Không dùng chung ô của modal nhiệm vụ vì lúc ở trang
+                             hàng chờ thì modal chưa dựng, ô kia không tồn tại trong DOM. -->
+                        <input type="file" id="kq-cho-duyet-file-input" class="hidden"
+                            accept=".doc,.docx,.pdf" aria-label="Chọn file kết quả để nộp bản mới"
+                            onchange="uploadKetQua(this)">
+                        <div id="kq-cho-duyet-trang-thai" class="hidden mt-2 text-xs text-gray-500"></div>
                     </div>
                 </div>
             </div>
@@ -1228,9 +1235,9 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260902-1"></script>
+    <script src="assets/js/app.js?v=20260902-2"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
-<script src="assets/js/project-details.js?v=20260831-1"></script>
+<script src="assets/js/project-details.js?v=20260902-1"></script>
 
 </body>
 
