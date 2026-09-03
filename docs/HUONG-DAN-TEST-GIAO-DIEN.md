@@ -643,8 +643,23 @@ docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
   "SELECT version_no, ten_goc, ten_luu FROM task_file_versions ORDER BY id DESC LIMIT 3;"
 ```
 
-Giới hạn để thử chỗ chặn: chỉ nhận **`.doc` `.docx` `.pdf`**, tối đa **20 MB**. Nộp `.exe`, `.xlsx`
-hoặc file quá cỡ ⇒ báo lỗi bằng câu tiếng Việt, không phải `500`.
+Giới hạn để thử chỗ chặn (đổi 2026-09-03 — người dùng chốt mở thêm PowerPoint, Excel và ảnh):
+nhận **12 đuôi** `.doc` `.docx` `.pdf` · `.xls` `.xlsx` · `.ppt` `.pptx` · `.jpg` `.jpeg` `.png`
+`.gif` `.webp`, tối đa **50 MB** (trước là `.doc/.docx/.pdf`, 20 MB). Nộp `.exe`, `.zip` hoặc file
+quá cỡ ⇒ báo lỗi bằng câu tiếng Việt, không phải `500`.
+
+**`.svg` bị chặn CÓ Ý** dù nó cũng là ảnh: SVG chạy được `<script>` nên mở trên trình duyệt là lỗ
+XSS. Thử nộp `hinh.svg` phải nhận câu «Chỉ nhận file …» — nếu một ngày nào đó nó qua được thì đó là
+lỗi bảo mật, báo ngay.
+
+Ba điểm nên xem bằng mắt sau khi mở thêm định dạng:
+
+1. **Ảnh có nút 👁 xem** như PDF — bấm là ảnh mở tab mới ngay trong trình duyệt. Excel/PowerPoint
+   **không** có nút đó, chỉ có ⬇ tải về (trình duyệt không hiển thị được file Office).
+2. **Nút ✎ sửa trực tuyến** hiện ở Word/PDF/Excel/PowerPoint (ONLYOFFICE có bộ soạn thảo cho cả
+   bốn: Excel mở dạng bảng tính, PowerPoint mở dạng trình chiếu), nhưng **KHÔNG hiện ở ảnh**.
+3. **Tên file có dấu tiếng Việt** vẫn đúng — thử nộp một ảnh tên `ảnh chụp hiện trường.jpg`, tên
+   phải giữ nguyên cả dấu cả khoảng trắng ở khối «Kết quả» và trên tiêu đề tab sửa trực tuyến.
 
 ### 9b.2 Lãnh đạo phòng phụ trách là người xem/sửa/duyệt
 

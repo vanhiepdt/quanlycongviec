@@ -585,6 +585,26 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   đây là cách đúng cho badge số; (b) sửa `dev-vong14.sql` là SQL, ngoài phạm vi đếm; (c) test mới
   không nằm trong `web/`. Nếu sau này badge đổi sang `innerHTML` thì pin phải tăng — đừng làm, số
   thuần dùng `textContent` là đủ.
+- **Mở thêm PowerPoint / Excel / ảnh (2026-09-03 — người dùng chốt «thêm cả up được cả file ppt và
+  ảnh và excel nữa»)**: pin **101/830 → 101/831** (+1 giá trị, **số chỗ ghi KHÔNG đổi**). Giá trị
+  mới duy nhất là `accept=` của ô chọn file trong `napKetQua`: trước đây là chuỗi hằng viết thẳng
+  (`accept=".doc,.docx,.pdf"`) nên không có lỗ nội suy nào; nay dựng từ hằng `ACCEPT_KET_QUA` để
+  danh sách đuôi chỉ khai báo MỘT chỗ, và mọi lỗ nội suy vào thuộc tính HTML đều phải qua
+  `escapeHtmlAttr` (luật TC-SEC-10 không phân biệt nguồn — hằng của mã cũng bọc, vừa đúng luật vừa
+  vô hại). Ba điểm an toàn cần nhớ khi mở thêm định dạng:
+  - **`.svg` bị chặn CÓ Ý**, dù nó nằm cùng «họ ảnh» với png/jpg và rất dễ bị thêm vào whitelist ở
+    lần mở rộng sau. SVG là XML **chạy được `<script>`**: mở inline trên trình duyệt là XSS lưu trữ
+    dưới tên miền của chính hệ thống, tức là đọc được cookie phiên. Chốt bằng test hai đầu —
+    TC-TF-14 (máy chủ trả 400) và TCKQ-13 (client không gọi máy chủ).
+  - **`?inline=1` đi theo whitelist `MIME_XEM_INLINE`**, không phải theo «có phải ảnh không». Chỉ
+    PDF + 4 ảnh raster (jpeg/png/gif/webp) được `Content-Disposition: inline`; Excel/PowerPoint dù
+    xin `?inline=1` vẫn ra `attachment` (TC-TF-14c canh cả hai chiều). Ảnh raster không có bộ diễn
+    giải script nào nên mở inline an toàn, và `helmet()` đã đặt `X-Content-Type-Options: nosniff` ⇒
+    trình duyệt không tự đoán lại kiểu để chạy nội dung khác.
+  - **Cặp đuôi ↔ mimeType vẫn phải khớp**, nay là đuôi → *danh sách* mime (Office 2003 gửi mime
+    khác nhau tuỳ trình duyệt) nên so bằng `includes`. `.png` mang mime Excel vẫn 400 (TC-TF-14).
+    Tên file gốc — kể cả tên có dấu tiếng Việt như `ảnh chụp.jpg` — vẫn chỉ để hiển thị và luôn
+    escape tại lỗ; tên vật lý do máy chủ sinh (`v{n}-{uuid}.{ext}`), không bao giờ lấy từ tên gửi lên.
 
 
 
