@@ -330,7 +330,12 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // kiến»), nút «Nộp bản mới» thoát 2 (id nhóm + mã nhiệm vụ), tiêu đề bảng `o()` thoát 2 (class
     // thêm + nhãn cột), `buildKhoiPhanCongGonHtml` thoát 5 (3 chip × nhãn/giá trị dùng chung 1 hàm
     // `chip` ⇒ 3 lỗ nhãn + 1 lỗ giá trị + 1 lỗ câu «chưa phân công») ⇒ **101 chỗ / 830 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 830 });
+    // 2026-09-03 (mở thêm PowerPoint/Excel/ảnh): KHÔNG thêm chỗ ghi HTML nào. **+1 giá trị** —
+    // `accept=` của ô chọn file trong `napKetQua` trước đây là chuỗi hằng viết thẳng trong mã, nay
+    // dựng từ `ACCEPT_KET_QUA` nên phải qua `escapeHtmlAttr` như mọi lỗ nội suy khác (danh sách đuôi
+    // là hằng của mã, không phải dữ liệu người dùng — bọc vẫn đúng luật và vô hại)
+    // ⇒ **101 chỗ / 831 giá trị**. Chi tiết: docs/XSS-4.6.md.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 831 });
   });
 });
 

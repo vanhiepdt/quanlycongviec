@@ -36,7 +36,8 @@ function khoiDong() {
   document.body.innerHTML = `
     <div id="task-modal"></div>
     <div id="toast-container"></div>
-    <input type="file" id="task-file-input" accept=".doc,.docx,.pdf" class="hidden">`;
+    <input type="file" id="task-file-input" class="hidden"
+      accept=".doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp">`;
   window.fetch = () => Promise.reject(new Error('KHONG DUOC GOI MAY CHU trong test UI nay'));
   window.confirm = () => true;
   window.prompt = () => 'nội dung đủ dài';
@@ -163,6 +164,20 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
     expect(khong).not.toContain('/editor');
   });
 
+  it('TCKQ-17b: nút ✎ mở cho Excel/PowerPoint nhưng ẨN ở ẢNH — DS không sửa được ảnh', () => {
+    // Người dùng chốt 2026-09-03: bật ✎ cho Excel + PowerPoint. Ảnh thì DS không có bộ soạn thảo
+    // nào (máy chủ trả 400) nên nút phải ẩn, khỏi mở ra một tab editor lỗi.
+    window.__tfDs(true);
+    for (const ten of ['bang.xlsx', 'so-lieu.xls', 'slide.pptx', 'slide.ppt', 'bao-cao.docx']) {
+      const co = window.buildKhoiFile(NHOM({ ten_goc: ten }), 'CV001-002');
+      expect(co, ten).toContain('/api/v1/task-file-versions/11/editor');
+    }
+    for (const ten of ['anh.png', 'ảnh chụp.jpg', 'anh.jpeg', 'anh.gif', 'anh.webp']) {
+      const khong = window.buildKhoiFile(NHOM({ ten_goc: ten }), 'CV001-002');
+      expect(khong, ten).not.toContain('/editor');
+    }
+  });
+
   it('TCKQ-18: panel ý kiến — label gắn bản mới nhất + data-ban-cuoi + Gửi ý kiến', () => {
     const panel = window.buildYKienPanel(NHOM(), 'CV001-002');
     expect(panel).toContain('Ý kiến cho bản 1');
@@ -230,6 +245,31 @@ describe('TCKQ — bảng luồng và danh sách bản', () => {
     // Nhãn hiển thị KHÔNG kèm mã nhiệm vụ (quy ước Vòng 7) — mã chỉ được nằm trong onclick
     // (cần để nạp lại tab sau hành động).
     expect(bans.replace(/onclick="[^"]*"/g, '')).not.toContain('CV0');
+  });
+
+  it('TCKQ-05b: ẢNH cũng có nút 👁 xem; Excel/PowerPoint chỉ có ⬇ tải (chốt 2026-09-03)', () => {
+    // Người dùng chốt: mở thêm ppt/excel/ảnh, và ẢNH mở xem inline được như PDF. Excel/PowerPoint
+    // thì không — trình duyệt không hiển thị được, để attachment cho khỏi tải về file rác.
+    for (const mime of ['image/png', 'image/jpeg', 'image/gif', 'image/webp']) {
+      const anh = window.buildBanFileList(
+        NHOM({ bans: [{ ...NHOM().bans[0], loai_mime: mime, ten_luu: 'v1-abc.png' }] }),
+        'CV001-002'
+      );
+      expect(anh, mime).toContain("xemFileKetQua('11')");
+    }
+    for (const mime of [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-powerpoint',
+    ]) {
+      const office = window.buildBanFileList(
+        NHOM({ bans: [{ ...NHOM().bans[0], loai_mime: mime, ten_luu: 'v1-abc.xlsx' }] }),
+        'CV001-002'
+      );
+      expect(office, mime).not.toContain('xemFileKetQua');
+      expect(office, mime).toContain("taiFileKetQua('11')");
+    }
   });
 });
 
@@ -319,11 +359,70 @@ describe('TCKQ — escape và chặn phía client', () => {
       fetchDaGoi += 1;
       return Promise.reject(new Error('không được gọi'));
     };
-    const file = new File(['MZ'], 'virus.exe', { type: 'application/octet-stream' });
     const input = document.getElementById('task-file-input');
-    Object.defineProperty(input, 'files', { value: [file], configurable: true });
-    await window.uploadKetQua(input);
+    const nop = async (ten, mime, noiDung = 'MZ') => {
+      const file = new File([noiDung], ten, { type: mime });
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await window.uploadKetQua(input);
+    };
+    await nop('virus.exe', 'application/octet-stream');
+    // `.svg` bị chặn CÓ Ý dù trông như ảnh: SVG chạy được <script> ⇒ lỗ XSS lưu trữ nếu mở inline.
+    await nop('hinh.svg', 'image/svg+xml', '<svg onload=alert(1)>');
+    await nop('kho.zip', 'application/zip');
     expect(fetchDaGoi).toBe(0);
+  });
+
+  it('TCKQ-13b: đuôi ppt/excel/ảnh ĐI QUA cửa kiểm client (chốt 2026-09-03)', async () => {
+    // Chặn quá tay cũng là lỗi: sau khi mở thêm định dạng, 9 đuôi mới phải tới được máy chủ.
+    // `fetch` trả 401 để `restUpload` dừng gọn — ở đây chỉ cần biết nó CÓ gọi.
+    let fetchDaGoi = 0;
+    window.fetch = () => {
+      fetchDaGoi += 1;
+      return Promise.resolve({ status: 401, ok: false, json: () => Promise.resolve({}) });
+    };
+    window.showLoginModal = () => {};
+    const input = document.getElementById('task-file-input');
+    const DS = [
+      ['bang.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['so-lieu.xls', 'application/vnd.ms-excel'],
+      ['slide.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+      ['slide.ppt', 'application/vnd.ms-powerpoint'],
+      ['ảnh chụp.jpg', 'image/jpeg'],
+      ['anh.jpeg', 'image/jpeg'],
+      ['anh.png', 'image/png'],
+      ['anh.gif', 'image/gif'],
+      ['anh.webp', 'image/webp'],
+    ];
+    for (const [ten, mime] of DS) {
+      const truoc = fetchDaGoi;
+      const file = new File(['noi dung'], ten, { type: mime });
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await window.uploadKetQua(input);
+      // Mỗi lần nộp gọi 2 lần fetch: lấy token CSRF rồi POST FormData.
+      expect(fetchDaGoi, ten).toBeGreaterThan(truoc);
+    }
+  });
+
+  it('TCKQ-13c: quá 50 MB bị chặn ở client; đúng 50 MB thì đi qua', async () => {
+    let fetchDaGoi = 0;
+    window.fetch = () => {
+      fetchDaGoi += 1;
+      return Promise.resolve({ status: 401, ok: false, json: () => Promise.resolve({}) });
+    };
+    window.showLoginModal = () => {};
+    const input = document.getElementById('task-file-input');
+    // File giả: `size` là thuộc tính chỉ-đọc của File nên đặt lại bằng defineProperty, khỏi phải
+    // cấp phát 50 MB thật trong test.
+    const nopVoiKichThuoc = async (size) => {
+      const file = new File(['x'], 'to.pdf', { type: 'application/pdf' });
+      Object.defineProperty(file, 'size', { value: size, configurable: true });
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await window.uploadKetQua(input);
+    };
+    await nopVoiKichThuoc(50 * 1024 * 1024 + 1);
+    expect(fetchDaGoi).toBe(0);
+    await nopVoiKichThuoc(50 * 1024 * 1024);
+    expect(fetchDaGoi).toBeGreaterThan(0);
   });
 
   it('TCKQ-14: ô «Ý kiến» trong khối file — gắn bản mới nhất (data-ban-cuoi) + nút Gửi ý kiến', () => {

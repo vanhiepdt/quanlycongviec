@@ -42,6 +42,25 @@ const DOCX = {
   mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   noiDung: 'PK\x03\x04 docx gia lap',
 };
+/**
+ * Các đuôi mở thêm 2026-09-03 (người dùng chốt: «thêm cả up được cả file ppt và ảnh và excel»).
+ * Ảnh dùng để kiểm hai điều KHÁC Word/PDF: `?inline=1` mở được, và nút ✎ sửa trực tuyến phải
+ * ĐÓNG (DS không có bộ soạn thảo cho ảnh).
+ */
+const XLSX = {
+  ten: 'bang-tong-hop.xlsx',
+  mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  noiDung: 'PK\x03\x04 xlsx gia lap',
+};
+const PPTX = {
+  ten: 'bai-trinh-bay.pptx',
+  mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  noiDung: 'PK\x03\x04 pptx gia lap',
+};
+const XLS = { ten: 'so-lieu.xls', mime: 'application/vnd.ms-excel', noiDung: 'xls gia lap' };
+const PPT = { ten: 'slide.ppt', mime: 'application/vnd.ms-powerpoint', noiDung: 'ppt gia lap' };
+const PNG = { ten: 'anh-hien-truong.png', mime: 'image/png', noiDung: '\x89PNG gia lap' };
+const JPG = { ten: 'ảnh chụp.jpg', mime: 'image/jpeg', noiDung: '\xFF\xD8\xFF gia lap' };
 
 async function dangNhap(user) {
   const api = client(app);
@@ -471,7 +490,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(gopY.status).toBe(403);
   });
 
-  it('TC-TF-14: sai loại file / sai mimeType / quá 20 MB ⇒ 400 với câu rõ', async () => {
+  it('TC-TF-14: sai loại file / sai mimeType / quá 50 MB ⇒ 400 với câu rõ', async () => {
     const ma = await taoNhiemVuCho('TF-14');
     // .exe bị chặn theo đuôi.
     const exe = await nopFile(apiNv, ma, {
@@ -480,7 +499,15 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       noiDung: 'MZ',
     });
     expect(exe.status).toBe(400);
-    expect(exe.body.error.message).toContain('Chỉ nhận file Word');
+    expect(exe.body.error.message).toContain('Chỉ nhận file');
+    // .svg bị chặn CÓ Ý: SVG là XML chạy được <script>, mở inline là lỗ XSS lưu trữ. Nằm cùng
+    // «họ ảnh» với png/jpg nên rất dễ bị thêm vào whitelist khi mở rộng — chốt lại bằng test.
+    const svg = await nopFile(apiNv, ma, {
+      ten: 'hinh.svg',
+      mime: 'image/svg+xml',
+      noiDung: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    });
+    expect(svg.status).toBe(400);
     // Đuôi .pdf nhưng mimeType lạ bị chặn theo mime.
     const mimeLai = await nopFile(apiNv, ma, {
       ten: 'tulieumao.pdf',
@@ -488,13 +515,21 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       noiDung: '%PDF',
     });
     expect(mimeLai.status).toBe(400);
-    // Quá 20 MB.
+    // Đuôi ảnh nhưng mime của Excel — cặp đuôi/mime phải khớp, kể cả ở các đuôi mới.
+    const anhLai = await nopFile(apiNv, ma, {
+      ten: 'khong-phai-anh.png',
+      mime: 'application/vnd.ms-excel',
+      noiDung: '\x89PNG',
+    });
+    expect(anhLai.status).toBe(400);
+    // Quá 50 MB.
     const to = await nopFile(apiNv, ma, {
       ten: 'to.pdf',
       mime: 'application/pdf',
-      noiDung: 'A'.repeat(20 * 1024 * 1024 + 1),
+      noiDung: 'A'.repeat(50 * 1024 * 1024 + 1),
     });
     expect(to.status).toBe(400);
+    expect(to.body.error.message).toContain('50 MB');
     // Không đính file nào cũng 400 (multer không có file).
     const token = await apiNv.csrfToken();
     const rong = await apiNv.agent
@@ -502,6 +537,40 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       .set('x-csrf-token', token)
       .field('moTa', '');
     expect(rong.status).toBe(400);
+  });
+
+  it('TC-TF-14b: nộp được PowerPoint / Excel / ảnh (cả đuôi Office 2003) — người dùng chốt 2026-09-03', async () => {
+    for (const file of [XLSX, PPTX, XLS, PPT, PNG, JPG]) {
+      const ma = await taoNhiemVuCho(`TF-14b-${file.ten}`);
+      const res = await nopFile(apiNv, ma, file);
+      expect(res.status, `${file.ten}: ${JSON.stringify(res.body)}`).toBe(200);
+      const nhom = await docFiles(apiNv, ma);
+      expect(nhom).toHaveLength(1);
+      // Tên gốc giữ nguyên, kể cả tên có DẤU tiếng Việt và dấu cách (`ảnh chụp.jpg`).
+      expect(nhom[0].ten_goc).toBe(file.ten);
+      expect(nhom[0].bans[0].loai_mime).toBe(file.mime);
+    }
+  });
+
+  it('TC-TF-14c: ẢNH mở được inline (?inline=1); Excel/PowerPoint luôn tải về dạng attachment', async () => {
+    const ma = await taoNhiemVuCho('TF-14c');
+    await nopFile(apiNv, ma, PNG);
+    const banAnh = (await docFiles(apiNv, ma))[0].bans[0].id;
+    const anhInline = await apiNv.get(`/api/v1/task-files/${banAnh}/download?inline=1`);
+    expect(anhInline.status).toBe(200);
+    expect(anhInline.headers['content-disposition']).toContain('inline');
+    expect(anhInline.headers['content-type']).toContain('image/png');
+    // Không có `?inline=1` thì vẫn là attachment — mặc định an toàn không đổi.
+    const anhTai = await apiNv.get(`/api/v1/task-files/${banAnh}/download`);
+    expect(anhTai.headers['content-disposition']).toContain('attachment');
+
+    // Excel/PowerPoint KHÔNG nằm trong `MIME_XEM_INLINE` ⇒ dù xin `?inline=1` vẫn phải attachment,
+    // không để trình duyệt tự quyết định làm gì với một file Office.
+    const maX = await taoNhiemVuCho('TF-14c-x');
+    await nopFile(apiNv, maX, XLSX);
+    const banX = (await docFiles(apiNv, maX))[0].bans[0].id;
+    const xin = await apiNv.get(`/api/v1/task-files/${banX}/download?inline=1`);
+    expect(xin.headers['content-disposition']).toContain('attachment');
   });
 
   it('TC-TF-15: TRƯỞNG PHÒNG sửa được nhiệm vụ do Cán bộ tạo (phân quyền §6) + editor mode', async () => {
@@ -604,6 +673,32 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     const trangPdf = await apiNv.get(`/api/v1/task-file-versions/${banPdf}/editor`);
     expect(trangPdf.text).toContain('"documentType":"pdf"');
     expect(trangPdf.text).toContain('"fileType":"pdf"');
+  });
+
+  it('TC-TF-16b: editor mở Excel (cell) + PowerPoint (slide); ẢNH thì 400 với câu rõ', async () => {
+    // Người dùng chốt 2026-09-03: bật ✎ sửa trực tuyến cho Excel và PowerPoint. DS chọn bộ soạn
+    // thảo theo `documentType` nên gán sai là editor lỗi ngay — chốt cả bốn đuôi bằng test.
+    for (const [file, loai] of [
+      [XLSX, 'cell'],
+      [XLS, 'cell'],
+      [PPTX, 'slide'],
+      [PPT, 'slide'],
+    ]) {
+      const ma = await taoNhiemVuCho(`TF-16b-${file.ten}`);
+      await nopFile(apiNv, ma, file);
+      const ban = (await docFiles(apiNv, ma))[0].bans[0].id;
+      const trang = await apiNv.get(`/api/v1/task-file-versions/${ban}/editor`);
+      expect(trang.status, `${file.ten}: ${trang.text?.slice(0, 200)}`).toBe(200);
+      expect(trang.text).toContain(`"documentType":"${loai}"`);
+    }
+    // ẢNH: DS không có bộ soạn thảo nào. Trước đây `?? 'word'` biến mọi đuôi lạ thành Word ⇒ mở ra
+    // một trang editor lỗi không ai hiểu; nay phải là 400 với câu đọc được.
+    const maAnh = await taoNhiemVuCho('TF-16b-anh');
+    await nopFile(apiNv, maAnh, PNG);
+    const banAnh = (await docFiles(apiNv, maAnh))[0].bans[0].id;
+    const trangAnh = await apiNv.get(`/api/v1/task-file-versions/${banAnh}/editor`);
+    expect(trangAnh.status).toBe(400);
+    expect(trangAnh.body.error.message).toContain('Không sửa trực tuyến được');
   });
 
   it('TC-TF-17: /raw thiếu file trên đĩa ⇒ 404 gọn, KHÔNG làm sập máy chủ', async () => {
