@@ -95,6 +95,9 @@ export default [
       // verdict theo vai + giá trị hiệu lực, bảng luồng, escape + chặn sai đuôi (TCKQ, 014) —
       // app.js thật trong jsdom, fetch giả.
       'tests/unit/task-files-ui.test.js',
+      // nav-cho-duyet.test.js: mục «Hàng chờ phê duyệt» trên thanh điều hướng phải mở cho MỌI vai
+      // có cửa duyệt — admin/Phó GĐ/TP/PP (TC-NAV, 2026-09-03) — app.js thật trong jsdom, fetch giả.
+      'tests/unit/nav-cho-duyet.test.js',
     ],
     languageOptions: {
       globals: {
