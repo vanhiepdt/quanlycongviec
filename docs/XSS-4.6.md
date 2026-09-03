@@ -579,6 +579,12 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     `escapeHtmlAttr` cho class), TC-SEC của `project-details-phan-cong.test.js` canh riêng.
   - Không có lỗ nào dùng `innerHTML +=` hay ghép chuỗi từ `location.*`; url editor vẫn qua
     `safeUrl` (luật TC-SEC-13 sau Vòng 14续2).
+- **Vòng 14续7 (2026-09-03 — 3 lỗi người dùng)**: pin **giữ nguyên 101/830**. Ba bản vá không thêm
+  chỗ ghi HTML nào: (a) `capNhatNavChoDuyet()` chỉ đọc/ghi `classList` và `textContent` của hai thẻ
+  có sẵn trong `web/index.html` — `textContent` **không** phải lỗ XSS nên `dem-xss.mjs` không đếm,
+  đây là cách đúng cho badge số; (b) sửa `dev-vong14.sql` là SQL, ngoài phạm vi đếm; (c) test mới
+  không nằm trong `web/`. Nếu sau này badge đổi sang `innerHTML` thì pin phải tăng — đừng làm, số
+  thuần dùng `textContent` là đủ.
 
 
 

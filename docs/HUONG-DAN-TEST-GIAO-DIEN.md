@@ -4,7 +4,9 @@ Viết ngày 2026-08-25, cho nhánh `vps/phase-4-frontend`.
 Bổ sung **mục 1.0** (script `chay-test.bat`) và **mục 9b** (kết quả nhiệm vụ là file, ONLYOFFICE,
 trang «Hàng chờ phê duyệt») ngày **2026-09-02**, thêm **mục 9b.6** (8 việc: phân công của Trưởng
 phòng, cập nhật tại chỗ, siết lãnh đạo phụ trách, bảng cây hàng chờ, nộp bản mới, thanh tải lên,
-giao diện công việc cha) ngày **2026-09-03** — tất cả trên nhánh `vps/ket-qua-file`.
+giao diện công việc cha) và **mục 9b.7** (3 lỗi: «Tải lên thất bại: máy chủ từ chối», Giám đốc/Phó
+Giám đốc không thấy mục «Hàng chờ phê duyệt», hàng chờ trống) ngày **2026-09-03** — tất cả trên
+nhánh `vps/ket-qua-file`.
 
 Mục đích: bạn mở trình duyệt, bấm bằng tay, tự thấy Phase 4 làm được gì. Mọi con số và câu
 thông báo trong tài liệu này đều **đã chạy thật** qua đúng đường người dùng đi
@@ -783,6 +785,50 @@ lý do. File 15–20 MB dễ thấy nhất; file nhỏ thì nhấp nháy rất n
 dòng** (Người theo dõi · Lãnh đạo phụ trách · Cán bộ), bấm **«Chi tiết»** mới bung đầy đủ. Cây bên
 dưới mỗi nhánh một khung có **gờ màu**; nhánh **«Nhiệm vụ trực thuộc công việc»** (không qua công
 việc con) dùng **màu khác** để không lẫn với nhiệm vụ nằm trong công việc con.
+
+### 9b.7 Ba lỗi của vòng 2026-09-03 (续7) — bấm để tự nghiệm
+
+Cần bản **`app.js 20260903-1`** (Console phải in đúng số đó) và **seed lại bộ Vòng 14**:
+`chay-test.bat /v14 /f`. Bước seed là **bắt buộc** cho mục này — data cũ để cột `leader_ids` rỗng,
+xem lý do ở (2) bên dưới.
+
+**(1) Giám đốc và Phó Giám đốc thấy mục «Hàng chờ phê duyệt».** Đăng nhập `gd@test.local` (Giám đốc)
+→ thanh điều hướng **phải có** mục «Hàng chờ phê duyệt», badge là **tổng hai hàng chờ** (file + cây
+công việc). Làm lại với `pgd@test.local`. Trước bản này chỉ TP/PP thấy mục: lời gọi cập nhật nằm
+trong nhánh «đổi vai TP/PP/Phó GĐ» nên admin không bao giờ chạy tới — vai quyền cao nhất lại là vai
+duy nhất không thấy cửa duyệt, và **không có lỗi nào hiện ra**.
+
+So badge với `nv1@test.local`: cán bộ **không** thấy mục (họ không có cửa duyệt nào). Đếm thẳng bằng
+Console nếu muốn chắc:
+
+```js
+document.getElementById('nav-cho-duyet').className;      // KHÔNG được chứa 'hidden'
+document.getElementById('nav-cho-duyet-badge').textContent;
+```
+
+**(2) «Tải lên thất bại: máy chủ từ chối» đã hết.** `tp@test.local` → mở NV-02 → khối **«Kết quả»** →
+«Tải file lên» một `.docx` → phải lên được. Nguyên nhân cũ **không** phải upload hỏng: vòng trước
+siết mọi cửa file theo ô «Lãnh đạo phòng phụ trách» (`leader_ids`), nhưng bộ seed để cột đó **rỗng**
+⇒ không ai là lãnh đạo phụ trách của nhiệm vụ nào, nên máy chủ trả 403 và giao diện chỉ nói được câu
+chung «máy chủ từ chối». Seed mới gán sẵn: NV-02/NV-04 cho **Trưởng phòng**, NV-01/NV-03/NV-05 cho
+**Phó phòng** — nên hãy thử **cả hai** tài khoản, mỗi người chỉ xử được phần của mình.
+
+Xem thẳng ai phụ trách nhiệm vụ nào:
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT i.code, i.name, u.email FROM work_items i
+     LEFT JOIN users u ON u.id = ANY(i.leader_ids)
+    WHERE i.level = 3 ORDER BY i.code;"
+```
+
+**(3) Hàng chờ không còn trống.** `tp@test.local` → «Hàng chờ phê duyệt» → tab «Phê duyệt kết quả»:
+phải có dòng của **NV-02** và **NV-04**. Đăng nhập `pp@test.local`: thấy **NV-03** (`can-sua`), không
+thấy NV-02/NV-04. Đây là cùng một nguyên nhân với (2) — hàng chờ và cửa nộp/duyệt nay đọc **cùng một
+luật**, nên nếu một trong hai chỗ trống thì cả hai đều trống, đừng đi tìm hai lỗi khác nhau.
+
+Nếu vẫn trống sau khi seed: gần như chắc là trình duyệt còn `app.js` bản cũ (Ctrl+F5) hoặc máy chủ
+đang nối CSDL khác — bước `[7/7]` của `chay-test.bat` in ra CSDL đang nối, đọc dòng đó trước.
 
 
 ---
