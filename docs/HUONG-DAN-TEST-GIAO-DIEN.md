@@ -2,7 +2,9 @@
 
 Viết ngày 2026-08-25, cho nhánh `vps/phase-4-frontend`.
 Bổ sung **mục 1.0** (script `chay-test.bat`) và **mục 9b** (kết quả nhiệm vụ là file, ONLYOFFICE,
-trang «Hàng chờ phê duyệt») ngày **2026-09-02** trên nhánh `vps/ket-qua-file`.
+trang «Hàng chờ phê duyệt») ngày **2026-09-02**, thêm **mục 9b.6** (8 việc: phân công của Trưởng
+phòng, cập nhật tại chỗ, siết lãnh đạo phụ trách, bảng cây hàng chờ, nộp bản mới, thanh tải lên,
+giao diện công việc cha) ngày **2026-09-03** — tất cả trên nhánh `vps/ket-qua-file`.
 
 Mục đích: bạn mở trình duyệt, bấm bằng tay, tự thấy Phase 4 làm được gì. Mọi con số và câu
 thông báo trong tài liệu này đều **đã chạy thật** qua đúng đường người dùng đi
@@ -742,6 +744,47 @@ tp@test.local   → «Hàng chờ phê duyệt» → tab «Phê duyệt kết qu
                 → bấm ✎ → sửa → «Lưu thành bản mới» → «Lịch sử»  (9b.3)
 ```
 
+### 9b.6 Tám việc của vòng 2026-09-03 — bấm để tự nghiệm
+
+Cần bản `app.js 20260902-2` trở lên (Console phải in đúng số đó). Bộ seed Vòng 14.
+
+**(1) Trưởng phòng chọn được cán bộ khi tạo nhiệm vụ.** `tp@test.local` → **Quản lý công việc** →
+mở `CV001` → «Thêm nhiệm vụ» → ô **«Cán bộ trực tiếp»** phải có `nv1@`, `nv2@` (trước đây **rỗng**,
+không lỗi nào hiện ra). Kiểm nhanh bằng Console: `document.querySelectorAll('select[name="assigneeId"] option').length`
+phải > 1.
+
+**(2) Tạo xong hiện ngay, không phải tắt-mở modal.** Đang mở modal chi tiết `CV001` → «Thêm công
+việc con» → lưu → dòng mới **xuất hiện luôn trong cây** của modal đang mở.
+
+**(3) Nhân viên không sửa được «Lãnh đạo phòng phụ trách».** `nv1@test.local` → mở một nhiệm vụ của
+mình → ô đó **xám (`disabled`)** kèm câu «Do lãnh đạo phòng phân công». Đăng nhập `tp@` mở đúng
+nhiệm vụ ấy thì ô sửa được. Đây là chặn **leo quyền**, không phải chuyện thẩm mỹ: mọi cửa duyệt file
+đọc `leader_ids`, nên tự đổi ô này là tự chọn người duyệt mình.
+
+**(4) Chỉ lãnh đạo phòng ĐƯỢC GÁN mới thấy và xử.** Mở NV-02 bằng `tp@`, xoá `pp@` khỏi ô «Lãnh đạo
+phòng phụ trách», lưu → đăng nhập `pp@test.local` → **«Hàng chờ phê duyệt» → «Phê duyệt kết quả»**:
+dòng NV-02 **mất hẳn** (trước đây vẫn thấy và bấm được, chỉ bị chặn ở request cuối). Gán lại thì
+dòng quay về. Lưu ý **có chủ ý**: nhiệm vụ chưa gán lãnh đạo nào thì không TP/PP nào thấy — `gd@`
+và `pgd@` vẫn xử được nên file không treo.
+
+**(5) Hàng chờ là BẢNG THEO CÂY.** Cùng trang đó: **công việc cha** một hàng đậm → **công việc con**
+thụt vào → **nhiệm vụ** thụt sâu hơn (bấm tên là mở nhiệm vụ) → **file** ở hàng cuối, 5 cột: tên
+file · trạng thái · bản mới nhất · **Ý kiến** · hành động. Cột «Ý kiến» chỉ hiện chữ **«Xem ý kiến
+(n)»**, bấm mới mở nhiệm vụ để đọc — đúng yêu cầu «độ rộng không đủ».
+
+**(6) Nộp bản mới ngay trong hàng chờ.** Trên dòng file có nút **⬆** → chọn `.docx/.pdf` → bảng tự
+nạp lại, số bản tăng. Không phải mở modal nhiệm vụ nữa.
+
+**(7) Thanh trạng thái tải lên.** Trong lúc tải, ngay dưới bảng (hoặc dưới khối «Kết quả» nếu làm
+trong modal) hiện **«Đang tải lên: <tên file>»**, xong đổi thành dấu ✓, lỗi thì đổi màu đỏ kèm câu
+lý do. File 15–20 MB dễ thấy nhất; file nhỏ thì nhấp nháy rất nhanh.
+
+**(8) Giao diện công việc cha.** Mở modal chi tiết một công việc: khối phân công giờ là **3 chip một
+dòng** (Người theo dõi · Lãnh đạo phụ trách · Cán bộ), bấm **«Chi tiết»** mới bung đầy đủ. Cây bên
+dưới mỗi nhánh một khung có **gờ màu**; nhánh **«Nhiệm vụ trực thuộc công việc»** (không qua công
+việc con) dùng **màu khác** để không lẫn với nhiệm vụ nằm trong công việc con.
+
+
 ---
 
 ## 10. Dọn dẹp sau buổi test
@@ -816,6 +859,13 @@ sạch thì xoá thư mục đó.
 | **Lãnh đạo phòng phụ trách xem/sửa/duyệt + nhận thông báo** | ✅ | mục **9b.2** |
 | **Sửa trực tuyến ONLYOFFICE + «Lưu thành bản mới»** | ✅ | mục **9b.3** — cần `ONLYOFFICE_*` trong `deploy/.env` |
 | **Trang «Hàng chờ phê duyệt» hai tab con** | ✅ | mục **9b.4** |
+| **Trưởng phòng chọn được cán bộ khi tạo nhiệm vụ** | ✅ | mục **9b.6** (1) |
+| **Tạo công việc con hiện ngay, không phải tắt-mở modal** | ✅ | mục **9b.6** (2) |
+| **Nhân viên không sửa được «Lãnh đạo phòng phụ trách»** | ✅ | mục **9b.6** (3) — chặn leo quyền |
+| **Chỉ lãnh đạo phòng ĐƯỢC GÁN mới thấy/xử file** | ✅ | mục **9b.6** (4) |
+| **Hàng chờ dạng bảng theo cây + cột «Xem ý kiến»** | ✅ | mục **9b.6** (5) |
+| **Nộp bản mới ngay trong hàng chờ + thanh tải lên** | ✅ | mục **9b.6** (6)(7) |
+| **Khối phân công thu gọn, cây tách bạch từng nhánh** | ✅ | mục **9b.6** (8) |
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |

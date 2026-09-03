@@ -563,5 +563,22 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   app.js. Tên nhiệm vụ và tên file là dữ liệu người dùng nhập nên nội suy qua `escapeHtmlServer()`
   mới thêm trong service (hàm riêng vì `escapeHtml` của app.js không dùng được ở máy chủ); mã bản là
   `Number(...)`; đoạn script của nút Lưu chỉ đọc DOM và cookie CSRF, không nội suy dữ liệu nào.
+- **Vòng 14续6 (2026-09-02/03 — 8 lỗi/yêu cầu người dùng)**: pin **101/811 → 101/830** (+19 giá
+  trị, **số chỗ ghi KHÔNG đổi**). Toàn bộ phần thêm nằm trong hai lỗ ghi đã pin sẵn của tab «Phê
+  duyệt kết quả», nên đây là ca đầu tiên trong dự án mà `sink` đứng yên còn `gia_tri` tăng — đừng
+  ngờ bộ đếm sai. Chi tiết 19 giá trị mới:
+  - `buildBangChoDuyetKetQua` **5** (một `<th>` cho mỗi cột: nhãn + class thêm) — hàm dựng bảng nên
+    mọi tiêu đề đi qua đúng một lỗ `o(t, them)`.
+  - `buildHangCayChoDuyet` **6** (class hàng, icon, tên cấp, **mã trong `onclick` qua
+    `escapeForInlineHandler`**, mã hiện bên cạnh, tên phòng) — hàng tiêu đề của cây.
+  - `buildDongChoDuyetKetQua` **+8** (thụt cột theo có/không có công việc con, số bản, số ý kiến,
+    mã nhiệm vụ trong `onclick` của nút «Xem ý kiến», id nhóm + mã nhiệm vụ trong `onclick` của nút
+    «Nộp bản mới», hai lỗ còn lại của ô «Bản mới nhất»).
+  - `khoiPhanCongGon` (project-details.js) **KHÔNG vào phép đếm** — bộ `tools/dem-xss.mjs` chỉ soát
+    `web/assets/js/app.js`. File đó vẫn thoát tại lỗ như cũ (`escapeHtml` cho nhãn/giá trị chip,
+    `escapeHtmlAttr` cho class), TC-SEC của `project-details-phan-cong.test.js` canh riêng.
+  - Không có lỗ nào dùng `innerHTML +=` hay ghép chuỗi từ `location.*`; url editor vẫn qua
+    `safeUrl` (luật TC-SEC-13 sau Vòng 14续2).
+
 
 
