@@ -32,15 +32,68 @@ import * as itemsRepo from '../workItems/repo.js';
 import * as notificationsRepo from '../notifications/repo.js';
 import * as repo from './repo.js';
 
-/** Giới hạn dung lượng mỗi bản (§13.4 mục 22 — chờ người dùng đổi nếu khác). */
-export const DUNG_LUONG_TOI_DA = 20 * 1024 * 1024; // 20 MB
+/**
+ * Giới hạn dung lượng mỗi bản. Người dùng chốt 2026-09-03: nới 20 MB → **50 MB** cùng lúc mở thêm
+ * PowerPoint/Excel/ảnh — slide nhiều ảnh và ảnh máy điện thoại đời mới vượt 20 MB là chuyện thường.
+ *
+ * Multer đang dùng `memoryStorage` ⇒ mỗi file nằm TRỌN trong RAM lúc tải; đây là lý do không nâng
+ * cao hơn nữa (§13.5 — nâng tiếp thì phải chuyển multer sang ghi tạm ra đĩa trước).
+ */
+export const DUNG_LUONG_TOI_DA = 50 * 1024 * 1024; // 50 MB
 
-/** Loại file nhận: đuôi → mimeType. Đuôi và mimeType phải LÀ CẶP (xem whitelist trong `nop`). */
+/** Nhãn dung lượng dùng trong MỌI câu lỗi — một chỗ, khỏi lệch số giữa các câu. */
+export const NHAN_DUNG_LUONG = '50 MB';
+
+/**
+ * Loại file nhận: đuôi → DANH SÁCH mimeType hợp lệ của đuôi đó. Đuôi và mimeType phải LÀ CẶP
+ * (xem whitelist trong `nop`); mime đầu danh sách là mime chuẩn, các mime sau là biến thể máy
+ * khách cũ vẫn còn gửi (Office 2003 và vài trình duyệt cũ).
+ *
+ * KHÔNG nhận `.svg`: SVG là XML chạy được `<script>`, mở inline trên trình duyệt là lỗ XSS lưu
+ * trữ. Ảnh raster (jpg/png/gif/webp) không chạy được mã nên mở inline an toàn — xem `MIME_XEM_INLINE`.
+ */
 export const DUOI_FILE_HOP_LE = Object.freeze({
-  '.doc': 'application/msword',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.pdf': 'application/pdf',
+  '.doc': ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.pdf': ['application/pdf'],
+  '.xls': ['application/vnd.ms-excel', 'application/excel', 'application/x-msexcel'],
+  '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  '.ppt': [
+    'application/vnd.ms-powerpoint',
+    'application/mspowerpoint',
+    'application/x-mspowerpoint',
+  ],
+  '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  '.jpg': ['image/jpeg', 'image/pjpeg'],
+  '.jpeg': ['image/jpeg', 'image/pjpeg'],
+  '.png': ['image/png'],
+  '.gif': ['image/gif'],
+  '.webp': ['image/webp'],
 });
+
+/** Regex đuôi hợp lệ — SINH từ chính bảng trên để hai chỗ không bao giờ lệch nhau. */
+const RE_DUOI_HOP_LE = new RegExp(
+  `\\.(${Object.keys(DUOI_FILE_HOP_LE)
+    .map((d) => d.slice(1))
+    .join('|')})$`,
+  'i'
+);
+
+/** Danh sách đuôi in ra trong câu lỗi — cũng sinh từ bảng, khỏi phải sửa hai nơi. */
+const DANH_SACH_DUOI = Object.keys(DUOI_FILE_HOP_LE).join(' ');
+
+/**
+ * Những mimeType được MỞ XEM ngay trên trình duyệt (`?inline=1`). Chỉ PDF và ảnh raster: không có
+ * SVG nên không có đường chạy mã; helmet đã đặt `X-Content-Type-Options: nosniff` nên trình duyệt
+ * không tự đoán lại kiểu. Mọi thứ khác luôn tải về dạng attachment.
+ */
+export const MIME_XEM_INLINE = Object.freeze([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
 
 /** Gốc lưu file: server/storage/ket-qua/{itemId}/v{n}-{uuid}.{ext} — đã đưa vào .gitignore. */
 export const GOC_STORAGE = path.resolve(process.cwd(), 'storage', 'ket-qua');
@@ -195,17 +248,23 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
   // mime của Word là dữ liệu dối trá); riêng 'application/octet-stream' được tha cho máy khách
   // cũ không đặt đúng mime. TÊN GỐC chỉ để hiển thị, không bao giờ làm đường dẫn (tên vật lý
   // sinh sẵn bên dưới — cấm path traversal); `tenGocUtf8` trả lại dấu tiếng Việt bị busboy làm hỏng.
+  //
+  // 2026-09-03: mở thêm Excel/PowerPoint/ảnh (người dùng chốt) ⇒ mỗi đuôi có thể có NHIỀU mime hợp
+  // lệ (Office 2003 gửi mime khác nhau tuỳ trình duyệt) nên so bằng `includes`, không so bằng `===`.
   const tenSan = tenGocUtf8(tenGoc);
-  const duoi = (tenSan.match(/\.(doc|docx|pdf)$/i) ?? [])[0]?.toLowerCase();
+  const duoi = (tenSan.match(RE_DUOI_HOP_LE) ?? [])[0]?.toLowerCase();
   const mimeChoDuoi = duoi ? DUOI_FILE_HOP_LE[duoi] : null;
   const mimeGui = String(loaiMime ?? '');
-  if (!duoi || (mimeGui !== mimeChoDuoi && mimeGui !== 'application/octet-stream')) {
-    throw badRequest('Chỉ nhận file Word (.doc/.docx) hoặc PDF, dung lượng tối đa 20 MB', 'file');
+  if (!duoi || !(mimeChoDuoi.includes(mimeGui) || mimeGui === 'application/octet-stream')) {
+    throw badRequest(
+      `Chỉ nhận file ${DANH_SACH_DUOI}, dung lượng tối đa ${NHAN_DUNG_LUONG}`,
+      'file'
+    );
   }
   const kichThuoc = Number(buffer?.length ?? 0);
   if (!kichThuoc) throw badRequest('File rỗng hoặc không đọc được', 'file');
   if (kichThuoc > DUNG_LUONG_TOI_DA) {
-    throw badRequest('File vượt quá dung lượng tối đa 20 MB', 'file');
+    throw badRequest(`File vượt quá dung lượng tối đa ${NHAN_DUNG_LUONG}`, 'file');
   }
 
   return withTransaction(async (client) => {
@@ -833,6 +892,12 @@ export async function moEditor(user, versionId) {
   const duocSua = duocSuaTrucTiep(user, nhom, item);
   const callbackBase = env.ONLYOFFICE_CALLBACK_BASE || env.APP_BASE_URL;
   const duoi = duoiBan(ban.ten_luu);
+  // Ảnh (jpg/png/gif/webp) KHÔNG có bộ soạn thảo nào trong DS. Trước đây `?? 'word'` biến mọi đuôi
+  // lạ thành Word ⇒ mở ảnh là được một trang editor lỗi không ai hiểu; nay trả câu rõ ngay.
+  const documentType = DOCUMENT_TYPE_THEO_DUOI[duoi];
+  if (!documentType) {
+    throw badRequest(`Không sửa trực tuyến được file .${duoi} — hãy tải về để xem`);
+  }
   const config = {
     document: {
       fileType: duoi,
@@ -841,7 +906,7 @@ export async function moEditor(user, versionId) {
       url: `${callbackBase}/api/v1/task-files-ds/raw/${ban.id}?token=${tokenDs('raw', ban.id)}`,
       permissions: { edit: duocSua, comment: duocSua, download: true },
     },
-    documentType: DOCUMENT_TYPE_THEO_DUOI[duoi] ?? 'word',
+    documentType,
     editorConfig: {
       callbackUrl: `${callbackBase}/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`,
       lang: 'vi',
@@ -938,12 +1003,25 @@ function duocSuaTrucTiep(user, nhom, item) {
  * ONLYOFFICE dùng ĐUÔI FILE để chọn bộ soạn thảo. Trước đây ghi cứng `'word'` nên mở file `.pdf`
  * là DS báo lỗi định dạng — bộ seed Vòng 14 có `quy-che-thi-sat-hach.pdf` nên gặp ngay.
  * Bảng đuôi → documentType lấy đúng theo tài liệu Docs API (`word` | `cell` | `slide` | `pdf`).
+ *
+ * 2026-09-03 (người dùng chốt): mở nút ✎ cho Excel (`cell`) và PowerPoint (`slide`) — DS hỗ trợ
+ * sẵn hai bộ này. ẢNH KHÔNG có trong bảng ⇒ `duocMoEditor` trả false ⇒ nút ✎ không hiện, vì DS
+ * không sửa được ảnh.
  */
 const DOCUMENT_TYPE_THEO_DUOI = Object.freeze({
   doc: 'word',
   docx: 'word',
   pdf: 'pdf',
+  xls: 'cell',
+  xlsx: 'cell',
+  ppt: 'slide',
+  pptx: 'slide',
 });
+
+/** Đuôi này có mở được editor trực tuyến không — client hỏi để ẩn/hiện nút ✎ cho từng bản. */
+export function duocMoEditor(tenLuu) {
+  return Object.hasOwn(DOCUMENT_TYPE_THEO_DUOI, duoiBan(tenLuu));
+}
 
 /** Đuôi (chữ thường, không dấu chấm) của một bản đã lưu. Không dò được thì coi là docx. */
 function duoiBan(tenLuu) {
@@ -1167,7 +1245,7 @@ export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
   const buffer = Buffer.from(await phanHoi.arrayBuffer());
   if (buffer.length === 0) throw badRequest('Bản đã sửa rỗng');
   if (buffer.length > DUNG_LUONG_TOI_DA)
-    throw badRequest('Bản đã sửa vượt quá dung lượng tối đa 20 MB');
+    throw badRequest(`Bản đã sửa vượt quá dung lượng tối đa ${NHAN_DUNG_LUONG}`);
 
   // Người sửa phải là người CÓ THẬT và còn hoạt động; DS gửi id lạ (phiên cũ, dữ liệu rác) thì lùi
   // về người nộp bản đang sửa — không bao giờ để `uploaded_by` trỏ vào id không tồn tại.

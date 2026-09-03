@@ -41,7 +41,7 @@ function chuyenLoiMulter(err, req, res, next) {
   if (err && err.name === 'MulterError') {
     const thongDiep =
       err.code === 'LIMIT_FILE_SIZE'
-        ? 'File vượt quá dung lượng tối đa 20 MB'
+        ? `File vượt quá dung lượng tối đa ${service.NHAN_DUNG_LUONG}`
         : 'Không đọc được file gửi lên, vui lòng thử lại';
     return next(new AppError('VALIDATION_ERROR', thongDiep, { field: 'file' }));
   }
@@ -77,7 +77,7 @@ taskFilesRouter.post(
   async (req, res, next) => {
     try {
       if (!req.file) {
-        throw Object.assign(new Error('Vui lòng chọn file Word/PDF để nộp'), {
+        throw Object.assign(new Error('Vui lòng chọn file kết quả để nộp'), {
           expected: true,
           code: 'VALIDATION_ERROR',
           status: 400,
@@ -108,7 +108,7 @@ taskFilesRouter.post(
       if (err && err.name === 'MulterError') {
         const thongDiep =
           err.code === 'LIMIT_FILE_SIZE'
-            ? 'File vượt quá dung lượng tối đa 20 MB'
+            ? `File vượt quá dung lượng tối đa ${service.NHAN_DUNG_LUONG}`
             : 'Không đọc được file gửi lên, vui lòng thử lại';
         return next(new AppError('VALIDATION_ERROR', thongDiep, { field: 'file' }));
       }
@@ -212,7 +212,11 @@ taskFilesRouter.get(
           status: 404,
         });
       }
-      const inline = req.validatedQuery?.inline === '1' && ban.loai_mime === 'application/pdf';
+      // `?inline=1` = mở NGAY trên trình duyệt thay vì tải về. Chỉ cho PDF và ảnh raster
+      // (`MIME_XEM_INLINE`): không có SVG nên không có đường chạy mã, và helmet đã đặt nosniff.
+      // Mime nào ngoài danh sách thì luôn về nhánh `attachment`.
+      const inline =
+        req.validatedQuery?.inline === '1' && service.MIME_XEM_INLINE.includes(ban.loai_mime);
       res.setHeader('Content-Type', ban.loai_mime);
       res.setHeader('Content-Length', thongKe.size);
       res.setHeader(
