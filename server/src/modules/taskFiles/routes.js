@@ -122,6 +122,9 @@ taskFilesRouter.get('/work-items/:ref/files', async (req, res, next) => {
     return ok(res, {
       item: req.params.ref,
       nhom: await service.doc(req.user, req.params.ref),
+      // Quyền của CHÍNH người đang xem trên luồng file của nhiệm vụ này (luật siết `leader_ids`
+      // 2026-09-02) — client mở/ẩn nút «Tải file lên» theo `quyen.duocNop`, không tự suy lại luật.
+      quyen: await service.quyenFile(req.user, req.params.ref),
       // Cờ bật/tắt ONLYOFFICE — client đọc để hiện/ẩn nút ✎ sửa trực tuyến.
       onlyOffice: service.onlyOfficeBat(),
     });

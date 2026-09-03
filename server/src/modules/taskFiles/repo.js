@@ -209,16 +209,22 @@ export async function lanhDaoPhuTrach(phongId, client = null) {
  * HÀNG CHỜ PHÊ DUYỆT KẾT QUẢ (tab riêng, người dùng chốt 2026-09-02) — các nhóm file đang chờ
  * CHÍNH người này xử, kèm tên nhiệm vụ + mã + bản mới nhất.
  *
- * Ai thấy gì (khớp `BANG_VERDICT` của service — không có luật quyền thứ hai ở SQL này, chỉ có
- * PHẠM VI):
- *   TP/PP        : 'cho-xem' + 'can-sua' của nhiệm vụ trong PHÒNG MÌNH.
+ * Ai thấy gì (khớp `BANG_VERDICT` + `laLanhDaoPhuTrachNhiemVu` của service — không có luật quyền
+ * thứ hai ở SQL này, chỉ có PHẠM VI):
+ *   TP/PP        : 'cho-xem' + 'can-sua' của nhiệm vụ mà họ ĐƯỢC NÊU trong `leader_ids`.
  *   Phó Giám đốc : 'cho-lanh-dao' của nhiệm vụ trong các phòng mình PHỤ TRÁCH.
  *   admin        : cả ba trạng thái, mọi phòng.
  * Các vai khác: rỗng — họ không có cửa duyệt nào.
  *
+ * 2026-09-02 (siết theo yêu cầu «không phải lãnh đạo phòng phụ trách nhiệm vụ đấy vẫn sửa, phê
+ * duyệt được»): điều kiện của TP/PP KHÔNG còn là `i.department_id = phòng mình` mà là
+ * `user.id = ANY(i.leader_ids)`. Nhiệm vụ chưa gán lãnh đạo ⇒ KHÔNG TP/PP nào thấy (phải gán
+ * trước) — đúng phương án «chặt tuyệt đối» người dùng chọn; admin/Phó GĐ vẫn xử được nên file
+ * không bao giờ bị treo vĩnh viễn.
+ *
  * `phongIds` rỗng với Phó Giám đốc chưa được gắn phòng nào ⇒ trả rỗng, không phải trả tất cả.
  */
-export async function listChoDuyetKetQua({ vai, phongId, phongIds }, client = null) {
+export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = null) {
   let dieuKienTrangThai;
   let dieuKienPhong;
   const tham = [];
@@ -226,10 +232,10 @@ export async function listChoDuyetKetQua({ vai, phongId, phongIds }, client = nu
     dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua', 'cho-lanh-dao')`;
     dieuKienPhong = 'TRUE';
   } else if (vai === 'Trưởng phòng' || vai === 'Phó phòng') {
-    if (phongId == null) return [];
+    if (nguoiId == null) return [];
     dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua')`;
-    tham.push(phongId);
-    dieuKienPhong = `i.department_id = $${tham.length}`;
+    tham.push(Number(nguoiId));
+    dieuKienPhong = `$${tham.length}::bigint = ANY(i.leader_ids)`;
   } else if (vai === 'Phó Giám đốc') {
     const ds = (phongIds ?? []).map(Number).filter(Number.isFinite);
     if (ds.length === 0) return [];
@@ -242,13 +248,22 @@ export async function listChoDuyetKetQua({ vai, phongId, phongIds }, client = nu
   const { rows } = await db(client).query(
     `SELECT f.id, f.item_id, f.ten_goc, f.trang_thai, f.created_at,
             cu.full_name AS ten_nguoi_tao,
-            i.code AS ma_nhiem_vu, i.name AS ten_nhiem_vu, i.department_id,
+            i.code AS ma_nhiem_vu, i.name AS ten_nhiem_vu, i.department_id, i.leader_ids,
+            i.assignee_id, i.parent_id, i.work_id,
+            cha.code AS ma_cv_con, cha.name AS ten_cv_con,
+            w.code AS ma_cong_viec, w.name AS ten_cong_viec,
             d.name AS ten_phong,
             v.id AS ban_cuoi_id, v.version_no AS ban_cuoi_so, v.uploaded_at AS ban_cuoi_luc,
-            vu.full_name AS ban_cuoi_nguoi
+            vu.full_name AS ban_cuoi_nguoi,
+            (SELECT count(*) FROM task_file_versions tv WHERE tv.file_id = f.id)::int AS so_ban,
+            (SELECT count(*) FROM task_file_comments tc
+               JOIN task_file_versions tv2 ON tv2.id = tc.version_id
+              WHERE tv2.file_id = f.id)::int AS so_y_kien
        FROM task_files f
        JOIN users cu       ON cu.id = f.created_by
        JOIN work_items i   ON i.id = f.item_id
+       JOIN works w        ON w.id = i.work_id
+       LEFT JOIN work_items cha ON cha.id = i.parent_id
        LEFT JOIN departments d ON d.id = i.department_id
        LEFT JOIN LATERAL (
          SELECT id, version_no, uploaded_at, uploaded_by
@@ -258,9 +273,27 @@ export async function listChoDuyetKetQua({ vai, phongId, phongIds }, client = nu
        ) v ON TRUE
        LEFT JOIN users vu  ON vu.id = v.uploaded_by
       WHERE ${dieuKienTrangThai} AND ${dieuKienPhong}
-      ORDER BY COALESCE(v.uploaded_at, f.created_at) DESC, f.id DESC
+      ORDER BY w.code, cha.code NULLS FIRST, i.code,
+               COALESCE(v.uploaded_at, f.created_at) DESC, f.id DESC
       LIMIT 200`,
     tham
+  );
+  return rows;
+}
+
+/**
+ * Nhiều người theo danh sách id — dùng cho `leader_ids` của MỘT nhiệm vụ (2026-09-02: người dùng
+ * chốt chỉ LÃNH ĐẠO PHÒNG PHỤ TRÁCH của chính nhiệm vụ đó mới xử được file, nên người nhận thông
+ * báo cũng phải đúng danh sách này chứ không phải mọi TP/PP của phòng).
+ * Id không tồn tại / đã vô hiệu hoá thì rơi ra — gọi xong phải xử lý trường hợp mảng rỗng.
+ */
+export async function nguoiTheoIds(ids, client = null) {
+  const ds = (ids ?? []).map(Number).filter(Number.isFinite);
+  if (ds.length === 0) return [];
+  const { rows } = await db(client).query(
+    `SELECT id, full_name, role FROM users
+      WHERE id = ANY($1::bigint[]) AND is_active ORDER BY id`,
+    [ds]
   );
   return rows;
 }

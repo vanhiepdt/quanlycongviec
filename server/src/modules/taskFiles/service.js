@@ -60,6 +60,55 @@ const DO_DAI_NOI_DUNG_TOI_THIEU = 10;
 const sameId = (a, b) => a != null && b != null && Number(a) === Number(b);
 
 /**
+ * LÃNH ĐẠO PHÒNG PHỤ TRÁCH ĐÚNG NHIỆM VỤ NÀY hay không — luật SIẾT 2026-09-02.
+ *
+ * Người dùng báo: «Hàng chờ phê duyệt, không phải lãnh đạo phòng phụ trách nhiệm vụ đấy vẫn sửa,
+ * phê duyệt được» và chọn phương án CHẶT TUYỆT ĐỐI. Trước đây phạm vi của TP/PP là cả PHÒNG
+ * (`inScope` case 'Trưởng phòng') nên mọi TP/PP trong phòng xử được mọi file của phòng.
+ *
+ * Nay với hai vai 'Trưởng phòng'/'Phó phòng', cửa file đòi thêm: id của họ phải nằm trong
+ * `work_items.leader_ids` của CHÍNH nhiệm vụ chứa file (ô «Lãnh đạo phòng phụ trách» của nhiệm vụ,
+ * 005_phan_cong.sql — cấp 3 tối đa MỘT người do CHECK `task_leader_single`).
+ *   • Nhiệm vụ CHƯA gán lãnh đạo (`leader_ids` rỗng) ⇒ trả false: không TP/PP nào xử được, phải
+ *     gán lãnh đạo trước. Đây là lựa chọn của người dùng (không mở cửa dự phòng cho cả phòng).
+ *   • admin và 'Phó Giám đốc' KHÔNG đi qua hàm này — họ giữ phạm vi cũ (admin mọi phòng, Phó GĐ
+ *     các phòng mình phụ trách), nên file không bao giờ treo vĩnh viễn.
+ * Đây là luật TRẠNG THÁI/PHÂN CÔNG, KHÔNG thay `can()`: `can()` vẫn chạy trước để bó phòng.
+ */
+function laLanhDaoPhuTrachNhiemVu(user, item) {
+  const ds = Array.isArray(item?.leader_ids) ? item.leader_ids : [];
+  return ds.some((id) => sameId(id, user.id));
+}
+
+/** Câu từ chối dùng chung cho mọi cửa file khi TP/PP không phụ trách nhiệm vụ đó. */
+function loiKhongPhuTrach() {
+  return forbidden(
+    'Bạn không phải Lãnh đạo phòng phụ trách nhiệm vụ này — chỉ người được nêu ở ô «Lãnh đạo phòng phụ trách» của nhiệm vụ (hoặc Phó Giám đốc phụ trách / Giám đốc) mới xem, sửa và duyệt được file kết quả. Nhiệm vụ chưa gán lãnh đạo thì phải gán trước.'
+  );
+}
+
+/**
+ * NGƯỜI NHẬN thông báo «có file cần xem/đã sửa» — đúng LÃNH ĐẠO PHÒNG PHỤ TRÁCH NHIỆM VỤ
+ * (`leader_ids`), không phải mọi TP/PP của phòng: gửi cho người không có quyền xử là báo rác.
+ *
+ * Nhiệm vụ CHƯA gán lãnh đạo thì không ai xử được (luật chặt tuyệt đối ở trên) — lúc đó vẫn phải
+ * báo cho TP/PP của phòng, kèm câu nhắc gán lãnh đạo, nếu không file nằm im và không ai biết.
+ * Trả `{ rows, thieuLanhDao }` để câu thông báo nói đúng tình huống.
+ */
+async function nguoiNhanLanhDao(item, client) {
+  const rows = await repo.nguoiTheoIds(item.leader_ids ?? [], client);
+  if (rows.length > 0) return { rows, thieuLanhDao: false };
+  return {
+    rows: await repo.lanhDaoPhuTrach(item.department_id, client),
+    thieuLanhDao: true,
+  };
+}
+
+/** Đuôi câu nhắc khi nhiệm vụ chưa gán «Lãnh đạo phòng phụ trách» (không ai duyệt được file). */
+const NHAC_GAN_LANH_DAO =
+  ' LƯU Ý: nhiệm vụ chưa gán «Lãnh đạo phòng phụ trách» nên chưa ai xử được file — cần gán trước.';
+
+/**
  * Tên file gửi lên bị MẤT DẤU TIẾNG VIỆT — sửa ở đúng một chỗ.
  *
  * Trình duyệt gửi `filename` trong Content-Disposition của multipart dưới dạng **UTF-8**, nhưng
@@ -181,6 +230,16 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     }
     // cho-xem / can-sua: `can(create,'file')` phía trên đã lọc đúng người được giao nhiệm vụ,
     // Trưởng phòng/Phó phòng và Phó GĐ/GĐ — không thêm điều kiện vai nào nữa.
+    //
+    // 2026-09-02 — SIẾT theo `leader_ids`: TP/PP chỉ nộp/sửa được file của nhiệm vụ mà họ ĐƯỢC NÊU
+    // ở ô «Lãnh đạo phòng phụ trách». Người được giao nhiệm vụ (Cán bộ) không đi qua nhánh này —
+    // họ nộp kết quả của chính mình, `can()` đã lo.
+    if (
+      ['Trưởng phòng', 'Phó phòng'].includes(user.role) &&
+      !laLanhDaoPhuTrachNhiemVu(user, item)
+    ) {
+      throw loiKhongPhuTrach();
+    }
 
     const versionNo = (nhom ? await repo.soBanCaoNhat(nhom.id, client) : 0) + 1;
     const tenLuu = `v${versionNo}-${randomUUID()}${duoi}`;
@@ -244,10 +303,11 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     const capNhat = await repo.doiTrangThai(nhom.id, trangThaiMoi, client);
 
     // ─── Thông báo (cùng giao dịch) ─────────────────────────────────────────────────────────
-    // LÃNH ĐẠO PHÒNG PHỤ TRÁCH nhiệm vụ (người dùng chốt 2026-09-02): TP/PP đứng tên ở phòng +
-    // người được gắn phụ trách phòng ('head'/'vice' trong department_managers). Trước đây chỉ đọc
-    // `users` nên người được gắn phụ trách mà vai không phải TP/PP thì KHÔNG hề biết có file mới.
-    const tpPp = await repo.lanhDaoPhuTrach(item.department_id, client);
+    // Người nhận = LÃNH ĐẠO PHÒNG PHỤ TRÁCH NHIỆM VỤ (`leader_ids`) — người dùng chốt 2026-09-02
+    // và siết lần hai cùng ngày: chỉ họ xử được file nên chỉ họ được báo. Nhiệm vụ chưa gán lãnh
+    // đạo ⇒ `nguoiNhanLanhDao` lùi về TP/PP của phòng kèm câu nhắc gán (không thì file nằm im).
+    const { rows: tpPp, thieuLanhDao } = await nguoiNhanLanhDao(item, client);
+    const nhac = thieuLanhDao ? NHAC_GAN_LANH_DAO : '';
     if (trangThaiMoi === 'da-duyet') {
       await baoNguoiNhan(
         user,
@@ -270,7 +330,7 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
       await baoNguoiNhan(
         user,
         tpPp,
-        `Nhiệm vụ "${item.name}": ${user.full_name} nộp bản ${versionNo} của "${tenSan}" — ${NHAN_TRANG_THAI[trangThaiMoi]}.`,
+        `Nhiệm vụ "${item.name}": ${user.full_name} nộp bản ${versionNo} của "${tenSan}" — ${NHAN_TRANG_THAI[trangThaiMoi]}.${nhac}`,
         notificationsRepo.LOAI.CHO_DUYET,
         nhom.id,
         client
@@ -394,6 +454,14 @@ export function verdict(user, fileId, { hanhDong, noiDung = '' }) {
       throw forbidden('Vai trò của bạn không được thực hiện hành động này trên file kết quả');
     }
     assertCan(user, luat.canKiem, item);
+    // 2026-09-02 — SIẾT: TP/PP chỉ verdict được file của nhiệm vụ mà họ được nêu ở `leader_ids`.
+    // Phó GĐ/admin không đi qua đây (họ giữ phạm vi phòng phụ trách / toàn hệ thống).
+    if (
+      ['Trưởng phòng', 'Phó phòng'].includes(user.role) &&
+      !laLanhDaoPhuTrachNhiemVu(user, item)
+    ) {
+      throw loiKhongPhuTrach();
+    }
     if (luat.canDuyet && giaTriHieuLuc(user, 'file', 'approve') !== 'cho-phep') {
       throw forbidden(
         'Quản trị đã đặt «⏳ Chờ duyệt» ở ô «Duyệt kết quả (file nhiệm vụ)» cho vai của bạn — hãy dùng «Trình Phó giám đốc» hoặc «Yêu cầu sửa».'
@@ -426,7 +494,7 @@ export function verdict(user, fileId, { hanhDong, noiDung = '' }) {
 
 /** Thông báo của verdict — nội dung riêng từng hành động, cùng giao dịch với lần đổi trạng thái. */
 async function thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, client) {
-  const tpPp = await repo.lanhDaoPhuTrach(item.department_id, client);
+  const { rows: tpPp } = await nguoiNhanLanhDao(item, client);
   const nguoiPhaiSua = [banCuoi?.uploaded_by, item.assignee_id];
   switch (hanhDong) {
     case 'yeu-cau-sua':
@@ -524,6 +592,13 @@ export function gomY(user, versionId, { noiDung, trang = null }) {
       );
     }
     assertCan(user, 'read', item);
+    // 2026-09-02 — SIẾT: TP/PP góp ý được chỉ khi phụ trách CHÍNH nhiệm vụ này (`leader_ids`).
+    if (
+      ['Trưởng phòng', 'Phó phòng'].includes(user.role) &&
+      !laLanhDaoPhuTrachNhiemVu(user, item)
+    ) {
+      throw loiKhongPhuTrach();
+    }
 
     const gopY = await repo.themGopY(
       { versionId: ban.id, nguoiId: user.id, vai: user.role, noiDung: nd, trang },
@@ -582,10 +657,11 @@ export async function choDuyetKetQua(user) {
   if (!user) return { items: [] };
   const rows = await repo.listChoDuyetKetQua({
     vai: user.role,
-    phongId: user.department_id,
+    nguoiId: user.id,
     phongIds: user.managedDepartmentIds ?? [],
   });
   const coDuyet = giaTriHieuLuc(user, 'file', 'approve') === 'cho-phep';
+  const coNop = giaTriHieuLuc(user, 'file', 'create') !== 'tu-choi';
   const items = rows.map((r) => {
     const hanhDong = Object.entries(BANG_VERDICT)
       .filter(
@@ -595,7 +671,23 @@ export async function choDuyetKetQua(user) {
           (!luat.canDuyet || coDuyet)
       )
       .map(([ma, luat]) => ({ ma, nhan: NHAN_VERDICT[ma], canNoiDung: luat.canNoiDung }));
-    return { ...r, hanhDong };
+    // «Nộp bản mới» ngay trong hàng chờ (người dùng chốt 2026-09-02: «người sửa file nhiệm vụ có
+    // thể up file lên để thể hiện bản mới của nó»). Cùng luật với nút ✎ sửa trực tuyến — nộp và
+    // sửa trực tuyến đều tạo BẢN MỚI nên không thể lệch nhau; máy chủ vẫn kiểm lại trong `nop()`.
+    const duocNop =
+      coNop &&
+      duocSuaTrucTiep(
+        user,
+        { trang_thai: r.trang_thai },
+        {
+          leader_ids: r.leader_ids,
+          id: r.item_id,
+          department_id: r.department_id,
+          assignee_id: r.assignee_id,
+          level: 3,
+        }
+      );
+    return { ...r, hanhDong, duocNop };
   });
   return { items, onlyOffice: onlyOfficeBat() };
 }
@@ -606,10 +698,18 @@ export async function demChoDuyetKetQua(user) {
   return items.length;
 }
 
-/** Đọc TOÀN BỘ kết quả file của một nhiệm vụ: nhóm + bản + góp ý + bảng luồng. */
+/**
+ * Đọc TOÀN BỘ kết quả file của một nhiệm vụ: nhóm + bản + góp ý + bảng luồng.
+ *
+ * Kèm hai CỜ theo người đang xem — client không tự suy luật lần nữa (2026-09-02, luật siết
+ * `leader_ids`): `duocSua` (mở nút ✎ sửa trực tuyến + nút nộp bản mới) và `duocVerdict` (mở hàng
+ * nút Yêu cầu sửa / Trình / Duyệt…). Máy chủ vẫn kiểm lại khi bấm.
+ */
 export async function doc(user, ref) {
   const item = await mustFindNhiemVu(ref);
   assertCan(user, 'read', item, 'task');
+  const laLanhDaoPhong = ['Trưởng phòng', 'Phó phòng'].includes(user.role);
+  const phuTrach = laLanhDaoPhong ? laLanhDaoPhuTrachNhiemVu(user, item) : true;
   const nhoms = await repo.listNhomByItem(item.id);
   return Promise.all(
     nhoms.map(async (nhom) => ({
@@ -617,8 +717,29 @@ export async function doc(user, ref) {
       bans: await repo.listBanByFile(nhom.id),
       gopY: await repo.listGopYByFile(nhom.id),
       luong: await repo.listLuongByFile(nhom.id),
+      duocSua: duocSuaTrucTiep(user, nhom, item),
+      duocVerdict: phuTrach && !KET_THUC.includes(nhom.trang_thai),
     }))
   );
+}
+
+/**
+ * QUYỀN của người đang xem trên luồng file của MỘT nhiệm vụ — cho client mở/ẩn nút cấp nhiệm vụ
+ * (nút «Tải file lên» tạo nhóm mới) mà không phải tự suy luật `leader_ids` lần nữa.
+ *
+ * `duocNop` = `can(create,'file')` cho phép VÀ (không phải TP/PP HOẶC đúng lãnh đạo phụ trách).
+ * `phuTrach` = TP/PP có tên ở ô «Lãnh đạo phòng phụ trách» của nhiệm vụ (vai khác luôn true, vì
+ * luật siết chỉ áp cho hai vai đó).
+ */
+export async function quyenFile(user, ref) {
+  const item = await mustFindNhiemVu(ref);
+  const laLanhDaoPhong = ['Trưởng phòng', 'Phó phòng'].includes(user.role);
+  const phuTrach = laLanhDaoPhong ? laLanhDaoPhuTrachNhiemVu(user, item) : true;
+  return {
+    phuTrach,
+    duocNop: can(user, 'create', 'file', item).ok && phuTrach,
+    thieuLanhDao: (item.leader_ids ?? []).length === 0,
+  };
 }
 
 /** Một bản để tải/xem — quyền đọc đi theo `can(read,'task')` của nhiệm vụ chứa nó. */
@@ -801,10 +922,15 @@ export async function luuNgay(user, versionId) {
 function duocSuaTrucTiep(user, nhom, item) {
   if (!nhom || KET_THUC.includes(nhom.trang_thai)) return false;
   if (!can(user, 'create', 'file', item).ok) return false;
-  if (nhom.trang_thai === 'cho-lanh-dao') {
-    return ['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role);
+  // 2026-09-02 — SIẾT: TP/PP chỉ sửa trực tuyến được file của nhiệm vụ mình phụ trách (`leader_ids`);
+  // người khác trong phòng mở editor ra chỉ ở chế độ XEM (`mode: 'view'`).
+  if (['Trưởng phòng', 'Phó phòng'].includes(user.role)) {
+    return laLanhDaoPhuTrachNhiemVu(user, item);
   }
-  if (['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role)) return true;
+  if (nhom.trang_thai === 'cho-lanh-dao') {
+    return ['Phó Giám đốc', 'admin'].includes(user.role);
+  }
+  if (['Phó Giám đốc', 'admin'].includes(user.role)) return true;
   return sameId(item.assignee_id, user.id);
 }
 
@@ -1086,7 +1212,7 @@ export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
       const cau =
         `Nhiệm vụ "${item.name}": ${nguoiGhi.full_name} sửa trực tuyến "${ban.ten_goc}" ` +
         `— đã lưu thành bản ${versionNo}.`;
-      const lanhDao = await repo.lanhDaoPhuTrach(item.department_id, client);
+      const { rows: lanhDao } = await nguoiNhanLanhDao(item, client);
       await bao(
         nguoiGhi,
         [...lanhDao.map((u) => u.id), ban.uploaded_by, item.assignee_id],
