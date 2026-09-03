@@ -120,14 +120,19 @@ WHERE d.code = 'PH01' AND tp.code = 'NV003' AND pgd.code = 'NV002';
 INSERT INTO work_items (code, work_id, parent_id, level, department_id, name, description,
                         assignee_id, assignee_name, status, priority,
                         start_date, due_date, completion, approval_status, approver_id,
-                        approved_at, sort_order, created_by, created_by_name, origin)
+                        approved_at, sort_order, created_by, created_by_name, origin,
+                        leader_ids)
 SELECT 'CV001-001', w.id, NULL, 2, w.department_id, 'Tài liệu và báo cáo đào tạo',
        'Khối công việc con chứa 5 nhiệm vụ mẫu của luồng file.',
        tp.id, tp.full_name, 'Đang thực hiện', 'Cao',
        '2026-09-01', '2026-12-31', 40, 'Đã duyệt', pgd.id, '2026-09-01 01:05+00',
-       1, tp.id, tp.full_name, 'Tự đăng ký'
-FROM works w, users tp, users pgd
-WHERE w.code = 'CV001' AND tp.code = 'NV003' AND pgd.code = 'NV002';
+       1, tp.id, tp.full_name, 'Tự đăng ký',
+       -- Cấp 2 phải NÊU đủ hai lãnh đạo: luật `LEADER_NOT_IN_SOURCE` (assignments/service.js) đòi
+       -- lãnh đạo của nhiệm vụ cấp 3 nằm trong danh sách của công việc con.
+       ARRAY[tp.id, pp.id]::bigint[]
+FROM works w, users tp, users pgd, users pp
+WHERE w.code = 'CV001' AND tp.code = 'NV003' AND pgd.code = 'NV002' AND pp.code = 'NV004';
+
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────
 -- 4. NĂM NHIỆM VỤ (cấp 3) — tất cả giao cho Cán bộ NV005 (Lê Thị Nhân), «Đã duyệt» theo luật
@@ -137,12 +142,20 @@ INSERT INTO work_items (code, work_id, parent_id, level, department_id, name, de
                         assignee_id, assignee_name, status, priority,
                         start_date, due_date, completion, approval_status,
                         sort_order, created_by, created_by_name, origin,
-                        assigned_by_id, assigned_by_name, assigned_at)
+                        assigned_by_id, assigned_by_name, assigned_at, leader_ids)
 SELECT n.code, w.id, p.id, 3, w.department_id, n.name, n.mo_ta,
        nv.id, nv.full_name, n.status, 'Trung bình',
        '2026-09-01', n.due_date::date, n.completion, 'Đã duyệt',
        n.sort_order, tp.id, tp.full_name, 'Được giao',
-       tp.id, tp.full_name, '2026-09-01 02:00+00'
+       tp.id, tp.full_name, '2026-09-01 02:00+00',
+       -- LÃNH ĐẠO PHÒNG PHỤ TRÁCH — bắt buộc từ 2026-09-02: chỉ người có tên ở đây (cùng Phó GĐ phụ
+       -- trách / Giám đốc) mới xem, sửa, duyệt được file kết quả của nhiệm vụ. Bỏ trống thì hàng chờ
+       -- của TP/PP trống và họ bị 403 khi nộp — đúng luật nhưng làm người test tưởng là lỗi.
+       -- Cấp 3 chỉ được MỘT lãnh đạo (`task_leader_single`, migration 005) nên chia đôi: NV-02/04
+       -- cho Trưởng phòng, NV-01/03/05 cho Phó phòng — test được cả hai vai mà không phải sửa data.
+       CASE WHEN n.code IN ('CV001-003', 'CV001-005') THEN ARRAY[tp.id]::bigint[]
+            ELSE ARRAY[pp.id]::bigint[] END
+
 FROM (VALUES
   ('CV001-002', 'NV-01 Báo cáo kết quả đào tạo quý 3',
    'CHƯA CÓ FILE — bấm «Tải file lên» ở ô «Kết quả» để bắt đầu luồng.',
@@ -163,7 +176,8 @@ FROM (VALUES
 JOIN works      w  ON w.code = 'CV001'
 JOIN work_items p  ON p.code = 'CV001-001'
 JOIN users      nv ON nv.code = 'NV005'
-JOIN users      tp ON tp.code = 'NV003';
+JOIN users      tp ON tp.code = 'NV003'
+JOIN users      pp ON pp.code = 'NV004';
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────
 -- 5. BỐN NHÓM FILE (014) — mỗi nhóm một trạng thái của luồng, kèm BẢN + Ý KIẾN + BẢNG LUỒNG.
