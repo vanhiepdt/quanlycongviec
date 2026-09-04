@@ -110,6 +110,42 @@ const NHAN_TRANG_THAI = Object.freeze({
 const KET_THUC = Object.freeze(['hoan-thanh', 'da-duyet']);
 const DO_DAI_NOI_DUNG_TOI_THIEU = 10;
 
+/**
+ * ĐỊNH DẠNG khai trước (016) — khớp CHECK `tf_dinh_dang_ok` của CSDL và `NHAN_DINH_DANG` của
+ * client. «Báo cáo» là loại DUY NHẤT không cần file: nội dung nhập thẳng thành BẢN không có file
+ * (người dùng chốt 2026-09-03: «như một BẢN không có file»), năm loại còn lại là lời hứa sẽ nộp
+ * file đúng loại đó — máy chủ KHÔNG chặn nộp lệch loại, chỉ chặn đuôi ngoài `DUOI_FILE_HOP_LE`:
+ * khai «Word» rồi nộp PDF là chuyện thường ở cơ quan, chặn cứng chỉ làm người dùng bế tắc.
+ */
+export const DINH_DANG_KHAI = Object.freeze(['Word', 'Excel', 'PPT', 'PDF', 'Ảnh', 'Báo cáo']);
+
+/** «Báo cáo» = kết quả là CHỮ, không có file nào để tải. */
+export const DINH_DANG_BAO_CAO = 'Báo cáo';
+
+/**
+ * Đuôi file → nhãn định dạng (016) — dùng khi nhóm mở trực tiếp bằng cách nộp file: khai lại thứ
+ * đã nằm trong chính tên file là việc vô nghĩa. Đuôi lạ không bao giờ tới đây (`nop` đã chặn bằng
+ * `DUOI_FILE_HOP_LE`), nhưng vẫn trả `null` cho chắc — cột `dinh_dang` cho phép NULL.
+ */
+const DINH_DANG_THEO_DUOI = Object.freeze({
+  '.doc': 'Word',
+  '.docx': 'Word',
+  '.pdf': 'PDF',
+  '.xls': 'Excel',
+  '.xlsx': 'Excel',
+  '.ppt': 'PPT',
+  '.pptx': 'PPT',
+  '.jpg': 'Ảnh',
+  '.jpeg': 'Ảnh',
+  '.png': 'Ảnh',
+  '.gif': 'Ảnh',
+  '.webp': 'Ảnh',
+});
+
+function dinhDangTheoDuoi(duoi) {
+  return DINH_DANG_THEO_DUOI[String(duoi ?? '').toLowerCase()] ?? null;
+}
+
 const sameId = (a, b) => a != null && b != null && Number(a) === Number(b);
 
 /**
@@ -236,6 +272,217 @@ function baoNguoiNhan(user, rows, content, type, refId, client) {
 }
 
 /**
+ * KHOÁ + KIỂM một nhóm có sẵn trước khi thêm bản (dùng cho cả nộp file và nộp «Báo cáo»).
+ * Trạng thái KẾT ⇒ 409; đang ở tay lãnh đạo ⇒ chỉ TP/PP và Phó GĐ/GĐ nộp được bản mới.
+ */
+async function nhomDeThemBan(user, item, fileId, client) {
+  const nhom = await repo.lockNhomById(Number(fileId), client);
+  if (!nhom || Number(nhom.item_id) !== Number(item.id)) {
+    throw notFound('Không tìm thấy nhóm file kết quả của nhiệm vụ này');
+  }
+  if (KET_THUC.includes(nhom.trang_thai)) {
+    throw conflict(`File này đã ${NHAN_TRANG_THAI[nhom.trang_thai]} — không nộp thêm được`);
+  }
+  if (
+    nhom.trang_thai === 'cho-lanh-dao' &&
+    !['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role)
+  ) {
+    throw forbidden(
+      'File đang chờ lãnh đạo xem — lúc này chỉ Trưởng phòng/Phó phòng mới nộp được bản mới'
+    );
+  }
+  return nhom;
+}
+
+/**
+ * SIẾT `leader_ids` cho cửa nộp — TP/PP chỉ nộp/sửa được file của nhiệm vụ mà họ ĐƯỢC NÊU ở ô
+ * «Lãnh đạo phòng phụ trách» (2026-09-02). Vai khác không đi qua nhánh này: `can()` đã lo.
+ */
+function chanTpPpKhongPhuTrach(user, item) {
+  if (['Trưởng phòng', 'Phó phòng'].includes(user.role) && !laLanhDaoPhuTrachNhiemVu(user, item)) {
+    throw loiKhongPhuTrach();
+  }
+}
+
+/**
+ * QUY TẮC TỰ-ĐỘNG sau khi lưu một bản (file hay «Báo cáo» đều dùng): đọc `file:create` hiệu lực của
+ * NGƯỜI NỘP — 'cho-phep' ⇒ chốt luôn 'da-duyet' kèm dòng luồng 'duyet-tu-dong'; TP/PP nộp ⇒
+ * 'cho-lanh-dao'; còn lại ⇒ 'cho-xem'. Trả trạng thái mới để bên gọi ghi + soạn câu thông báo.
+ */
+async function apTuDong(user, nhom, ban, client) {
+  const giaTri = giaTriHieuLuc(user, 'file', 'create');
+  if (giaTri === 'cho-phep') {
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: ban.id,
+        nguoiId: user.id,
+        vai: user.role,
+        hanhDong: 'duyet-tu-dong',
+        noiDung: 'Tự động — phân quyền không yêu cầu duyệt',
+      },
+      client
+    );
+    return 'da-duyet';
+  }
+  return ['Trưởng phòng', 'Phó phòng'].includes(user.role) ? 'cho-lanh-dao' : 'cho-xem';
+}
+
+/**
+ * KHAI MỘT DÒNG KẾT QUẢ TRƯỚC KHI CÓ FILE (016) — nút ＋ của khối «Kết quả».
+ *
+ * Người dùng chốt 2026-09-03: «Dòng đầu tiên khi mới tạo nhiệm vụ sẽ điền 1. 2. 3. điền những nội
+ * dung Kết quả làm được, Định dạng, Ghi ý kiến. Nhớ phải có nút + để thêm dòng để điền 2, 3…».
+ * Nhóm sinh ra với **0 bản** ⇒ cột «File đã tải lên» là «Chưa có» và nhóm KHÔNG vào hàng chờ phê
+ * duyệt (`listChoDuyetKetQua` đòi `v.id IS NOT NULL`): chưa có gì để duyệt thì đừng bắt ai duyệt.
+ *
+ * Trạng thái luôn là 'cho-xem' — KHÔNG áp quy tắc tự-động ở đây: chưa có bản nào thì không có cái
+ * gì để «duyệt tự động», và để 'da-duyet' là khoá luôn dòng vừa khai (nộp file sau sẽ bị 409).
+ *
+ * Ý kiến khai kèm ghi vào BẢNG LUỒNG (`hanh_dong = 'nop'`, `version_id` NULL — 014 cho phép), không
+ * vào `task_file_comments`: bảng góp ý gắn theo BẢN mà ở đây chưa có bản nào.
+ */
+export async function khaiKetQua(user, ref, { tenKetQua, dinhDang = null, yKien = '' }) {
+  const item = await mustFindNhiemVu(ref);
+  const ten = String(tenKetQua ?? '').trim();
+  if (!ten) throw badRequest('Vui lòng nhập tên kết quả làm được', 'tenKetQua');
+  if (ten.length > 500) throw badRequest('Tên kết quả tối đa 500 ký tự', 'tenKetQua');
+  const dd = dinhDang == null || dinhDang === '' ? null : String(dinhDang);
+  if (dd != null && !DINH_DANG_KHAI.includes(dd)) {
+    throw badRequest(`Định dạng chỉ nhận: ${DINH_DANG_KHAI.join(' · ')}`, 'dinhDang');
+  }
+  const yk = String(yKien ?? '').trim();
+  if (yk.length > 2000) throw badRequest('Ý kiến tối đa 2000 ký tự', 'yKien');
+
+  return withTransaction(async (client) => {
+    assertCan(user, 'create', item);
+    chanTpPpKhongPhuTrach(user, item);
+    const nhom = await repo.themNhom(
+      {
+        itemId: item.id,
+        tenGoc: ten,
+        tenKetQua: ten,
+        dinhDang: dd,
+        trangThai: 'cho-xem',
+        createdBy: user.id,
+      },
+      client
+    );
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: null,
+        nguoiId: user.id,
+        vai: user.role,
+        hanhDong: 'nop',
+        noiDung: yk || `Khai dòng kết quả «${ten}»${dd ? ` — định dạng ${dd}` : ''}, chưa có file`,
+      },
+      client
+    );
+    return { nhom, ban: null, tuDong: false };
+  });
+}
+
+/**
+ * NỘP «BÁO CÁO» — kết quả là CHỮ, thành một BẢN KHÔNG CÓ FILE (người dùng chốt: «như một BẢN không
+ * có file»). Nhờ vậy nó dùng lại nguyên bộ máy bản/góp ý/bảng luồng/verdict, không có nhánh nghiệp
+ * vụ thứ hai: TP/PP vẫn góp ý theo bản, vẫn Yêu cầu sửa / Trình / Duyệt như với file.
+ *
+ * `fileId` null = mở nhóm mới (dòng kết quả mới, định dạng «Báo cáo»); có = thêm bản vào nhóm đã
+ * khai trước. Không ghi đĩa, không kiểm đuôi/dung lượng — chỉ độ dài chữ (CHECK `tfv_file_hoac_chu`
+ * đòi ≥ 10 ký tự sau khi bỏ trắng, kiểm ở đây để trả câu tiếng Việt thay vì lỗi CSDL).
+ */
+export async function nopBaoCao(user, ref, { noiDung, tenGoc = '', fileId = null }) {
+  const item = await mustFindNhiemVu(ref);
+  const nd = String(noiDung ?? '').trim();
+  if (nd.length < DO_DAI_NOI_DUNG_TOI_THIEU) {
+    throw badRequest(`Nội dung báo cáo cần ít nhất ${DO_DAI_NOI_DUNG_TOI_THIEU} ký tự`, 'noiDung');
+  }
+  if (nd.length > 20000) throw badRequest('Nội dung báo cáo tối đa 20000 ký tự', 'noiDung');
+  const tenNhap = String(tenGoc ?? '').trim();
+  if (tenNhap.length > 500) throw badRequest('Tên báo cáo tối đa 500 ký tự', 'tenGoc');
+
+  return withTransaction(async (client) => {
+    assertCan(user, 'create', item);
+    let nhom = fileId != null ? await nhomDeThemBan(user, item, fileId, client) : null;
+    chanTpPpKhongPhuTrach(user, item);
+
+    // Tiêu đề bản: ưu tiên tên người dùng nhập, rồi tên kết quả đã khai của nhóm, cuối cùng mặc
+    // định — cột `ten_goc` của bản là NOT NULL và bảng kết quả in nó ở cột «File đã tải lên».
+    const ten = tenNhap || nhom?.ten_ket_qua || nhom?.ten_goc || 'Báo cáo';
+    const versionNo = (nhom ? await repo.soBanCaoNhat(nhom.id, client) : 0) + 1;
+    if (!nhom) {
+      nhom = await repo.themNhom(
+        {
+          itemId: item.id,
+          tenGoc: ten,
+          tenKetQua: ten,
+          dinhDang: DINH_DANG_BAO_CAO,
+          trangThai: 'cho-xem',
+          createdBy: user.id,
+        },
+        client
+      );
+    }
+    const ban = await repo.themBan(
+      { fileId: nhom.id, versionNo, tenGoc: ten, noiDung: nd, uploadedBy: user.id },
+      client
+    );
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: ban.id,
+        nguoiId: user.id,
+        vai: user.role,
+        hanhDong: 'nop',
+        noiDung: `Báo cáo (nhập chữ, không có file) — bản ${versionNo}`,
+      },
+      client
+    );
+
+    const trangThaiMoi = await apTuDong(user, nhom, ban, client);
+    const capNhat = await repo.doiTrangThai(nhom.id, trangThaiMoi, client);
+
+    const { rows: tpPp, thieuLanhDao } = await nguoiNhanLanhDao(item, client);
+    const nhac = thieuLanhDao ? NHAC_GAN_LANH_DAO : '';
+    if (trangThaiMoi === 'da-duyet') {
+      await baoNguoiNhan(
+        user,
+        tpPp,
+        `Nhiệm vụ "${item.name}": báo cáo "${ten}" bản ${versionNo} được phê duyệt tự động — phân quyền không yêu cầu duyệt.`,
+        notificationsRepo.LOAI.DA_DUYET,
+        nhom.id,
+        client
+      );
+    } else if (trangThaiMoi === 'cho-lanh-dao') {
+      await baoNguoiNhan(
+        user,
+        await phoGiamDocPhuTrach(item.department_id, client),
+        `Nhiệm vụ "${item.name}": ${user.full_name} nộp bản ${versionNo} của báo cáo "${ten}" — chờ Phó GĐ phụ trách xem.`,
+        notificationsRepo.LOAI.CHO_DUYET,
+        nhom.id,
+        client
+      );
+    } else {
+      await baoNguoiNhan(
+        user,
+        tpPp,
+        `Nhiệm vụ "${item.name}": ${user.full_name} nộp bản ${versionNo} của báo cáo "${ten}" — ${NHAN_TRANG_THAI[trangThaiMoi]}.${nhac}`,
+        notificationsRepo.LOAI.CHO_DUYET,
+        nhom.id,
+        client
+      );
+    }
+
+    return {
+      nhom: { ...nhom, trang_thai: capNhat.trang_thai },
+      ban,
+      tuDong: trangThaiMoi === 'da-duyet',
+    };
+  });
+}
+
+/**
  * NỘP BẢN MỚI. `fileId` có thì nộp thêm bản vào NHÓM có sẵn; không có thì mở NHÓM mới (v1).
  *
  * Sau khi lưu bản, áp QUY TẮC TỰ-ĐỘNG theo giá trị hiệu lực `file:create` của người nộp —
@@ -270,35 +517,9 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
   return withTransaction(async (client) => {
     assertCan(user, 'create', item);
 
-    let nhom = null;
-    if (fileId != null) {
-      nhom = await repo.lockNhomById(Number(fileId), client);
-      if (!nhom || Number(nhom.item_id) !== Number(item.id)) {
-        throw notFound('Không tìm thấy nhóm file kết quả của nhiệm vụ này');
-      }
-      if (KET_THUC.includes(nhom.trang_thai)) {
-        throw conflict(`File này đã ${NHAN_TRANG_THAI[nhom.trang_thai]} — không nộp thêm được`);
-      }
-      if (nhom.trang_thai === 'cho-lanh-dao') {
-        if (!['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role)) {
-          throw forbidden(
-            'File đang chờ lãnh đạo xem — lúc này chỉ Trưởng phòng/Phó phòng mới nộp được bản mới'
-          );
-        }
-      }
-    }
-    // cho-xem / can-sua: `can(create,'file')` phía trên đã lọc đúng người được giao nhiệm vụ,
-    // Trưởng phòng/Phó phòng và Phó GĐ/GĐ — không thêm điều kiện vai nào nữa.
-    //
-    // 2026-09-02 — SIẾT theo `leader_ids`: TP/PP chỉ nộp/sửa được file của nhiệm vụ mà họ ĐƯỢC NÊU
-    // ở ô «Lãnh đạo phòng phụ trách». Người được giao nhiệm vụ (Cán bộ) không đi qua nhánh này —
-    // họ nộp kết quả của chính mình, `can()` đã lo.
-    if (
-      ['Trưởng phòng', 'Phó phòng'].includes(user.role) &&
-      !laLanhDaoPhuTrachNhiemVu(user, item)
-    ) {
-      throw loiKhongPhuTrach();
-    }
+    const nhomCo = fileId != null ? await nhomDeThemBan(user, item, fileId, client) : null;
+    let nhom = nhomCo;
+    chanTpPpKhongPhuTrach(user, item);
 
     const versionNo = (nhom ? await repo.soBanCaoNhat(nhom.id, client) : 0) + 1;
     const tenLuu = `v${versionNo}-${randomUUID()}${duoi}`;
@@ -308,8 +529,17 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     await writeFile(path.join(thuMuc, tenLuu), buffer);
 
     if (!nhom) {
+      // 016: nhóm mở TRỰC TIẾP bằng cách nộp file (không qua nút ＋) thì tên kết quả = tên file và
+      // định dạng suy từ đuôi — người dùng không phải khai lại thứ đã nằm trong chính cái file.
       nhom = await repo.themNhom(
-        { itemId: item.id, tenGoc: tenSan, trangThai: 'cho-xem', createdBy: user.id },
+        {
+          itemId: item.id,
+          tenGoc: tenSan,
+          tenKetQua: tenSan,
+          dinhDang: dinhDangTheoDuoi(duoi),
+          trangThai: 'cho-xem',
+          createdBy: user.id,
+        },
         client
       );
     }
@@ -338,27 +568,8 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     );
 
     // ─── Quy tắc tự-động theo Bảng phân quyền (lõi của đợt này) ────────────────────────────
-    const giaTri = giaTriHieuLuc(user, 'file', 'create');
-    const laLanhDaoPhong = ['Trưởng phòng', 'Phó phòng'].includes(user.role);
-    let trangThaiMoi;
-    if (giaTri === 'cho-phep') {
-      trangThaiMoi = 'da-duyet';
-      await repo.themLuong(
-        {
-          fileId: nhom.id,
-          versionId: ban.id,
-          nguoiId: user.id,
-          vai: user.role,
-          hanhDong: 'duyet-tu-dong',
-          noiDung: 'Tự động — phân quyền không yêu cầu duyệt',
-        },
-        client
-      );
-    } else if (laLanhDaoPhong) {
-      trangThaiMoi = 'cho-lanh-dao';
-    } else {
-      trangThaiMoi = 'cho-xem';
-    }
+    // Dùng CHUNG `apTuDong` với `nopBaoCao` (016): một bản là một bản, không phân biệt file hay chữ.
+    const trangThaiMoi = await apTuDong(user, nhom, ban, client);
     const capNhat = await repo.doiTrangThai(nhom.id, trangThaiMoi, client);
 
     // ─── Thông báo (cùng giao dịch) ─────────────────────────────────────────────────────────
@@ -694,7 +905,11 @@ export async function xoaNhom(user, fileId) {
     }
     const bans = await repo.listBanByFile(nhom.id, client);
     await repo.xoaNhom(nhom.id, client);
-    return bans.map((b) => ({ itemId: item.id, tenLuu: b.ten_luu }));
+    // Bản «Báo cáo» (016) không có file vật lý ⇒ `ten_luu` NULL: lọc ra trước khi ghép đường dẫn,
+    // `path.join(..., null)` ném TypeError và làm đổ cả bước dọn của các bản có file thật.
+    return bans
+      .filter((b) => b.ten_luu != null)
+      .map((b) => ({ itemId: item.id, tenLuu: b.ten_luu }));
   });
   // Sau khi commit: dọn file vật lý — hỏng thì bỏ qua, dòng rác không làm đổ thao tác đã xong.
   await Promise.allSettled(
@@ -746,7 +961,7 @@ export async function choDuyetKetQua(user) {
           level: 3,
         }
       );
-    return { ...r, hanhDong, duocNop };
+    return { ...r, hanhDong, duocNop, laBaoCao: r.ban_cuoi_la_bao_cao === true };
   });
   return { items, onlyOffice: onlyOfficeBat() };
 }
@@ -771,14 +986,23 @@ export async function doc(user, ref) {
   const phuTrach = laLanhDaoPhong ? laLanhDaoPhuTrachNhiemVu(user, item) : true;
   const nhoms = await repo.listNhomByItem(item.id);
   return Promise.all(
-    nhoms.map(async (nhom) => ({
-      ...nhom,
-      bans: await repo.listBanByFile(nhom.id),
-      gopY: await repo.listGopYByFile(nhom.id),
-      luong: await repo.listLuongByFile(nhom.id),
-      duocSua: duocSuaTrucTiep(user, nhom, item),
-      duocVerdict: phuTrach && !KET_THUC.includes(nhom.trang_thai),
-    }))
+    nhoms.map(async (nhom) => {
+      const bans = await repo.listBanByFile(nhom.id);
+      return {
+        ...nhom,
+        bans,
+        gopY: await repo.listGopYByFile(nhom.id),
+        luong: await repo.listLuongByFile(nhom.id),
+        duocSua: duocSuaTrucTiep(user, nhom, item),
+        duocVerdict: phuTrach && !KET_THUC.includes(nhom.trang_thai),
+        // 016 — «Báo cáo»: dòng này nhập CHỮ chứ không nộp file, nên giao diện đổi ô «Hành động»
+        // thành khung nhập nội dung. Lấy theo `dinh_dang` đã khai; nhóm cũ chưa có cột thì suy từ
+        // bản mới nhất (bản không có `ten_luu` là bản chữ).
+        laBaoCao:
+          nhom.dinh_dang === DINH_DANG_BAO_CAO ||
+          (bans.length > 0 && laBanBaoCao(bans[bans.length - 1])),
+      };
+    })
   );
 }
 
@@ -810,7 +1034,25 @@ export async function docBan(user, banId) {
   const item = await itemsRepo.findById(nhom.item_id);
   if (!item) throw notFound('Không tìm thấy nhiệm vụ chứa file này');
   assertCan(user, 'read', item, 'task');
+  chanBanBaoCao(ban);
   return { ban, item };
+}
+
+/**
+ * Bản «Báo cáo» (016) KHÔNG có file vật lý — mọi cửa đòi file phải dừng ở đây với câu nói rõ, chứ
+ * không đi tiếp để `duongBan(null)` hay ONLYOFFICE nổ một lỗi không ai hiểu. Nội dung báo cáo đọc
+ * ngay trong bảng kết quả nên không có gì để tải về.
+ */
+export function laBanBaoCao(ban) {
+  return Boolean(ban && ban.noi_dung != null && ban.ten_luu == null);
+}
+
+function chanBanBaoCao(ban) {
+  if (laBanBaoCao(ban)) {
+    throw badRequest(
+      'Bản này là BÁO CÁO nhập chữ, không có file để tải hay mở — nội dung đã hiện ngay trong bảng kết quả'
+    );
+  }
 }
 
 /** Bản CHỈ DÀNH cho máy-đối-máy (ONLYOFFICE) — không có người dùng; đã được token HMAC bảo vệ. */
@@ -821,6 +1063,7 @@ export async function docBanSystem(banId) {
   if (!nhom) throw notFound('Không tìm thấy nhóm file chứa bản này');
   const item = await itemsRepo.findById(nhom.item_id);
   if (!item) throw notFound('Không tìm thấy nhiệm vụ chứa file này');
+  chanBanBaoCao(ban);
   return { ban, item };
 }
 

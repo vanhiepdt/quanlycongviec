@@ -3,6 +3,8 @@
 //
 // Năm đường:
 //   POST   /work-items/:ref/files           nộp bản mới (multipart: file + fileId? + moTa?)
+//   POST   /work-items/:ref/results         KHAI dòng kết quả trước khi có file (016, JSON)
+//   POST   /work-items/:ref/reports         nộp «Báo cáo» — bản không có file, nội dung chữ (016)
 //   GET    /work-items/:ref/files           nhóm + bản + góp ý + bảng luồng của nhiệm vụ
 //   GET    /task-files/:id/download         stream; ?inline=1 để PDF mở trong iframe
 //   POST   /task-files/:id/verdict          Yêu cầu sửa / Trình / Đẩy về Cán bộ / Hoàn thành /
@@ -67,6 +69,24 @@ const gopYSchema = z.object({
 
 const downloadSchema = z.object({ inline: z.enum(['0', '1']).optional() });
 
+/**
+ * KHAI DÒNG KẾT QUẢ TRƯỚC KHI CÓ FILE (016) — nút ＋ của khối «Kết quả». JSON, KHÔNG multipart:
+ * đường nộp file (`POST /work-items/:ref/files`) vẫn đòi có file thật, không nhận thân rỗng —
+ * một đường một nhiệm vụ thì câu lỗi mới nói đúng thứ người dùng thiếu.
+ */
+const khaiKetQuaSchema = z.object({
+  tenKetQua: z.string().trim().min(1, 'Vui lòng nhập tên kết quả làm được').max(500),
+  dinhDang: z.enum(['Word', 'Excel', 'PPT', 'PDF', 'Ảnh', 'Báo cáo']).optional(),
+  yKien: text(2000).optional(),
+});
+
+/** NỘP «BÁO CÁO» — bản KHÔNG có file, nội dung là chữ. `fileId` có = thêm bản vào nhóm đã khai. */
+const baoCaoSchema = z.object({
+  noiDung: z.string().trim().min(10, 'Nội dung báo cáo cần ít nhất 10 ký tự').max(20000),
+  tenGoc: z.string().trim().max(500).optional(),
+  fileId: idInput.optional(),
+});
+
 taskFilesRouter.use(requireAuth);
 
 /** Nộp bản mới (multipart). Không có `fileId` = mở nhóm mới (v1); có = thêm bản vào nhóm. */
@@ -116,6 +136,57 @@ taskFilesRouter.post(
     }
   }
 );
+
+/**
+ * POST /work-items/:ref/results — KHAI dòng kết quả (tên + định dạng + ý kiến), CHƯA có file.
+ * Nhóm sinh ra với 0 bản ⇒ cột «File đã tải lên» là «Chưa có» và nhóm không vào hàng chờ phê duyệt.
+ */
+taskFilesRouter.post(
+  '/work-items/:ref/results',
+  validate(khaiKetQuaSchema),
+  async (req, res, next) => {
+    try {
+      const ketQua = await service.khaiKetQua(req.user, req.params.ref, {
+        tenKetQua: req.body.tenKetQua,
+        dinhDang: req.body.dinhDang,
+        yKien: req.body.yKien,
+      });
+      res.locals.audit = {
+        action: 'taskFiles.khai',
+        entityType: 'task',
+        entityId: ketQua.nhom.item_id,
+        details: { fileId: ketQua.nhom.id, dinhDang: ketQua.nhom.dinh_dang },
+      };
+      return ok(res, ketQua);
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+/** POST /work-items/:ref/reports — nộp «Báo cáo»: một BẢN không có file, nội dung là chữ. */
+taskFilesRouter.post('/work-items/:ref/reports', validate(baoCaoSchema), async (req, res, next) => {
+  try {
+    const ketQua = await service.nopBaoCao(req.user, req.params.ref, {
+      noiDung: req.body.noiDung,
+      tenGoc: req.body.tenGoc,
+      fileId: req.body.fileId == null ? null : Number(req.body.fileId),
+    });
+    res.locals.audit = {
+      action: 'taskFiles.nop-bao-cao',
+      entityType: 'task',
+      entityId: ketQua.nhom.item_id,
+      details: {
+        fileId: ketQua.nhom.id,
+        versionNo: ketQua.ban.version_no,
+        tuDong: ketQua.tuDong,
+      },
+    };
+    return ok(res, ketQua);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 taskFilesRouter.get('/work-items/:ref/files', async (req, res, next) => {
   try {

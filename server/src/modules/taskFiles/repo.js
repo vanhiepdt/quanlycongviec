@@ -1,5 +1,5 @@
-// Truy vấn 4 bảng «kết quả nhiệm vụ là file» (014_nhiem_vu_file_ket_qua.sql) — nhóm, bản, góp ý,
-// bảng luồng. SQL viết tay, tham số hoá 100%; tên cột chỉ đến từ danh sách khai ở đây.
+// Truy vấn 4 bảng «kết quả nhiệm vụ là file» (014_nhiem_vu_file_ket_qua.sql, nới 016). SQL viết
+// tay, tham số hoá 100%; tên cột chỉ đến từ danh sách khai ở đây.
 //
 // Bốn bảng là bốn tầng của cùng một tính năng nhưng tách bảng để mỗi tầng có vòng đời riêng:
 //   task_files          NHÓM file của MỘT nhiệm vụ — đi riêng một luồng nộp → góp ý → duyệt
@@ -7,20 +7,32 @@
 //   task_file_comments  GÓP Ý gắn theo BẢN (góp ý của bản nào là của đúng bản đó)
 //   task_file_flow      BẢNG LUỒNG — một dòng cho MỖI hành động, kể cả «Tự động»
 // JOIN users để trả TÊN người kèm mỗi dòng: giao diện không phải gọi thêm API nào.
+//
+// 016 thêm ba cột vào danh sách chọn: `ten_ket_qua`/`dinh_dang` của NHÓM (khai trước khi có file —
+// dòng «Chưa có») và `noi_dung` của BẢN (bản «Báo cáo» không có file). Nhóm 0 bản là hợp lệ từ 016.
 import { pool } from '../../db/pool.js';
 
 const db = (client) => client ?? pool;
 
-const NHOM = `f.id, f.item_id, f.ten_goc, f.trang_thai, f.created_by, f.created_at,
-              cu.full_name AS ten_nguoi_tao`;
+const NHOM = `f.id, f.item_id, f.ten_goc, f.ten_ket_qua, f.dinh_dang, f.trang_thai,
+              f.created_by, f.created_at, cu.full_name AS ten_nguoi_tao`;
 const BAN = `v.id, v.file_id, v.version_no, v.ten_luu, v.ten_goc, v.loai_mime, v.kich_thuoc,
-             v.uploaded_by, v.uploaded_at, uu.full_name AS ten_nguoi_nop`;
+             v.noi_dung, v.uploaded_by, v.uploaded_at, uu.full_name AS ten_nguoi_nop`;
 
-export async function themNhom({ itemId, tenGoc, trangThai, createdBy }, client) {
+/**
+ * Mở NHÓM kết quả. `tenKetQua`/`dinhDang` là phần người dùng KHAI (016); `tenGoc` vẫn là tên file
+ * đầu tiên — nhóm khai trước khi có file thì lấy chính tên kết quả làm `tenGoc` (cột NOT NULL từ
+ * 014, và giao diện cũ lùi về nó khi `ten_ket_qua` trống).
+ */
+export async function themNhom(
+  { itemId, tenGoc, tenKetQua = null, dinhDang = null, trangThai, createdBy },
+  client
+) {
   const { rows } = await db(client).query(
-    `INSERT INTO task_files (item_id, ten_goc, trang_thai, created_by)
-     VALUES ($1, $2, $3, $4) RETURNING id, item_id, ten_goc, trang_thai, created_by, created_at`,
-    [itemId, tenGoc, trangThai, createdBy]
+    `INSERT INTO task_files (item_id, ten_goc, ten_ket_qua, dinh_dang, trang_thai, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, item_id, ten_goc, ten_ket_qua, dinh_dang, trang_thai, created_by, created_at`,
+    [itemId, tenGoc, tenKetQua ?? tenGoc, dinhDang, trangThai, createdBy]
   );
   return rows[0];
 }
@@ -65,17 +77,32 @@ export async function soBanCaoNhat(fileId, client) {
   return rows[0].n;
 }
 
+/**
+ * Thêm BẢN. Hai dạng loại trừ nhau, CHECK `tfv_file_hoac_chu` (016) canh ở CSDL:
+ *   FILE     : `tenLuu` + `loaiMime` + `kichThuoc` đủ ba, `noiDung` bỏ trống.
+ *   BÁO CÁO  : `noiDung` là chữ (≥ 10 ký tự), ba cột file để NULL — không sinh file vật lý nào.
+ * `tenGoc` luôn phải có: bản báo cáo cũng cần một tiêu đề để in ra bảng kết quả.
+ */
 export async function themBan(
-  { fileId, versionNo, tenLuu, tenGoc, loaiMime, kichThuoc, uploadedBy },
+  {
+    fileId,
+    versionNo,
+    tenLuu = null,
+    tenGoc,
+    loaiMime = null,
+    kichThuoc = null,
+    noiDung = null,
+    uploadedBy,
+  },
   client
 ) {
   const { rows } = await db(client).query(
     `INSERT INTO task_file_versions
-       (file_id, version_no, ten_luu, ten_goc, loai_mime, kich_thuoc, uploaded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, file_id, version_no, ten_luu, ten_goc, loai_mime, kich_thuoc,
+       (file_id, version_no, ten_luu, ten_goc, loai_mime, kich_thuoc, noi_dung, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, file_id, version_no, ten_luu, ten_goc, loai_mime, kich_thuoc, noi_dung,
                uploaded_by, uploaded_at`,
-    [fileId, versionNo, tenLuu, tenGoc, loaiMime, kichThuoc, uploadedBy]
+    [fileId, versionNo, tenLuu, tenGoc, loaiMime, kichThuoc, noiDung, uploadedBy]
   );
   return rows[0];
 }
@@ -223,6 +250,10 @@ export async function lanhDaoPhuTrach(phongId, client = null) {
  * không bao giờ bị treo vĩnh viễn.
  *
  * `phongIds` rỗng với Phó Giám đốc chưa được gắn phòng nào ⇒ trả rỗng, không phải trả tất cả.
+ *
+ * 016 — `AND v.id IS NOT NULL`: nhóm KHAI TRƯỚC còn 0 bản (dòng «Chưa có» trong khối «Kết quả») thì
+ * KHÔNG vào hàng chờ. Chưa có bản nào thì không có gì để duyệt: hiện ra là dòng trống không bấm
+ * được nút nào, lại còn đội con số trên tab lên. Nộp bản đầu (file hoặc «Báo cáo») là nó xuất hiện.
  */
 export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = null) {
   let dieuKienTrangThai;
@@ -246,7 +277,7 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
     return [];
   }
   const { rows } = await db(client).query(
-    `SELECT f.id, f.item_id, f.ten_goc, f.trang_thai, f.created_at,
+    `SELECT f.id, f.item_id, f.ten_goc, f.ten_ket_qua, f.dinh_dang, f.trang_thai, f.created_at,
             cu.full_name AS ten_nguoi_tao,
             i.code AS ma_nhiem_vu, i.name AS ten_nhiem_vu, i.department_id, i.leader_ids,
             i.assignee_id, i.parent_id, i.work_id,
@@ -254,7 +285,8 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
             w.code AS ma_cong_viec, w.name AS ten_cong_viec,
             d.name AS ten_phong,
             v.id AS ban_cuoi_id, v.version_no AS ban_cuoi_so, v.uploaded_at AS ban_cuoi_luc,
-            v.ten_goc AS ban_cuoi_ten, vu.full_name AS ban_cuoi_nguoi,
+            v.ten_goc AS ban_cuoi_ten, v.noi_dung IS NOT NULL AS ban_cuoi_la_bao_cao,
+            vu.full_name AS ban_cuoi_nguoi,
             (SELECT count(*) FROM task_file_versions tv WHERE tv.file_id = f.id)::int AS so_ban,
             (SELECT count(*) FROM task_file_comments tc
                JOIN task_file_versions tv2 ON tv2.id = tc.version_id
@@ -266,13 +298,14 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
        LEFT JOIN work_items cha ON cha.id = i.parent_id
        LEFT JOIN departments d ON d.id = i.department_id
        LEFT JOIN LATERAL (
-         SELECT id, version_no, ten_goc, uploaded_at, uploaded_by
+         SELECT id, version_no, ten_goc, noi_dung, uploaded_at, uploaded_by
            FROM task_file_versions
           WHERE file_id = f.id
           ORDER BY version_no DESC LIMIT 1
        ) v ON TRUE
        LEFT JOIN users vu  ON vu.id = v.uploaded_by
       WHERE ${dieuKienTrangThai} AND ${dieuKienPhong}
+        AND v.id IS NOT NULL
       ORDER BY w.code, cha.code NULLS FIRST, i.code,
                COALESCE(v.uploaded_at, f.created_at) DESC, f.id DESC
       LIMIT 200`,
