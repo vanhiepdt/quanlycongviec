@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260904-1");
+console.info("[QLCV] app.js 20260904-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2277,6 +2277,26 @@ function dinhDangCuaTen(ten) {
   return (khop && NHAN_DINH_DANG[khop[0].toLowerCase()]) || "—";
 }
 /**
+ * ICON của từng định dạng (người dùng chốt 2026-09-04: «ghi kèm icon định dạng file»). Đuôi lạ thì
+ * dùng biểu tượng tệp chung — thà nhạt nhoà còn hơn gán sai loại.
+ */
+const ICON_DINH_DANG = Object.freeze({
+  Word: "fa-file-word text-blue-600",
+  Excel: "fa-file-excel text-green-600",
+  PPT: "fa-file-powerpoint text-orange-600",
+  PDF: "fa-file-pdf text-red-600",
+  "Ảnh": "fa-file-image text-purple-600",
+});
+/** Icon định dạng kèm title + aria-label — mất icon (font chưa tải) vẫn còn CHỮ để đọc. */
+function buildIconDinhDang(ten) {
+  const nhan = dinhDangCuaTen(ten);
+  const icon = ICON_DINH_DANG[nhan] || "fa-file text-gray-400";
+  return (
+    "<i class=\"fas " + escapeHtmlAttr(icon) + " mr-2\" role=\"img\" title=\"" +
+    escapeHtmlAttr(nhan) + "\" aria-label=\"" + escapeHtmlAttr(nhan) + "\"></i>"
+  );
+}
+/**
  * CÂU KỂ tình trạng (thiết kế mới, sheet «kq-modal» cột «Tình trạng»): người dùng muốn đọc được
  * «đang đợi ai, đã qua tay ai, bị trả lại mấy lần» chứ không phải một nhãn ngắn. Sinh từ
  * `trang_thai` + ĐẾM số lần trả lại trong bảng luồng — KHÔNG cần trường mới nào của máy chủ.
@@ -2389,25 +2409,74 @@ function buildMucMenuKq(icon, nhan, onclick, laChot) {
   );
 }
 /**
- * Mở/đóng MỘT menu hành động. Đóng mọi menu khác trước — hai menu mở cùng lúc là chồng lên nhau,
- * người dùng bấm nhầm dòng. Bấm ra ngoài cũng đóng (listener gắn MỘT lần, xem `goiDongMenuKq`).
+ * Mở/đóng MỘT menu hành động — mở cái này thì cái đang mở phải gập (hai menu chồng nhau là bấm
+ * nhầm dòng).
+ *
+ * Người dùng chốt 2026-09-04: «Nút chức năng khi ấn thì bị vấn trong hộp nên phải kéo chuột xuống
+ * mới thấy, cho nó vươn ra khỏi hộp để dễ chọn». Menu KHÔNG vươn ra được bằng CSS: cả
+ * `.glass-card` (trang hàng chờ) lẫn `.modal-content` (modal nhiệm vụ) đều `overflow` cắt VÀ có
+ * `backdrop-filter` — mà `backdrop-filter` biến thẻ thành KHỐI CHỨA của cả `position: fixed`, nên
+ * đổi sang `fixed` vẫn bị cắt y như cũ. Cách chắc chắn: DỜI thẻ menu ra `<body>` lúc mở, định vị
+ * theo hình chữ nhật của nút ⋯, rồi TRẢ VỀ chỗ cũ lúc đóng.
  */
+let menuKqDangMo = null; // { el, cho, ke } — thẻ đang ở <body> và chỗ phải trả về
 function batTatMenuKq(maMenu) {
   const el = document.getElementById(maMenu);
-  document.querySelectorAll(".kq-menu").forEach((m) => {
-    if (m !== el) m.classList.add("hidden");
-  });
-  if (el) el.classList.toggle("hidden");
+  const dangMo = Boolean(menuKqDangMo && menuKqDangMo.el === el);
+  dongMenuKq();
+  if (!el || dangMo) return; // bấm lại đúng nút đó = gập lại
+  // Đo nút ⋯ TRƯỚC khi dời: dời rồi thì menu không còn anh em nào để đo.
+  const nut = el.previousElementSibling;
+  const o = nut && nut.getBoundingClientRect ? nut.getBoundingClientRect() : null;
+  menuKqDangMo = { el, cho: el.parentNode, ke: el.nextSibling };
+  document.body.appendChild(el);
+  el.classList.remove("hidden");
+  datViTriMenuKq(el, o);
   goiDongMenuKq();
+}
+/** Trả menu đang mở về chỗ cũ rồi ẩn. Bảng đã vẽ lại (chỗ cũ rụng khỏi DOM) thì bỏ thẻ đi. */
+function dongMenuKq() {
+  document.querySelectorAll(".kq-menu").forEach((m) => m.classList.add("hidden"));
+  if (!menuKqDangMo) return;
+  const { el, cho, ke } = menuKqDangMo;
+  menuKqDangMo = null;
+  el.classList.add("hidden");
+  el.removeAttribute("style");
+  if (cho && cho.isConnected) cho.insertBefore(el, ke && ke.parentNode === cho ? ke : null);
+  else el.remove();
+}
+/**
+ * Đặt menu (đang ở `<body>`) ngay dưới nút ⋯, canh lề phải nút. Không đủ chỗ bên dưới thì mở
+ * NGƯỢC LÊN; sát mép thì kéo vào trong. Không đo được (jsdom, nút vừa biến mất) thì để nguyên
+ * theo CSS — không đoán toạ độ.
+ */
+function datViTriMenuKq(el, o) {
+  if (!o || (!o.width && !o.height)) return;
+  const rong = el.offsetWidth || 208; // 13rem = min-width của .kq-menu
+  const cao = el.offsetHeight || 0;
+  let trai = o.right - rong;
+  if (trai + rong > window.innerWidth - 8) trai = window.innerWidth - rong - 8;
+  if (trai < 8) trai = 8;
+  const conLai = window.innerHeight - o.bottom;
+  const moLen = cao > 0 && conLai < cao + 12 && o.top > conLai;
+  el.style.position = "fixed";
+  el.style.right = "auto";
+  el.style.left = trai + "px";
+  el.style.top = (moLen ? Math.max(8, o.top - cao - 4) : o.bottom + 4) + "px";
+  el.style.maxHeight = Math.max(120, (moLen ? o.top : conLai) - 12) + "px";
+  el.style.overflowY = "auto";
 }
 let daGoiDongMenuKq = false;
 /** Gắn MỘT lần listener «bấm ra ngoài thì đóng menu» — gắn nhiều lần là rò listener mỗi lượt vẽ. */
 function goiDongMenuKq() {
   if (daGoiDongMenuKq) return;
   daGoiDongMenuKq = true;
+  // Lúc mở, menu nằm ở `<body>` (không còn trong `.kq-menu-boc`) nên bấm vào MỘT MỤC cũng rơi vào
+  // nhánh «bấm ra ngoài» — đúng ý: chọn xong thì menu gập. Chỉ chừa đúng nút ⋯ cho `batTatMenuKq`
+  // tự xử, khỏi đóng rồi mở lại trong cùng một cú bấm.
   document.addEventListener("click", (ev) => {
     if (ev.target && ev.target.closest && ev.target.closest(".kq-menu-boc")) return;
-    document.querySelectorAll(".kq-menu").forEach((m) => m.classList.add("hidden"));
+    dongMenuKq();
   });
 }
 /** Ẩn/hiện khung Ý KIỆN (yk) hoặc LỊCH SỬ (ls) của một dòng file — bấm lần nữa là gập lại. */
@@ -2474,6 +2543,7 @@ async function restUpload(path, formData) {
 async function napKetQua(ma) {
   const khung = document.getElementById("task-ket-qua-danh-sach");
   if (!khung) return;
+  dongMenuKq(); // menu đang mở nằm ở <body>: vẽ lại bảng mà không gập là để nó lơ lửng mồ côi
   taskKetQuaMa = String(ma || khung.dataset.ma || "");
   const ketQua = await restGet("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files");
   if (!document.getElementById("task-ket-qua-danh-sach")) return;
@@ -6915,6 +6985,7 @@ async function napTrangChoDuyet() {
 async function renderChoDuyetKetQua() {
   const listEl = document.getElementById("cho-duyet-ket-qua-list");
   if (!listEl) return;
+  dongMenuKq(); // xem chú ở napKetQua
   listEl.innerHTML = "<div class=\"text-sm text-gray-400 py-2\"><i class=\"fas fa-spinner fa-spin mr-2\"></i>Đang tải...</div>";
   const duLieu = await restGet("/api/v1/task-files/cho-duyet");
   if (!document.getElementById("cho-duyet-ket-qua-list")) return;
@@ -7022,12 +7093,19 @@ function buildDongChoDuyetKetQua(n) {
   const soYKien = Number(n.so_y_kien || 0);
   return (
     "<tr class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
-    // 1. Tên kết quả làm được — đợt 1 là tên file gốc (đợt 2 = migration 016 thêm `ten_ket_qua`).
+    // 1. Tên kết quả làm được (người dùng chốt 2026-09-04): DÒNG 1 = tên kết quả đã khai ở ô
+    // «Kết quả» của nhiệm vụ + ICON định dạng + số bản; DÒNG 2 = TÊN FILE của bản mới nhất (hai
+    // thứ này khác nhau ngay khi ai đó nộp bản mới bằng file tên khác). Đợt 1 tên kết quả vẫn là
+    // `ten_goc` của nhóm; đợt 2 = migration 016 thêm cột `ten_ket_qua` cho người dùng tự khai.
     "<td class=\"px-3 py-2\">" +
-    "<i class=\"fas fa-file-alt text-blue-500 mr-2\"></i>" +
-    "<span class=\"font-medium text-gray-800\">" + escapeHtml(n.ten_goc) + "</span>" +
-    "<div class=\"text-xs text-gray-400\">" + escapeHtml(dinhDangCuaTen(n.ten_goc)) + " · " +
-    escapeHtml(n.so_ban || 1) + " bản</div>" +
+    "<div class=\"flex items-start\">" +
+    buildIconDinhDang(n.ten_goc) +
+    "<div class=\"min-w-0\">" +
+    "<div><span class=\"font-medium text-gray-800\">" + escapeHtml(n.ten_goc) + "</span>" +
+    "<span class=\"text-xs text-gray-400 ml-2 whitespace-nowrap\">" + escapeHtml(n.so_ban || 1) + " bản</span></div>" +
+    "<div class=\"text-xs text-gray-500 truncate\" title=\"" + escapeHtmlAttr(n.ban_cuoi_ten || n.ten_goc) + "\">" +
+    escapeHtml(n.ban_cuoi_ten || n.ten_goc) + "</div>" +
+    "</div></div>" +
     "</td>" +
     // 2-3-4. Ba cấp cây, đọc từ dưới lên đúng thứ tự sheet.
     buildONhiemVuChoDuyet(n.ten_nhiem_vu, n.ma_nhiem_vu) +

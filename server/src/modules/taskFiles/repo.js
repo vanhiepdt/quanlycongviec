@@ -254,7 +254,7 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
             w.code AS ma_cong_viec, w.name AS ten_cong_viec,
             d.name AS ten_phong,
             v.id AS ban_cuoi_id, v.version_no AS ban_cuoi_so, v.uploaded_at AS ban_cuoi_luc,
-            vu.full_name AS ban_cuoi_nguoi,
+            v.ten_goc AS ban_cuoi_ten, vu.full_name AS ban_cuoi_nguoi,
             (SELECT count(*) FROM task_file_versions tv WHERE tv.file_id = f.id)::int AS so_ban,
             (SELECT count(*) FROM task_file_comments tc
                JOIN task_file_versions tv2 ON tv2.id = tc.version_id
@@ -266,7 +266,7 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
        LEFT JOIN work_items cha ON cha.id = i.parent_id
        LEFT JOIN departments d ON d.id = i.department_id
        LEFT JOIN LATERAL (
-         SELECT id, version_no, uploaded_at, uploaded_by
+         SELECT id, version_no, ten_goc, uploaded_at, uploaded_by
            FROM task_file_versions
           WHERE file_id = f.id
           ORDER BY version_no DESC LIMIT 1

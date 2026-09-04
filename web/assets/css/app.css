@@ -3823,6 +3823,12 @@
    Sheet ghi: «ấn vào đây hiển thị các Hành động để chọn». Trước đây mỗi hành động là
    một nút riêng nên hàng nút tràn ngang bảng; nay một nút ⋯ mở danh sách dọc.
    `position: absolute` + `right: 0` để menu không đẩy giãn ô bảng.
+
+   2026-09-04: hai khai báo dưới chỉ là VỊ TRÍ DỰ PHÒNG. Lúc mở, `batTatMenuKq` DỜI thẻ
+   menu ra `<body>` và đặt `position: fixed` bằng JS — vì `.glass-card` / `.modal-content`
+   vừa `overflow` cắt vừa có `backdrop-filter` (thẻ có backdrop-filter là khối chứa của cả
+   `fixed`, nên đổi sang fixed tại chỗ vẫn bị cắt). Đó là lỗi «bị vấn trong hộp, phải kéo
+   chuột xuống mới thấy» người dùng báo.
    ──────────────────────────────────────────────────────────────────────────── */
 .kq-menu-boc {
     position: relative;
@@ -3947,3 +3953,53 @@
     border-left: 2px dashed #cbd5e1;
 }
 
+/* ============================================================================
+   LỚP TAILWIND TRANG DÙNG NHƯNG BẢN ĐÓNG GÓI KHÔNG CÓ (2026-09-04).
+
+   `assets/vendor/tailwind/tailwind.min.css` là bản CẮT SẴN 39 KB (§7 việc 4.3: thư viện
+   phải tự chứa, không CDN) nên thiếu một số lớp trang vẫn dùng. Thiếu lớp `text-*` thì
+   chữ chỉ sai cỡ/màu; nhưng thiếu lớp `bg-*` của một badge chữ TRẮNG thì badge biến mất
+   hẳn — đúng lỗi người dùng báo 2026-09-04: «Số đang hiển thị ở tab hàng chờ màu trắng
+   cùng màu với nền nên ko nhìn rõ». `#nav-cho-duyet-badge` mang `bg-rose-600 text-white`
+   mà `.bg-rose-600` không tồn tại ⇒ số trắng trên nền trắng.
+
+   Chỉ khai đúng những lớp ĐANG dùng, cùng giá trị với Tailwind — không nhồi cả bảng màu,
+   bản đóng gói phải giữ nhỏ. Soát lại bằng: node tools/_tam-soat-lop.mjs (nếu còn).
+   ============================================================================ */
+
+/* Mục «Hàng chờ phê duyệt» trên thanh điều hướng: badge số + ô biểu tượng. */
+.bg-rose-600 {
+    background-color: #e11d48;
+}
+
+.bg-rose-100 {
+    background-color: #ffe4e6;
+}
+
+.text-rose-600 {
+    color: #e11d48;
+}
+
+/* Badge trạng thái của hai bảng «Kết quả» / «Phê duyệt kết quả» (MAU_TRANG_THAI_FILE):
+   «Chờ TP/PP xem» (vàng) mất nền, và «Đã duyệt» (xanh đậm, chữ trắng) mất hẳn như badge trên. */
+.bg-yellow-100 {
+    background-color: #fef9c3;
+}
+
+.text-yellow-700 {
+    color: #a16207;
+}
+
+.bg-green-800 {
+    background-color: #166534;
+}
+
+/* Cỡ chữ 11px của badge + hàng tiêu đề hai bảng, và màu ô «—» khi không có gì để hiện. */
+.text-\[11px\] {
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.text-gray-300 {
+    color: #d1d5db;
+}
