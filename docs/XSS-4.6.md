@@ -627,6 +627,19 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     Chúng được `querySelector` đọc lại nên còn một lớp nữa ở `batTatBanKq`: lọc `"` và `\` khỏi khoá
     trước khi ghép vào bộ chọn CSS, kẻo id lạ làm vỡ selector (không phải XSS, nhưng cùng họ lỗi
     «ghép chuỗi vào một ngôn ngữ khác»).
+- **Ba việc người dùng báo sau khi xem bảng thật (2026-09-04 — Vòng 14续10)**: pin
+  **101/868 → 101/873** (**+5 giá trị, `sink` vẫn đứng yên** — lần thứ tư). Phân bổ ghi trong chú
+  thích TC-SEC-17. Hai điều đáng ghi lại:
+  - **Dời thẻ ra `<body>` không sinh lỗ nào.** `batTatMenuKq` cho menu ⋯ «vươn ra khỏi hộp» bằng
+    `document.body.appendChild(el)` + `el.style.*` — thuần DOM API, không ghép chuỗi HTML, nên bộ
+    soát không thấy gì và **đó là kết quả đúng**. Cùng việc ấy nếu làm bằng
+    `document.body.insertAdjacentHTML(...)` thì thành một `sink` mới phải giải trình. Khi phải đưa
+    một khối đang có sẵn ra chỗ khác, **di chuyển thẻ** luôn rẻ hơn dựng lại chuỗi.
+  - **Icon suy từ dữ liệu vẫn là ba lỗ phải escape.** `buildIconDinhDang` nội suy tên lớp icon vào
+    `class`, và nhãn định dạng vào `title` + `aria-label` — cả ba đều `escapeHtmlAttr`. Tên lớp lấy
+    từ bảng `ICON_DINH_DANG` do chương trình giữ (không phải từ người dùng), nhưng escape ở lỗ là
+    luật không xét nguồn (TC-SEC-13); và `aria-label` có mặt vì mất font icon thì badge còn chữ để
+    đọc — chuyện dễ tiếp cận, không phải chuyện bảo mật.
 
 
 

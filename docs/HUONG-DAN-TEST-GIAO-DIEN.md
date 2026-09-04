@@ -902,6 +902,52 @@ Thứ tự dòng là **của máy chủ** (theo mã công việc → mã công v
 thứ tự trông lạ thì đó là thứ tự mã, không phải lỗi sắp xếp.
 
 
+### 9b.9 Ba việc bạn báo sau khi xem bảng thật (2026-09-04) — bấm để tự nghiệm
+
+Cần bản **`app.js 20260904-2`** và **`app.css 20260904-2`** (Console in số đó; **Ctrl+Shift+R** vì
+đợt này đổi cả CSS). Không migration, không seed lại.
+
+**(1) Số trên tab «Hàng chờ phê duyệt» nhìn rõ chưa.** Đăng nhập `tp@test.local`, nhìn **thanh điều
+hướng bên trái**: mục «Hàng chờ phê duyệt» có một **badge đỏ** với con số ở mép phải. Trước đây con
+số đó **trắng trên nền trắng** nên coi như mất — bản đóng gói Tailwind của trang bị cắt bớt, không
+có sẵn màu nền `rose-600` mà badge đang dùng, nên nền không được vẽ ra. Nay đã khai bù màu đó.
+
+Cùng lỗi ấy còn ăn vào **badge trạng thái** của hai bảng kết quả: mở NV-01, badge «Chờ TP/PP xem»
+phải có **nền vàng nhạt chữ nâu** (trước là chữ nâu trên nền trắng), và kết quả nào đã được Phó
+Giám đốc duyệt thì badge «Đã duyệt» phải là **nền xanh đậm chữ trắng** (trước là badge trắng trơn,
+coi như biến mất).
+
+**(2) Menu ⋯ không còn bị hộp cắt.** Đây là việc bạn báo «ấn thì bị vấn trong hộp nên phải kéo chuột
+xuống mới thấy». Thử ở **dòng cuối cùng** — chỗ dễ lộ nhất:
+
+- `tp@test.local` → «Hàng chờ phê duyệt» → tab «Phê duyệt kết quả» → bấm ⋯ ở **dòng dưới cùng** của
+  bảng. Danh sách phải hiện **đầy đủ, nổi lên trên khung trắng**, không bị cắt ngang và bạn **không
+  phải cuộn** để thấy mục cuối.
+- Nếu dòng đó nằm sát **đáy cửa sổ**, menu phải **tự mở ngược lên trên** thay vì đổ xuống rồi mất.
+- Làm y như vậy trong **modal nhiệm vụ**: mở NV-01 → tab «Thông tin» → bảng «Kết quả» → bấm ⋯ ở dòng
+  cuối. Modal có thanh cuộn riêng nên đây là chỗ lỗi nặng nhất trước đây.
+- **Cuộn trang trong khi menu đang mở** thì menu đứng yên tại chỗ cũ (nó đã ra ngoài khung cuộn) —
+  bấm ra chỗ trống để đóng, rồi bấm ⋯ lại. Đó là đánh đổi có ý: thà menu đứng một chỗ còn hơn bị
+  cắt mất.
+- Chọn một mục bất kỳ (ví dụ «Tải bản mới nhất») thì menu **đóng ngay** và việc vẫn chạy như trước.
+
+**(3) Cột «Tên kết quả làm được» ở hàng chờ nay hai dòng.** Vẫn ở tab «Phê duyệt kết quả», nhìn cột
+đầu tiên. Mỗi dòng phải có:
+
+- **biểu tượng theo định dạng** ở đầu: Word xanh, Excel xanh lá, PowerPoint cam, PDF đỏ, ảnh tím
+  (đuôi lạ thì biểu tượng tệp xám);
+- **dòng trên**: tên kết quả + chữ mờ «**N bản**»;
+- **dòng dưới**: **tên file của bản mới nhất**.
+
+Muốn thấy rõ hai dòng đó là **hai thứ khác nhau**: ở NV-01 nộp bản mới bằng một file **đặt tên khác**
+(ví dụ `ban-sua-lan-2.docx`), rồi quay lại hàng chờ. Dòng trên vẫn là tên kết quả ban đầu, dòng dưới
+đổi thành `ban-sua-lan-2.docx`, và số bản tăng lên. Tên quá dài thì bị cắt bằng «…» — trỏ chuột vào
+để đọc đủ.
+
+Lưu ý phần còn nợ: dòng trên hiện vẫn **lấy theo tên file đầu tiên**, vì chỗ để bạn *tự đặt tên kết
+quả* nằm ở **đợt 2** (migration 016, cùng lúc với dòng «Chưa có» và định dạng «Báo cáo»).
+
+
 ---
 
 ## 10. Dọn dẹp sau buổi test
