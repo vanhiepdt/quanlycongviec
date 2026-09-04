@@ -20,6 +20,7 @@ const EXPORTS = `;Object.assign(window, {
   buildBangChoDuyetKetQua, moChonFileChoDuyet, veTrangThaiUpload,
   khoaPhanCongVoiNhanVien,
   buildBangKetQua, buildDongBanKetQua, batTatBanKq, buildMenuHanhDongKq, batTatMenuKq,
+  dongMenuKq, buildIconDinhDang,
   dinhDangCuaTen, cauTinhTrangFile, cauTinhTrangHangCho,
   __tf: (ten, giaTri) => {
     ({
@@ -848,5 +849,92 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(nut('viec').classList.contains('active')).toBe(true);
     expect(panel('viec').classList.contains('hidden')).toBe(false);
     expect(panel('ket-qua').classList.contains('hidden')).toBe(true);
+  });
+
+  // ── TCKQ-31/32 — ba việc người dùng báo 2026-09-04 sau khi xem bảng thật ────────────────
+  it('TCKQ-31: cột 1 hàng chờ có ICON định dạng + số bản ở dòng 1, TÊN FILE ở dòng 2', () => {
+    window.__tfDs(false);
+    // Người dùng chốt: «tên Tên kết quả làm được ở hàng chờ là tên Kết quả làm được khi nhập ở ô
+    // kết quả của nhiệm vụ, ghi kèm icon định dạng file và bao nhiêu bản, dòng 2 sẽ ghi tên file».
+    const html = window.buildDongChoDuyetKetQua(
+      DONG({ so_ban: 3, ban_cuoi_ten: 'ban-sua-lan-2.docx' })
+    );
+    expect(html).toContain('fa-file-word');
+    expect(html).toContain('3 bản');
+    // Dòng 2 = tên file của BẢN MỚI NHẤT, khác tên kết quả ⇒ phải thấy CẢ HAI.
+    expect(html).toContain('ket-qua-quy3.docx');
+    expect(html).toContain('ban-sua-lan-2.docx');
+    // Tên dài thì cắt bằng ellipsis nhưng vẫn đọc đủ khi trỏ chuột.
+    expect(html).toContain('title="ban-sua-lan-2.docx"');
+    // Máy chủ chưa trả tên bản (dòng cũ) ⇒ lấy tên nhóm, không để trống.
+    expect(window.buildDongChoDuyetKetQua(DONG({ ban_cuoi_ten: null }))).toContain(
+      'ket-qua-quy3.docx'
+    );
+    // Icon theo ĐÚNG định dạng, kèm chữ cho người đọc bằng trình đọc màn hình.
+    const pdf = window.buildDongChoDuyetKetQua(DONG({ ten_goc: 'bao-cao.pdf' }));
+    expect(pdf).toContain('fa-file-pdf');
+    expect(pdf).toContain('aria-label="PDF"');
+    // Đuôi lạ: biểu tượng tệp chung + nhãn «—», không gán bừa một loại.
+    const la = window.buildDongChoDuyetKetQua(DONG({ ten_goc: 'khong-duoi' }));
+    expect(la).toContain('fa-file text-gray-400');
+    expect(la).toContain('aria-label="—"');
+    // Tên file chứa HTML vẫn phải thoát ở CẢ hai dòng lẫn trong title.
+    const xau = window.buildDongChoDuyetKetQua(
+      DONG({ ban_cuoi_ten: '"><img src=x onerror=alert(1)>.pdf' })
+    );
+    expect(xau).not.toContain('<img src=x');
+    expect(xau).toContain('&lt;img src=x');
+  });
+
+  it('TCKQ-32: menu ⋯ DỜI ra <body> khi mở để vươn khỏi hộp bị overflow, đóng thì trả về chỗ cũ', () => {
+    // Người dùng chốt 2026-09-04: «Nút chức năng khi ấn thì bị vấn trong hộp nên phải kéo chuột
+    // xuống mới thấy, cho nó vươn ra khỏi hộp để dễ chọn». `.glass-card`/`.modal-content` vừa
+    // `overflow` cắt vừa có `backdrop-filter` (= khối chứa của cả `position: fixed`), nên cách duy
+    // nhất chắc chắn là dời thẻ menu ra ngoài hộp.
+    window.__tfDs(false);
+    document.body.innerHTML =
+      '<div id="hop" style="overflow:hidden"><table><tbody>' +
+      window.buildBangChoDuyetKetQua([DONG()]) +
+      '</tbody></table></div>';
+    const menu = () => document.getElementById('kq-menu-hc-7');
+    const hop = document.getElementById('hop');
+    expect(hop.contains(menu())).toBe(true);
+    expect(menu().classList.contains('hidden')).toBe(true);
+
+    window.batTatMenuKq('kq-menu-hc-7');
+    // Ra khỏi hộp, thành con TRỰC TIẾP của <body> và định vị fixed (không còn bị cắt).
+    expect(menu().parentElement).toBe(document.body);
+    expect(hop.contains(menu())).toBe(false);
+    expect(menu().classList.contains('hidden')).toBe(false);
+
+    // Bấm lại đúng nút đó = gập, và thẻ TRẢ VỀ trong hộp — không để rác tích lại ở <body>.
+    window.batTatMenuKq('kq-menu-hc-7');
+    expect(menu().classList.contains('hidden')).toBe(true);
+    expect(hop.contains(menu())).toBe(true);
+    expect(menu().getAttribute('style')).toBe(null);
+
+    // Bấm ra ngoài cũng gập + trả về chỗ cũ (listener «bấm ngoài» gắn một lần).
+    window.batTatMenuKq('kq-menu-hc-7');
+    expect(menu().parentElement).toBe(document.body);
+    document.body.click();
+    expect(menu().classList.contains('hidden')).toBe(true);
+    expect(hop.contains(menu())).toBe(true);
+  });
+
+  it('TCKQ-33: vẽ lại bảng khi menu đang mở thì KHÔNG để lại thẻ mồ côi ở <body>', async () => {
+    // Vẽ lại làm chỗ cũ của menu rụng khỏi DOM; nếu chỉ «trả về chỗ cũ» thì thẻ nằm mãi ở <body>,
+    // chồng lên giao diện. `renderChoDuyetKetQua` phải gập menu TRƯỚC khi ghi innerHTML.
+    window.__tfDs(false);
+    document.body.innerHTML =
+      '<div id="cho-duyet-ket-qua-list"></div><span id="tab-ket-qua-count"></span>';
+    const listEl = document.getElementById('cho-duyet-ket-qua-list');
+    listEl.innerHTML = window.buildBangChoDuyetKetQua([DONG()]);
+    window.batTatMenuKq('kq-menu-hc-7');
+    expect(document.getElementById('kq-menu-hc-7').parentElement).toBe(document.body);
+
+    // fetch bị stub để REJECT ⇒ restGet trả null ⇒ hàm dừng sớm, nhưng phải gập menu trước đó.
+    await window.renderChoDuyetKetQua();
+    expect(document.getElementById('kq-menu-hc-7')).toBe(null);
+    expect([...document.body.children].some((el) => el.classList.contains('kq-menu'))).toBe(false);
   });
 });

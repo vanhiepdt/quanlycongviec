@@ -354,7 +354,17 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     //    đã GỠ; các ô thụt lề/icon của nó không còn).
     // Mọi lỗ mới đều DA-THOAT/HTML-LONG — danh sách `CO_Y_KHONG_BOC` không đổi
     // ⇒ **101 chỗ / 868 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 868 });
+    //
+    // 2026-09-04 (ba việc người dùng báo sau khi xem bảng thật): **+5 giá trị**, vẫn KHÔNG thêm
+    // chỗ ghi HTML nào.
+    //  · `buildIconDinhDang` +3 (icon định dạng file cho cột «Tên kết quả làm được»: lớp icon,
+    //    `title`, `aria-label` — mất icon thì vẫn còn chữ để đọc);
+    //  · `buildDongChoDuyetKetQua` 17 → 19 (cột 1 nay hai dòng: dòng dưới là TÊN FILE của bản mới
+    //    nhất ⇒ +1 lỗ `title` + 1 lỗ chữ; lỗ icon cũ là hằng nên không đếm).
+    // `batTatMenuKq` dời thẻ menu ra `<body>` bằng DOM API (`appendChild`, `style.*`) — không
+    // dựng chuỗi HTML nào nên bộ soát không thấy gì, đúng như mong đợi
+    // ⇒ **101 chỗ / 873 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 873 });
   });
 });
 

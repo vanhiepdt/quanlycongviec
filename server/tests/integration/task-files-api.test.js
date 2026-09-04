@@ -809,6 +809,10 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
     expect(dong.trang_thai).toBe('cho-xem');
     expect(dong.ban_cuoi_so).toBe(1);
     expect(dong.ban_cuoi_nguoi).toBe('Nguyễn Văn Cán Bộ');
+    // 2026-09-04: cột 1 của hàng chờ ghi tên kết quả ở dòng trên và TÊN FILE của bản mới nhất ở
+    // dòng dưới, nên máy chủ phải trả tên bản — hai thứ lệch nhau ngay khi ai đó nộp bản mới bằng
+    // file tên khác.
+    expect(dong.ban_cuoi_ten).toBe('ket-qua.docx');
     // Nút của TP ở «cho-xem»: 3 hành động, KHÔNG có 'duyet' (đó là cửa của PGD).
     const ma3 = dong.hanhDong.map((h) => h.ma).sort();
     expect(ma3).toEqual(['hoan-thanh', 'tra-ve-cbo', 'trinh-lanh-dao', 'yeu-cau-sua'].sort());
