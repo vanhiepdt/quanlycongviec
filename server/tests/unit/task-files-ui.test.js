@@ -22,10 +22,15 @@ const EXPORTS = `;Object.assign(window, {
   buildBangKetQua, buildDongBanKetQua, batTatBanKq, buildMenuHanhDongKq, batTatMenuKq,
   dongMenuKq, buildIconDinhDang,
   dinhDangCuaTen, cauTinhTrangFile, cauTinhTrangHangCho,
+  buildKhungKhaiKq, batTatKhungKhaiKq, doiDinhDangKhaiKq, guiKhaiKetQua, guiBaoCaoKetQua,
+  buildONhapBaoCao, dinhDangCuaNhom, laDongBaoCao, laBanBaoCaoKq, tenBanCuoiHangCho,
+  buildKhungDanhSachKetQua, buildDongKhaiTam, themDongKhaiTam, thuThapDongKhaiTam,
+  guiDongKhaiTam, coTheKhaiKetQua, doiDinhDangDongTam, xoaDongKhaiTam,
   __tf: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
       allTasks: () => { allTasks = giaTri; },
+      pendingTaskCreate: () => { pendingTaskCreate = giaTri; },
     })[ten]();
   },
   __tfPq: (macDinh, ghiDe) => {
@@ -170,13 +175,16 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
   it('TCKQ-17b: nút ✎ mở cho Excel/PowerPoint nhưng ẨN ở ẢNH — DS không sửa được ảnh', () => {
     // Người dùng chốt 2026-09-03: bật ✎ cho Excel + PowerPoint. Ảnh thì DS không có bộ soạn thảo
     // nào (máy chủ trả 400) nên nút phải ẩn, khỏi mở ra một tab editor lỗi.
+    // Đợt 2: nút ✎ nhìn `banCuoi.ten_goc` (đuôi bản mới nhất), không phải `ten_goc` của nhóm —
+    // fixture phải ghi đúng tên bản, không thì PDF mặc định của NHOM() làm Ảnh vẫn hiện ✎.
     window.__tfDs(true);
+    const nhomTen = (ten) => NHOM({ ten_goc: ten, bans: [{ ...NHOM().bans[0], ten_goc: ten }] });
     for (const ten of ['bang.xlsx', 'so-lieu.xls', 'slide.pptx', 'slide.ppt', 'bao-cao.docx']) {
-      const co = window.buildKhoiFile(NHOM({ ten_goc: ten }), 'CV001-002');
+      const co = window.buildKhoiFile(nhomTen(ten), 'CV001-002');
       expect(co, ten).toContain('/api/v1/task-file-versions/11/editor');
     }
     for (const ten of ['anh.png', 'ảnh chụp.jpg', 'anh.jpeg', 'anh.gif', 'anh.webp']) {
-      const khong = window.buildKhoiFile(NHOM({ ten_goc: ten }), 'CV001-002');
+      const khong = window.buildKhoiFile(nhomTen(ten), 'CV001-002');
       expect(khong, ten).not.toContain('/editor');
     }
   });
@@ -235,7 +243,19 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
       expect(tai, t).toBeGreaterThan(truoc);
       truoc = tai;
     }
-    expect(window.buildBangKetQua([], 'CV001-002')).toContain('Chưa có kết quả nào.');
+    // SỬA + danh sách rỗng: vẫn là BẢNG 8 cột, hàng «Chưa có» nằm trong tbody — đợt 2 không còn
+    // trả một dòng chữ xám ngoài bảng (người dùng 2026-09-04: «tạo mới không thấy bảng kết quả»).
+    const rongSua = window.buildBangKetQua([], 'CV001-002');
+    expect(rongSua).toContain('bang-ket-qua');
+    expect(rongSua).toContain('Chưa có kết quả nào.');
+    expect(rongSua).toContain('colspan="8"');
+    // TẠO MỚI (ma rỗng): một dòng khai tạm 1. với ô tên/định dạng/ý kiến, KHÔNG POST.
+    const rongTao = window.buildBangKetQua([], '');
+    expect(rongTao).toContain('bang-ket-qua');
+    expect(rongTao).toContain('dong-kq-khai-tam');
+    expect(rongTao).toContain('kq-tam-ten');
+    expect(rongTao).toContain('>1.<');
+    expect(rongTao).not.toContain('name="kq-tam');
   });
 
   it('TCKQ-24: dòng cha đánh số 1., 2., 3.; dòng bản là 1.1 / 1.2 kèm chữ «Sửa lần N»', () => {
@@ -300,10 +320,12 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
     for (const ten of ['a.exe', 'a.svg', 'khong-co-duoi', '', null, undefined]) {
       expect(window.dinhDangCuaTen(ten), String(ten)).toBe('—');
     }
-    // Cột 3 của bảng dùng đúng hàm này.
-    expect(window.buildBangKetQua([NHOM({ ten_goc: 'bang.xlsx' })], 'CV001-002')).toContain(
-      'Excel'
-    );
+    // Cột 3: đợt 2 ưu tiên `dinh_dang` đã khai, không có thì đuôi bản mới nhất, rồi mới `ten_goc`.
+    // NHOM() mặc định có bản `ket-qua-quy3.pdf` nên ghi `ten_goc: 'bang.xlsx'` không đổi cột.
+    expect(
+      window.buildBangKetQua([NHOM({ ten_goc: 'bang.xlsx', bans: [] })], 'CV001-002')
+    ).toContain('Excel');
+    expect(window.buildBangKetQua([NHOM({ dinh_dang: 'Excel' })], 'CV001-002')).toContain('Excel');
   });
 
   it('TCKQ-27: cột «Tình trạng» là CÂU KỂ đọc được, kèm «Bị trả lại lần N» đếm từ bảng luồng', () => {
@@ -936,5 +958,183 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     await window.renderChoDuyetKetQua();
     expect(document.getElementById('kq-menu-hc-7')).toBe(null);
     expect([...document.body.children].some((el) => el.classList.contains('kq-menu'))).toBe(false);
+  });
+});
+
+// ============================================================================
+// TCKQ-34… — ĐỢT 2 (016): khai kết quả TRƯỚC khi có file + form TẠO hiện bảng 8 cột
+// (người dùng 2026-09-04: «khi tạo mới không thấy bảng kết quả»; «dòng đầu 1. 2. 3.
+// điền Kết quả làm được, Định dạng, Ghi ý kiến»; «Báo cáo» = bản không có file).
+// ============================================================================
+describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', () => {
+  it('TCKQ-34: form TẠO NHIỆM VỤ (cấp 3) nhúng bảng 8 cột + dòng khai tạm + nút ＋ ngay trong HTML', () => {
+    const form = window.createTaskModal(false);
+    expect(form).toContain('Tạo nhiệm vụ mới');
+    expect(form).toContain('task-ket-qua-danh-sach');
+    expect(form).toContain('bang-ket-qua');
+    expect(form).toContain('dong-kq-khai-tam');
+    expect(form).toContain('themDongKhaiTam()');
+    expect(form).toContain('Thêm kết quả');
+    const cot = [
+      'Thời gian',
+      'Kết quả làm được',
+      'Định dạng',
+      'File đã tải lên',
+      'Người thực hiện',
+      'Ghi ý kiến',
+      'Tình trạng',
+      'Hành động',
+    ];
+    for (const t of cot) expect(form, t).toContain(t);
+    // Ô khai tạm KHÔNG có name= — FormData của #task-form không được nuốt chúng.
+    expect(form).not.toContain('name="kq-tam');
+    expect(form).not.toContain("name='kq-tam");
+    // Nút ＋ form tạo KHÔNG mở ô chọn file (đó là lỗi đợt 1 còn sót).
+    expect(form).not.toContain('moChonFileKetQua(null)');
+  });
+
+  it('TCKQ-35: form TẠO CÔNG VIỆC CON (cấp 2) KHÔNG có bảng kết quả — mustFindNhiemVu chỉ cấp 3', () => {
+    window.__tf('pendingTaskCreate', { level: 2, parentId: 'CV001', projectId: 'P1' });
+    const form = window.createTaskModal(false);
+    expect(form).toContain('Tạo công việc con');
+    expect(form).toContain('task-ket-qua-danh-sach');
+    expect(form).not.toContain('bang-ket-qua');
+    expect(form).not.toContain('dong-kq-khai-tam');
+  });
+
+  it('TCKQ-36: ＋ trên form tạo thêm dòng 2. ngay trong bảng, không gọi máy chủ', () => {
+    document.body.innerHTML =
+      '<div id="task-ket-qua-danh-sach">' + window.buildKhungDanhSachKetQua([], '') + '</div>';
+    expect(document.querySelectorAll('tr.dong-kq-khai-tam')).toHaveLength(1);
+    let fetchGoi = 0;
+    window.fetch = () => {
+      fetchGoi += 1;
+      return Promise.reject(new Error('KHONG DUOC GOI'));
+    };
+    window.themDongKhaiTam();
+    expect(document.querySelectorAll('tr.dong-kq-khai-tam')).toHaveLength(2);
+    const so = [...document.querySelectorAll('.kq-tam-so')].map((el) => el.textContent);
+    expect(so).toEqual(['1.', '2.']);
+    expect(fetchGoi).toBe(0);
+  });
+
+  it('TCKQ-37: thuThapDongKhaiTam bỏ dòng chưa đặt tên; chọn Báo cáo thì hiện ô nội dung', () => {
+    document.body.innerHTML =
+      '<div id="task-ket-qua-danh-sach">' + window.buildKhungDanhSachKetQua([], '') + '</div>';
+    window.themDongKhaiTam();
+    const dong = document.querySelectorAll('tr.dong-kq-khai-tam');
+    dong[0].querySelector('.kq-tam-ten').value = 'Báo cáo quý 3';
+    dong[0].querySelector('.kq-tam-dinh-dang').value = 'Word';
+    dong[0].querySelector('.kq-tam-y-kien').value = 'Nộp trước 15/9';
+    // Dòng 2 để trống tên → bị bỏ.
+    dong[1].querySelector('.kq-tam-ten').value = '   ';
+    const ra = window.thuThapDongKhaiTam();
+    expect(ra).toEqual([
+      { tenKetQua: 'Báo cáo quý 3', dinhDang: 'Word', yKien: 'Nộp trước 15/9', noiDung: '' },
+    ]);
+    // Đổi dòng 1 sang «Báo cáo» → ô nội dung hiện.
+    const sel = dong[0].querySelector('.kq-tam-dinh-dang');
+    sel.value = 'Báo cáo';
+    window.doiDinhDangDongTam(sel);
+    expect(dong[0].querySelector('.kq-tam-noi-dung-boc').classList.contains('hidden')).toBe(false);
+  });
+
+  it('TCKQ-38: nhóm 0 bản in «Chưa có»; định dạng lấy cột khai; Báo cáo có ô nhập chữ ở Hành động', () => {
+    const chua = window.buildKhoiFile(
+      NHOM({ bans: [], ten_ket_qua: 'Quy chế thi', dinh_dang: 'Word', ten_goc: 'Quy chế thi' }),
+      'CV001-002'
+    );
+    expect(chua).toContain('Chưa có');
+    expect(chua).toContain('Quy chế thi');
+    expect(chua).toContain('fa-file-word');
+    expect(chua).not.toContain('kq-nut-bung"'); // không có ▸ khi 0 bản
+    const bc = window.buildKhoiFile(
+      NHOM({
+        bans: [],
+        ten_ket_qua: 'Báo cáo tháng',
+        dinh_dang: 'Báo cáo',
+        laBaoCao: true,
+        ten_goc: 'Báo cáo tháng',
+      }),
+      'CV001-002'
+    );
+    expect(bc).toContain('Báo cáo tháng');
+    expect(bc).toContain('fa-file-lines');
+    expect(bc).toContain('task-kq-bc-7');
+    expect(bc).toContain('Nộp báo cáo');
+    expect(bc).not.toContain('moChonFileKetQua');
+  });
+
+  it('TCKQ-39: hàng chờ dòng 1 = ten_ket_qua đã khai; Báo cáo dòng 2 = «Báo cáo (nhập chữ)»', () => {
+    const hang = (over = {}) => ({
+      id: 7,
+      ten_goc: 'ket-qua-quy3.docx',
+      trang_thai: 'cho-xem',
+      ma_nhiem_vu: 'CV001-002',
+      ten_nhiem_vu: 'Soạn quy chế thi sát hạch',
+      so_ban: 2,
+      ban_cuoi_id: 11,
+      ban_cuoi_ten: 'ban-sua.docx',
+      hanhDong: [],
+      ...over,
+    });
+    const html = window.buildDongChoDuyetKetQua(
+      hang({ ten_ket_qua: 'Quy chế thi sát hạch', dinh_dang: 'Word' })
+    );
+    expect(html).toContain('Quy chế thi sát hạch');
+    expect(html).toContain('ban-sua.docx');
+    expect(html).toContain('fa-file-word');
+    const bc = window.buildDongChoDuyetKetQua(
+      hang({
+        ten_ket_qua: 'Báo cáo tuần',
+        dinh_dang: 'Báo cáo',
+        laBaoCao: true,
+        ten_goc: 'Báo cáo tuần',
+        ban_cuoi_ten: null,
+      })
+    );
+    expect(bc).toContain('Báo cáo tuần');
+    expect(bc).toContain('Báo cáo (nhập chữ)');
+    expect(window.tenBanCuoiHangCho({ laBaoCao: true })).toBe('Báo cáo (nhập chữ)');
+  });
+
+  it('TCKQ-40: ten_ket_qua / noi_dung / option định dạng chứa HTML phải thoát', () => {
+    const html = window.buildBangKetQua(
+      [
+        NHOM({
+          ten_ket_qua: '<img src=x onerror=alert(1)>',
+          dinh_dang: 'PDF',
+          ten_goc: 'an-toan.pdf',
+          bans: [
+            {
+              id: 11,
+              file_id: 7,
+              version_no: 1,
+              ten_luu: null,
+              ten_goc: 'an-toan.pdf',
+              loai_mime: null,
+              kich_thuoc: null,
+              noi_dung: '<svg onload=alert(2)>đủ mười ký tự</svg>',
+              uploaded_by: 4,
+              uploaded_at: '2026-09-01T10:00:00Z',
+              ten_nguoi_nop: 'Nguyễn Văn Cán Bộ',
+            },
+          ],
+        }),
+      ],
+      'CV001-002'
+    );
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img src=x');
+    expect(html).not.toContain('<svg onload=alert(2)>');
+    expect(html).toContain('&lt;svg onload=alert(2)&gt;');
+    const khung = window.buildKhungKhaiKq('CV001-002');
+    expect(khung).toContain('task-kq-khai-ten');
+    expect(khung).toContain('value="Báo cáo"');
+    expect(khung).not.toContain('moChonFileKetQua(null)');
+    const tam = window.buildDongKhaiTam(3);
+    expect(tam).toContain('>3.<');
+    expect(tam).toContain('value="Word"');
+    expect(tam).not.toContain('name=');
   });
 });

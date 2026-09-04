@@ -903,3 +903,218 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
     expect(cuaTp.some((t) => t.content.includes('HCPD-04'))).toBe(false);
   });
 });
+
+/**
+ * ĐỢT 2 của thiết kế lại theo `docs/moi.xlsx` (016_ket_qua_khai_truoc.sql):
+ *   • KHAI dòng kết quả TRƯỚC khi có file (nút ＋) ⇒ nhóm 0 bản, cột «File đã tải lên» = «Chưa có».
+ *   • «Báo cáo» = kết quả nhập CHỮ, lưu như một BẢN KHÔNG CÓ FILE (người dùng chốt: «như một BẢN
+ *     không có file») ⇒ dùng lại nguyên bộ máy bản/góp ý/luồng/verdict.
+ * Hai điều phải canh chặt: nhóm 0 bản KHÔNG được vào hàng chờ phê duyệt, và bản chữ KHÔNG được đi
+ * qua các cửa đòi file (tải về / ONLYOFFICE) — nếu không là 500 hoặc trang editor lỗi.
+ */
+describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không có file (016)', () => {
+  /** Nút ＋ của khối «Kết quả» — JSON, không multipart. */
+  const khai = (api, ref, body) =>
+    api.post(`/api/v1/work-items/${encodeURIComponent(ref)}/results`, body);
+  /** Nộp «Báo cáo» — nội dung là chữ; `fileId` có = thêm bản vào nhóm đã khai. */
+  const nopBaoCao = (api, ref, body) =>
+    api.post(`/api/v1/work-items/${encodeURIComponent(ref)}/reports`, body);
+
+  it('TC-KQ2-01: Cán bộ khai dòng kết quả (tên + định dạng + ý kiến) ⇒ nhóm 0 BẢN, «cho-xem», có dòng luồng', async () => {
+    const ma = await taoNhiemVuCho('KQ2-01');
+    const res = await khai(apiNv, ma, {
+      tenKetQua: 'Báo cáo tổng kết quý 3',
+      dinhDang: 'Word',
+      yKien: 'Sẽ nộp bản Word trước ngày 20',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const nhom = res.body.data.nhom;
+    expect(res.body.data.ban).toBeNull();
+    expect(res.body.data.tuDong).toBe(false);
+    expect(nhom.ten_ket_qua).toBe('Báo cáo tổng kết quý 3');
+    expect(nhom.dinh_dang).toBe('Word');
+    expect(nhom.trang_thai).toBe('cho-xem');
+
+    // 0 bản: chính là dòng «Chưa có» ở cột 4 của bảng kết quả.
+    const doc = await docFiles(apiNv, ma);
+    expect(doc).toHaveLength(1);
+    expect(doc[0].bans).toHaveLength(0);
+    expect(doc[0].ten_ket_qua).toBe('Báo cáo tổng kết quý 3');
+    expect(doc[0].laBaoCao).toBe(false);
+
+    // Ý kiến khai kèm đi vào BẢNG LUỒNG (`version_id` NULL) — bảng góp ý gắn theo BẢN mà ở đây
+    // chưa có bản nào.
+    const luong = await luongCuaNhom(nhom.id);
+    expect(luong).toHaveLength(1);
+    expect(luong[0].hanh_dong).toBe('nop');
+    expect(luong[0].version_no).toBeNull();
+    expect(luong[0].noi_dung).toBe('Sẽ nộp bản Word trước ngày 20');
+  });
+
+  it('TC-KQ2-02: nhóm 0 bản KHÔNG vào hàng chờ phê duyệt; nộp file bản đầu thì mới xuất hiện', async () => {
+    const ma = await taoNhiemVuCho('KQ2-02');
+    const nhom = (await khai(apiNv, ma, { tenKetQua: 'Bảng số liệu', dinhDang: 'Excel' })).body.data
+      .nhom;
+
+    // Chưa có gì để duyệt thì đừng bắt ai duyệt — hiện ra chỉ là dòng không bấm được nút nào.
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    expect((await apiAdmin.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+
+    const nop = await nopFile(apiNv, ma, XLSX, { fileId: nhom.id });
+    expect(nop.status, JSON.stringify(nop.body)).toBe(200);
+    // Vẫn ĐÚNG MỘT nhóm: file nộp vào nhóm đã khai, không mở nhóm thứ hai.
+    const doc = await docFiles(apiNv, ma);
+    expect(doc).toHaveLength(1);
+    expect(doc[0].bans).toHaveLength(1);
+    expect(doc[0].ten_ket_qua).toBe('Bảng số liệu');
+
+    const hangCho = (await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items;
+    expect(hangCho).toHaveLength(1);
+    // Cột 1: dòng trên là TÊN KẾT QUẢ đã khai, dòng dưới là TÊN FILE của bản mới nhất — hai thứ
+    // khác nhau hẳn, đây là lý do 016 phải có cột `ten_ket_qua` riêng.
+    expect(hangCho[0].ten_ket_qua).toBe('Bảng số liệu');
+    expect(hangCho[0].ban_cuoi_ten).toBe('bang-tong-hop.xlsx');
+    expect(hangCho[0].laBaoCao).toBe(false);
+  });
+
+  it('TC-KQ2-03: «Báo cáo» ⇒ BẢN không có file (ten_luu/loai_mime/kich_thuoc NULL), vào hàng chờ như file', async () => {
+    const ma = await taoNhiemVuCho('KQ2-03');
+    const res = await nopBaoCao(apiNv, ma, {
+      noiDung: 'Đã hoàn thành khảo sát 12 trạm, không phát sinh sự cố nào trong quý.',
+      tenGoc: 'Báo cáo khảo sát quý 3',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.nhom.dinh_dang).toBe('Báo cáo');
+    const ban = res.body.data.ban;
+    expect(ban.version_no).toBe(1);
+    expect(ban.ten_luu).toBeNull();
+    expect(ban.loai_mime).toBeNull();
+    expect(ban.kich_thuoc).toBeNull();
+    expect(ban.noi_dung).toContain('12 trạm');
+    expect(await trangThaiNhom(res.body.data.nhom.id)).toBe('cho-xem');
+
+    const doc = await docFiles(apiTp, ma);
+    expect(doc[0].laBaoCao).toBe(true);
+    expect(doc[0].bans[0].noi_dung).toContain('12 trạm');
+
+    // Có bản ⇒ vào hàng chờ và bấm được đúng bộ nút của TP, y như một file.
+    const hangCho = (await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items;
+    expect(hangCho).toHaveLength(1);
+    expect(hangCho[0].laBaoCao).toBe(true);
+    expect(hangCho[0].hanhDong.map((h) => h.ma).sort()).toEqual(
+      ['hoan-thanh', 'tra-ve-cbo', 'trinh-lanh-dao', 'yeu-cau-sua'].sort()
+    );
+  });
+
+  it('TC-KQ2-04: Báo cáo dùng lại nguyên luồng — góp ý theo bản, «Yêu cầu sửa», nộp bản 2 rồi TP chốt', async () => {
+    const ma = await taoNhiemVuCho('KQ2-04');
+    const tao = await nopBaoCao(apiNv, ma, { noiDung: 'Bản báo cáo lần một, còn thiếu số liệu.' });
+    const nhomId = tao.body.data.nhom.id;
+    const banId = tao.body.data.ban.id;
+
+    // TP góp ý THEO BẢN (bảng `task_file_comments` không cần biết bản là file hay chữ).
+    const gy = await apiTp.post(`/api/v1/task-file-versions/${banId}/comments`, {
+      noiDung: 'Bổ sung số liệu 3 tháng và kết luận',
+    });
+    expect(gy.status, JSON.stringify(gy.body)).toBe(200);
+
+    const ycs = await apiTp.post(`/api/v1/task-files/${nhomId}/verdict`, {
+      hanhDong: 'yeu-cau-sua',
+      noiDung: 'Thiếu số liệu, viết lại phần kết luận',
+    });
+    expect(ycs.status, JSON.stringify(ycs.body)).toBe(200);
+    expect(await trangThaiNhom(nhomId)).toBe('can-sua');
+
+    // Cán bộ nộp BẢN 2 của chính báo cáo đó (vẫn là chữ, vẫn cùng nhóm).
+    const ban2 = await nopBaoCao(apiNv, ma, {
+      noiDung: 'Bản báo cáo lần hai, đã bổ sung số liệu 3 tháng và kết luận.',
+      fileId: nhomId,
+    });
+    expect(ban2.status, JSON.stringify(ban2.body)).toBe(200);
+    expect(ban2.body.data.ban.version_no).toBe(2);
+
+    const doc = await docFiles(apiTp, ma);
+    expect(doc[0].bans).toHaveLength(2);
+    expect(doc[0].gopY).toHaveLength(1);
+
+    const chot = await apiTp.post(`/api/v1/task-files/${nhomId}/verdict`, {
+      hanhDong: 'hoan-thanh',
+    });
+    expect(chot.status, JSON.stringify(chot.body)).toBe(200);
+    expect(await trangThaiNhom(nhomId)).toBe('hoan-thanh');
+    // Trạng thái KẾT: nộp thêm báo cáo cũng 409 như nộp thêm file.
+    const them = await nopBaoCao(apiNv, ma, {
+      noiDung: 'Định nộp thêm sau khi đã chốt xong.',
+      fileId: nhomId,
+    });
+    expect(them.status).toBe(409);
+  });
+
+  it('TC-KQ2-05: bản «Báo cáo» KHÔNG đi qua cửa đòi file — tải về và mở editor đều 400 với câu rõ', async () => {
+    const ma = await taoNhiemVuCho('KQ2-05');
+    const banId = (await nopBaoCao(apiNv, ma, { noiDung: 'Nội dung báo cáo không có file kèm.' }))
+      .body.data.ban.id;
+
+    const tai = await apiNv.get(`/api/v1/task-files/${banId}/download`);
+    expect(tai.status).toBe(400);
+    expect(tai.body.error.message).toContain('BÁO CÁO');
+
+    // Cửa máy-đối-máy của ONLYOFFICE cũng phải chặn: `duongBan(null)` là 500 không ai hiểu.
+    const raw = await client(app).agent.get(
+      `/api/v1/task-files-ds/raw/${banId}?token=${tokenDs('raw', banId)}`
+    );
+    expect(raw.status).toBe(400);
+  });
+
+  it('TC-KQ2-06: máy chủ là rào chặn cuối — tên rỗng/định dạng lạ/báo cáo quá ngắn 400; người ngoài phòng 403', async () => {
+    const ma = await taoNhiemVuCho('KQ2-06');
+    expect((await khai(apiNv, ma, { tenKetQua: '   ' })).status).toBe(400);
+    expect((await khai(apiNv, ma, { tenKetQua: 'Hợp lệ', dinhDang: 'Video' })).status).toBe(400);
+    // CHECK `tfv_file_hoac_chu` của 016 đòi ≥ 10 ký tự; service trả câu tiếng Việt trước khi tới CSDL.
+    const ngan = await nopBaoCao(apiNv, ma, { noiDung: 'ok' });
+    expect(ngan.status).toBe(400);
+    expect(ngan.body.error.message).toContain('10 ký tự');
+
+    // Cán bộ phòng khác: cả hai đường đều 403 (cùng `can()` với đường nộp file).
+    expect((await khai(apiNvNgoai, ma, { tenKetQua: 'Chen ngang' })).status).toBe(403);
+    expect(
+      (await nopBaoCao(apiNvNgoai, ma, { noiDung: 'Chen ngang một bản báo cáo.' })).status
+    ).toBe(403);
+  });
+
+  it('TC-KQ2-07: file:create = ✓ ⇒ Báo cáo cũng TỰ ĐỘNG «da-duyet» kèm dòng luồng duyet-tu-dong', async () => {
+    const ma = await taoNhiemVuCho('KQ2-07');
+    await datGhiDe('Nhân viên', 'file', 'create', 'cho-phep');
+    const res = await nopBaoCao(apiNv, ma, {
+      noiDung: 'Báo cáo nộp khi phân quyền không yêu cầu duyệt.',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.tuDong).toBe(true);
+    expect(await trangThaiNhom(res.body.data.nhom.id)).toBe('da-duyet');
+    const luong = await luongCuaNhom(res.body.data.nhom.id);
+    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop', 'duyet-tu-dong']);
+    // Đã chốt ⇒ không còn trong hàng chờ của ai.
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+  });
+
+  it('TC-KQ2-08: xoá nhóm có bản Báo cáo (ten_luu NULL) không nổ; nhóm 0 bản cũng xoá được', async () => {
+    const ma = await taoNhiemVuCho('KQ2-08');
+    const chuaCo = (await khai(apiNv, ma, { tenKetQua: 'Dòng chưa có file' })).body.data.nhom;
+    const coBaoCao = (
+      await nopBaoCao(apiNv, ma, { noiDung: 'Một bản báo cáo chữ, không có file vật lý.' })
+    ).body.data.nhom;
+
+    expect((await apiNv.del(`/api/v1/task-files/${chuaCo.id}`)).status).toBe(200);
+    expect((await apiNv.del(`/api/v1/task-files/${coBaoCao.id}`)).status).toBe(200);
+    expect(await docFiles(apiNv, ma)).toHaveLength(0);
+  });
+
+  it('TC-KQ2-09: nộp file trực tiếp (không qua ＋) vẫn tự điền ten_ket_qua + dinh_dang theo đuôi', async () => {
+    const ma = await taoNhiemVuCho('KQ2-09');
+    await nopFile(apiNv, ma, PDF);
+    const doc = await docFiles(apiNv, ma);
+    expect(doc[0].ten_ket_qua).toBe('ket-qua.pdf');
+    expect(doc[0].dinh_dang).toBe('PDF');
+    expect(doc[0].laBaoCao).toBe(false);
+  });
+});

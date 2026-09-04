@@ -364,7 +364,23 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // `batTatMenuKq` dời thẻ menu ra `<body>` bằng DOM API (`appendChild`, `style.*`) — không
     // dựng chuỗi HTML nào nên bộ soát không thấy gì, đúng như mong đợi
     // ⇒ **101 chỗ / 873 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 873 });
+    //
+    // 2026-09-04 (Vòng 14续11 — đợt 2: khai kết quả TRƯỚC + form TẠO hiện bảng 8 cột):
+    // **+1 chỗ ghi HTML, +20 giá trị**.
+    //  · Sink mới: `themDongKhaiTam` gọi `tbody.insertAdjacentHTML("beforeend", buildDongKhaiTam(so))`
+    //    — ＋ trên form tạo thêm dòng 2., 3. ngay trong bảng, không POST. Builder đã thoát bên trong
+    //    nên xếp HTML-DUNG. `napKetQua` vẫn MỘT lần `khung.innerHTML` (gọi `buildKhungDanhSachKetQua`).
+    //  · `buildKhungDanhSachKetQua` +5 (`nutThem`, `buildKhungKhaiKq`, `buildBangKetQua`, `oChonFile`,
+    //    `accept=` của ô chọn file — `accept=` trước nằm trong `napKetQua`, nay chuyển sang đây nên
+    //    không tăng thêm so với 续10 nếu đếm ròng, nhưng hàm mới là lỗ mới).
+    //  · `buildKhungKhaiKq` +4 (map option định dạng, 2 lỗ option value/text, onclick `ma`).
+    //  · `buildBangKetQua` đổi nhánh rỗng: `than` (HTML-BIEN) thay `nhom.map` — số lỗ tiêu đề giữ.
+    //  · `buildDongKhaiTam` +5 (map option, 2 lỗ option, số thứ tự `1.`, `chonDd`).
+    //  · `buildKhoiFile` / `buildDongBanKetQua` / `buildONhapBaoCao` / hàng chờ `ten_ket_qua` thêm lỗ
+    //    thoát `ten_ket_qua` + `noi_dung` + option «Báo cáo» — phần còn lại của +20.
+    // Mọi lỗ mới đều DA-THOAT / HTML-LONG / HTML-BIEN — danh sách `CO_Y_KHONG_BOC` không đổi
+    // ⇒ **102 chỗ / 893 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 102, gia_tri: 893 });
   });
 });
 
