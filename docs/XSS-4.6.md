@@ -640,6 +640,19 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     từ bảng `ICON_DINH_DANG` do chương trình giữ (không phải từ người dùng), nhưng escape ở lỗ là
     luật không xét nguồn (TC-SEC-13); và `aria-label` có mặt vì mất font icon thì badge còn chữ để
     đọc — chuyện dễ tiếp cận, không phải chuyện bảo mật.
+- **Đợt 2 khai kết quả trước + form tạo hiện bảng (2026-09-04 — Vòng 14续11)**: pin
+  **101/873 → 102/893** (**+1 chỗ ghi HTML, +20 giá trị**). Đây là lần đầu `sink` tăng từ 续5 (khi thêm
+  `renderChoDuyetKetQua`). Phân bổ ghi trong chú thích TC-SEC-17. Ba điều đáng ghi lại:
+  - **Sink mới là `insertAdjacentHTML`, không phải `innerHTML` thứ hai.** ＋ trên form tạo gọi
+    `tbody.insertAdjacentHTML("beforeend", buildDongKhaiTam(so))`. `napKetQua` vẫn **một** lần
+    `khung.innerHTML = buildKhungDanhSachKetQua(...)` — tách nhánh tạo thành chỗ ghi riêng sẽ +2 sink
+    mà không thêm việc. Cùng bài học 续10: khi khối HTML đã có sẵn thì **di chuyển thẻ**; khi phải
+    *thêm* một hàng mới thì `insertAdjacentHTML` + builder `build*` là đúng, đừng `innerHTML +=`.
+  - **Tên hàm phải mang tiền tố `build*`.** `buildKhungDanhSachKetQua` / `buildDongKhaiTam` xếp
+    HTML-LONG. Đặt `veKhungKetQua` thì mỗi chỗ gọi trong chuỗi HTML của `createTaskModal` thành một lỗ
+    `CAN-THOAT` — cùng bẫy `xinXoaBadge` / `o(...)` ở §13.5.
+  - **`ten_ket_qua` / `noi_dung` / option định dạng đều escape tại lỗ** dù giá trị lấy từ map nội bộ
+    (`DINH_DANG_KHAI`) hay từ REST. Luật TC-SEC-13 không xét nguồn. TCKQ-40 canh cả ba.
 
 
 

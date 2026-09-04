@@ -6,7 +6,9 @@ trang «Hàng chờ phê duyệt») ngày **2026-09-02**, thêm **mục 9b.6** (
 phòng, cập nhật tại chỗ, siết lãnh đạo phụ trách, bảng cây hàng chờ, nộp bản mới, thanh tải lên,
 giao diện công việc cha) và **mục 9b.7** (3 lỗi: «Tải lên thất bại: máy chủ từ chối», Giám đốc/Phó
 Giám đốc không thấy mục «Hàng chờ phê duyệt», hàng chờ trống) ngày **2026-09-03** — tất cả trên
-nhánh `vps/ket-qua-file`.
+nhánh `vps/ket-qua-file`. Bổ sung **mục 9b.8** (đợt 1: bảng 8 cột), **9b.9** (icon + menu ⋯ +
+badge) và **9b.10** (đợt 2: khai kết quả trước + «Báo cáo» + form tạo hiện bảng) ngày
+**2026-09-04** trên nhánh `vps/ket-qua-thiet-ke-lai`.
 
 Mục đích: bạn mở trình duyệt, bấm bằng tay, tự thấy Phase 4 làm được gì. Mọi con số và câu
 thông báo trong tài liệu này đều **đã chạy thật** qua đúng đường người dùng đi
@@ -850,10 +852,8 @@ Nếu vẫn trống sau khi seed: gần như chắc là trình duyệt còn `app
 Cần bản **`app.js 20260904-1`** (Console phải in đúng số đó, và **Ctrl+Shift+R** để lấy cả
 `app.css 20260904-1` — đợt này đổi cả CSS). **Không** cần migration, **không** cần seed lại.
 
-Đây là **đợt 1: chỉ hình dáng**. Hai thứ trong file thiết kế của bạn còn nằm ở đợt 2 nên **chưa
-thấy được** ở bản này, nói trước để bạn không đi tìm: **dòng «Chưa có»** (khai kết quả trước khi có
-file) và **định dạng «Báo cáo»** (nhập chữ thay cho nộp file). Cả hai đòi cột mới trong cơ sở dữ
-liệu (migration 016).
+Đây là **đợt 1: chỉ hình dáng**. **Dòng «Chưa có»** và **định dạng «Báo cáo»** nằm ở **đợt 2** —
+xem mục **9b.10** (cần `app.js 20260904-3` + migration **016**).
 
 **(1) Khối «Kết quả» giờ là một bảng 8 cột.** `nv1@test.local` → NV-01 → tab «Thông tin», cuộn tới
 nhãn «Kết quả». Hàng tiêu đề phải đọc từ trái sang phải đúng thứ tự:
@@ -944,8 +944,52 @@ Muốn thấy rõ hai dòng đó là **hai thứ khác nhau**: ở NV-01 nộp b
 đổi thành `ban-sua-lan-2.docx`, và số bản tăng lên. Tên quá dài thì bị cắt bằng «…» — trỏ chuột vào
 để đọc đủ.
 
-Lưu ý phần còn nợ: dòng trên hiện vẫn **lấy theo tên file đầu tiên**, vì chỗ để bạn *tự đặt tên kết
-quả* nằm ở **đợt 2** (migration 016, cùng lúc với dòng «Chưa có» và định dạng «Báo cáo»).
+Từ **đợt 2** (mục **9b.10**, cần `app.js 20260904-3` + migration **016**): dòng trên là **tên kết
+quả bạn tự đặt** khi khai, không còn lấy theo tên file đầu tiên. Dòng dưới vẫn là tên file của
+bản mới nhất.
+
+
+### 9b.10 Đợt 2 — khai kết quả trước khi có file + form tạo hiện bảng (2026-09-04)
+
+Cần bản **`app.js 20260904-3`** (Console in số đó; **Ctrl+Shift+R**) **và migration 016 đã chạy**
+(`SELECT ten_ket_qua, dinh_dang FROM task_files LIMIT 1;` không được báo «column does not exist»).
+Không seed lại.
+
+**(1) Form «Tạo nhiệm vụ mới» phải thấy bảng 8 cột ngay.** Đăng nhập `nv1@test.local` (hoặc
+`tp@test.local`) → «Quản lý Nhiệm vụ» → **Tạo mới**. Trong tab «Thông tin», khối «Kết quả» phải
+là **một bảng** với đủ 8 cột (Thời gian · Kết quả làm được · Định dạng · File đã tải lên · Người
+thực hiện · Ghi ý kiến · Tình trạng · Hành động), **không** phải khung trống. Dòng đầu mang số
+**1.**, ô tên + ô định dạng + ô ghi ý kiến đã sẵn để điền. Cột 4 ghi «Chưa có». Cột 7 ghi «Sẽ
+gửi khi lưu nhiệm vụ».
+
+**(2) Nút ＋ thêm dòng 2. 3. tại chỗ, không mở hộp chọn file.** Bấm «Thêm kết quả» → phải mọc thêm
+dòng **2.** ngay dưới, vẫn chưa gọi máy chủ. Xoá hết dòng thì hệ thống **giữ lại ít nhất một
+dòng trống** (không để bảng mất). Form **công việc con** (cấp 2) **không** có bảng này.
+
+**(3) Lưu nhiệm vụ là lúc các dòng khai được gửi.** Điền dòng 1. tên «Báo cáo quý 3», định dạng
+Word, ý kiến tuỳ ý; dòng 2. để trống tên. Bấm Lưu. Mở lại nhiệm vụ vừa tạo → khối «Kết quả» phải
+có **một** dòng cha «Báo cáo quý 3», cột Định dạng icon Word, cột 4 vẫn «Chưa có» (chưa nộp file).
+Dòng để trống **không** thành kết quả rác.
+
+**(4) Cán bộ nộp file đầu tiên thành dòng 1.1.** Mở nhiệm vụ đã khai → ⋯ hoặc nút tải trên đúng
+dòng «Chưa có» → chọn một file Word. Sau khi tải xong, dòng cha vẫn là **1.**, bản file là **1.1**
+(bấm ▸ mới thấy). Nộp/sửa lần sau là **1.2**. Kết quả đã `da-duyet` thì nộp tiếp bị máy chủ từ
+chối (409) — đúng, không phải lỗi giao diện.
+
+**(5) Định dạng «Báo cáo» là ô chữ, không phải file.** Ở form tạo (hoặc ＋ khi sửa nhiệm vụ), chọn
+định dạng **Báo cáo** → phải hiện ô nhập nội dung. Gõ ≥ 10 ký tự rồi lưu. Mở lại: cột 4 hiện đoạn
+chữ (không có nút tải file), hàng chờ nếu vào được thì dòng 2 ghi «Báo cáo (nhập chữ)». Nội dung
+ngắn hơn 10 ký tự bị từ chối.
+
+**(6) Hàng chờ lấy tên bạn đặt, nhóm chưa có bản thì không vào hàng chờ.** Vào «Hàng chờ phê
+duyệt» → tab «Phê duyệt kết quả». Cột 1 dòng trên = **tên kết quả khai**, kèm icon + «N bản»;
+dòng dưới = tên file bản mới nhất. Một kết quả vừa khai, chưa nộp file / chưa nộp báo cáo **không
+xuất hiện** ở đây (vẫn thấy trong modal nhiệm vụ).
+
+Nếu Console **không** in `app.js 20260904-3` thì đang chạy file cũ — Ctrl+Shift+R. Nếu form tạo
+vẫn không có bảng thì chưa nhận bản này. Nếu lưu nhiệm vụ xong khối «Kết quả» trống dù đã điền
+dòng khai, xem toast lỗi (thường là chưa chạy migration 016, hoặc đang tạo **công việc con** cấp
+2).
 
 
 ---
@@ -1032,7 +1076,7 @@ sạch thì xoá thư mục đó.
 | **Khối «Kết quả» là bảng 8 cột, dòng bản 1.1/1.2 «Sửa lần N» thu gọn sau ▸** | ✅ | mục **9b.8** (1)(2) |
 | **Mọi hành động gộp vào một menu ⋯; «Tình trạng» là câu kể có «Bị trả lại lần N»** | ✅ | mục **9b.8** (3)(4) |
 | **Hàng chờ phê duyệt là bảng phẳng 8 cột, ba cấp cây thành ba cột** | ✅ | mục **9b.8** (5) |
-| **Dòng «Chưa có» (khai kết quả trước khi có file) + định dạng «Báo cáo» nhập chữ** | ⏳ **đợt 2** | cần migration 016 — chưa làm, chờ bạn xem đợt 1 |
+| **Dòng «Chưa có» (khai kết quả trước khi có file) + định dạng «Báo cáo» nhập chữ + form tạo hiện bảng 8 cột** | ✅ | mục **9b.10** — cần `app.js 20260904-3` **và** migration **016** |
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |
