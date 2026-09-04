@@ -335,7 +335,26 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // dựng từ `ACCEPT_KET_QUA` nên phải qua `escapeHtmlAttr` như mọi lỗ nội suy khác (danh sách đuôi
     // là hằng của mã, không phải dữ liệu người dùng — bọc vẫn đúng luật và vô hại)
     // ⇒ **101 chỗ / 831 giá trị**. Chi tiết: docs/XSS-4.6.md.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 831 });
+    // 2026-09-04 (Vòng 14续9 — THIẾT KẾ LẠI khối «Kết quả» + «Phê duyệt kết quả» thành bảng 8 cột
+    // theo hai sheet của người dùng): KHÔNG thêm chỗ ghi HTML nào — cả hai bảng vẫn ghi qua đúng
+    // hai lỗ `innerHTML` cũ (`khung.innerHTML` của `napKetQua`, `listEl.innerHTML` của
+    // `renderChoDuyetKetQua`), các builder mới chỉ TRẢ chuỗi. **+37 giá trị**, chia ra:
+    //  · `buildDongBanKetQua` +16 (dòng con 1.1/1.2 mới: `data-ban`, `data-nhom`, thời điểm nộp,
+    //    số 1.1, tên gốc, chữ «Sửa lần N», định dạng, id bản trong onclick, tên file, số bản,
+    //    người nộp, 3 lỗ của thread góp ý theo bản, lỗ `yKien`, lỗ `buildMenuHanhDongKq`);
+    //  · `buildBangKetQua` +11 (2 lỗ trong `buildOTieuDeKq` + 8 lời gọi nó cho 8 cột + lỗ
+    //    `nhom.map(...).join`);
+    //  · `buildKhoiFile` 16 → 24 (dòng cha nay là `<tr>` 8 ô: thêm thời gian tạo, số thứ tự «1.»,
+    //    số bản, định dạng, tên file của ô «File đã tải lên» + id bản trong onclick, câu kể tình
+    //    trạng, lỗ menu ⋯, lỗ `dongBan`);
+    //  · `buildMenuHanhDongKq` +3 và `buildMucMenuKq` +3 (menu ⋯ dùng chung cho cả hai bảng);
+    //  · `buildOCapChoDuyet` +3 và `buildONhiemVuChoDuyet` +3 (ba cấp cây thành ba CỘT);
+    //  · `buildBangChoDuyetKetQua` 8 → 11 (8 cột thay vì 5);
+    //  · `buildDongChoDuyetKetQua` 22 → 17 và `buildHangCayChoDuyet` 8 → 0 (hàm hàng tiêu đề cây
+    //    đã GỠ; các ô thụt lề/icon của nó không còn).
+    // Mọi lỗ mới đều DA-THOAT/HTML-LONG — danh sách `CO_Y_KHONG_BOC` không đổi
+    // ⇒ **101 chỗ / 868 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 868 });
   });
 });
 
