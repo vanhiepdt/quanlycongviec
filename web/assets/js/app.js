@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260904-2");
+console.info("[QLCV] app.js 20260904-3");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2262,9 +2262,9 @@ const NHAN_VERDICT_FILE = Object.freeze({
   duyet: "Duyệt",
 });
 /**
- * ĐỊNH DẠNG kết quả — suy từ ĐUÔI file của bản mới nhất (đợt 1 chưa có cột `dinh_dang` trong CSDL;
- * đợt 2 = migration 016 sẽ cho người dùng tự khai lúc thêm dòng kết quả). «Báo cáo» = nhập text,
- * chỉ có sau đợt 2 nên ở đây không xuất hiện.
+ * ĐỊNH DẠNG kết quả — nhãn suy từ ĐUÔI file. Từ đợt 2 (016) người dùng KHAI định dạng lúc thêm dòng
+ * (`nhom.dinh_dang`) nên bảng này chỉ còn là đường lùi cho dòng cũ và cho tên bản; «Báo cáo» không
+ * có đuôi nào vì nó là chữ nhập thẳng, xem `DINH_DANG_KHAI`.
  */
 const NHAN_DINH_DANG = Object.freeze({
   ".doc": "Word", ".docx": "Word", ".pdf": "PDF",
@@ -2286,10 +2286,58 @@ const ICON_DINH_DANG = Object.freeze({
   PPT: "fa-file-powerpoint text-orange-600",
   PDF: "fa-file-pdf text-red-600",
   "Ảnh": "fa-file-image text-purple-600",
+  "Báo cáo": "fa-file-lines text-slate-600",
 });
+/**
+ * ĐỊNH DẠNG người dùng KHAI được ở nút ＋ (016) — khớp `DINH_DANG_KHAI` của máy chủ và CHECK
+ * `tf_dinh_dang_ok` của CSDL. «Báo cáo» là loại duy nhất KHÔNG cần file: nội dung nhập thẳng.
+ */
+const DINH_DANG_KHAI = Object.freeze(["Word", "Excel", "PPT", "PDF", "Ảnh", "Báo cáo"]);
+const DINH_DANG_BAO_CAO = "Báo cáo";
+/**
+ * ĐỊNH DẠNG hiển thị của MỘT dòng kết quả: ưu tiên cột `dinh_dang` người dùng đã khai (016), không
+ * có thì suy từ đuôi tên file của bản mới nhất như đợt 1 — dòng cũ trước 016 không mất chữ.
+ */
+function dinhDangCuaNhom(n) {
+  const khai = n && n.dinh_dang;
+  if (khai) return String(khai);
+  const bans = Array.isArray(n && n.bans) ? n.bans : [];
+  const banCuoi = bans.length > 0 ? bans[bans.length - 1] : null;
+  return dinhDangCuaTen((banCuoi && banCuoi.ten_goc) || (n && n.ten_goc));
+}
+/** Dòng này là «Báo cáo» (nhập chữ, không có file) — máy chủ trả cờ `laBaoCao` ở cả hai đường. */
+function laDongBaoCao(n) {
+  return Boolean(n && (n.laBaoCao === true || n.dinh_dang === DINH_DANG_BAO_CAO));
+}
+/**
+ * MỘT BẢN là bản «Báo cáo» hay không — nhận theo DỮ LIỆU của chính bản (016: bản chữ có `noi_dung`
+ * và `ten_luu` NULL), không theo định dạng khai của nhóm: một nhóm có thể có cả bản file lẫn bản
+ * chữ nếu người dùng đổi cách nộp giữa đường, và mỗi dòng bản phải hiện đúng thứ nó là.
+ */
+function laBanBaoCaoKq(b) {
+  return Boolean(b && b.noi_dung != null && b.ten_luu == null);
+}
+/**
+ * Ô NHẬP «Báo cáo» ngay trong cột «Hành động» của dòng cha — người dùng chốt: «Báo cáo» là kết quả
+ * nhập CHỮ, lưu như một BẢN không có file. Nộp là thành bản mới, đi đúng luồng nộp → góp ý → duyệt.
+ */
+function buildONhapBaoCao(n, ma) {
+  const bans = Array.isArray(n.bans) ? n.bans : [];
+  return (
+    "<div class=\"mt-2 text-left\">" +
+    "<label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-bc-" + escapeHtmlAttr(n.id) + "\">" +
+    escapeHtml(bans.length > 0 ? "Nội dung bản mới" : "Nội dung báo cáo") + "</label>" +
+    "<textarea id=\"task-kq-bc-" + escapeHtmlAttr(n.id) + "\" rows=\"3\" maxlength=\"20000\" " +
+    "class=\"form-input w-full text-sm mt-1\" placeholder=\"Nhập nội dung (tối thiểu 10 ký tự)…\"></textarea>" +
+    "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-xs mt-1\" onclick=\"guiBaoCaoKetQua('" +
+    escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "')\">" +
+    escapeHtml(bans.length > 0 ? "Nộp bản mới" : "Nộp báo cáo") + "</button>" +
+    "</div>"
+  );
+}
 /** Icon định dạng kèm title + aria-label — mất icon (font chưa tải) vẫn còn CHỮ để đọc. */
 function buildIconDinhDang(ten) {
-  const nhan = dinhDangCuaTen(ten);
+  const nhan = DINH_DANG_KHAI.includes(String(ten || "")) ? String(ten) : dinhDangCuaTen(ten);
   const icon = ICON_DINH_DANG[nhan] || "fa-file text-gray-400";
   return (
     "<i class=\"fas " + escapeHtmlAttr(icon) + " mr-2\" role=\"img\" title=\"" +
@@ -2545,47 +2593,204 @@ async function napKetQua(ma) {
   if (!khung) return;
   dongMenuKq(); // menu đang mở nằm ở <body>: vẽ lại bảng mà không gập là để nó lơ lửng mồ côi
   taskKetQuaMa = String(ma || khung.dataset.ma || "");
-  const ketQua = await restGet("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files");
-  if (!document.getElementById("task-ket-qua-danh-sach")) return;
-  if (!ketQua) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
-  const phanQuyen = await restGet("/api/v1/permissions");
-  if (phanQuyen) {
-    phanQuyenFile.macDinh = phanQuyen.macDinh || null;
-    phanQuyenFile.ghiDe = phanQuyen.ghiDe || {};
+  // Form TẠO chưa có mã nhiệm vụ: không gọi REST, vẽ bảng 8 cột + dòng khai tạm tại chỗ.
+  // Một lần gán innerHTML (giữ nguyên số sink XSS); đừng tách nhánh tạo thành chỗ ghi thứ hai.
+  let nhom = [];
+  if (taskKetQuaMa) {
+    const ketQua = await restGet("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files");
+    if (!document.getElementById("task-ket-qua-danh-sach")) return;
+    if (!ketQua) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
+    const phanQuyen = await restGet("/api/v1/permissions");
+    if (phanQuyen) {
+      phanQuyenFile.macDinh = phanQuyen.macDinh || null;
+      phanQuyenFile.ghiDe = phanQuyen.ghiDe || {};
+    }
+    dsBat = ketQua.onlyOffice === true;
+    nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
   }
-  dsBat = ketQua.onlyOffice === true;
-  const nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
+  khung.innerHTML = buildKhungDanhSachKetQua(nhom, taskKetQuaMa);
+}
+/**
+ * Ai được KHAI dòng kết quả ở giao diện (máy chủ vẫn là rào chặn cuối). Form TẠO chưa có dòng
+ * nhiệm vụ trong bộ nhớ nên `coTheNopFile(null, "")` trả false với Cán bộ — ＋ biến mất, đúng lỗi
+ * «tạo mới không thấy bảng». Ở form tạo: hiện ＋ miễn `file:create` không phải `tu-choi`.
+ */
+function coTheKhaiKetQua(ma) {
+  if (!ma) {
+    const vai = currentUser && currentUser.role;
+    if (!vai) return false;
+    return giaTriHieuLucFile(vai, "create") !== "tu-choi";
+  }
+  return coTheNopFile(null, ma);
+}
+/**
+ * KHUNG «Kết quả» (nút ＋ + bảng 8 cột + ô chọn file). Dùng chung cho SỬA (sau REST) và TẠO MỚI
+ * (nhom=[], ma="") — form tạo nhúng thẳng vào chuỗi HTML của `createTaskModal` nên bảng hiện NGAY,
+ * không chờ setTimeout 250ms, không cần mã nhiệm vụ.
+ */
+function buildKhungDanhSachKetQua(nhom, ma) {
+  const ds = Array.isArray(nhom) ? nhom : [];
+  const taoMoi = !ma;
+  const duocKhai = coTheKhaiKetQua(ma);
+  const nutThem = duocKhai
+    ? taoMoi
+      ? "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"themDongKhaiTam()\"><i class=\"fas fa-plus mr-2\"></i>Thêm kết quả</button>"
+      : "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"batTatKhungKhaiKq()\"><i class=\"fas fa-plus mr-2\"></i>Thêm kết quả</button>"
+    : "";
   const oChonFile =
     "<input type=\"file\" id=\"task-file-input\" accept=\"" + escapeHtmlAttr(ACCEPT_KET_QUA) + "\" class=\"hidden\" onchange=\"uploadKetQua(this)\">" +
-    // Ô trạng thái «đang tải lên» của khối này (trang hàng chờ có ô riêng trong index.html).
     "<div id=\"task-kq-trang-thai\" class=\"hidden\"></div>";
-  // «Nhớ phải có nút + để thêm dòng để điền 2, 3…» (người dùng chốt 2026-09-03). Nút này TẠO NHÓM
-  // MỚI: đợt 1 vẫn phải chọn file ngay (chưa có cột `ten_ket_qua`/`dinh_dang` ⇒ chưa dựng được
-  // dòng «Chưa có»); đợt 2 = migration 016 sẽ cho khai tên + định dạng trước, file nộp sau.
-  const nutThem =
-    coTheNopFile(null, taskKetQuaMa)
-      ? "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"moChonFileKetQua(null)\"><i class=\"fas fa-plus mr-2\"></i>Thêm kết quả</button>"
-      : "";
-  khung.innerHTML =
+  return (
     "<div class=\"flex items-center gap-2 mt-1 flex-wrap\">" +
     "<span class=\"text-xs text-gray-400\">Mỗi kết quả là một dòng; bấm ▸ để xem các lần đã sửa.</span>" +
-    (nhom.length === 0 && !coTheNopFile(null, taskKetQuaMa)
+    (ds.length === 0 && !duocKhai
       ? "<span class=\"text-xs text-gray-400\">Chỉ người được giao nhiệm vụ (và TP/PP) nộp được.</span>"
       : "") +
     "<span class=\"ml-auto\">" + nutThem + "</span>" +
     "</div>" +
-    buildBangKetQua(nhom, taskKetQuaMa) +
-    oChonFile;
+    (!taoMoi && duocKhai ? buildKhungKhaiKq(ma) : "") +
+    buildBangKetQua(ds, ma) +
+    oChonFile
+  );
+}
+/**
+ * KHUNG KHAI MỘT DÒNG KẾT QUẢ (đợt 2 — 016). Người dùng chốt 2026-09-03: «Dòng đầu tiên khi mới tạo
+ * nhiệm vụ sẽ điền 1. 2. 3. điền những nội dung Kết quả làm được, Định dạng, Ghi ý kiến. Nhớ phải có
+ * nút + để thêm dòng để điền 2, 3…».
+ *
+ * Ẩn sẵn, bấm ＋ mới hiện — bảng là thứ người ta vào xem, không phải cái form. Chọn «Báo cáo» thì ô
+ * nội dung hiện ra để nộp CHỮ luôn thành bản 1; năm định dạng còn lại chỉ khai rồi nộp file sau.
+ */
+function buildKhungKhaiKq(ma) {
+  return (
+    "<div id=\"task-kq-khai\" class=\"hidden mt-2 p-3 border border-gray-100 rounded-lg bg-gray-50\">" +
+    "<div class=\"grid grid-cols-1 md:grid-cols-3 gap-2\">" +
+    "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-ten\">Kết quả làm được</label>" +
+    "<input type=\"text\" id=\"task-kq-khai-ten\" maxlength=\"500\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Ví dụ: Báo cáo tổng kết quý 3\"></div>" +
+    "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-dinh-dang\">Định dạng</label>" +
+    "<select id=\"task-kq-khai-dinh-dang\" class=\"form-input w-full text-sm mt-1\" onchange=\"doiDinhDangKhaiKq()\">" +
+    "<option value=\"\">— Chưa rõ —</option>" +
+    DINH_DANG_KHAI.map((d) => "<option value=\"" + escapeHtmlAttr(d) + "\">" + escapeHtml(d) + "</option>").join("") +
+    "</select></div>" +
+    "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-y-kien\">Ghi ý kiến</label>" +
+    "<input type=\"text\" id=\"task-kq-khai-y-kien\" maxlength=\"2000\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Không bắt buộc\"></div>" +
+    "</div>" +
+    "<div id=\"task-kq-khai-noi-dung-boc\" class=\"hidden mt-2\">" +
+    "<label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-noi-dung\">Nội dung báo cáo (nhập chữ, không cần file — tối thiểu 10 ký tự)</label>" +
+    "<textarea id=\"task-kq-khai-noi-dung\" rows=\"4\" maxlength=\"20000\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Nhập nội dung báo cáo…\"></textarea>" +
+    "</div>" +
+    "<div class=\"flex items-center gap-2 mt-2\">" +
+    "<button type=\"button\" class=\"btn-primary py-1 px-3 text-sm\" onclick=\"guiKhaiKetQua('" + escapeForInlineHandler(ma) + "')\">Thêm dòng</button>" +
+    "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"batTatKhungKhaiKq()\">Đóng</button>" +
+    "<span class=\"text-xs text-gray-400\">Chọn «Báo cáo» thì nhập nội dung ngay; các định dạng khác thì tải file lên sau ở cột Hành động.</span>" +
+    "</div></div>"
+  );
+}
+/** Ẩn/hiện khung khai; mở ra thì đưa con trỏ vào ô tên luôn cho đỡ một lần bấm. */
+function batTatKhungKhaiKq() {
+  const el = document.getElementById("task-kq-khai");
+  if (!el) return;
+  el.classList.toggle("hidden");
+  if (el.classList.contains("hidden")) return;
+  const o = document.getElementById("task-kq-khai-ten");
+  if (o) o.focus();
+}
+/** «Báo cáo» là loại duy nhất nhập CHỮ ⇒ chỉ nó mới cần ô nội dung. */
+function doiDinhDangKhaiKq() {
+  const chon = document.getElementById("task-kq-khai-dinh-dang");
+  const boc = document.getElementById("task-kq-khai-noi-dung-boc");
+  if (!chon || !boc) return;
+  boc.classList.toggle("hidden", chon.value !== DINH_DANG_BAO_CAO);
+}
+/**
+ * GỬI khai dòng kết quả. «Báo cáo» có nội dung ⇒ đi đường /reports (tạo luôn BẢN chữ đầu tiên);
+ * còn lại ⇒ /results (nhóm 0 bản, cột file là «Chưa có»). Máy chủ vẫn kiểm lại toàn bộ.
+ */
+async function guiKhaiKetQua(ma) {
+  const oTen = document.getElementById("task-kq-khai-ten");
+  const oDd = document.getElementById("task-kq-khai-dinh-dang");
+  const oYk = document.getElementById("task-kq-khai-y-kien");
+  const oNd = document.getElementById("task-kq-khai-noi-dung");
+  const ten = String((oTen && oTen.value) || "").trim();
+  if (!ten) {
+    showToast("Nhập tên kết quả làm được trước đã", "error");
+    if (oTen) oTen.focus();
+    return;
+  }
+  const dinhDang = String((oDd && oDd.value) || "");
+  const yKien = String((oYk && oYk.value) || "").trim();
+  const noiDung = String((oNd && oNd.value) || "").trim();
+  // Form TẠO chưa có mã nhiệm vụ: không POST, điền vào dòng khai tạm trong bảng.
+  if (!ma) {
+    dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung);
+    if (oTen) oTen.value = "";
+    if (oYk) oYk.value = "";
+    if (oNd) oNd.value = "";
+    batTatKhungKhaiKq();
+    showToast("Đã thêm dòng — sẽ gửi khi lưu nhiệm vụ", "success");
+    return;
+  }
+  const duong = "/api/v1/work-items/" + encodeURIComponent(ma);
+  let ketQua;
+  if (dinhDang === DINH_DANG_BAO_CAO && noiDung !== "") {
+    if (noiDung.length < 10) {
+      showToast("Nội dung báo cáo cần ít nhất 10 ký tự", "error");
+      return;
+    }
+    ketQua = await restPost(duong + "/reports", { noiDung, tenGoc: ten });
+  } else {
+    const than = { tenKetQua: ten };
+    if (dinhDang) than.dinhDang = dinhDang;
+    if (yKien) than.yKien = yKien;
+    ketQua = await restPost(duong + "/results", than);
+  }
+  if (!ketQua) return;
+  showToast(
+    ketQua.tuDong ? "Đã thêm dòng và PHÊ DUYỆT LUÔN — phân quyền không yêu cầu duyệt" : "Đã thêm dòng kết quả",
+    "success"
+  );
+  napKetQua(ma);
+}
+/**
+ * NỘP «Báo cáo» cho MỘT dòng đã có: ô nhập nằm ngay trong bảng (cột «Hành động» của dòng Báo cáo),
+ * lưu thành BẢN MỚI — cùng đường với lần nhập đầu, chỉ thêm `fileId`.
+ */
+async function guiBaoCaoKetQua(fileId, ma) {
+  const o = document.getElementById("task-kq-bc-" + fileId);
+  if (!o) return;
+  const noiDung = String(o.value || "").trim();
+  if (noiDung.length < 10) {
+    showToast("Nội dung báo cáo cần ít nhất 10 ký tự", "error");
+    o.focus();
+    return;
+  }
+  const ketQua = await restPost("/api/v1/work-items/" + encodeURIComponent(ma) + "/reports", {
+    noiDung,
+    fileId: String(fileId),
+  });
+  if (!ketQua) return;
+  o.value = "";
+  showToast(ketQua.tuDong ? "Đã nộp báo cáo và PHÊ DUYỆT LUÔN" : "Đã nộp bản báo cáo mới", "success");
+  napKetQua(ma);
 }
 /**
  * BẢNG «Kết quả» 8 cột theo sheet «kq-modal» (2026-09-03) — thay cho các thẻ rời trước đây.
  * Rỗng thì nói rõ là chưa có, đừng để một bảng trắng không ai biết đang tải hay chưa có gì.
  */
 function buildBangKetQua(nhom, ma) {
-  if (!Array.isArray(nhom) || nhom.length === 0) {
-    return "<div class=\"text-xs text-gray-400 py-2\">Chưa có kết quả nào.</div>";
-  }
+  const ds = Array.isArray(nhom) ? nhom : [];
+  const taoMoi = !ma;
   const buildOTieuDeKq = (t, them) => "<th class=\"px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase " + escapeHtmlAttr(them || "") + "\">" + escapeHtml(t) + "</th>";
+  // Form TẠO (chưa có mã): một dòng khai tạm để điền 1. ngay; SỬA mà chưa có nhóm: hàng «Chưa có»
+  // vẫn nằm TRONG bảng 8 cột — người dùng chốt 2026-09-04 «khi tạo mới không thấy bảng kết quả».
+  let than;
+  if (ds.length > 0) {
+    than = ds.map((n, i) => buildKhoiFile(n, ma, i + 1)).join("");
+  } else if (taoMoi && coTheKhaiKetQua(ma)) {
+    than = buildDongKhaiTam(1);
+  } else {
+    than = "<tr class=\"dong-kq-trong\"><td colspan=\"8\" class=\"px-3 py-3 text-xs text-gray-400\">Chưa có kết quả nào.</td></tr>";
+  }
   return (
     "<div class=\"overflow-x-auto mt-2\"><table class=\"min-w-full text-sm bang-ket-qua\"><thead class=\"bg-gray-50\"><tr>" +
     buildOTieuDeKq("Thời gian") +
@@ -2597,9 +2802,143 @@ function buildBangKetQua(nhom, ma) {
     buildOTieuDeKq("Tình trạng") +
     buildOTieuDeKq("Hành động", "text-right") +
     "</tr></thead><tbody class=\"divide-y divide-gray-100\">" +
-    nhom.map((n, i) => buildKhoiFile(n, ma, i + 1)).join("") +
+    than +
     "</tbody></table></div>"
   );
+}
+/**
+ * DÒNG KHAI TẠM trên form TẠO nhiệm vụ — chỉ ô tên / định dạng / ý kiến (và nội dung nếu «Báo cáo»).
+ * KHÔNG dùng `buildKhoiFile`: id giả sẽ sinh menu tải/xoá/verdict gọi REST với file id không tồn tại.
+ * Ô KHÔNG có `name=` — FormData của `#task-form` không được nuốt chúng vào `taskFromLegacy`.
+ */
+function buildDongKhaiTam(so) {
+  const stt = Number(so) > 0 ? Number(so) : 1;
+  const chonDd =
+    "<option value=\"\">— Chưa rõ —</option>" +
+    DINH_DANG_KHAI.map((d) => "<option value=\"" + escapeHtmlAttr(d) + "\">" + escapeHtml(d) + "</option>").join("");
+  return (
+    "<tr class=\"dong-kq-khai-tam\">" +
+    "<td class=\"px-3 py-2 text-xs text-gray-400\">—</td>" +
+    "<td class=\"px-3 py-2\"><span class=\"text-gray-400 mr-1 kq-tam-so\">" + escapeHtml(stt + ".") + "</span>" +
+    "<input type=\"text\" class=\"form-input text-sm kq-tam-ten\" maxlength=\"500\" placeholder=\"Tên kết quả làm được\"></td>" +
+    "<td class=\"px-3 py-2\"><select class=\"form-input text-sm kq-tam-dinh-dang\" onchange=\"doiDinhDangDongTam(this)\">" + chonDd + "</select></td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-400\">Chưa có</td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-400\">—</td>" +
+    "<td class=\"px-3 py-2\"><input type=\"text\" class=\"form-input text-sm kq-tam-y-kien\" maxlength=\"2000\" placeholder=\"Không bắt buộc\"></td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-400\">Sẽ gửi khi lưu nhiệm vụ</td>" +
+    "<td class=\"px-3 py-2 text-right\">" +
+    "<button type=\"button\" class=\"text-gray-400 hover:text-red-600 text-xs\" title=\"Xoá dòng này\" onclick=\"xoaDongKhaiTam(this)\"><i class=\"fas fa-times\"></i></button>" +
+    "<div class=\"kq-tam-noi-dung-boc hidden mt-2 text-left\">" +
+    "<textarea class=\"form-input w-full text-sm kq-tam-noi-dung\" rows=\"3\" maxlength=\"20000\" placeholder=\"Nội dung báo cáo (tối thiểu 10 ký tự)…\"></textarea>" +
+    "</div></td></tr>"
+  );
+}
+function tbodyKhaiTam() {
+  return document.querySelector("#task-ket-qua-danh-sach table.bang-ket-qua tbody");
+}
+/** ＋ trên form tạo: thêm dòng 2., 3. … ngay trong bảng, không gọi REST. */
+function themDongKhaiTam() {
+  const tbody = tbodyKhaiTam();
+  if (!tbody) return;
+  const trong = tbody.querySelector(".dong-kq-trong");
+  if (trong) trong.remove();
+  const so = tbody.querySelectorAll("tr.dong-kq-khai-tam").length + 1;
+  tbody.insertAdjacentHTML("beforeend", buildDongKhaiTam(so));
+}
+function danhSoDongKhaiTam(tbody) {
+  tbody.querySelectorAll("tr.dong-kq-khai-tam").forEach((d, i) => {
+    const so = d.querySelector(".kq-tam-so");
+    if (so) so.textContent = i + 1 + ".";
+  });
+}
+function xoaDongKhaiTam(nut) {
+  const tr = nut && nut.closest && nut.closest("tr.dong-kq-khai-tam");
+  if (!tr) return;
+  const tbody = tr.parentElement;
+  tr.remove();
+  danhSoDongKhaiTam(tbody);
+  // Form tạo luôn giữ ít nhất một dòng trống để bảng không biến mất.
+  if (tbody && tbody.querySelectorAll("tr.dong-kq-khai-tam").length === 0) themDongKhaiTam();
+}
+function doiDinhDangDongTam(sel) {
+  const tr = sel && sel.closest && sel.closest("tr.dong-kq-khai-tam");
+  if (!tr) return;
+  const boc = tr.querySelector(".kq-tam-noi-dung-boc");
+  if (boc) boc.classList.toggle("hidden", sel.value !== DINH_DANG_BAO_CAO);
+}
+/** Điền khung khai (nếu còn) vào dòng tạm trống đầu tiên, không thì thêm dòng mới. */
+function dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung) {
+  const tbody = tbodyKhaiTam();
+  if (!tbody) return;
+  const trong = tbody.querySelector(".dong-kq-trong");
+  if (trong) trong.remove();
+  let dich = null;
+  tbody.querySelectorAll("tr.dong-kq-khai-tam").forEach((hang) => {
+    if (dich) return;
+    const o = hang.querySelector(".kq-tam-ten");
+    if (o && !String(o.value || "").trim()) dich = hang;
+  });
+  if (!dich) {
+    themDongKhaiTam();
+    const all = tbody.querySelectorAll("tr.dong-kq-khai-tam");
+    dich = all[all.length - 1];
+  }
+  if (!dich) return;
+  const oTen = dich.querySelector(".kq-tam-ten");
+  const oDd = dich.querySelector(".kq-tam-dinh-dang");
+  const oYk = dich.querySelector(".kq-tam-y-kien");
+  const oNd = dich.querySelector(".kq-tam-noi-dung");
+  if (oTen) oTen.value = ten;
+  if (oDd) {
+    oDd.value = dinhDang;
+    doiDinhDangDongTam(oDd);
+  }
+  if (oYk) oYk.value = yKien;
+  if (oNd) oNd.value = noiDung;
+}
+/** Đọc các dòng khai tạm TRƯỚC khi `closeModal` gỡ DOM. Bỏ dòng chưa đặt tên. */
+function thuThapDongKhaiTam() {
+  const ra = [];
+  document.querySelectorAll("#task-ket-qua-danh-sach tr.dong-kq-khai-tam").forEach((tr) => {
+    const ten = String((tr.querySelector(".kq-tam-ten") || {}).value || "").trim();
+    if (!ten) return;
+    const dinhDang = String((tr.querySelector(".kq-tam-dinh-dang") || {}).value || "");
+    const yKien = String((tr.querySelector(".kq-tam-y-kien") || {}).value || "").trim();
+    const noiDung = String((tr.querySelector(".kq-tam-noi-dung") || {}).value || "").trim();
+    ra.push({ tenKetQua: ten, dinhDang: dinhDang || null, yKien, noiDung });
+  });
+  return ra;
+}
+/**
+ * Gửi từng dòng khai tạm sau khi `addTaskWithAuth` trả `taskId`. Lỗi từng dòng toast, KHÔNG
+ * rollback nhiệm vụ vừa tạo — người dùng mở lại để khai tiếp. Cấp 2 không gọi hàm này.
+ */
+async function guiDongKhaiTam(ma, dongs) {
+  if (!ma || !Array.isArray(dongs) || dongs.length === 0) return;
+  const duong = "/api/v1/work-items/" + encodeURIComponent(ma);
+  let ok = 0,
+    loi = 0;
+  for (let i = 0; i < dongs.length; i += 1) {
+    const d = dongs[i];
+    let ketQua = null;
+    if (d.dinhDang === DINH_DANG_BAO_CAO && d.noiDung) {
+      if (String(d.noiDung).length < 10) {
+        showToast("Bỏ qua báo cáo «" + d.tenKetQua + "»: nội dung cần ít nhất 10 ký tự", "error");
+        loi += 1;
+        continue;
+      }
+      ketQua = await restPost(duong + "/reports", { noiDung: d.noiDung, tenGoc: d.tenKetQua });
+    } else {
+      const than = { tenKetQua: d.tenKetQua };
+      if (d.dinhDang) than.dinhDang = d.dinhDang;
+      if (d.yKien) than.yKien = d.yKien;
+      ketQua = await restPost(duong + "/results", than);
+    }
+    if (ketQua) ok += 1;
+    else loi += 1;
+  }
+  if (ok > 0) showToast("Đã khai " + ok + " dòng kết quả cho nhiệm vụ mới", "success");
+  if (loi > 0) showToast(loi + " dòng kết quả chưa gửi được — mở lại nhiệm vụ để khai tiếp", "error");
 }
 /** Ai được nộp file theo TRẠNG THÁI + quyền hiệu lực (máy chủ vẫn là rào chặn cuối). */
 function coTheNopFile(n, ma) {
@@ -2898,8 +3237,11 @@ function buildDongBanKetQua(n, b, chiSo, soCha) {
         )
         .join("")
     : "<span class=\"text-xs text-gray-300\">—</span>";
-  const muc = [buildMucMenuKq("fa-download", "Tải bản này", "taiFileKetQua('" + escapeForInlineHandler(b.id) + "')")];
-  if (xemInlineDuoc(b)) {
+  // Bản «Báo cáo» không có file ⇒ không có gì để tải/xem; nội dung đã in ngay ở cột 4 của dòng này.
+  const muc = laBanBaoCaoKq(b)
+    ? []
+    : [buildMucMenuKq("fa-download", "Tải bản này", "taiFileKetQua('" + escapeForInlineHandler(b.id) + "')")];
+  if (!laBanBaoCaoKq(b) && xemInlineDuoc(b)) {
     muc.push(buildMucMenuKq("fa-eye", "Xem trên trình duyệt", "xemFileKetQua('" + escapeForInlineHandler(b.id) + "')"));
   }
   // «Sửa lần N»: bản 1 là bản đầu tiên nên không phải lần sửa nào.
@@ -2909,11 +3251,14 @@ function buildDongBanKetQua(n, b, chiSo, soCha) {
     "<td class=\"px-3 py-2 text-xs text-gray-500 whitespace-nowrap\">" + escapeHtml(formatDateForDisplay(b.uploaded_at, true)) + "</td>" +
     "<td class=\"px-3 py-2 text-xs pl-8\">" +
     "<span class=\"text-gray-400 mr-1\">" + escapeHtml(soCha + "." + (chiSo + 1)) + "</span>" +
-    "<span class=\"text-gray-700\">" + escapeHtml(n.ten_goc) + escapeHtml(nhanSua) + "</span></td>" +
-    "<td class=\"px-3 py-2 text-xs text-gray-500\">" + escapeHtml(dinhDangCuaTen(b.ten_goc || n.ten_goc)) + "</td>" +
+    "<span class=\"text-gray-700\">" + escapeHtml(n.ten_ket_qua || n.ten_goc) + escapeHtml(nhanSua) + "</span></td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-500\">" +
+    escapeHtml(laBanBaoCaoKq(b) ? DINH_DANG_BAO_CAO : dinhDangCuaTen(b.ten_goc || n.ten_goc)) + "</td>" +
     "<td class=\"px-3 py-2 text-xs\">" +
-    "<button type=\"button\" class=\"text-blue-600 hover:underline\" title=\"Tải bản này\" onclick=\"taiFileKetQua('" +
-    escapeForInlineHandler(b.id) + "')\">" + escapeHtml(b.ten_goc || n.ten_goc) + "</button>" +
+    (laBanBaoCaoKq(b)
+      ? "<div class=\"text-gray-600 whitespace-pre-line line-clamp-3\" title=\"Nội dung báo cáo bản này\">" + escapeHtml(b.noi_dung || "") + "</div>"
+      : "<button type=\"button\" class=\"text-blue-600 hover:underline\" title=\"Tải bản này\" onclick=\"taiFileKetQua('" +
+        escapeForInlineHandler(b.id) + "')\">" + escapeHtml(b.ten_goc || n.ten_goc) + "</button>") +
     "<div class=\"text-gray-400\">bản " + escapeHtml(b.version_no) + "</div></td>" +
     "<td class=\"px-3 py-2 text-xs text-gray-600\">" + escapeHtml(b.ten_nguoi_nop) + "</td>" +
     "<td class=\"px-3 py-2\">" + yKien + "</td>" +
@@ -2935,20 +3280,23 @@ function buildKhoiFile(n, ma, soCha) {
   const banCuoi = bans.length > 0 ? bans[bans.length - 1] : null;
   const so = Number(soCha) > 0 ? Number(soCha) : 1;
   const muc = [];
+  // Dòng «Báo cáo» (016) là CHỮ, không có file: không mời tải lên, không mời tải về, không ✎ — ô
+  // nhập nội dung nằm ngay trong cột «Hành động» bên dưới menu.
+  const laBaoCao = laDongBaoCao(n);
   // «Tải lên (với trường hợp chưa có file)» — sheet gộp phần tải file vào chính bảng kết quả.
-  if (coTheNopFile(n, ma)) {
+  if (coTheNopFile(n, ma) && !laBaoCao) {
     muc.push(
       buildMucMenuKq("fa-upload", banCuoi ? "Nộp bản mới" : "Tải lên", "moChonFileKetQua('" + escapeForInlineHandler(n.id) + "')")
     );
   }
-  if (banCuoi) {
+  if (banCuoi && !laBaoCao) {
     muc.push(buildMucMenuKq("fa-download", "Tải bản mới nhất", "taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
     if (xemInlineDuoc(banCuoi)) {
       muc.push(buildMucMenuKq("fa-eye", "Xem ngay trong trình duyệt (PDF và ảnh)", "xemFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
     }
     // ✎ sửa trực tuyến (ONLYOFFICE) — mỗi lần lưu ở editor thành BẢN MỚI của nhóm này. Ảnh không
     // có bộ soạn thảo nào trong DS nên ẩn mục, khỏi mở ra một trang editor lỗi.
-    if (dsBat && suaTrucTuyenDuoc(n.ten_goc)) {
+    if (dsBat && suaTrucTuyenDuoc(banCuoi.ten_goc || n.ten_goc)) {
       muc.push(
         "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + banCuoi.id)) + "/editor\" target=\"_blank\" title=\"Sửa trực tuyến (ONLYOFFICE) — lưu là thành bản mới\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>Sửa trực tuyến</a>"
       );
@@ -2984,21 +3332,24 @@ function buildKhoiFile(n, ma, soCha) {
     "<tr class=\"dong-kq-nhom\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
     // 1. Thời gian — tự ghi nhận lúc tạo, người dùng không phải điền (sheet dòng 4 cột 1).
     "<td class=\"px-3 py-2 text-xs text-gray-500 whitespace-nowrap\">" + escapeHtml(formatDateForDisplay(n.created_at, true)) + "</td>" +
-    // 2. Kết quả làm được — đợt 1 dùng tên file gốc; đợt 2 (migration 016) cho người dùng tự khai.
+    // 2. Kết quả làm được — TÊN KHAI của người dùng (016 `ten_ket_qua`); dòng cũ lùi về tên file.
     "<td class=\"px-3 py-2\">" +
     (bans.length > 0
       ? "<button type=\"button\" class=\"kq-nut-bung\" title=\"Ẩn/hiện các lần đã sửa\" onclick=\"batTatBanKq('" + escapeForInlineHandler(n.id) + "')\"><i class=\"fas fa-caret-right\"></i></button>"
       : "<span class=\"kq-nut-bung-trong\"></span>") +
     "<span class=\"text-gray-400 mr-1\">" + escapeHtml(so + ".") + "</span>" +
-    "<span class=\"font-medium text-sm text-gray-800\">" + escapeHtml(n.ten_goc) + "</span>" +
+    "<span class=\"font-medium text-sm text-gray-800\">" + escapeHtml(n.ten_ket_qua || n.ten_goc) + "</span>" +
     (bans.length > 1 ? "<span class=\"text-xs text-gray-400 ml-2\">" + escapeHtml(bans.length) + " bản</span>" : "") +
     "</td>" +
-    // 3. Định dạng.
-    "<td class=\"px-3 py-2 text-xs text-gray-600\">" + escapeHtml(dinhDangCuaTen(n.ten_goc)) + "</td>" +
-    // 4. File đã tải lên — «Chưa có» khi chưa nộp bản nào (sheet dòng 4 cột 4).
+    // 3. Định dạng — cột khai của 016, không có thì suy từ đuôi bản mới nhất như đợt 1.
+    "<td class=\"px-3 py-2 text-xs text-gray-600\">" + buildIconDinhDang(dinhDangCuaNhom(n)) + escapeHtml(dinhDangCuaNhom(n)) + "</td>" +
+    // 4. File đã tải lên — «Chưa có» khi chưa nộp bản nào (sheet dòng 4 cột 4). Bản «Báo cáo» không
+    // có file để tải: ghi rõ là chữ, bấm «Lịch sử» để đọc nội dung từng bản.
     "<td class=\"px-3 py-2 text-xs\">" +
     (banCuoi
-      ? "<button type=\"button\" class=\"text-blue-600 hover:underline text-left\" title=\"Tải file này\" onclick=\"taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')\">" + escapeHtml(banCuoi.ten_goc || n.ten_goc) + "</button>"
+      ? (laBanBaoCaoKq(banCuoi)
+          ? "<span class=\"text-gray-500\" title=\"Kết quả là nội dung chữ, không có file\">Báo cáo (nhập chữ)</span>"
+          : "<button type=\"button\" class=\"text-blue-600 hover:underline text-left\" title=\"Tải file này\" onclick=\"taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')\">" + escapeHtml(banCuoi.ten_goc || n.ten_goc) + "</button>")
       : "<span class=\"text-gray-400\">Chưa có</span>") +
     "</td>" +
     // 5. Người thực hiện.
@@ -3013,8 +3364,10 @@ function buildKhoiFile(n, ma, soCha) {
     "<span class=\"text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap " + escapeHtmlAttr(MAU_TRANG_THAI_FILE[n.trang_thai] || "bg-gray-100 text-gray-600") + "\">" +
     escapeHtml(NHAN_TRANG_THAI_FILE[n.trang_thai] || n.trang_thai) + "</span>" +
     "<div class=\"text-xs text-gray-500 mt-1\">" + escapeHtml(cauTinhTrangFile(n)) + "</div></td>" +
-    // 8. Hành động — MỘT menu, đúng câu chú trong sheet.
-    "<td class=\"px-3 py-2 text-right\">" + buildMenuHanhDongKq("kq-" + n.id, muc) + "</td>" +
+    // 8. Hành động — MỘT menu, đúng câu chú trong sheet; dòng «Báo cáo» thêm ô nhập chữ (016) vì
+    // kết quả của nó KHÔNG phải file: nhập rồi bấm Nộp là thành BẢN MỚI, đi đúng luồng duyệt cũ.
+    "<td class=\"px-3 py-2 text-right\">" + buildMenuHanhDongKq("kq-" + n.id, muc) +
+    (laBaoCao && coTheNopFile(n, ma) ? buildONhapBaoCao(n, ma) : "") + "</td>" +
     "</tr>" +
     dongBan +
     "<tr class=\"dong-kq-panel\"><td colspan=\"8\" class=\"px-3 pb-2 pt-0\">" +
@@ -3304,7 +3657,8 @@ function createTaskModal(isEdit, task) {
     };
     projectSel.addEventListener("change", napPhanCongTask);
     napPhanCongTask();
-    // Kết quả file (014) — nạp sau khi form dựng xong; tạo mới thì chưa có nhiệm vụ nên bỏ qua.
+    // Kết quả file (014/016): SỬA thì nạp REST. TẠO MỚI (cấp 3) đã nhúng bảng 8 cột + dòng khai
+    // tạm vào chuỗi HTML bên dưới nên người dùng thấy bảng NGAY, không chờ 250ms, không cần mã.
     if (isEdit) napKetQua(taskId);
   }, 250);
   return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        </div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              " + (isEdit ? buildThanhTabNhatKy("task", thangSuaDuocCuaDauViec(task[COL.T_START], task[COL.T_DUE]).length > 0) : "") + "\n              <!-- 3 Columns Content -->\n              <div id=\"task-form-body\" class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 || createProject ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + (isAdmin() || isManager() ? allProjects : getUserAllowedProjects()).map(item => {
@@ -3314,7 +3668,7 @@ function createTaskModal(isEdit, task) {
     let text3 = "";
     if (isEdit) text3 = task[COL.T_ASSIGNEE] === list2[COL.S_NAME] ? "selected" : "";else !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
     return "<option value=\"" + escapeHtml(list2[COL.S_NAME]) + "\" " + text3 + ">" + escapeHtml(list2[COL.S_NAME]) + "</option>";
-  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tiến độ (%)</label>\n                                  <input type=\"number\" name=\"completion\" class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? parseInt(task[COL.T_COMPLETION] || 0) : 0) + "\">\n                              </div>\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả</label>\n                            <textarea name=\"resultLinks\" class=\"form-textarea\" rows=\"5\" placeholder=\"Nhập mỗi link trên một dòng\">" + (isEdit ? escapeHtml(task[COL.T_RESULT_LINKS]) || "" : "") + "</textarea>\n                          </div><!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. --><div id=\"task-ket-qua-danh-sach\"></div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n          </form>\n      </div>\n  </div>\n";
+  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tiến độ (%)</label>\n                                  <input type=\"number\" name=\"completion\" class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? parseInt(task[COL.T_COMPLETION] || 0) : 0) + "\">\n                              </div>\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"3\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả</label>\n                            <textarea name=\"resultLinks\" class=\"form-textarea\" rows=\"5\" placeholder=\"Nhập mỗi link trên một dòng\">" + (isEdit ? escapeHtml(task[COL.T_RESULT_LINKS]) || "" : "") + "</textarea>\n                          </div><!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. --><div id=\"task-ket-qua-danh-sach\">" + (!isEdit && createLevel !== 2 ? buildKhungDanhSachKetQua([], "") : "") + "</div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n          </form>\n      </div>\n  </div>\n";
 }
 function toggleTaskReminders(forceShow) {
   const taskRemindersContainerEl = document.getElementById("task-reminders-container"),
@@ -3795,6 +4149,9 @@ function handleAdd(type, { luuNhap = false } = {}) {
   // «Lưu nháp» (012) chỉ có nghĩa với công việc/nhiệm vụ — cầu RPC chuyển thẳng khoá này thành
   // `saveAsDraft` của REST (rpc/table.js). Vai nào tạo cũng lưu nháp được (người dùng chốt cả 3 cấp).
   if (luuNhap && (type === "project" || type === "task")) data.saveAsDraft = true;
+  // closeModal gỡ DOM — phải đọc dòng khai tạm TRƯỚC. Cấp 2 không có kết quả file (mustFindNhiemVu).
+  let dongKhaiTam = [];
+  if (type === "task" && Number(data.level) !== 2) dongKhaiTam = thuThapDongKhaiTam();
   const text = "TEMP_" + Date.now();
   addOptimisticUpdate(type, data, text), closeModal(type + "-modal"), showToast(type.charAt(0).toUpperCase() + type.slice(1) + " đang được tạo...", "info"), setButtonLoading(el2, true);
   let text2 = "";
@@ -3819,6 +4176,7 @@ function handleAdd(type, { luuNhap = false } = {}) {
         if (type === "task") {
           const taskIndex = allTasks.findIndex(task => task[COL.T_ID] === text);
           if (taskIndex !== -1) allTasks[taskIndex][COL.T_ID] = response.taskId;
+          if (response.taskId && dongKhaiTam.length) guiDongKhaiTam(response.taskId, dongKhaiTam);
         } else {
           if (type === "staff") {
             const staffIndex = allStaff.findIndex(staff => staff[COL.S_ID] === text);
@@ -7057,19 +7415,39 @@ function buildONhiemVuChoDuyet(ten, ma) {
  * Mọi hành động gộp vào MỘT menu ⋯ («ấn vào đây hiển thị các Hành động để chọn»).
  * Mọi giá trị user-data đều escape tại lỗ.
  */
+/**
+ * DÒNG 2 của cột 1 hàng chờ: tên file của bản mới nhất. Bản «Báo cáo» (016) không có file — ghi rõ
+ * «Báo cáo (nhập chữ)» thay vì lặp lại tên kết quả ở dòng trên (lặp lại là hai dòng y nhau, vô nghĩa).
+ */
+function tenBanCuoiHangCho(n) {
+  if (laDongBaoCao(n)) return "Báo cáo (nhập chữ)";
+  return String((n && (n.ban_cuoi_ten || n.ten_ket_qua || n.ten_goc)) || "");
+}
 function buildDongChoDuyetKetQua(n) {
   const muc = [];
-  if (n.ban_cuoi_id) {
+  // Dòng «Báo cáo» không có file: không mời tải về, không mời sửa trực tuyến — mở nhiệm vụ để đọc.
+  const laBaoCao = laDongBaoCao(n);
+  if (n.ban_cuoi_id && !laBaoCao) {
     muc.push(buildMucMenuKq("fa-download", "Tải bản mới nhất", "taiFileKetQua('" + escapeForInlineHandler(n.ban_cuoi_id) + "')"));
   }
-  if (dsBat && n.ban_cuoi_id && suaTrucTuyenDuoc(n.ten_goc)) {
+  if (laBaoCao) {
+    muc.push(
+      buildMucMenuKq(
+        "fa-file-lines",
+        "Mở nhiệm vụ để đọc nội dung báo cáo",
+        "openEditModal('task', '" + escapeForInlineHandler(n.ma_nhiem_vu) + "')"
+      )
+    );
+  }
+  if (dsBat && n.ban_cuoi_id && !laBaoCao && suaTrucTuyenDuoc(n.ban_cuoi_ten || n.ten_goc)) {
     muc.push(
       "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + n.ban_cuoi_id)) +
       "/editor\" target=\"_blank\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>Sửa trực tuyến</a>"
     );
   }
   // «Nộp bản mới» ngay trong hàng chờ — người dùng chốt: người sửa file được up bản mới của nó.
-  if (n.duocNop === true) {
+  // Dòng «Báo cáo» nộp bằng ô nhập chữ trong modal nhiệm vụ, không qua ô chọn file.
+  if (n.duocNop === true && !laBaoCao) {
     muc.push(
       buildMucMenuKq(
         "fa-upload",
@@ -7093,18 +7471,18 @@ function buildDongChoDuyetKetQua(n) {
   const soYKien = Number(n.so_y_kien || 0);
   return (
     "<tr class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
-    // 1. Tên kết quả làm được (người dùng chốt 2026-09-04): DÒNG 1 = tên kết quả đã khai ở ô
-    // «Kết quả» của nhiệm vụ + ICON định dạng + số bản; DÒNG 2 = TÊN FILE của bản mới nhất (hai
-    // thứ này khác nhau ngay khi ai đó nộp bản mới bằng file tên khác). Đợt 1 tên kết quả vẫn là
-    // `ten_goc` của nhóm; đợt 2 = migration 016 thêm cột `ten_ket_qua` cho người dùng tự khai.
+    // 1. Tên kết quả làm được (người dùng chốt 2026-09-04): DÒNG 1 = TÊN KẾT QUẢ đã khai ở ô
+    // «Kết quả» của nhiệm vụ (016 `ten_ket_qua`) + ICON định dạng + số bản; DÒNG 2 = TÊN FILE của
+    // bản mới nhất — hai thứ lệch nhau ngay khi ai đó nộp bản mới bằng file tên khác. Dòng «Báo
+    // cáo» không có file nên dòng 2 ghi rõ là chữ thay vì lặp lại tên.
     "<td class=\"px-3 py-2\">" +
     "<div class=\"flex items-start\">" +
-    buildIconDinhDang(n.ten_goc) +
+    buildIconDinhDang(n.dinh_dang || n.ban_cuoi_ten || n.ten_goc) +
     "<div class=\"min-w-0\">" +
-    "<div><span class=\"font-medium text-gray-800\">" + escapeHtml(n.ten_goc) + "</span>" +
+    "<div><span class=\"font-medium text-gray-800\">" + escapeHtml(n.ten_ket_qua || n.ten_goc) + "</span>" +
     "<span class=\"text-xs text-gray-400 ml-2 whitespace-nowrap\">" + escapeHtml(n.so_ban || 1) + " bản</span></div>" +
-    "<div class=\"text-xs text-gray-500 truncate\" title=\"" + escapeHtmlAttr(n.ban_cuoi_ten || n.ten_goc) + "\">" +
-    escapeHtml(n.ban_cuoi_ten || n.ten_goc) + "</div>" +
+    "<div class=\"text-xs text-gray-500 truncate\" title=\"" + escapeHtmlAttr(tenBanCuoiHangCho(n)) + "\">" +
+    escapeHtml(tenBanCuoiHangCho(n)) + "</div>" +
     "</div></div>" +
     "</td>" +
     // 2-3-4. Ba cấp cây, đọc từ dưới lên đúng thứ tự sheet.
