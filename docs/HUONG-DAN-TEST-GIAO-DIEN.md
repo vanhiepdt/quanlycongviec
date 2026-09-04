@@ -845,6 +845,62 @@ luật**, nên nếu một trong hai chỗ trống thì cả hai đều trống,
 Nếu vẫn trống sau khi seed: gần như chắc là trình duyệt còn `app.js` bản cũ (Ctrl+F5) hoặc máy chủ
 đang nối CSDL khác — bước `[7/7]` của `chay-test.bat` in ra CSDL đang nối, đọc dòng đó trước.
 
+### 9b.8 Hai bảng kết quả thiết kế lại (2026-09-04, đợt 1) — bấm để tự nghiệm
+
+Cần bản **`app.js 20260904-1`** (Console phải in đúng số đó, và **Ctrl+Shift+R** để lấy cả
+`app.css 20260904-1` — đợt này đổi cả CSS). **Không** cần migration, **không** cần seed lại.
+
+Đây là **đợt 1: chỉ hình dáng**. Hai thứ trong file thiết kế của bạn còn nằm ở đợt 2 nên **chưa
+thấy được** ở bản này, nói trước để bạn không đi tìm: **dòng «Chưa có»** (khai kết quả trước khi có
+file) và **định dạng «Báo cáo»** (nhập chữ thay cho nộp file). Cả hai đòi cột mới trong cơ sở dữ
+liệu (migration 016).
+
+**(1) Khối «Kết quả» giờ là một bảng 8 cột.** `nv1@test.local` → NV-01 → tab «Thông tin», cuộn tới
+nhãn «Kết quả». Hàng tiêu đề phải đọc từ trái sang phải đúng thứ tự:
+
+```
+Thời gian | Kết quả làm được | Định dạng | File đã tải lên | Người thực hiện | Ghi ý kiến | Tình trạng | Hành động
+```
+
+Mỗi kết quả là **một dòng** đánh số **1.**, **2.**, **3.**… «Thời gian» tự ghi nhận lúc nộp (bạn
+không phải điền), «Người thực hiện» tự lấy tên người nộp, «Định dạng» tự suy từ đuôi file — nộp một
+`.xlsx` thì ô đó ghi **Excel**, `.pptx` ghi **PPT**, `.png` ghi **Ảnh**.
+
+**(2) Các lần đã sửa nằm sau nút ▸, thu gọn sẵn.** Nộp thêm 2 bản nữa cho cùng một kết quả (menu ⋯
+→ «Nộp bản mới»). Dòng cha ghi «3 bản» và **vẫn chỉ một dòng** — bấm **▸** ở đầu dòng mới bung ra
+**1.1**, **1.2**, **1.3**, trong đó 1.2 ghi thêm «— Sửa lần 1» và 1.3 «— Sửa lần 2» (bản đầu tiên
+không phải lần sửa nào nên 1.1 không có chữ đó). Bấm lại là gập, mũi tên đổi ▸ ↔ ▾. Đây là chỗ bạn
+đã chọn «thu gọn mặc định» thay vì hiện thẳng.
+
+**(3) Mọi hành động gộp vào một nút ⋯.** Cột «Hành động» chỉ còn **một** nút ba chấm; bấm mới hiện
+danh sách dọc «Tải lên / Nộp bản mới · Tải bản mới nhất · Xem ngay trong trình duyệt · Sửa trực
+tuyến · Yêu cầu sửa · Trình Phó giám đốc · Hoàn thành / Duyệt · Xoá kết quả này» — đúng những mục
+**vai của bạn** được làm, không phải tất cả. Mở menu của dòng khác thì menu đang mở **tự đóng**;
+bấm ra chỗ trống cũng đóng. Đăng nhập `tp@test.local` xem cùng nhiệm vụ: danh sách trong menu khác
+hẳn của cán bộ. (Nút hiện/ẩn chỉ cho gọn mắt — máy chủ vẫn chặn lại nếu gọi thẳng.)
+
+**(4) Cột «Tình trạng» đọc được thành câu.** Không còn chỉ một nhãn ngắn: dưới badge màu là câu kể
+như «đang đợi Trưởng phòng/Phó phòng duyệt», «đang đợi Cán bộ sửa và nộp bản mới», «TP/PP đã duyệt,
+đang gửi lên Phó Giám đốc/Giám đốc». Để thấy phần đếm: `tp@test.local` bấm «Yêu cầu sửa» một lần →
+mở lại nhiệm vụ, câu đó thành **«Bị trả lại lần 1 — đang đợi Cán bộ sửa và nộp bản mới»**; nộp bản
+mới rồi «Yêu cầu sửa» lần nữa thì ra **lần 2**.
+
+**(5) «Hàng chờ phê duyệt → Phê duyệt kết quả» thành bảng phẳng 8 cột.** `tp@test.local` → «Hàng
+chờ phê duyệt» → tab «Phê duyệt kết quả». Hàng tiêu đề:
+
+```
+Tên kết quả làm được | Nhiệm vụ | Công việc con | Công việc chính | Trạng thái | Bản mới nhất | Ý kiến | Nút chức năng
+```
+
+Khác bản trước ở chỗ **hết hàng tiêu đề gộp**: ba cấp cây nay là **ba cột của chính dòng file**, nên
+mỗi dòng tự nói nó thuộc nhiệm vụ nào, công việc con nào, công việc chính nào — mắt quét theo hàng,
+không phải nhớ mình đang ở dưới nhóm nào. Nhiệm vụ nào không có công việc con thì ô đó là dấu «—»
+chứ không bỏ trống. Tên nhiệm vụ vẫn bấm được để mở nhiệm vụ. Cột «Nút chức năng» cũng là **một
+menu ⋯** như (3).
+
+Thứ tự dòng là **của máy chủ** (theo mã công việc → mã công việc con → mã nhiệm vụ). Nếu bạn thấy
+thứ tự trông lạ thì đó là thứ tự mã, không phải lỗi sắp xếp.
+
 
 ---
 
@@ -927,6 +983,10 @@ sạch thì xoá thư mục đó.
 | **Hàng chờ dạng bảng theo cây + cột «Xem ý kiến»** | ✅ | mục **9b.6** (5) |
 | **Nộp bản mới ngay trong hàng chờ + thanh tải lên** | ✅ | mục **9b.6** (6)(7) |
 | **Khối phân công thu gọn, cây tách bạch từng nhánh** | ✅ | mục **9b.6** (8) |
+| **Khối «Kết quả» là bảng 8 cột, dòng bản 1.1/1.2 «Sửa lần N» thu gọn sau ▸** | ✅ | mục **9b.8** (1)(2) |
+| **Mọi hành động gộp vào một menu ⋯; «Tình trạng» là câu kể có «Bị trả lại lần N»** | ✅ | mục **9b.8** (3)(4) |
+| **Hàng chờ phê duyệt là bảng phẳng 8 cột, ba cấp cây thành ba cột** | ✅ | mục **9b.8** (5) |
+| **Dòng «Chưa có» (khai kết quả trước khi có file) + định dạng «Báo cáo» nhập chữ** | ⏳ **đợt 2** | cần migration 016 — chưa làm, chờ bạn xem đợt 1 |
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |

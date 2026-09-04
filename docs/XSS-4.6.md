@@ -605,6 +605,28 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     khác nhau tuỳ trình duyệt) nên so bằng `includes`. `.png` mang mime Excel vẫn 400 (TC-TF-14).
     Tên file gốc — kể cả tên có dấu tiếng Việt như `ảnh chụp.jpg` — vẫn chỉ để hiển thị và luôn
     escape tại lỗ; tên vật lý do máy chủ sinh (`v{n}-{uuid}.{ext}`), không bao giờ lấy từ tên gửi lên.
+- **Thiết kế lại hai bảng kết quả (2026-09-04 — Vòng 14续9, đợt 1)**: pin **101/831 → 101/868**
+  (**+37 giá trị, số chỗ ghi HTML KHÔNG đổi**). Đây là lần thứ ba pin tăng mà `sink` đứng yên, và lý
+  do vẫn thế: cả hai bảng ghi qua đúng **hai lỗ `innerHTML` đã đếm từ trước** — `khung.innerHTML`
+  trong `napKetQua` và `listEl.innerHTML` trong `renderChoDuyetKetQua`. Mọi builder mới
+  (`buildBangKetQua`, `buildDongBanKetQua`, `buildMenuHanhDongKq`, `buildMucMenuKq`,
+  `buildOCapChoDuyet`, `buildONhiemVuChoDuyet`) chỉ **TRẢ chuỗi** cho hai lỗ đó. Phân bổ +37 ghi
+  trong chú thích của TC-SEC-17, không nhắc lại ở đây. Bốn điểm cần nhớ:
+  - **Tên hàm phải mang tiền tố `build*`.** Sáu builder trên đều đặt tên như vậy nên bộ soát xếp
+    chúng vào `HTML-LONG` (giá trị CHÍNH LÀ HTML, các lỗ bên trong soát riêng). Đặt tên kiểu `o(...)`
+    hay `menu(...)` là mỗi chỗ gọi bị đếm thành một lỗ `CAN-THOAT` — cùng bẫy `xinXoaBadge` ở §13.5.
+  - **Menu ⋯ escape ở hai tầng khác nhau, đừng nhầm.** `buildMucMenuKq(icon, nhan, onclick)` nhận
+    `onclick` là **cả một chuỗi lời gọi đã dựng sẵn** rồi cho qua `escapeHtmlAttr`; bên trong chuỗi
+    đó, từng giá trị đã đi qua `escapeForInlineHandler` ở chỗ gọi. Hai tầng này **không** thừa: tầng
+    trong chống đóng chuỗi JS (`'` → `\'`), tầng ngoài chống đóng thuộc tính HTML (`"` → `&quot;`).
+    Bộ soát ghi lỗ đó là `handler-ngoai` + `DA-THOAT` — đúng, vì cả biểu thức là mã JS do chương
+    trình sinh, không phải một giá trị nằm trong chuỗi JS.
+  - **Mục «Sửa trực tuyến» là `<a href>` nên vẫn phải `escapeHtmlAttr(safeUrl(...))`** dù id bản là
+    số của máy chủ — luật TC-SEC-13 không xét nguồn.
+  - **`data-nhom` / `data-file` là thuộc tính, không phải chữ giữa hai thẻ**: dùng `escapeHtmlAttr`.
+    Chúng được `querySelector` đọc lại nên còn một lớp nữa ở `batTatBanKq`: lọc `"` và `\` khỏi khoá
+    trước khi ghép vào bộ chọn CSS, kẻo id lạ làm vỡ selector (không phải XSS, nhưng cùng họ lỗi
+    «ghép chuỗi vào một ngôn ngữ khác»).
 
 
 
