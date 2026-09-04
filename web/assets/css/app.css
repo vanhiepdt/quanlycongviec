@@ -3777,31 +3777,92 @@
 }
 
 /* ============================================================================
-   BẢNG «Phê duyệt kết quả» dạng CÂY (2026-09-02, người dùng chốt: hiện công việc cha →
-   công việc con → nhiệm vụ → file). Ba hàng tiêu đề phân biệt bằng nền + màu chữ, không
-   phải bằng thụt lề đơn thuần — nhìn phát ra ngay cấp nào.
+   BẢNG «Kết quả» (modal nhiệm vụ) và «Phê duyệt kết quả» (hàng chờ) — thiết kế lại
+   2026-09-03 theo hai sheet của người dùng: bảng PHẲNG, ba cấp cây thành ba cột, mọi
+   hành động gộp vào MỘT menu ⋯. Hàng tiêu đề cây (hang-cay-1/2/3) đã gỡ.
    ============================================================================ */
-.bang-kq-cho-duyet .hang-cay-1 {
-    background: linear-gradient(to right, #eff6ff, #faf5ff);
-    color: #1e3a8a;
+
+/* Dòng cha của một kết quả — đậm hơn dòng bản để nhìn ra tầng. */
+.bang-ket-qua .dong-kq-nhom {
+    background: #fff;
 }
 
-.bang-kq-cho-duyet .hang-cay-2 {
-    background: #f8fafc;
-    color: #334155;
+.bang-ket-qua .dong-kq-nhom:hover,
+.bang-kq-cho-duyet .dong-kq-cho-duyet:hover {
+    background: #f9fafb;
 }
 
-.bang-kq-cho-duyet .hang-cay-3 {
-    background: #fffdf5;
-    color: #78350f;
+/* Dòng BẢN (1.1, 1.2 …) — nền xám nhạt + vạch trái, thụt vào so với dòng cha. */
+.bang-ket-qua .dong-ban-kq {
+    background: #fafafa;
 }
 
-.bang-kq-cho-duyet .hang-cay-2 td {
-    border-left: 3px solid #cbd5e1;
+.bang-ket-qua .dong-ban-kq td:first-child {
+    border-left: 3px solid #dbeafe;
 }
 
-.bang-kq-cho-duyet .hang-cay-3 td {
-    border-left: 3px solid #fcd34d;
+/* Dòng giữ hai khung «Ý kiến» / «Lịch sử» — không viền trên, dính vào dòng cha. */
+.bang-ket-qua .dong-kq-panel > td {
+    border-top: 0;
+}
+
+/* Nút ▸/▾ bung danh sách bản. Ô trống cùng bề rộng để cột 2 không lệch khi chưa có bản. */
+.kq-nut-bung,
+.kq-nut-bung-trong {
+    display: inline-block;
+    width: 1.25rem;
+    text-align: center;
+    color: #9ca3af;
+}
+
+.kq-nut-bung:hover {
+    color: #2563eb;
+}
+
+/* ── MENU «Nút chức năng» ────────────────────────────────────────────────────
+   Sheet ghi: «ấn vào đây hiển thị các Hành động để chọn». Trước đây mỗi hành động là
+   một nút riêng nên hàng nút tràn ngang bảng; nay một nút ⋯ mở danh sách dọc.
+   `position: absolute` + `right: 0` để menu không đẩy giãn ô bảng.
+   ──────────────────────────────────────────────────────────────────────────── */
+.kq-menu-boc {
+    position: relative;
+    display: inline-block;
+}
+
+.kq-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 30;
+    min-width: 13rem;
+    margin-top: 0.25rem;
+    padding: 0.25rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px rgb(0 0 0 / 12%);
+    text-align: left;
+}
+
+.kq-menu-muc {
+    display: block;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    color: #374151;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.kq-menu-muc:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+
+.kq-menu-muc-chot {
+    font-weight: 600;
+    color: #1d4ed8;
 }
 
 /* ============================================================================
