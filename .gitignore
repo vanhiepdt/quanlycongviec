@@ -40,3 +40,7 @@ server/tools/_*
 
 # ===== File kết quả nhiệm vụ lưu trên đĩa (014) — dữ liệu người dùng, KHÔNG commit =====
 server/storage/
+
+# File khoá tạm của Excel/Word (`~$ten.xlsx`) — Office tạo khi đang mở file, xoá không được vì
+# đang bị chiếm dụng. Không phải nội dung, đừng commit.
+~$*
