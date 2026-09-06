@@ -23,6 +23,8 @@ import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import * as chatService from '../modules/chat/service.js';
 import * as notiRepo from '../modules/notifications/repo.js';
+import * as zaloRepo from '../modules/zalo/repo.js';
+import * as zaloApi from './zalo.js';
 
 /** Nhiệm vụ đã xong thì không quá hạn nữa, dù hạn chót đã lùi lại bao lâu. */
 const TRANG_THAI_XONG = 'Hoàn thành';
@@ -130,6 +132,86 @@ export async function quetQuaHan({ now = new Date() } = {}) {
 let viecDaDangKy = null;
 /** Lịch dọn chat cũ (việc 7.4) — giữ riêng để gỡ được độc lập với lịch quét quá hạn. */
 let viecDonChat = null;
+/** Lịch đẩy hàng đợi Zalo (017) — giữ riêng để gỡ được độc lập với hai lịch trên. */
+let viecDayZalo = null;
+
+/** Nhãn loại tin — người nhận nhìn dòng đầu là biết vì sao bot nhắn mình. */
+const NHAN_ZALO = Object.freeze({
+  approval_pending: '[Chờ duyệt]',
+  approval_rejected: '[Trả lại]',
+  overdue: '[Quá hạn]',
+});
+
+/**
+ * Dựng nội dung tin Zalo từ một dòng thông báo.
+ *
+ * Nguyên tắc B1.4 (`docs/KE-HOACH-THONG-BAO.md`): tin chỉ có loại việc, tên đầu việc, ai gửi và câu
+ * «mở hệ thống để xem». KHÔNG đẩy phần «Lý do: …» (lý do từ chối, lý do xin xoá) — `content` lưu trong
+ * CSDL có phần đó, cắt ở mốc đầu tiên trước khi gửi ra ngoài.
+ */
+function tinZalo(dong) {
+  const than = String(dong.content ?? '')
+    .split(' Lý do:')[0]
+    .replace(/\s+$/, '');
+  const nhan = NHAN_ZALO[dong.type] ?? '[Thông báo]';
+  return `${nhan} ${than} Mở hệ thống để xem chi tiết.`;
+}
+
+/**
+ * Một lượt đẩy HÀNG ĐỢI thông báo sang Zalo (017, việc B4).
+ *
+ * Đúng khuôn `quetQuaHan`: hàm thường nhận đồng hồ từ ngoài, lịch chỉ gọi nó. Không đẩy tại chỗ gọi
+ * tạo thông báo vì ba lý do ghi ở §B4: không giữ khoá transaction theo độ trễ mạng, khởi động lại
+ * không mất tin, và một chỗ duy nhất kiểm «đã gửi chưa».
+ *
+ * Zalo đang TẮT (token trống) ⇒ trả về ngay và KHÔNG chạm hàng đợi: ba lượt thử rồi bỏ hẳn sẽ thiêu
+ * sạch tin tồn trong lúc tắt, để khi bật lên thì người dùng không nhận được gì của quãng đó.
+ *
+ * @param {object} opts
+ * @param {Date} opts.now đồng hồ — test truyền đồng hồ giả, lịch chạy truyền `new Date()`
+ * @returns {Promise<{trongDoi: number, daGui: number, boQua: number, thatBai: number, tat: boolean}>}
+ */
+export async function dayThongBaoZalo({ now = new Date() } = {}) {
+  const ketQua = { trongDoi: 0, daGui: 0, boQua: 0, thatBai: 0, tat: !zaloApi.daBat() };
+  if (ketQua.tat) return ketQua;
+
+  const client = await pool.connect();
+  try {
+    const muonNhat = new Date(now.getTime() - env.ZALO_PUSH_MAX_AGE_H * 3_600_000);
+    const lo = await zaloRepo.loCanDay(
+      { soGio: env.ZALO_PUSH_MAX_AGE_H, muonNhat, gioiHan: 50 },
+      client
+    );
+    ketQua.trongDoi = lo.length;
+    if (lo.length === 0) return ketQua; // im lặng: 720 lượt/ngày, không log lượt rỗng
+
+    // Người CHƯA liên kết: đánh dấu bỏ qua để lịch không quét lại họ mỗi 2 phút — họ sẽ không bao
+    // giờ nhận được tin cho tới khi tự liên kết (phần «bỏ qua» của §B4).
+    const chuaLienKet = lo.filter((d) => !d.zalo_chat_id).map((d) => d.id);
+    if (chuaLienKet.length > 0) {
+      await zaloRepo.danhDauDaXuLy({ ids: chuaLienKet, lyDo: 'chưa liên kết Zalo' }, client);
+      ketQua.boQua += chuaLienKet.length;
+    }
+
+    // Gửi TUẦN TỰ, mỗi tin một lời gọi: giới hạn tần suất phía Zalo tính theo bot, gửi song song một
+    // chùm 50 tin là tự đưa mình vào chỗ bị chặn. Lô chỉ 50 dòng, chậm hơn vài giây là cái giá đáng.
+    for (const dong of lo) {
+      if (!dong.zalo_chat_id) continue;
+      const kq = await zaloApi.guiTin({ chatId: dong.zalo_chat_id, text: tinZalo(dong) });
+      if (kq.ok) {
+        await zaloRepo.danhDauDaXuLy({ ids: [dong.id], lyDo: '' }, client);
+        ketQua.daGui += 1;
+      } else {
+        await zaloRepo.danhDauThatBai({ id: dong.id, lyDo: kq.loi }, client);
+        ketQua.thatBai += 1;
+      }
+    }
+    logger.info(ketQua, 'Đẩy thông báo Zalo xong');
+    return ketQua;
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * Một lượt dọn tin chat cũ (§7 việc 7.4).
@@ -205,11 +287,37 @@ export function batLichChay() {
       'Biểu thức lịch dọn chat không hợp lệ, không bật lịch dọn'
     );
   }
+
+  // Lịch đẩy hàng đợi Zalo sai biểu thức thì BỎ RIÊNG nó, không kéo theo hai lịch đã đăng ký xong.
+  // Zalo TẮT (token trống) thì lịch vẫn chạy nhưng `dayThongBaoZalo` tự trả về ngay — một chỗ kiểm.
+  if (cron.validate(env.CRON_ZALO_PUSH)) {
+    viecDayZalo = cron.schedule(
+      env.CRON_ZALO_PUSH,
+      async () => {
+        try {
+          await dayThongBaoZalo({ now: new Date() });
+        } catch (err) {
+          logger.error({ err: err.message }, 'Lượt đẩy thông báo Zalo hỏng');
+        }
+      },
+      { timezone: env.TZ }
+    );
+    logger.info({ lich: env.CRON_ZALO_PUSH, tz: env.TZ }, 'Đã bật lịch đẩy thông báo Zalo');
+  } else {
+    logger.error(
+      { CRON_ZALO_PUSH: env.CRON_ZALO_PUSH },
+      'Biểu thức lịch đẩy Zalo không hợp lệ, không bật lịch đẩy'
+    );
+  }
   return viecDaDangKy;
 }
 
 /** Gỡ lịch. Gọi khi tắt máy chủ để tiến trình không bị giữ lại bởi bộ đếm giờ. */
 export function dungLichChay() {
+  if (viecDayZalo) {
+    viecDayZalo.stop();
+    viecDayZalo = null;
+  }
   if (viecDonChat) {
     viecDonChat.stop();
     viecDonChat = null;

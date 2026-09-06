@@ -28,6 +28,8 @@ import taskFilesDsRouter from './modules/taskFiles/dsRoutes.js';
 import { usersRouter } from './modules/users/routes.js';
 import { worksRouter } from './modules/works/routes.js';
 import { workItemsRouter } from './modules/workItems/routes.js';
+import { zaloRouter } from './modules/zalo/routes.js';
+import { zaloWebhookRouter } from './modules/zalo/webhookRoutes.js';
 import { createRpcRouter } from './rpc/index.js';
 import { logger } from './utils/logger.js';
 
@@ -73,6 +75,9 @@ export function createApp() {
   // KHÔNG có cookie phiên/CSRF: mount TRƯỚC issueCsrfCookie/verifyCsrf, bảo vệ bằng token HMAC
   // riêng (`tokenDs`) của service. Người dùng thì đi đường thường `/v1/task-file-versions/:id/editor`.
   api.use('/v1/task-files-ds', taskFilesDsRouter);
+  // Zalo Bot gọi về khi người dùng nhắn mã liên kết (017) — máy-đối-máy, KHÔNG có cookie/CSRF:
+  // mount cùng khe với `task-files-ds`, xác thực bằng header `X-Bot-Api-Secret-Token` (safeEqual).
+  api.use('/zalo-bot/webhook', zaloWebhookRouter);
   api.use(issueCsrfCookie);
   api.use(verifyCsrf);
   api.use(audit);
@@ -133,6 +138,9 @@ export function createV1Router() {
   v1.use('/delegations', delegationsRouter);
   // Bảng phân quyền hệ thống — Giám đốc sửa bằng dropdown (Vòng 9, 009_permission_overrides.sql).
   v1.use('/permissions', permissionsRouter);
+  // Phase 8 (017) — Thông báo Zalo: trạng thái, mã liên kết, bỏ liên kết. REST thuần, KHÔNG có
+  // tên RPC — cầu giữ đúng 37 tên (§5.2).
+  v1.use('/zalo', zaloRouter);
   return v1;
 }
 

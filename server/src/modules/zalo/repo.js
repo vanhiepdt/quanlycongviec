@@ -138,13 +138,18 @@ export async function nguoiGiuChatId(chatId, client = null) {
  *  · `zalo_sent_at IS NULL AND zalo_attempts < N` — khớp ĐÚNG vị từ của
  *    `idx_notifications_zalo_pending` để câu này dùng được chỉ mục bộ phận.
  *  · `type = ANY($1)` — chỉ ba loại đáng làm phiền (xem `LOAI_DAY_ZALO`).
- *  · `created_at >= now() - interval` — container tắt ba ngày rồi bật lại không dội tin cũ.
+ *  · `created_at >= …` — container tắt ba ngày rồi bật lại không dội tin cũ. Mốc mặc định tính theo
+ *    đồng hồ CSDL (`now() - interval`); lịch chạy có thể truyền `muonNhat` để cầm đồng hồ từ ngoài
+ *    (đúng khuôn `quetQuaHan` — test chạy được với ngày giả).
  *  · LEFT JOIN `users` chứ không INNER: người CHƯA liên kết vẫn phải lấy ra để đánh dấu bỏ qua,
  *    nếu không lịch chạy quét lại họ mãi mãi mỗi 2 phút.
  *
  * `is_read = false`: đã đọc trong ứng dụng rồi thì không cần đẩy Zalo nữa — người dùng đã biết.
  */
-export async function loCanDay({ loai = LOAI_DAY_ZALO, soGio = 24, gioiHan = 50 }, client = null) {
+export async function loCanDay(
+  { loai = LOAI_DAY_ZALO, soGio = 24, gioiHan = 50, muonNhat = null },
+  client = null
+) {
   const { rows } = await db(client).query(
     `SELECT n.id, n.user_id, n.content, n.type, n.ref_type, n.ref_id, n.created_at,
             n.zalo_attempts, u.zalo_chat_id, u.full_name
@@ -153,11 +158,17 @@ export async function loCanDay({ loai = LOAI_DAY_ZALO, soGio = 24, gioiHan = 50 
       WHERE n.zalo_sent_at IS NULL
         AND n.zalo_attempts < $1
         AND n.type = ANY($2::text[])
-        AND n.created_at >= now() - ($3 || ' hours')::interval
+        AND n.created_at >= COALESCE($5::timestamptz, now() - ($3 || ' hours')::interval)
         AND n.is_read = false
       ORDER BY n.id
       LIMIT $4`,
-    [SO_LAN_THU_TOI_DA, loai, String(soGio), Math.min(500, Math.max(1, Number(gioiHan) || 50))]
+    [
+      SO_LAN_THU_TOI_DA,
+      loai,
+      String(soGio),
+      Math.min(500, Math.max(1, Number(gioiHan) || 50)),
+      muonNhat,
+    ]
   );
   return rows;
 }
