@@ -30,8 +30,10 @@ mkdir -p "$THU_MUC"
   fi
 
   # Giữ 14 bản gần nhất mỗi loại (tên tệp có ngày nên ls -1t = mới nhất trước).
-  ls -1t "$THU_MUC"/qlcv-*.dump 2>/dev/null | tail -n +15 | xargs -r rm -f
-  ls -1t "$THU_MUC"/storage-*.tar.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+  # `|| true`: chưa có bản nào khớp glob thì ls thoát 2, pipefail + set -e sẽ giết
+  # cả kịch bản dù việc sao lưu đã xong.
+  ls -1t "$THU_MUC"/qlcv-*.dump 2>/dev/null | tail -n +15 | xargs -r rm -f || true
+  ls -1t "$THU_MUC"/storage-*.tar.gz 2>/dev/null | tail -n +15 | xargs -r rm -f || true
 
   echo "=== $(date '+%F %T') xong — hien co $(ls -1 "$THU_MUC"/qlcv-*.dump | wc -l) ban CSDL"
 } >> "$THU_MUC/backup.log" 2>&1
