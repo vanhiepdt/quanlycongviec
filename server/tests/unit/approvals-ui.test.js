@@ -12,7 +12,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, buildPendingApprovalRowHtml, buildPendingDeleteRowHtml, renderChoDuyetPanel,
-  renderYeuCauXoaPanel, goiNutChoDuyetPanel,
+  renderYeuCauXoaPanel, goiNutChoDuyetPanel, capNhatTrangThaiChoDuyetLocal,
+  __setTree: (projects, tasks) => { allProjects = projects; allTasks = tasks; },
+  __tree: () => ({ projects: allProjects, tasks: allTasks }),
   __vaoVai: (ten, vai) => {
     isAuthenticated = true;
     currentUser = { name: ten, role: vai, id: 9 };
@@ -64,6 +66,28 @@ beforeEach(() => {
     '<span id="approvals-delete-count">0</span>' +
     '<div id="approvals-delete-list"></div></div></div>';
   khoiDong();
+});
+
+describe('trạng thái cây sau gửi duyệt', () => {
+  it('gửi công việc con chỉ đổi con nháp/từ chối, không hạ nhiệm vụ đã duyệt', () => {
+    const C = window.COL;
+    window.__setTree(
+      [],
+      [
+        { [C.T_ID]: 'SW', [C.T_APPROVAL]: 'Nháp' },
+        { [C.T_ID]: 'T1', [C.T_PARENT]: 'SW', [C.T_APPROVAL]: 'Nháp' },
+        { [C.T_ID]: 'T2', [C.T_PARENT]: 'SW', [C.T_APPROVAL]: 'Đã duyệt' },
+        { [C.T_ID]: 'T3', [C.T_PARENT]: 'OTHER', [C.T_APPROVAL]: 'Nháp' },
+      ]
+    );
+    window.capNhatTrangThaiChoDuyetLocal('work-item', 'SW');
+    expect(window.__tree().tasks.map((t) => t[C.T_APPROVAL])).toEqual([
+      'Chờ duyệt',
+      'Chờ duyệt',
+      'Đã duyệt',
+      'Nháp',
+    ]);
+  });
 });
 
 describe('builder dòng «Chờ duyệt»', () => {

@@ -23,6 +23,7 @@ import * as appsService from '../apps/service.js';
 import { publicUser } from '../auth/service.js';
 import * as deptRepo from '../departments/repo.js';
 import { groupManagerEmails, toPublic as departmentRest } from '../departments/service.js';
+import * as notiRepo from '../notifications/repo.js';
 import * as proposalsService from '../proposals/service.js';
 import * as remindersRepo from '../reminders/repo.js';
 import * as usersRepo from '../users/repo.js';
@@ -166,24 +167,37 @@ export async function departmentContext(user) {
  * bắt buộc phải vẽ cây từ bootstrap.
  */
 export async function getBundle(user) {
-  const [works, people, departments, managers, pending, activities, countable, proposals, apps] =
-    await Promise.all([
-      worksService.list(user),
-      usersRepo.listAll(),
-      deptRepo.listAll(),
-      deptRepo.listAllManagers(),
-      approvalsService.pendingCount(user),
-      logsRepo.listRecent({
-        limit: 22,
-        actorId: user.role === 'admin' ? null : user.id,
-      }),
-      hangThongKe(user),
-      // Phase 7: đề nghị đi cùng gói đăng nhập vì `handleSuccessfulLogin` gán
-      // `allProposals = data.proposals` một lần rồi mới `renderProposals()` (app.js:198).
-      proposalsService.list(user),
-      // App cũng vậy: `allApps` chỉ được nạp từ gói này, không có tên RPC nào lấy danh sách app.
-      appsService.list(user),
-    ]);
+  const [
+    works,
+    people,
+    departments,
+    managers,
+    pending,
+    activities,
+    countable,
+    proposals,
+    apps,
+    unread,
+  ] = await Promise.all([
+    worksService.list(user),
+    usersRepo.listAll(),
+    deptRepo.listAll(),
+    deptRepo.listAllManagers(),
+    approvalsService.pendingCount(user),
+    logsRepo.listRecent({
+      limit: 22,
+      actorId: user.role === 'admin' ? null : user.id,
+    }),
+    hangThongKe(user),
+    // Phase 7: đề nghị đi cùng gói đăng nhập vì `handleSuccessfulLogin` gán
+    // `allProposals = data.proposals` một lần rồi mới `renderProposals()` (app.js:198).
+    proposalsService.list(user),
+    // App cũng vậy: `allApps` chỉ được nạp từ gói này, không có tên RPC nào lấy danh sách app.
+    appsService.list(user),
+    // Chuông thông báo (2026-09-06): có SỐ ngay lần vẽ đầu, không phải chờ một vòng fetch. Chỉ con
+    // số, không kéo cả danh sách — hộp chuông chỉ nạp danh sách khi người dùng bấm mở.
+    notiRepo.countUnread(user.id),
+  ]);
   const stats = summaryFrom(countable.works, countable.items);
   const chartData = chartFrom(countable.items);
 
@@ -195,6 +209,7 @@ export async function getBundle(user) {
     departments: departments.map((d) => departmentRest(d, managerEmailsByDeptId)),
     people: people.map(publicStaff),
     pendingCount: pending,
+    unreadCount: unread,
     summaryStats: stats,
     chartData,
     works,

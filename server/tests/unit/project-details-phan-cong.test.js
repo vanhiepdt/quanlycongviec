@@ -34,6 +34,7 @@ const EXPORTS = `;Object.assign(window, {
     return document.getElementById('modals-container');
   },
   moChiTietCheDoDuyet,
+  mockRefresh: (fn) => { refreshData = fn; },
 });`;
 
 /** Nạp app.js + project-details.js trong MỘT lời gọi (mọi biến chia sẻ cùng phạm vi hàm). */
@@ -209,6 +210,47 @@ describe('modal chi tiết — hàng phân công MỘT hàng + khung tên công 
     expect(goc.querySelector('img')).toBeNull();
     const khungThuHai = goc.querySelectorAll('.cv-con-tieu-de')[1];
     expect(khungThuHai.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+});
+
+describe('chi tiết authoritative và thông tin công việc cha', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="modals-container"></div>';
+    khoiDong();
+  });
+
+  it('thiếu công việc trong bộ nhớ: nạp bootstrap rồi mở đúng cây chỉ đọc', async () => {
+    const { cv, tasks } = duLieu(window.COL);
+    cv[0][window.COL.P_DESC] = 'Mô tả từ máy chủ <img src=x onerror=alert(1)>';
+    cv[0][window.COL.P_APPROVAL] = 'Chờ duyệt';
+    window.datDuLieu([], []);
+    window.dangNhapTen('Phó GĐ Một', 'Phó Giám đốc');
+    let calls = 0;
+    // Trả Promise TƯỜNG MINH thay vì `async` không có `await`: hợp đồng của `refreshData` là
+    // «trả Promise<boolean>», và eslint `require-await` chặn `async` rỗng.
+    window.mockRefresh(() => {
+      calls += 1;
+      window.datDuLieu(cv, tasks);
+      return Promise.resolve(true);
+    });
+    await window.moChiTietCheDoDuyet('CV001', 'Tên cũ');
+    expect(calls).toBe(1);
+    const modal = document.getElementById('project-details-modal');
+    expect(modal.textContent).toContain('Chuẩn bị hội nghị');
+    expect(modal.textContent).toContain('Đặt bàn ghế');
+    expect(modal.querySelector('.project-metadata').textContent).toContain('Mô tả từ máy chủ');
+    expect(modal.querySelector('.project-metadata').textContent).toContain('Ngày bắt đầu');
+    expect(modal.querySelector('.project-metadata').textContent).toContain('Chờ duyệt');
+    expect(modal.querySelector('img')).toBeNull();
+    expect(modal.querySelector('.edit-subwork-btn')).toBeNull();
+  });
+
+  it('nạp thất bại không dựng cây rỗng như thể không có dữ liệu', async () => {
+    window.datDuLieu([], []);
+    window.dangNhapTen('Phó GĐ Một', 'Phó Giám đốc');
+    window.mockRefresh(() => Promise.resolve(false));
+    await window.moChiTietCheDoDuyet('CV001', 'Tên cũ');
+    expect(document.getElementById('project-details-modal')).toBeNull();
   });
 });
 

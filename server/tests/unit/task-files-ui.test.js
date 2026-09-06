@@ -97,8 +97,10 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
       'Kết quả đầu ra': '',
     });
     expect(form).toContain('task-ket-qua-danh-sach');
-    expect(form).toContain('Kết quả</label>');
-    expect(form).not.toContain('Link kết quả</label>');
+    expect(form).not.toContain('name="resultLinks"');
+    expect(form).not.toContain('Nhập mỗi link trên một dòng');
+    expect(form).toContain('md:grid-cols-3');
+    expect(form).toContain('md:col-span-2');
     // Modal CÔNG VIỆC không có khối file.
     expect(APP).toContain('task-ket-qua-danh-sach');
   });
@@ -943,6 +945,37 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(hop.contains(menu())).toBe(true);
   });
 
+  it('TCKQ-32b: bấm nút thật giữ menu mở phía trên modal và bấm lại thì đóng', () => {
+    document.body.innerHTML =
+      '<div id="task-modal" style="z-index:70;overflow:hidden">' +
+      window.buildMenuHanhDongKq('modal', ['<button type="button">Tải file</button>']) +
+      '</div>';
+    const nut = document.querySelector('.kq-menu-nut');
+    const menu = document.getElementById('kq-menu-modal');
+    nut.getBoundingClientRect = () => ({
+      left: 400,
+      right: 440,
+      top: 100,
+      bottom: 130,
+      width: 40,
+      height: 30,
+    });
+    // jsdom không tự chạy onclick nội tuyến: gắn đúng mã đã sinh rồi phát sự kiện có bubble.
+    nut.onclick = (event) =>
+      new Function('event', 'batTatMenuKq', nut.getAttribute('onclick'))(
+        event,
+        window.batTatMenuKq
+      );
+    nut.click();
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.classList.contains('hidden')).toBe(false);
+    expect(menu.style.position).toBe('fixed');
+    expect(Number(menu.style.zIndex)).toBeGreaterThan(70);
+    nut.click();
+    expect(menu.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('task-modal').contains(menu)).toBe(true);
+  });
+
   it('TCKQ-33: vẽ lại bảng khi menu đang mở thì KHÔNG để lại thẻ mồ côi ở <body>', async () => {
     // Vẽ lại làm chỗ cũ của menu rụng khỏi DOM; nếu chỉ «trả về chỗ cũ» thì thẻ nằm mãi ở <body>,
     // chồng lên giao diện. `renderChoDuyetKetQua` phải gập menu TRƯỚC khi ghi innerHTML.
@@ -989,6 +1022,11 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
     // Ô khai tạm KHÔNG có name= — FormData của #task-form không được nuốt chúng.
     expect(form).not.toContain('name="kq-tam');
     expect(form).not.toContain("name='kq-tam");
+    // Form mới không còn ô nhập link nhiều dòng; từng kết quả nằm trên một dòng của bảng.
+    expect(form).not.toContain('name="resultLinks"');
+    expect(form).not.toContain('Nhập mỗi link trên một dòng');
+    expect(form).toContain('md:grid-cols-3');
+    expect(form).toContain('md:col-span-2');
     // Nút ＋ form tạo KHÔNG mở ô chọn file (đó là lỗi đợt 1 còn sót).
     expect(form).not.toContain('moChonFileKetQua(null)');
   });
@@ -1036,7 +1074,38 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
     const sel = dong[0].querySelector('.kq-tam-dinh-dang');
     sel.value = 'Báo cáo';
     window.doiDinhDangDongTam(sel);
-    expect(dong[0].querySelector('.kq-tam-noi-dung-boc').classList.contains('hidden')).toBe(false);
+    expect(dong[0].nextElementSibling.classList.contains('kq-tam-noi-dung-hang')).toBe(true);
+    expect(dong[0].nextElementSibling.classList.contains('hidden')).toBe(false);
+    expect(dong[0].children).toHaveLength(8);
+    expect(dong[0].lastElementChild.querySelector('textarea')).toBe(null);
+    const noiDung = dong[0].nextElementSibling;
+    expect(noiDung.firstElementChild.colSpan).toBe(8);
+    noiDung.querySelector('textarea').value = 'Nội dung báo cáo tiếng Việt';
+    expect(window.thuThapDongKhaiTam()[0]).toEqual({
+      tenKetQua: 'Báo cáo quý 3',
+      dinhDang: 'Báo cáo',
+      yKien: 'Nộp trước 15/9',
+      noiDung: 'Nội dung báo cáo tiếng Việt',
+    });
+    sel.value = 'Word';
+    window.doiDinhDangDongTam(sel);
+    expect(noiDung.classList.contains('hidden')).toBe(true);
+  });
+
+  it('TCKQ-37b: xoá dòng khai xoá cả hàng báo cáo và đánh lại số', () => {
+    document.body.innerHTML =
+      '<div id="task-ket-qua-danh-sach">' + window.buildKhungDanhSachKetQua([], '') + '</div>';
+    window.themDongKhaiTam();
+    const dong = document.querySelector('tr.dong-kq-khai-tam');
+    const noiDung = dong.nextElementSibling;
+    window.xoaDongKhaiTam(dong.querySelector('button'));
+    expect(dong.isConnected).toBe(false);
+    expect(noiDung.isConnected).toBe(false);
+    expect(document.querySelectorAll('.kq-tam-noi-dung-hang')).toHaveLength(1);
+    expect(document.querySelector('.kq-tam-so').textContent).toBe('1.');
+    window.xoaDongKhaiTam(document.querySelector('tr.dong-kq-khai-tam button'));
+    expect(document.querySelectorAll('tr.dong-kq-khai-tam')).toHaveLength(1);
+    expect(document.querySelectorAll('.kq-tam-noi-dung-hang')).toHaveLength(1);
   });
 
   it('TCKQ-38: nhóm 0 bản in «Chưa có»; định dạng lấy cột khai; Báo cáo có ô nhập chữ ở Hành động', () => {

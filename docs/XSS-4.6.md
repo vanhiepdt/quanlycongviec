@@ -653,6 +653,40 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     `CAN-THOAT` — cùng bẫy `xinXoaBadge` / `o(...)` ở §13.5.
   - **`ten_ket_qua` / `noi_dung` / option định dạng đều escape tại lỗ** dù giá trị lấy từ map nội bộ
     (`DINH_DANG_KHAI`) hay từ REST. Luật TC-SEC-13 không xét nguồn. TCKQ-40 canh cả ba.
+- **Bố cục form nhiệm vụ và chân form «Lưu tạm»/«Gửi đi duyệt» (2026-09-05)**: pin **giữ nguyên
+  102/893** — không phải vì chưa đếm lại, mà vì **trừ một lỗ, thêm một lỗ**:
+  - MẤT `escapeHtml(task[COL.T_RESULT_LINKS])`: bỏ textarea legacy «Nhập mỗi link trên một dòng»
+    khỏi cả form tạo và sửa; mỗi kết quả nay là một dòng trong bảng 8 cột. Cột cơ sở dữ liệu vẫn
+    còn, chỉ không dựng vào HTML nữa.
+  - MỚI `buildLuuNhapNutHtml(false)` ở chân form **TẠO nhiệm vụ** — HTML-LONG, builder tự thoát bên
+    trong và đã có lỗ `escapeHtml("Lưu tạm")` riêng được đếm.
+  - Hai lỗ ĐỔI CHỖ, không đổi số: `escapeHtml(text2)` → `escapeHtml(isEdit ? text2 : "Gửi đi
+    duyệt")`, và `escapeHtml("Lưu nháp")` → `escapeHtml("Lưu tạm")`.
+  - **Bẫy đã tránh**: nhãn TĨNH của chân form mới («Hủy», «Gửi đi duyệt», dòng gợi ý) viết thẳng vào
+    chuỗi HTML, **KHÔNG** bọc `escapeHtml`. Hằng chuỗi trong mã nguồn không phải dữ liệu người dùng;
+    bọc nó chỉ làm phình con số chốt và che mất lỗ thật. Lần đầu vá tôi bọc cả ba ⇒ 896, tưởng là
+    lỗ mới.
+  - `batTatMenuKq` dời menu ra `<body>` bằng DOM API và `chan-form-tao` chỉ là lớp CSS — bộ soát
+    không thấy gì, đúng như mong đợi.
+  - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 102 | gia_tri = 893`) và TC-SEC-17.
+- **CHUÔNG THÔNG BÁO (2026-09-06)**: pin **102/893 → 104/900** (+2 chỗ ghi HTML, +7 giá trị).
+  - Sink 1: `khung.innerHTML = buildDanhSachThongBao(thongBaoDanhSach)` trong `napThongBao` —
+    HTML-LONG, builder tự thoát bên trong.
+  - Sink 2: `khung.innerHTML = "<div …>Chưa tải được thông báo…"` — chuỗi **hằng**, 0 giá trị nội
+    suy. Là sink vì có ghi HTML, nhưng không có lỗ nào.
+  - +7 giá trị, **tất cả DA-THOAT**, đều trong `buildMotThongBao`: 5 lỗ thuộc tính
+    (`escapeHtmlAttr` cho `row.id`, `ref`, `refId` — ba cái này vào `data-*` mà `moThongBao` đọc
+    lại — và `loai.icon`, `loai.mau` là lớp icon) + 2 lỗ văn bản (`escapeHtml(row.content)`,
+    `escapeHtml(dinhDangGioThongBao(row.created_at))`).
+  - **`row.content` là dữ liệu người dùng đi qua HAI tầng**: máy chủ dựng câu «Nhiệm vụ "<tên>" đang
+    chờ bạn duyệt» từ tên đầu việc người dùng gõ, rồi lưu **nguyên văn** vào `notifications.content`
+    (`notifications-api.test.js` chốt điều đó có chủ ý: thoát ký tự là việc của giao diện). Đây là
+    đúng loại đường dễ bị bỏ escape nhất — TC-TBUI-01 canh cả `<img onerror>` và `type` chứa nháy.
+  - `dinhDangGioThongBao` **không** tên `build*` nhưng chỉ trả **chữ thuần** và chỗ gọi đã bọc
+    `escapeHtml` ⇒ đúng luật. Bẫy «tên hàm HTML không `build*`» chỉ áp cho hàm TRẢ VỀ HTML.
+  - `THONG_BAO_LOAI` là map nội bộ nhưng `loai.icon`/`loai.mau` vẫn escape tại lỗ — TC-SEC-13 không
+    xét nguồn (cùng lý lẽ đã ghi cho `DINH_DANG_KHAI`).
+  - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 104 | gia_tri = 900`) và TC-SEC-17.
 
 
 

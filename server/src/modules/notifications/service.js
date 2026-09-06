@@ -1,6 +1,11 @@
-// Nghiệp vụ Thông báo — đường TẠO (§2.10 nhóm J1, §5.2 `notifications.create`).
+// Nghiệp vụ Thông báo — đường TẠO (§2.10 nhóm J1, §5.2 `notifications.create`) và đường ĐỌC của
+// chuông thông báo (bổ sung 2026-09-06, §13.4 mục 16 chốt phương án b).
 //
-// Đây là tên RPC cuối cùng còn `pending()` của cầu tương thích. Ba quyết định của nó:
+// Hai cổng quyền KHÁC NHAU, đừng gộp: `assertAdmin` cho đường GHI (phát thông báo cho người khác)
+// và `assertDangNhap` cho đường ĐỌC (xem thông báo của chính mình). Gộp lại thành một là hoặc
+// khoá mất chuông của mọi người không phải admin, hoặc mở cho ai cũng phát thông báo hàng loạt.
+//
+// Đường TẠO có ba quyết định:
 //
 //  1. **Chỉ admin.** Bản cũ chặn bằng `checkUserPermission('create', 'notification')`, và CẢ BA
 //     nhánh vai (Phó Giám đốc, Trưởng/Phó phòng, Quản lý công việc) đều trả đúng một câu
@@ -65,6 +70,59 @@ function assertAdmin(user) {
   if (user.role !== 'admin') {
     throw new AppError('FORBIDDEN', 'Chỉ admin mới được tạo thông báo');
   }
+}
+
+/**
+ * Cổng ĐỌC. Khác `assertAdmin` ở chỗ mọi người đều qua được — vì câu hỏi khác nhau: ghi là "được
+ * phát thông báo cho người khác không", đọc là "xem thông báo CỦA CHÍNH MÌNH".
+ */
+function assertDangNhap(user) {
+  if (!user || user.id == null) throw new AppError('UNAUTHENTICATED', 'Bạn chưa đăng nhập');
+  return Number(user.id);
+}
+
+/**
+ * Thông báo của CHÍNH người đang gọi (§13.4 mục 16, chốt 2026-09-06 phương án b).
+ *
+ * KHÔNG nhận `userId` từ ngoài — kể cả với admin. Nếu nhận thì đổi một số trong query là đọc hộ
+ * thông báo của người khác, mà thông báo chứa tên đầu việc và lý do từ chối của họ. Admin muốn
+ * xem thông báo người khác thì đọc CSDL, không đi qua API này.
+ *
+ * Trả kèm `unread` để giao diện vẽ badge và danh sách trong MỘT lượt gọi — hộp chuông luôn cần cả
+ * hai, tách thành hai lời gọi chỉ để badge trễ hơn danh sách một nhịp.
+ */
+export function docCuaToi(user, { limit = 50, onlyUnread = false } = {}) {
+  const userId = assertDangNhap(user);
+  return withPgErrors(async () => {
+    const [items, unread] = await Promise.all([
+      repo.listByUser(userId, { limit, onlyUnread }),
+      repo.countUnread(userId),
+    ]);
+    return { items, unread, total: items.length };
+  });
+}
+
+/** Chỉ con số chưa đọc — đường cho vòng hỏi lại, nhẹ hơn `docCuaToi` một câu SELECT danh sách. */
+export function demChuaDoc(user) {
+  const userId = assertDangNhap(user);
+  return withPgErrors(async () => ({ unread: await repo.countUnread(userId) }));
+}
+
+/**
+ * Đánh dấu đã đọc. `ids` rỗng/thiếu ⇒ TẤT CẢ của người đó (nút «đọc hết»).
+ *
+ * `repo.markRead` luôn có `user_id = $1` trong WHERE, nên gửi id của người khác thì `changed = 0`
+ * chứ không đọc hộ được — chỗ chặn nằm ở câu SQL, không ở đây.
+ */
+export function danhDauDaDoc(user, ids = null) {
+  const userId = assertDangNhap(user);
+  const danhSach = Array.isArray(ids)
+    ? ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+    : null;
+  return withPgErrors(async () => ({
+    changed: await repo.markRead(userId, danhSach && danhSach.length > 0 ? danhSach : null),
+    unread: await repo.countUnread(userId),
+  }));
 }
 
 /**

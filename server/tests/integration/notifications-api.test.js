@@ -31,7 +31,7 @@ async function nhuLa(user) {
   return api;
 }
 
-/** Đọc thẳng bảng: hệ thống chưa có đường REST nào để ĐỌC thông báo (§5.2 chỉ có đường tạo). */
+/** Đọc thẳng bảng: dùng cho các phép kiểm đường TẠO (chèn xong soi đúng cột nào được ghi). */
 async function dongThongBao() {
   const { rows } = await pool.query(
     'SELECT user_id, content, type, is_read, ref_type, ref_id FROM notifications ORDER BY id'
@@ -239,5 +239,146 @@ describe('POST /notifications — nhật ký kiểm toán', () => {
     expect(rows[0].entity_type).toBe('notification');
     expect(rows[0].details.total).toBe(1);
     expect(JSON.stringify(rows[0].details)).not.toContain('Chuyện nội bộ');
+  });
+});
+
+// ============================================================================================
+// ĐƯỜNG ĐỌC của chuông thông báo (2026-09-06, §13.4 mục 16 chốt phương án b).
+//
+// Câu hỏi lớn nhất ở đây KHÔNG phải "đọc được không" mà là "có đọc HỘ được không": thông báo chứa
+// tên đầu việc, ai gửi duyệt, và lý do từ chối của người khác. Nên nhóm này canh chặt hai điều:
+// `GET /` chỉ trả của chính người gọi (không nhận `userId` từ query, kể cả admin), và
+// `PATCH /read` gửi id của người khác thì không đổi được gì.
+// ============================================================================================
+
+/** Chèn thẳng vào bảng: đường tạo REST chỉ cho admin và không đặt được `ref_type`/`ref_id`. */
+async function themThongBao(userId, over = {}) {
+  const r = {
+    content: 'Có việc chờ bạn duyệt',
+    type: 'approval_pending',
+    ref_type: '',
+    ref_id: null,
+    ...over,
+  };
+  const { rows } = await pool.query(
+    `INSERT INTO notifications (user_id, content, type, is_read, ref_type, ref_id)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+    [userId, r.content, r.type, r.is_read ?? false, r.ref_type, r.ref_id]
+  );
+  return rows[0].id;
+}
+
+describe('GET /notifications — chỉ thông báo CỦA CHÍNH MÌNH', () => {
+  it('chưa đăng nhập ⇒ 401', async () => {
+    const res = await client(app).get(URL_TB);
+    expect(res.status).toBe(401);
+  });
+
+  it('Nhân viên đọc được thông báo của mình kèm số chưa đọc; KHÔNG thấy của người khác', async () => {
+    await themThongBao(nhanVien.id, { content: 'Của nhân viên' });
+    await themThongBao(nhanVien.id, { content: 'Của nhân viên 2', is_read: true });
+    await themThongBao(truongPhong.id, { content: 'Của trưởng phòng' });
+    const api = await nhuLa(nhanVien);
+    const res = await api.get(URL_TB);
+    expect(res.status).toBe(200);
+    const noiDung = res.body.data.items.map((r) => r.content);
+    expect(noiDung).toContain('Của nhân viên');
+    expect(noiDung).not.toContain('Của trưởng phòng');
+    expect(res.body.data.items).toHaveLength(2);
+    expect(res.body.data.unread).toBe(1);
+  });
+
+  it('ADMIN cũng KHÔNG đọc hộ được: ?userId= bị bỏ qua, chỉ trả của chính admin', async () => {
+    await themThongBao(nhanVien.id, { content: 'Riêng của nhân viên' });
+    const api = await nhuLa(quanTri);
+    const res = await api.get(`${URL_TB}?userId=${nhanVien.id}&limit=100`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toHaveLength(0);
+    expect(res.body.data.unread).toBe(0);
+  });
+
+  it('onlyUnread=true lọc bỏ dòng đã đọc, nhưng `unread` vẫn là tổng chưa đọc thật', async () => {
+    await themThongBao(nhanVien.id, { content: 'Chưa đọc' });
+    await themThongBao(nhanVien.id, { content: 'Đã đọc', is_read: true });
+    const api = await nhuLa(nhanVien);
+    const res = await api.get(`${URL_TB}?onlyUnread=true`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((r) => r.content)).toEqual(['Chưa đọc']);
+    expect(res.body.data.unread).toBe(1);
+  });
+
+  it('limit rác không làm 400 và không vượt chặn trên 200 dòng của repo', async () => {
+    await themThongBao(nhanVien.id);
+    const api = await nhuLa(nhanVien);
+    for (const q of ['?limit=abc', '?limit=-5', '?limit=999999', '']) {
+      const res = await api.get(URL_TB + q);
+      expect(res.status, `limit ${q}`).toBe(200);
+      expect(res.body.data.items.length).toBeLessThanOrEqual(200);
+    }
+  });
+
+  it('GET /unread-count khớp số chưa đọc, không trả nội dung nào', async () => {
+    await themThongBao(nhanVien.id);
+    await themThongBao(nhanVien.id, { is_read: true });
+    await themThongBao(nhanVien.id);
+    const api = await nhuLa(nhanVien);
+    const res = await api.get(`${URL_TB}/unread-count`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ unread: 2 });
+  });
+});
+
+describe('PATCH /notifications/read — không đọc hộ người khác được', () => {
+  it('không có ids ⇒ đánh dấu TẤT CẢ của mình, không chạm của người khác', async () => {
+    await themThongBao(nhanVien.id);
+    await themThongBao(nhanVien.id);
+    await themThongBao(truongPhong.id);
+    const api = await nhuLa(nhanVien);
+    const res = await api.patch(`${URL_TB}/read`, {});
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ changed: 2, unread: 0 });
+    const conLai = await pool.query(
+      'SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND is_read = false',
+      [truongPhong.id]
+    );
+    expect(conLai.rows[0].n).toBe(1);
+  });
+
+  it('ids của NGƯỜI KHÁC ⇒ changed = 0, dòng đó vẫn chưa đọc', async () => {
+    const cuaTruongPhong = await themThongBao(truongPhong.id);
+    const api = await nhuLa(nhanVien);
+    const res = await api.patch(`${URL_TB}/read`, { ids: [cuaTruongPhong] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.changed).toBe(0);
+    const { rows } = await pool.query('SELECT is_read FROM notifications WHERE id = $1', [
+      cuaTruongPhong,
+    ]);
+    expect(rows[0].is_read).toBe(false);
+  });
+
+  it('ids cụ thể ⇒ chỉ những dòng đó, dòng còn lại giữ nguyên', async () => {
+    const a = await themThongBao(nhanVien.id, { content: 'A' });
+    await themThongBao(nhanVien.id, { content: 'B' });
+    const api = await nhuLa(nhanVien);
+    const res = await api.patch(`${URL_TB}/read`, { ids: [a] });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ changed: 1, unread: 1 });
+  });
+
+  it('chưa đăng nhập ⇒ 401', async () => {
+    const res = await client(app).patch(`${URL_TB}/read`, {});
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('bootstrap — badge có số ngay lần vẽ đầu', () => {
+  it('GET /bootstrap trả unreadCount đúng của người đang đăng nhập', async () => {
+    await themThongBao(nhanVien.id);
+    await themThongBao(nhanVien.id);
+    await themThongBao(truongPhong.id);
+    const api = await nhuLa(nhanVien);
+    const res = await api.get('/api/v1/bootstrap');
+    expect(res.status).toBe(200);
+    expect(res.body.data.unreadCount).toBe(2);
   });
 });

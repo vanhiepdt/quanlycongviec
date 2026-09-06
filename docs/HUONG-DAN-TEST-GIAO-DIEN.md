@@ -8,7 +8,10 @@ giao diện công việc cha) và **mục 9b.7** (3 lỗi: «Tải lên thất b
 Giám đốc không thấy mục «Hàng chờ phê duyệt», hàng chờ trống) ngày **2026-09-03** — tất cả trên
 nhánh `vps/ket-qua-file`. Bổ sung **mục 9b.8** (đợt 1: bảng 8 cột), **9b.9** (icon + menu ⋯ +
 badge) và **9b.10** (đợt 2: khai kết quả trước + «Báo cáo» + form tạo hiện bảng) ngày
-**2026-09-04** trên nhánh `vps/ket-qua-thiet-ke-lai`.
+**2026-09-04** trên nhánh `vps/ket-qua-thiet-ke-lai`. Bổ sung **mục 9b.11** (5 việc bạn báo qua
+ảnh: chi tiết hàng chờ có dữ liệu thật, tạo tiếp công việc con/nhiệm vụ ngay, chân form «Lưu tạm»/
+«Gửi đi duyệt», dòng khai kết quả thẳng hàng, menu ⋯ nổi trên modal) và **mục 9b.12** (CHUÔNG THÔNG
+BÁO — badge trên thanh tiêu đề, bấm dòng mở đúng việc) ngày **2026-09-06**.
 
 Mục đích: bạn mở trình duyệt, bấm bằng tay, tự thấy Phase 4 làm được gì. Mọi con số và câu
 thông báo trong tài liệu này đều **đã chạy thật** qua đúng đường người dùng đi
@@ -992,6 +995,119 @@ dòng khai, xem toast lỗi (thường là chưa chạy migration 016, hoặc đ
 2).
 
 
+### 9b.11 Năm việc bạn báo qua ảnh (2026-09-06) — bấm để tự nghiệm
+
+Cần bản **`app.js 20260905-2`** (Console in đúng số đó; **Ctrl+Shift+R** nếu không). Không
+migration mới, không seed lại. Sáu bước dưới đây đi liền một mạch, làm đúng thứ tự.
+
+**(1) «Xem chi tiết» ở hàng chờ duyệt phải có dữ liệu THẬT.** Đăng nhập `tp@test.local` → **Tạo
+công việc** mới (tên gõ dễ nhận, ví dụ «Việc thử 0906»), điền mô tả + ngày bắt đầu/kết thúc →
+bấm **Gửi đi duyệt**. Đăng xuất, đăng nhập `pgd@test.local` → tab **Hàng chờ phê duyệt** → bấm
+«Xem chi tiết» ở dòng vừa gửi. Modal phải hiện **khối «Thông tin công việc»** ngay dưới 4 thẻ số:
+mô tả, ngày bắt đầu, ngày kết thúc, trạng thái, trạng thái duyệt — **không** được trắng trơn chỉ
+có tiêu đề như trước. Bốn thẻ số và cây bên dưới cũng phải khớp với công việc đó.
+
+**(2) Tạo xong công việc cha thì tạo tiếp con/nhiệm vụ ngay.** Về `tp@test.local`, tạo một công
+việc nữa. Ngay khi lưu xong, modal tạo tự đóng và **modal chi tiết của chính công việc vừa tạo tự
+mở** — trong đó có nút «+ công việc con». Bấm vào, tạo công việc con, lưu; modal chi tiết cha lại
+mở, thấy công việc con vừa thêm. Từ hàng công việc con bấm nút tạo nhiệm vụ cấp 3, lưu. **Không**
+phải tắt đi mở lại mới thấy dòng mới, và **không** phải quay ra danh sách rồi tìm lại công việc.
+
+**(3) Chân form tạo: chỉ hai nút ý định, dính đáy.** Mở form tạo (công việc, công việc con hoặc
+nhiệm vụ). Cuộn xuống — thanh dưới cùng **dính đáy** (không phải cuộn hết mới thấy), có
+«Hủy» · «Lưu tạm» · «Gửi đi duyệt», kèm dòng chữ nhỏ giải thích. Ở thanh tiêu đề **không còn** nút
+lưu nào nữa. Đây là điểm cũ dễ sai: trước có nút «Tạo nhiệm vụ» ở tiêu đề không mang ý định gì,
+bấm vào thì máy chủ tự quyết trạng thái mà bạn không biết mình đã gửi duyệt hay chưa.
+
+Bấm **Lưu tạm** ⇒ mục mới ở trạng thái **Nháp**, không xuất hiện trong hàng chờ duyệt của ai.
+Bấm **Gửi đi duyệt** ⇒ toast ghi rõ trạng thái máy chủ trả về và dòng đó hiện **«Chờ duyệt» ngay**,
+**không** cần F5. Ở chế độ **sửa**, nút «Cập nhật» vẫn nằm ở thanh tiêu đề như cũ.
+
+**(4) Nhiệm vụ cấp 3 KHÔNG bị gán «Chờ duyệt» theo cha.** Mở một công việc đang «Chờ duyệt», tạo
+thêm **nhiệm vụ cấp 3** trong đó rồi bấm «Gửi đi duyệt». Nhiệm vụ mới **không** được hiện «Chờ
+duyệt» chỉ vì cha đang chờ — toast sẽ nói rõ «nhiệm vụ cấp 3 không gửi độc lập». Đối chiếu bằng
+SQL cho chắc:
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT code, level, approval_status FROM work_items ORDER BY created_at DESC LIMIT 5;"
+```
+
+Cột `approval_status` trên màn hình phải **khớp** cột này. Trước đây giao diện ghi «Chờ duyệt» còn
+CSDL để `Nháp` — đó chính là lỗi đã sửa.
+
+**(5) Dòng khai kết quả phải thẳng hàng.** Mở form tạo nhiệm vụ → bảng 8 cột. Chọn định dạng
+**Báo cáo** ở dòng 1. ⇒ ô nhập nội dung bung ra thành **một hàng riêng chạy hết chiều ngang bảng**,
+nằm ngay dưới dòng 1. — không chen vào trong cột 8 làm các ô lệch nhau như ảnh bạn gửi. Đổi lại
+sang Word ⇒ hàng nội dung ẩn đi. Bấm ＋ thêm dòng 2., 3.; xoá dòng 2. ⇒ **cả** hàng nội dung của nó
+mất theo và dòng 3. được đánh số lại thành **2.** Xoá đến dòng cuối thì hệ thống giữ lại một dòng
+trống.
+
+**(6) Menu ⋯ / Hành động phải hiện lên TRÊN hộp.** Trong modal nhiệm vụ (chế độ sửa), ở bảng «Kết
+quả» bấm nút **⋯** cột Hành động. Menu phải **hiện đầy đủ, nổi trên** modal — kể cả khi dòng đó
+nằm gần đáy bảng (menu tự mở ngược lên) hoặc sát mép phải. Bấm ⋯ lần nữa hoặc bấm ra ngoài thì
+menu gập lại. Trước đây menu bị hộp kính mờ cắt mất nên bấm như không có gì xảy ra.
+
+Nếu Console **không** in `app.js 20260905-2` thì đang chạy file cũ — **Ctrl+Shift+R**. Nếu bước (3)
+vẫn thấy nút lưu ở thanh tiêu đề, hoặc bước (5) ô Báo cáo vẫn nằm trong cột 8, thì bản `web/` chưa
+được sync.
+
+
+### 9b.12 Chuông thông báo (2026-09-06) — bấm để tự nghiệm
+
+Cần bản **`app.js 20260906-1`**. Không migration mới, không seed lại. Đây là **việc A** của
+`docs/KE-HOACH-THONG-BAO.md`; phần đẩy sang **Zalo** (việc B) **chưa làm** — còn chờ bạn trả lời bốn
+câu ở §13.4 **mục 25** của `KE-HOACH-VPS.md`.
+
+Máy chủ đã ghi thông báo từ lâu (mỗi lần gửi duyệt / duyệt / từ chối / ủy quyền / nộp kết quả /
+nhiệm vụ quá hạn) nhưng **không có đường đọc** nên không ai thấy. Nay có chuông.
+
+**(1) Chuông xuất hiện cạnh nút chat, badge đúng số ngay khi đăng nhập.** Đăng nhập
+`pgd@test.local`. Trên thanh tiêu đề, bên trái nút 💬 phải có nút 🔔. Nếu người này đang có thông báo
+chưa đọc thì badge đỏ hiện số **ngay lần vẽ đầu**, không phải chờ vài giây. Không có thông báo nào ⇒
+badge **ẩn hẳn**, không hiện số 0.
+
+**(2) Tạo một thông báo thật rồi xem nó nổi lên.** Mở tab khác (hoặc trình duyệt ẩn danh) đăng nhập
+`tp@test.local` → tạo một công việc mới → **Gửi đi duyệt**. Quay về tab của `pgd@test.local`: trong
+vòng **1 phút** badge phải tăng thêm 1 mà **không** cần F5 (vòng hỏi lại 60 giây). Bấm 🔔 → dòng mới
+nằm trên cùng, chữ **đậm**, có **chấm xanh** bên phải, kèm dòng nhỏ «14:05 hôm nay · bấm để mở».
+
+**(3) Bấm vào thông báo phải mở đúng việc.** Bấm dòng đó ⇒ modal chi tiết **đúng công việc vừa gửi**
+mở ra, và dòng thông báo chuyển sang **không đậm**, mất chấm xanh, badge giảm 1. Đây là điểm dễ sai:
+thông báo lưu **id** trong CSDL còn giao diện tra theo **mã** (`CV003`), nên nếu dò không ra thì hệ
+thống báo «hãy tải lại trang» chứ **không** mở sai việc.
+
+**(4) «Đánh dấu đã đọc hết».** Bấm 🔔 → nút ở góc phải hộp → badge **ẩn hẳn**, mọi dòng thành không
+đậm. Mở lại hộp: các dòng vẫn còn (đọc rồi ≠ xoá).
+
+**(5) Không ai đọc được thông báo của người khác.** Vẫn ở tab `pgd@test.local`, mở DevTools →
+Console, gõ:
+
+```js
+await (await fetch('/api/v1/notifications?userId=1&limit=100', {credentials:'same-origin'})).json()
+```
+
+Kết quả chỉ được chứa thông báo **của chính Phó GĐ đang đăng nhập** — tham số `userId` bị **bỏ qua**,
+kể cả khi bạn đăng nhập bằng admin. Đối chiếu với CSDL:
+
+```bash
+docker exec -i qlcv-dev-db psql -U qlcv -d quanlycongviec_uat -c \
+  "SELECT u.email, count(*) FILTER (WHERE NOT n.is_read) AS chua_doc
+     FROM notifications n JOIN users u ON u.id = n.user_id GROUP BY u.email ORDER BY 1;"
+```
+
+Số `chua_doc` của email đang đăng nhập phải **khớp** badge trên màn hình; số của người khác **không**
+được lộ ra trong phản hồi API.
+
+**(6) Tab để trong nền thì không nã request.** Mở DevTools → Network, lọc `unread-count`. Chuyển sang
+tab khác của trình duyệt và để đó 3 phút, rồi quay lại: trong lúc tab bị ẩn **không** có request
+`unread-count` nào mới. Quay lại tab thì nhịp 60 giây chạy tiếp.
+
+Nếu Console **không** in `app.js 20260906-1` thì đang chạy file cũ — **Ctrl+Shift+R**. Nếu không thấy
+nút 🔔, `web/index.html` chưa được sync. Nếu bấm 🔔 mà hộp ghi «Chưa tải được thông báo» thì máy chủ
+đang chạy bản cũ chưa có `GET /api/v1/notifications` — khởi động lại Node.
+
+
 ---
 
 ## 10. Dọn dẹp sau buổi test
@@ -1077,6 +1193,8 @@ sạch thì xoá thư mục đó.
 | **Mọi hành động gộp vào một menu ⋯; «Tình trạng» là câu kể có «Bị trả lại lần N»** | ✅ | mục **9b.8** (3)(4) |
 | **Hàng chờ phê duyệt là bảng phẳng 8 cột, ba cấp cây thành ba cột** | ✅ | mục **9b.8** (5) |
 | **Dòng «Chưa có» (khai kết quả trước khi có file) + định dạng «Báo cáo» nhập chữ + form tạo hiện bảng 8 cột** | ✅ | mục **9b.10** — cần `app.js 20260904-3` **và** migration **016** |
+| **Chi tiết hàng chờ có dữ liệu thật · tạo tiếp con/nhiệm vụ ngay · chân form «Lưu tạm»/«Gửi đi duyệt» dính đáy · «Chờ duyệt» hiện ngay · dòng khai thẳng hàng · menu ⋯ nổi trên modal** | ✅ | mục **9b.11** — cần `app.js 20260905-2`, **không** migration mới. Test tự động: **1596/87 xanh** |
+| **CHUÔNG THÔNG BÁO — badge trên thanh tiêu đề, bấm dòng mở đúng việc, «đọc hết», không đọc hộ được thông báo người khác** | ✅ | mục **9b.12** — cần `app.js 20260906-1` + máy chủ có `GET /api/v1/notifications`. Test tự động: **1625/88 xanh**. Phần **đẩy sang Zalo** ⏳ chờ §13.4 mục **25** |
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |

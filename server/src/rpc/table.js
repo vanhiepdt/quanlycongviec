@@ -72,6 +72,9 @@ function legacyBundleFromRest(data) {
     recentActivities: (data.activities ?? []).map((row) => activityToLegacy(row)),
     summaryStats: data.summaryStats ?? {},
     pendingCount: data.pendingCount ?? { works: 0, items: 0, total: 0 },
+    // Chuông thông báo (2026-09-06): badge có số ngay lần vẽ đầu. Là SỐ, không phải object như
+    // `pendingCount` — `repo.countUnread` trả `int`.
+    unreadCount: Number(data.unreadCount ?? 0),
     proposals: (data.proposals ?? []).map((row) => proposalToLegacy(row)),
     // 4 thẻ đếm của trang Đề nghị (G3). Đếm trên phần THẤY ĐƯỢC, đã lọc phạm vi ở service.
     proposalCounts: data.proposalCounts ?? {},

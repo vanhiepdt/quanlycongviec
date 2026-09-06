@@ -380,7 +380,38 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     //    thoát `ten_ket_qua` + `noi_dung` + option «Báo cáo» — phần còn lại của +20.
     // Mọi lỗ mới đều DA-THOAT / HTML-LONG / HTML-BIEN — danh sách `CO_Y_KHONG_BOC` không đổi
     // ⇒ **102 chỗ / 893 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 102, gia_tri: 893 });
+    // 2026-09-05 (bố cục form + «Lưu tạm»/«Gửi đi duyệt»): **0 sink mới, tổng giá trị KHÔNG đổi**
+    // — trừ đúng một lỗ, thêm đúng một lỗ, nên con số trùng nhau chứ không phải chưa đếm lại:
+    //  · MẤT `escapeHtml(task[COL.T_RESULT_LINKS])`: bỏ textarea legacy «Nhập mỗi link trên một
+    //    dòng» khỏi form nhiệm vụ (cột cơ sở dữ liệu vẫn còn, chỉ không dựng vào HTML nữa) ⇒ −1.
+    //  · MỚI `buildLuuNhapNutHtml(false)` ở chân form TẠO nhiệm vụ (HTML-LONG — builder tự thoát
+    //    bên trong, đã có lỗ `escapeHtml("Lưu tạm")` riêng) ⇒ +1.
+    //  · Hai lỗ ĐỔI CHỖ, không đổi số: `escapeHtml(text2)` → `escapeHtml(isEdit ? text2 : "Gửi đi
+    //    duyệt")` ở chân form công việc, và `escapeHtml("Lưu nháp")` → `escapeHtml("Lưu tạm")`.
+    //  · Nhãn TĨNH của chân form mới («Hủy», «Gửi đi duyệt», dòng gợi ý) viết thẳng vào chuỗi HTML,
+    //    KHÔNG bọc `escapeHtml` — hằng chuỗi trong mã nguồn không phải dữ liệu người dùng; bọc chỉ
+    //    làm phình con số chốt và che mất lỗ thật. Bẫy này ghi ở §13.5.
+    //  · `chan-form-tao` chỉ là lớp CSS (sticky đáy), không nội suy gì.
+    // ⇒ vẫn **102 chỗ / 893 giá trị**.
+    //
+    // 2026-09-06 (CHUÔNG THÔNG BÁO — §13.4 mục 16, việc A): **+2 chỗ ghi HTML, +7 giá trị**.
+    //  · Sink 1: `khung.innerHTML = buildDanhSachThongBao(thongBaoDanhSach)` trong `napThongBao` —
+    //    HTML-LONG, builder tự thoát bên trong.
+    //  · Sink 2: `khung.innerHTML = "<div …>Chưa tải được thông báo…"` — chuỗi HẰNG, không nội suy
+    //    gì; là sink vì có ghi HTML, nhưng 0 giá trị.
+    //  · +7 giá trị, tất cả DA-THOAT, đều trong `buildMotThongBao`: 5 lỗ thuộc tính
+    //    (`escapeHtmlAttr` cho `row.id`, `ref`, `refId`, `loai.icon`, `loai.mau` — ba cái đầu vào
+    //    `data-*` mà `moThongBao` đọc lại, hai cái sau là lớp icon) và 2 lỗ văn bản
+    //    (`escapeHtml(row.content)` — nội dung do máy chủ dựng từ TÊN ĐẦU VIỆC người dùng gõ, và
+    //    `escapeHtml(dinhDangGioThongBao(row.created_at))`).
+    //  · `buildDanhSachThongBao` nhánh rỗng là chuỗi hằng ⇒ không thêm lỗ.
+    //  · `dinhDangGioThongBao` KHÔNG tên `build*` nhưng chỉ trả **chữ thuần** và chỗ gọi đã bọc
+    //    `escapeHtml` — đúng luật, không phải ngoại lệ (bẫy «tên hàm HTML không build*» chỉ áp cho
+    //    hàm TRẢ VỀ HTML).
+    //  · `THONG_BAO_LOAI` là map nội bộ, nhưng `loai.icon`/`loai.mau` vẫn escape tại lỗ — luật
+    //    TC-SEC-13 không xét nguồn (cùng lý lẽ đã ghi cho `DINH_DANG_KHAI` ở trên).
+    // ⇒ **104 chỗ / 900 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 104, gia_tri: 900 });
   });
 });
 

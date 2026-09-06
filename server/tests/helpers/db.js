@@ -26,6 +26,8 @@ const BUSINESS_TABLES = [
   'task_files',
   // Ghi đè Bảng phân quyền (009) trỏ updated_by → users: xoá trước users.
   'permission_overrides',
+  // Mã liên kết Zalo (017) trỏ user_id → users: xoá trước users, cùng cách của delegations.
+  'zalo_link_codes',
   'work_items',
   'works',
   'department_managers',

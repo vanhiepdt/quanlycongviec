@@ -3839,7 +3839,7 @@
     position: absolute;
     right: 0;
     top: 100%;
-    z-index: 30;
+    z-index: 200;
     min-width: 13rem;
     margin-top: 0.25rem;
     padding: 0.25rem;
@@ -3864,6 +3864,14 @@
 .kq-menu-muc:hover {
     background: #f3f4f6;
     color: #111827;
+}
+
+.bang-ket-qua td {
+    vertical-align: middle;
+}
+
+.bang-ket-qua .form-input {
+    width: 100%;
 }
 
 .kq-menu-muc-chot {

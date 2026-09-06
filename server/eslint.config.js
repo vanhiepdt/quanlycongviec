@@ -19,6 +19,9 @@ export default [
         Buffer: 'readonly',
         // fetch: dsRoutes dùng fetch tải bản đã sửa từ ONLYOFFICE (Vòng 14).
         fetch: 'readonly',
+        // AbortSignal: `services/zalo.js` đặt hạn chờ cho mọi lời gọi ra Internet bằng
+        // `AbortSignal.timeout(ms)` — một lời gọi treo không được giữ tiến trình hay treo lịch chạy.
+        AbortSignal: 'readonly',
       },
     },
     rules: {
@@ -98,6 +101,10 @@ export default [
       // nav-cho-duyet.test.js: mục «Hàng chờ phê duyệt» trên thanh điều hướng phải mở cho MỌI vai
       // có cửa duyệt — admin/Phó GĐ/TP/PP (TC-NAV, 2026-09-03) — app.js thật trong jsdom, fetch giả.
       'tests/unit/nav-cho-duyet.test.js',
+      // thong-bao-ui.test.js: chuông thông báo trên header — thoát nội dung, badge, bấm dòng mở
+      // đúng mục, vòng hỏi lại 60 giây chỉ khi tab hiện (TC-TBUI, 2026-09-06) — app.js thật trong
+      // jsdom, fetch giả.
+      'tests/unit/thong-bao-ui.test.js',
     ],
     languageOptions: {
       globals: {

@@ -382,6 +382,14 @@ function showProjectDetailsModal(projectId, projectName) {
     buildStatCardHtml(dangLam, "Đang làm", "text-amber-600") +
     buildStatCardHtml(treHan, "Trễ hạn", "text-red-500") +
     "            </div>\n" +
+    '<section class="project-metadata border border-gray-100 rounded-lg p-3">' +
+    '<h4 class="font-semibold text-gray-700 mb-2">Thông tin công việc</h4>' +
+    '<p class="text-sm text-gray-700 whitespace-pre-wrap break-words">' + escapeHtml(project[COL.P_DESC] || 'Chưa có mô tả') + '</p>' +
+    '<div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">' +
+    '<span>Ngày bắt đầu: ' + escapeHtml(formatDateForDisplay(project[COL.P_START])) + '</span>' +
+    '<span>Ngày kết thúc: ' + escapeHtml(formatDateForDisplay(project[COL.P_END])) + '</span>' +
+    '<span>Trạng thái: ' + escapeHtml(project[COL.P_STATUS] || '—') + '</span>' +
+    '<span>Trạng thái duyệt: ' + escapeHtml(project[COL.P_APPROVAL] || '—') + '</span></div></section>' +
     buildKhoiPhanCongGonHtml(project, canBoThamGia, cvCons, tongTienDo) +
     '            <div>\n' +
     '                <div class="flex items-center justify-between mb-3">\n' +
