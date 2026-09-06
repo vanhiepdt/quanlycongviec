@@ -80,6 +80,18 @@
         border-color: rgba(255, 255, 255, 0.3);
     }
 
+    /* Sửa lỗi 1 phase 8b (2026-09-06): 4 menu thả xuống ở đầu trang
+       («Xuất Excel», «+ Tạo mới», chuông, Chat) mang cùng lúc hai class
+       `absolute … glass-card`. Tailwind nạp trước khai báo `.absolute`,
+       nhưng `position: relative` ở `.glass-card` bên trên có cùng độ ưu tiên
+       (0,1,0) mà nạp sau nên thắng, khiến menu rơi vào dòng chảy bình thường
+       và kéo dài khung đầu trang thay vì phủ lên nội dung bên dưới.
+       Rule này độ ưu tiên cao hơn (0,2,0) nên lấy lại vị trí tuyệt đối;
+       `position: relative` của .glass-card thuần vẫn giữ cho ::before. */
+    .glass-card.absolute {
+        position: absolute;
+    }
+
     /* Navigation */
     .nav-link {
         color: #64748b;
