@@ -70,6 +70,31 @@ const optional = {
   ONLYOFFICE_URL: z.string().default(''),
   ONLYOFFICE_JWT_SECRET: z.string().default(''),
   ONLYOFFICE_CALLBACK_BASE: z.string().default(''),
+  // ZALO BOT (017, việc B của `docs/KE-HOACH-THONG-BAO.md`). Trống = TẮT HẲN: không gọi mạng, không
+  // hiện khối liên kết trên giao diện. Cùng khuôn ONLYOFFICE_* ở trên.
+  //
+  // `ZALO_BOT_TOKEN` là BÍ MẬT và khác mọi bí mật khác của repo ở một điểm nguy hiểm: nó nằm TRONG
+  // ĐƯỜNG DẪN (`/bot<token>/sendMessage`), không phải trong header hay body. `utils/logger.js` chỉ
+  // che 8 đường dẫn cố định về cookie/password, KHÔNG che theo tên biến — nên `services/zalo.js`
+  // phải tự cắt token trước khi log và không được để lỗi thô của `fetch` (có `cause` chứa URL) đi
+  // tới errorHandler.
+  ZALO_BOT_TOKEN: z.string().default(''),
+  // Khoá bí mật của webhook, PHẢI trùng giá trị đã nhập ở trang Zalo Bot Creator. Tài liệu Zalo:
+  // 8–256 ký tự, Zalo gắn vào header `X-Bot-Api-Secret-Token` của mọi request gọi về.
+  // KHÔNG kiểm độ dài ở đây: mặc định là '' (tắt), mà `.min(8)` sẽ làm MỌI lần khởi động chết vì ''
+  // không đủ 8 ký tự. Kiểm ở chỗ dùng, đúng như bẫy đã ghi trong §13.5.
+  ZALO_BOT_SECRET_TOKEN: z.string().default(''),
+  // Đổi được để test trỏ vào máy chủ giả, và để Zalo dời tên miền thì không phải sửa mã.
+  ZALO_BOT_API_BASE: z.string().default('https://bot-api.zaloplatforms.com'),
+  // Cách NHẬN tin từ bot. `webhook` cần domain công khai + HTTPS (tài liệu Zalo từ chối localhost và
+  // IP nội bộ) nên chỉ dùng được từ Phase 8; `polling` chạy được ngay trên PC (§13.4 mục 2). Hai
+  // cách LOẠI TRỪ LẪN NHAU ở phía Zalo: đặt webhook rồi thì `getUpdates` ngừng trả sự kiện.
+  ZALO_BOT_NHAN: z.enum(['tat', 'polling', 'webhook']).default('tat'),
+  // Lịch đẩy hàng đợi Zalo. Nằm cùng cờ CRON_ENABLED — chú thích `services/cron.js` đã chốt «không
+  // có cờ riêng» vì máy dev và staging dùng chung CSDL bản sao.
+  CRON_ZALO_PUSH: z.string().default('*/2 * * * *'),
+  // Bỏ qua thông báo cũ hơn N giờ: container tắt ba ngày rồi bật lại không được dội một tràng tin.
+  ZALO_PUSH_MAX_AGE_H: intIn(1, 720).default('24'),
 };
 
 const schema = z.object({ ...required, ...optional });
