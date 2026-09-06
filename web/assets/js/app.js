@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260906-1");
+console.info("[QLCV] app.js 20260906-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -8595,12 +8595,16 @@ function renderTrangTaiKhoan() {
     buildTaiKhoanDong("Đang mượn quyền của", uyQuyenText)
   ].join("");
   veBangPhanQuyen();
+  // Khối «Thông báo Zalo» nạp riêng vì cần hỏi máy chủ cờ `bat` (xem renderThongBaoZalo).
+  void renderThongBaoZalo();
 }
 /** Nối form đổi mật khẩu + nút Tải lại của trang tài khoản — MỘT lần (mốc dataset.daNoi). */
 function setupTrangTaiKhoan() {
   const form = document.getElementById("account-password-form"),
-    nutTaiLai = document.getElementById("account-refresh-btn");
+    nutTaiLai = document.getElementById("account-refresh-btn"),
+    zaloBody = document.getElementById("account-zalo-body");
   nutTaiLai && !nutTaiLai.dataset.daNoi && ((nutTaiLai.dataset.daNoi = "1"), nutTaiLai.addEventListener("click", renderTrangTaiKhoan));
+  zaloBody && !zaloBody.dataset.daNoi && ((zaloBody.dataset.daNoi = "1"), zaloBody.addEventListener("click", xuLyNutZalo));
   if (!form || form.dataset.daNoi) return;
   form.dataset.daNoi = "1";
   form.addEventListener("submit", function (event) {
@@ -8638,6 +8642,116 @@ function hienOkTaiKhoan(message) {
   const el = document.getElementById("account-password-ok");
   if (!el) return;
   el.textContent = message || "", message ? el.classList.remove("hidden") : el.classList.add("hidden");
+}
+
+/* ----------------------------------------------------------------------------
+ * THÔNG BÁO ZALO (2026-09-06, Phase 8) — liên kết tài khoản Zalo của CHÍNH người
+ * đang đăng nhập để bot đẩy ba loại tin: chờ duyệt, trả lại, quá hạn.
+ *
+ * Cờ `bat` lấy từ /api/v1/zalo/trang-thai — trình duyệt không tự đoán máy chủ có
+ * token hay không (bẫy §13.5 «cờ cấu hình phải đi cùng dữ liệu»). `bat !== true`
+ * thì ẩn CẢ khối, không hiện nút nào.
+ *
+ * Dữ liệu máy chủ (mã, câu hướng dẫn, trạng thái) đều qua các builder build* bên
+ * dưới; nhãn tĩnh thì KHÔNG bọc escapeHtml.
+ * -------------------------------------------------------------------------- */
+
+/** Kéo trạng thái và vẽ lại khối «Thông báo Zalo»; TẮT hoặc chưa đăng nhập thì ẩn khối. */
+async function renderThongBaoZalo() {
+  const card = document.getElementById("account-zalo-card"),
+    body = document.getElementById("account-zalo-body");
+  if (!card || !body) return;
+  if (!isAuthenticated || !currentUser) {
+    card.classList.add("hidden");
+    return;
+  }
+  const tt = await restGet("/api/v1/zalo/trang-thai");
+  if (!tt || tt.bat !== true) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  body.innerHTML = tt.daLienKet === true ? buildZaloDaLienKetHtml() : buildZaloChuaLienKetHtml();
+}
+
+/** BUILDER: trạng thái ĐÃ liên kết — một câu nói bot sẽ nhắn gì + nút bỏ liên kết. */
+function buildZaloDaLienKetHtml() {
+  return (
+    '<div class="flex flex-wrap items-center justify-between gap-3">' +
+    '<div class="text-sm text-gray-700">' +
+    '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium mr-2">' +
+    '<i class="fas fa-check mr-1"></i>Đã liên kết</span>' +
+    "Bot sẽ nhắn cho bạn khi có việc chờ bạn duyệt, việc bị trả lại hoặc việc quá hạn." +
+    "</div>" +
+    '<button type="button" data-zalo="bo-lien-ket" class="btn-secondary text-sm thanh-loc-nut">' +
+    '<i class="fas fa-unlink mr-2"></i>Bỏ liên kết</button>' +
+    "</div>"
+  );
+}
+
+/** BUILDER: trạng thái CHƯA liên kết — nút lấy mã 6 số. */
+function buildZaloChuaLienKetHtml() {
+  return (
+    '<div class="flex flex-wrap items-center justify-between gap-3">' +
+    '<div class="text-sm text-gray-700">' +
+    '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium mr-2">Chưa liên kết</span>' +
+    "Liên kết tài khoản Zalo để bot nhắn tin khi có việc chờ duyệt, việc bị trả lại hoặc việc quá hạn." +
+    "</div>" +
+    '<button type="button" data-zalo="lay-ma" class="btn-primary text-sm thanh-loc-nut">' +
+    '<i class="fas fa-qrcode mr-2"></i>Lấy mã liên kết</button>' +
+    "</div>"
+  );
+}
+
+/**
+ * BUILDER: khối mã liên kết — `code` và `huongDan` do máy chủ trả (POST /zalo/ma-lien-ket)
+ * nên LUÔN qua escapeHtml dù mã chỉ là 6 chữ số và câu hướng dẫn là chuỗi cố định.
+ */
+function buildZaloMaHtml(ma) {
+  return (
+    '<div class="text-sm text-gray-700">' +
+    '<p class="mb-3">' +
+    escapeHtml(ma.huongDan || "") +
+    "</p>" +
+    '<div class="flex items-baseline gap-3 mb-3">' +
+    '<span class="text-2xl font-bold tracking-[0.3em] text-blue-700">' +
+    escapeHtml(String(ma.code || "")) +
+    "</span>" +
+    '<span class="text-xs text-gray-500">Mã dùng một lần, có hạn ' +
+    escapeHtml(String(ma.hanPhut || 15)) +
+    " phút</span>" +
+    "</div>" +
+    '<button type="button" data-zalo="lay-ma" class="btn-secondary text-sm thanh-loc-nut">' +
+    '<i class="fas fa-rotate mr-2"></i>Lấy mã khác</button>' +
+    "</div>"
+  );
+}
+
+/**
+ * Nút trong khối Zalo — uỷ quyền sự kiện (delegation) vì khối được vẽ lại sau mỗi
+ * thao tác. «Lấy mã» / «Lấy mã khác» dùng chung một hành động.
+ */
+async function xuLyNutZalo(event) {
+  const nut = event.target.closest("button[data-zalo]");
+  if (!nut) return;
+  const hanhDong = nut.dataset.zalo,
+    body = document.getElementById("account-zalo-body");
+  if (hanhDong === "lay-ma") {
+    setButtonLoading(nut, true);
+    const ma = await restPost("/api/v1/zalo/ma-lien-ket", {});
+    if (!ma || !body) return void renderThongBaoZalo();
+    body.innerHTML = buildZaloMaHtml(ma);
+  } else if (hanhDong === "bo-lien-ket") {
+    setButtonLoading(nut, true);
+    const kq = await restGhi("DELETE", "/api/v1/zalo/lien-ket");
+    if (kq && kq.ok) {
+      showToast("Đã bỏ liên kết Zalo — thông báo từ giờ chỉ hiện trong phần mềm.", "success");
+      renderThongBaoZalo();
+    } else {
+      setButtonLoading(nut, false);
+      showToast((kq && kq.error) || "Không bỏ được liên kết Zalo.", "error");
+    }
+  }
 }
 
 /**
