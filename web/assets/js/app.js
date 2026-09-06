@@ -104,6 +104,9 @@ const COL = {
   T_START: "Ngày bắt đầu",
   T_DUE: "Hạn chót",
   T_COMPLETION: "Tiến độ (%)",
+  // Bug 2 (8b): tỷ lệ gia quyền của đầu mục — server chia đều khi tạo, người có quyền «sửa tỷ lệ»
+  // chỉnh tay. Giá trị chuỗi phải KHỚP server legacyFields.js (col-parity.test.js).
+  T_TY_LE: "Tỷ lệ công việc (%)",
   T_REPORT_DATE: "Ngày hoàn thành",
   T_TARGET: "Mục tiêu",
   T_RESULT_LINKS: "Link kết quả",
@@ -973,10 +976,11 @@ function renderStats(summaryStats) {
     allTasks2 = getFilteredTasks();
   const projects2Length = allProjects2.length,
     count = allProjects2.filter(projects2 => (projects2[COL.P_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
+    // Bug 2 (8b): thẻ «Tỷ lệ hoàn thành» theo đúng E4 — bình quân gia quyền các đầu mục từng dự
+    // án (tienDoDauMucKhach), không còn bình quân số học trên mọi nhiệm vụ.
     projects2Total = allProjects2.reduce((acc, projects2) => {
-      const filteredTasks2 = allTasks2.filter(tasks2 => tasks2[COL.T_PID] === projects2[COL.P_ID]),
-        num4 = filteredTasks2.length > 0 ? filteredTasks2.reduce((acc2, filteredTasks22) => acc2 + parseInt(filteredTasks22[COL.T_COMPLETION] || 0), 0) / filteredTasks2.length : 0;
-      return acc + num4;
+      const filteredTasks2 = allTasks2.filter(tasks2 => tasks2[COL.T_PID] === projects2[COL.P_ID]);
+      return acc + tienDoDauMucKhach(filteredTasks2);
     }, 0),
     num = projects2Length > 0 ? Math.round(projects2Total / projects2Length) : 0,
     tasks2Length = allTasks2.length,
@@ -1529,6 +1533,25 @@ function renderChart(err) {
     }
   });
 }
+// Bug 2 (8b): tiến độ dự án phía client — BẢN SOI của `server/src/modules/workItems/tienDo.js`
+// (`tienDoWork`): bình quân GIA QUYỀN «Tỷ lệ công việc (%)» × «Tiến độ (%)» (server gắn sẵn từ mức
+// hoàn thành các nhóm file kết quả) trên các ĐẦU MỤC (cấp 2, hoặc cấp 3 không nằm trong công việc
+// con). Đầu mục tỷ lệ 0 không vào mẫu; không đầu mục nào có tỷ lệ → 0%. Chỉ dùng cho biểu đồ
+// fallback + hộp thoại chi tiết khi không gọi API thống kê; hàm THUẦN để test jsdom soi được và
+// đồng dạng công thức với stats-parity.test.js. project-details.js (nạp sau) cũng gọi hàm này.
+function tienDoDauMucKhach(rows) {
+  let tu = 0,
+    mau = 0;
+  for (const row of rows || []) {
+    const cap = Number(row[COL.T_LEVEL]);
+    if (!(cap === 2 || cap === 3 && !row[COL.T_PARENT])) continue;
+    const tyLe = Math.max(0, Number(row[COL.T_TY_LE]) || 0);
+    if (tyLe <= 0) continue;
+    mau += tyLe;
+    tu += tyLe * Math.max(0, Number(row[COL.T_COMPLETION]) || 0);
+  }
+  return mau > 0 ? Math.round(tu / mau) : 0;
+}
 function renderProjectProgressChart() {
   const projectProgressChartEl = document.getElementById("project-progress-chart"),
     projectChartMessageEl = document.getElementById("project-chart-message");
@@ -1565,9 +1588,9 @@ function renderProjectProgressChart() {
   };
   filteredProjects.forEach(filteredProject => {
     const filteredFilteredTasks = filteredTasks.filter(filteredTask => filteredTask[COL.T_PID] === filteredProject[COL.P_ID]),
-      count = filteredFilteredTasks.filter(filteredFilteredTask => (filteredFilteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-      filteredFilteredTaskCount = filteredFilteredTasks.length,
-      num = filteredFilteredTaskCount > 0 ? Math.round(count / filteredFilteredTaskCount * 100) : 0,
+      // Bug 2 (8b): số cũ là % nhiệm vụ «Hoàn thành» — nay theo đúng server (tienDo.js): bình quân
+      // gia quyền tiến độ các đầu mục, không còn chỗ nào nhân viên nhập tay.
+      num = tienDoDauMucKhach(filteredFilteredTasks),
       projectName = filteredProject[COL.P_NAME] || "Chưa có tên";
     if (num === 100) data["100%"].count++, data["100%"].projects.push(projectName);else {
       if (num >= 76) data["76-99%"].count++, data["76-99%"].projects.push(projectName);else {
@@ -3589,13 +3612,9 @@ function createTaskModal(isEdit, task) {
     taskPid = isEdit && task ? task[COL.T_PID] : "",
     taskPid2 = taskPid && allProjects.find(project => project[COL.P_ID] === taskPid && project[COL.P_MANAGER] === currentUser.name),
     isEdit22 = isEdit2 && !taskPid2;
+  // Bug 2 (8b): ô nhập «Tiến độ (%)» đã bỏ — tiến độ do server tính từ mức hoàn thành các nhóm
+  // file kết quả (tienDo.js), listener «chọn Hoàn thành tự điền 100%» cũng hết chỗ bám.
   setTimeout(() => {
-    const el = document.querySelector("#task-modal select[name=\"status\"]"),
-      el2 = document.querySelector("#task-modal input[name=\"completion\"]");
-    el && el2 && el.addEventListener("change", function () {
-      this.value === "Hoàn thành" && (el2.value = 100);
-    });
-  }, 100), setTimeout(() => {
     const el = document.querySelector("#task-modal select[name=\"projectId\"]"),
       el2 = document.querySelector("#task-modal select[name=\"assignee\"]"),
       el3 = document.querySelector("#task-modal input[name=\"startDate\"]"),
@@ -3637,6 +3656,12 @@ function createTaskModal(isEdit, task) {
   }, 100);
   // Cấp 2 (công việc con) có đủ ô phân công; nhiệm vụ (cấp 3) chỉ chọn MỘT lãnh đạo phòng
   const laCapHai = isEdit && task ? Number(task[COL.T_LEVEL]) === 2 : createLevel === 2;
+  // Bug 2 (8b): «Tỷ lệ công việc (%)» chỉ có ở ĐẦU MỤC (cấp 2, hoặc cấp 3 không nằm trong công
+  // việc con). Server chia đều khi tạo; người giữ quyền «sửa tỷ lệ» (rbac.js ACTION_TY_LE) chỉnh
+  // tay. Client chỉ là ổ khoá trang trí — gửi tyLe mà KHÔNG có quyền thì service.js trả 403 cả bản
+  // ghi, nên người không có quyền thấy ô KHÓA và KHÔNG có name (không lọt vào FormData).
+  const laDauMucForm = isEdit && task ? Number(task[COL.T_LEVEL]) === 2 || Number(task[COL.T_LEVEL]) === 3 && !task[COL.T_PARENT] : createLevel === 2 || createLevel === 3 && !createParent,
+    duocSuaTyLe = isAdmin() || laQuanTriTrongPhamVi() || laLanhDaoPhong();
   const taskReminders = isEdit && task ? task[COL.T_REMINDERS] || [] : [],
     taskId = isEdit && task ? task[COL.T_ID] : "";
   // Phân công ba lớp của form nhiệm vụ/CV con: nguồn ứng viên theo PHÒNG của công việc đang
@@ -3674,7 +3699,7 @@ function createTaskModal(isEdit, task) {
     let text3 = "";
     if (isEdit) text3 = task[COL.T_ASSIGNEE] === list2[COL.S_NAME] ? "selected" : "";else !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
     return "<option value=\"" + escapeHtml(list2[COL.S_NAME]) + "\" " + text3 + ">" + escapeHtml(list2[COL.S_NAME]) + "</option>";
-  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tiến độ (%)</label>\n                                  <input type=\"number\" name=\"completion\" class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? parseInt(task[COL.T_COMPLETION] || 0) : 0) + "\">\n                              </div>\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3 md:col-span-2\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. --><div id=\"task-ket-qua-danh-sach\">" + (!isEdit && createLevel !== 2 ? buildKhungDanhSachKetQua([], "") : "") + "</div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n              " + (!isEdit ? "<div class=\"chan-form-tao sticky bottom-0 -mx-8 px-8 pt-3 pb-3 mt-4 border-t border-gray-100 bg-white flex flex-wrap items-center justify-end gap-3\"><span class=\"mr-auto text-xs text-gray-500 hidden md:inline\"><i class=\"fas fa-info-circle mr-1\"></i>«Lưu tạm» giữ ở Nháp để sửa tiếp · «Gửi đi duyệt» đưa vào hàng chờ</span><button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>" + buildLuuNhapNutHtml(false) + "<button type=\"submit\" data-gui-duyet=\"1\" class=\"btn-primary\"><i class=\"fas fa-paper-plane mr-2\"></i>Gửi đi duyệt</button></div>" : "") + "\n          </form>\n      </div>\n  </div>\n";
+  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>" + (laDauMucForm ? "\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tỷ lệ công việc (%)</label>\n                                  <input type=\"number\" " + (duocSuaTyLe ? "name=\"tyLe\"" : "disabled title=\"Chỉ lãnh đạo phụ trách mới sửa được tỷ lệ\"") + " class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? Number(task[COL.T_TY_LE] || 0) : "") + "\"" + (isEdit ? "" : " placeholder=\"Chia đều\"") + ">\n                              </div>" : "") + "\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3 md:col-span-2\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. --><div id=\"task-ket-qua-danh-sach\">" + (!isEdit && createLevel !== 2 ? buildKhungDanhSachKetQua([], "") : "") + "</div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n              " + (!isEdit ? "<div class=\"chan-form-tao sticky bottom-0 -mx-8 px-8 pt-3 pb-3 mt-4 border-t border-gray-100 bg-white flex flex-wrap items-center justify-end gap-3\"><span class=\"mr-auto text-xs text-gray-500 hidden md:inline\"><i class=\"fas fa-info-circle mr-1\"></i>«Lưu tạm» giữ ở Nháp để sửa tiếp · «Gửi đi duyệt» đưa vào hàng chờ</span><button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>" + buildLuuNhapNutHtml(false) + "<button type=\"submit\" data-gui-duyet=\"1\" class=\"btn-primary\"><i class=\"fas fa-paper-plane mr-2\"></i>Gửi đi duyệt</button></div>" : "") + "\n          </form>\n      </div>\n  </div>\n";
 }
 function toggleTaskReminders(forceShow) {
   const taskRemindersContainerEl = document.getElementById("task-reminders-container"),
@@ -5407,7 +5432,9 @@ function renderProjectComparisonChart() {
       filteredFilteredTasks = filteredTasks.filter(filteredTask => filteredTask[COL.T_PID] === projectId),
       filteredFilteredTaskCount = filteredFilteredTasks.length,
       count = filteredFilteredTasks.filter(filteredFilteredTask => (filteredFilteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-      num = filteredFilteredTaskCount > 0 ? Math.round(count / filteredFilteredTaskCount * 100) : 0;
+      // Bug 2 (8b): completionRate theo server (tienDo.js) — bình quân gia quyền các đầu mục;
+      // `completedTasks` giữ nguyên để tooltip số lượng không đổi hình dạng.
+      num = tienDoDauMucKhach(filteredFilteredTasks);
     return {
       name: projectName.length > 15 ? projectName.substring(0, 15) + "..." : projectName,
       totalTasks: filteredFilteredTaskCount,
@@ -5552,7 +5579,10 @@ function addOptimisticUpdate(type, user, id = null) {
         [COL.T_PRIORITY]: user.priority || "Trung bình",
         [COL.T_START]: user.startDate,
         [COL.T_DUE]: user.dueDate,
-        [COL.T_COMPLETION]: parseInt(user.completion || 0)
+        // Bug 2 (8b): tiến độ do server tính từ file kết quả — dòng tạm không tự bịa số; tỷ lệ
+        // theo người dùng nhập (server chia đều khi vắng).
+        [COL.T_COMPLETION]: 0,
+        [COL.T_TY_LE]: parseInt(user.tyLe || 0)
       };
       allTasks.unshift(data), renderTasks();
     } else {
@@ -5628,7 +5658,9 @@ function updateOptimisticUpdate(type, id, user) {
           [COL.T_PRIORITY]: user.priority,
           [COL.T_START]: user.startDate,
           [COL.T_DUE]: user.dueDate,
-          [COL.T_COMPLETION]: parseInt(user.completion || 0)
+          // Bug 2 (8b): KHÔNG ghi đè «Tiến độ (%)» — số này server tính từ file kết quả, spread giữ
+          // nguyên giá trị cũ đến khi refreshData về; tỷ lệ chỉ đổi khi người dùng thực sự gửi tyLe.
+          [COL.T_TY_LE]: parseInt(user.tyLe || allTasks[taskIndex][COL.T_TY_LE] || 0)
         }
       }, renderTasks(), renderProjects(), renderProjectStats(), renderTaskStats(), renderStats(), renderTaskPriorityChart(), renderPriorityTasksMini(), renderStaffPerformanceChart(), renderTimelineProgressChart(), currentSection === "gantt" && renderGanttChart());
     } else {
@@ -8334,6 +8366,11 @@ const BANG_PHAN_QUYEN = [
   { ten: 'Sửa Công việc (cấp 1)', entityType: 'work', action: 'update' },
   { ten: 'Sửa Công việc con (cấp 2)', entityType: 'subwork', action: 'update', gc: 'TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.' },
   { ten: 'Sửa Nhiệm vụ (cấp 3)', entityType: 'task', action: 'update' },
+  // Bug 2 (8b): quyền «sửa tỷ lệ» của đầu mục (rbac.js ACTION_TY_LE, KHÔNG thuộc mảng ACTIONS —
+  // sửa là hiệu lực ngay, không có ⏳ chờ duyệt). Mặc định ✓ cho admin/PQĐ/TP/PP; TP/PP chỉ trong
+  // phòng phụ trách (inScope). Cán bộ & vai «Quản lý công việc» ✕.
+  { ten: 'Sửa tỷ lệ công việc (%) — Công việc con (cấp 2)', entityType: 'subwork', action: 'ty-le', gc: 'Tỷ lệ chia đều khi tạo; đầu mục thiếu/không có tỷ lệ không tính vào tiến độ.' },
+  { ten: 'Sửa tỷ lệ công việc (%) — Nhiệm vụ (cấp 3)', entityType: 'task', action: 'ty-le', gc: 'Chỉ nhiệm vụ KHÔNG nằm trong công việc con mới là đầu mục có tỷ lệ.' },
   { ten: 'Xoá Công việc (cấp 1)', entityType: 'work', action: 'delete' },
   { ten: 'Xoá Công việc con (cấp 2)', entityType: 'subwork', action: 'delete' },
   { ten: 'Xoá Nhiệm vụ (cấp 3)', entityType: 'task', action: 'delete', gc: 'Cán bộ chỉ xoá nhiệm vụ của mình.' },

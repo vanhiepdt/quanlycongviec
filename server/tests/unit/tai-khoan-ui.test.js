@@ -254,20 +254,22 @@ describe('TC-TK — đổi mật khẩu ngay trong trang', () => {
 // ------------------------------------------------------------------------------------------
 describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', () => {
   const MAC_DINH = {
+    // Bug 2 (8b): thêm 'ty-le' cho PGĐ/TP/PP ở subwork + task — phản ánh đúng PERMISSIONS mới
+    // (rbac.js); Cán bộ và «Quản lý công việc» KHÔNG có.
     'Phó Giám đốc': {
       work: ['read', 'create', 'update', 'delete', 'approve'],
-      subwork: ['read', 'create', 'update', 'delete', 'approve'],
-      task: ['read', 'create', 'update', 'delete'],
+      subwork: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
+      task: ['read', 'create', 'update', 'delete', 'ty-le'],
     },
     'Trưởng phòng': {
       work: ['read', 'create', 'update', 'delete'],
-      subwork: ['read', 'create', 'update', 'delete'],
-      task: ['read', 'create', 'update', 'delete'],
+      subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
+      task: ['read', 'create', 'update', 'delete', 'ty-le'],
     },
     'Phó phòng': {
       work: ['read', 'create', 'update', 'delete'],
-      subwork: ['read', 'create', 'update', 'delete'],
-      task: ['read', 'create', 'update', 'delete'],
+      subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
+      task: ['read', 'create', 'update', 'delete', 'ty-le'],
     },
     'Nhân viên': {
       work: ['read'],
@@ -311,12 +313,13 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(bang).toContain('TẤT CẢ các phòng');
   });
 
-  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 15 hàng × 4 vai + phạm vi cho 3 vai', () => {
+  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 17 hàng × 4 vai + phạm vi cho 3 vai', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     // Vòng 13 đợt 2: +1 hàng dropdown «Duyệt Nhiệm vụ (cấp 3)» (12 → 13); 014: +2 hàng «file»
-    // (13 → 15). Hàng «Duyệt yêu cầu XOÁ» chỉ hiển thị nên KHÔNG cộng vào hai con số này.
-    expect((bang.match(/data-gd="1"/g) || []).length).toBe(15 * 4);
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(15 * 3);
+    // (13 → 15); bug 2 (8b): +2 hàng «sửa tỷ lệ» subwork/task (15 → 17). Hàng «Duyệt yêu cầu
+    // XOÁ» chỉ hiển thị nên KHÔNG cộng vào hai con số này.
+    expect((bang.match(/data-gd="1"/g) || []).length).toBe(17 * 4);
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(17 * 3);
     // Vòng 12b: dropdown Cán bộ mang vai CSDL «Nhân viên» — không phải nhãn «Cán bộ».
     expect(bang).toContain('data-vai="Nhân viên"');
     expect(bang).toContain('data-vai="Phó Giám đốc"');
@@ -413,7 +416,7 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
   it('TC-TKPQ-14: cột Cán bộ KHÔNG có select phạm vi (server chặn «tat-ca» cho Nhân viên)', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     expect(oCanBo(bang, 'Xem Công việc')).not.toContain('data-pv="1"');
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(15 * 3); // 3 vai, không có Cán bộ
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(17 * 3); // 3 vai, không có Cán bộ
   });
 
   it('TC-TKPQ-17: hai hàng «file» (014) — ⏳ đúng chỗ, PGD không có ⏳, nghĩa ✓ là «Phê duyệt luôn»', () => {
@@ -473,5 +476,24 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     const hangXoa = oCanBo(bang, 'Duyệt yêu cầu XOÁ (cả 3 cấp)');
     expect(hangXoa).not.toContain('data-gd="1"');
     expect(hangXoa).toContain('Chỉ xin, không duyệt');
+  });
+
+  it('TC-TKPQ-18: bug 2 (8b) — hai hàng «sửa tỷ lệ» tồn tại, PGĐ/TP/PP ✓, Cán bộ ✕, không có ⏳', () => {
+    const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
+    expect(bang).toContain('Sửa tỷ lệ công việc (%) — Công việc con (cấp 2)');
+    expect(bang).toContain('Sửa tỷ lệ công việc (%) — Nhiệm vụ (cấp 3)');
+    // data-entity/data-action đúng cặp để nút Lưu gửi đúng khoá ghi đè.
+    const hangSw = bang.split('<tr').find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Công việc con'));
+    expect(hangSw).toContain('data-entity="subwork"');
+    expect(hangSw).toContain('data-action="ty-le"');
+    const hangTask = bang.split('<tr').find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Nhiệm vụ'));
+    expect(hangTask).toContain('data-entity="task"');
+    expect(hangTask).toContain('data-action="ty-le"');
+    // Ma trận cho PGĐ/TP/PP ⇒ ✓ Cho phép; Cán bộ KHÔNG có ty-le ⇒ ✕ Tắt.
+    expect(hangSw).toContain('data-vai="Phó Giám đốc"');
+    expect(oCanBo(bang, 'Sửa tỷ lệ công việc (%) — Nhiệm vụ')).toContain('✕');
+    // Sửa tỷ lệ KHÔNG có luồng chờ duyệt — option ⏳ không được vẽ (CHECK po_cho_duyet chặn).
+    expect(hangSw).not.toContain('value="cho-duyet"');
+    expect(hangTask).not.toContain('value="cho-duyet"');
   });
 });

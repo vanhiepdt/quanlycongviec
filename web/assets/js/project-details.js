@@ -344,11 +344,9 @@ function showProjectDetailsModal(projectId, projectName) {
   const treHan = tatCaNV.filter(
     t => isTaskOverdue(t[COL.T_DUE]) && !(t[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")
   ).length;
-  const tongTienDo = tatCaNV.length
-    ? Math.round(
-        tatCaNV.reduce((acc, t) => acc + parseInt(t[COL.T_COMPLETION] || 0), 0) / tatCaNV.length
-      )
-    : 0;
+  // Bug 2 (8b): tiến độ dự án KHÔNG còn là bình quân «Tiến độ (%)» nhập tay của nhiệm vụ cấp 3 —
+  // theo đúng server (tienDo.js): bình quân GIA QUYỀN các đầu mục qua tienDoDauMucKhach (app.js).
+  const tongTienDo = tienDoDauMucKhach(allTasks.filter(t => t[COL.T_PID] === projectId));
   const canBoThamGia = [
     ...new Set(tatCaNV.map(t => t[COL.T_ASSIGNEE]).filter(v => v && v !== "Chưa gán")),
   ];
