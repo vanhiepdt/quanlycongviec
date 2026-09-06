@@ -411,7 +411,21 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     //  · `THONG_BAO_LOAI` là map nội bộ, nhưng `loai.icon`/`loai.mau` vẫn escape tại lỗ — luật
     //    TC-SEC-13 không xét nguồn (cùng lý lẽ đã ghi cho `DINH_DANG_KHAI` ở trên).
     // ⇒ **104 chỗ / 900 giá trị**.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 104, gia_tri: 900 });
+    //
+    // 2026-09-06 (KHỐI «THÔNG BÁO ZALO» trên trang tài khoản — Phase 8 việc 1e):
+    // **+2 chỗ ghi HTML, +3 giá trị**.
+    //  · Sink 1: `body.innerHTML = tt.daLienKet === true ? buildZaloDaLienKetHtml() :
+    //    buildZaloChuaLienKetHtml()` trong `renderThongBaoZalo` — HTML-LONG, cả hai builder chỉ có
+    //    nhãn TĨNH (không escapeHtml — đúng luật hằng chuỗi), không lỗ nào.
+    //  · Sink 2: `body.innerHTML = buildZaloMaHtml(ma)` trong `xuLyNutZalo` — HTML-LONG, builder tự
+    //    thoát bên trong. Chỗ gọi tính là SINK chứ không tính builder là giá trị — cùng lệ đã ghi
+    //    cho CHUÔNG THÔNG BÁO ở trên.
+    //  · +3 giá trị, tất cả DA-THOAT, đều trong `buildZaloMaHtml`: `escapeHtml(ma.huongDan || "")`,
+    //    `escapeHtml(String(ma.code || ""))`, `escapeHtml(String(ma.hanPhut || 15))` — mã dù chỉ là
+    //    6 chữ số và câu hướng dẫn là chuỗi cố định của máy chủ, vẫn bọc: dữ liệu máy chủ = dữ
+    //    liệu chưa tin.
+    // ⇒ **106 chỗ / 903 giá trị**.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 106, gia_tri: 903 });
   });
 });
 

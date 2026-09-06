@@ -105,6 +105,10 @@ export default [
       // đúng mục, vòng hỏi lại 60 giây chỉ khi tab hiện (TC-TBUI, 2026-09-06) — app.js thật trong
       // jsdom, fetch giả.
       'tests/unit/thong-bao-ui.test.js',
+      // zalo-lien-ket-ui.test.js: khối «Thông báo Zalo» trên trang tài khoản — cờ `bat` quyết cả
+      // khối, luồng lấy mã/bỏ liên kết, thoát dữ liệu máy chủ trong buildZaloMaHtml (Phase 8 việc
+      // 1e, 2026-09-06) — app.js thật trong jsdom, fetch giả.
+      'tests/unit/zalo-lien-ket-ui.test.js',
     ],
     languageOptions: {
       globals: {

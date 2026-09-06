@@ -687,6 +687,21 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
   - `THONG_BAO_LOAI` là map nội bộ nhưng `loai.icon`/`loai.mau` vẫn escape tại lỗ — TC-SEC-13 không
     xét nguồn (cùng lý lẽ đã ghi cho `DINH_DANG_KHAI`).
   - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 104 | gia_tri = 900`) và TC-SEC-17.
+- **KHỐI «THÔNG BÁO ZALO» TRÊN TRANG TÀI KHOẢN (2026-09-06, Phase 8 việc 1e)**: pin
+  **104/900 → 106/903** (+2 chỗ ghi HTML, +3 giá trị).
+  - Sink 1: `body.innerHTML = tt.daLienKet === true ? buildZaloDaLienKetHtml() :
+    buildZaloChuaLienKetHtml()` trong `renderThongBaoZalo` — HTML-LONG. Cả hai builder chỉ chứa
+    nhãn TĨNH («Đã liên kết», «Chưa liên kết», câu mô tả, tên nút) ⇒ **0 lỗ**, không bọc
+    `escapeHtml` — đúng luật hằng chuỗi ở trên.
+  - Sink 2: `body.innerHTML = buildZaloMaHtml(ma)` trong `xuLyNutZalo` — HTML-LONG, builder tự thoát
+    bên trong. Chỗ gọi tính là SINK; builder không bị tính trùng thành giá trị — cùng lệ đã chốt cho
+    CHUÔNG THÔNG BÁO.
+  - +3 giá trị, **tất cả DA-THOAT**, đều trong `buildZaloMaHtml`: `escapeHtml(ma.huongDan || "")`,
+    `escapeHtml(String(ma.code || ""))`, `escapeHtml(String(ma.hanPhut || 15))`. Mã liên kết dù chỉ
+    là 6 chữ số và câu hướng dẫn là chuỗi cố định của máy chủ, vẫn bọc: «dữ liệu máy chủ = dữ liệu
+    chưa tin». TC trong `zalo-lien-ket-ui.test.js` bắn `<img onerror>` vào `code` và `<script>` vào
+    `huongDan`, khẳng định hiện thành chữ.
+  - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 106 | gia_tri = 903`) và TC-SEC-17.
 
 
 
