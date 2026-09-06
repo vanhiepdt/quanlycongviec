@@ -12,7 +12,9 @@
 //  2. Bản cũ đếm chung cấp 2 và cấp 3 vào `tasks`. `totals` ở đây đếm rạch ròi từng cấp (bẫy §13.5).
 import { can } from '../../middleware/rbac.js';
 import { thayDuocNhap } from '../approvals/rules.js';
+import { demNhomFileTheoItem } from '../taskFiles/repo.js';
 import * as itemsRepo from '../workItems/repo.js';
+import { ganTienDo } from '../workItems/tienDo.js';
 import * as repo from './repo.js';
 
 /** Nhãn nhóm cho nhiệm vụ cấp 3 không thuộc công việc con nào. Giữ đúng chữ của bản cũ để người
@@ -105,6 +107,9 @@ export async function getTree(user, filter = {}) {
     (row) => can(user, 'read', 'work', row).ok && thayDuocNhap(user, row)
   );
   const items = await itemsRepo.listForWorks(works.map((w) => w.id));
+  // Bug 2 (8b): tiến độ mỗi dòng = mức hoàn thành các nhóm file kết quả — gắn một câu đếm
+  // cho cả cây để mọi đường uống `getTree` (xuất Excel, xem cây) dùng số mới.
+  ganTienDo(items, await demNhomFileTheoItem());
   // Công việc con / nhiệm vụ tạo riêng rồi để nháp (không nằm trong cây nháp của cấp 1) cũng phải
   // bó theo đúng luật đó.
   return assemble(

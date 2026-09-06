@@ -1,11 +1,16 @@
 // Việc 6.9 — ĐỐI CHIẾU số liệu bản Apps Script ↔ bản VPS trên CÙNG dữ liệu (TC-STAT-16).
 //
-// Không chạy được Google Apps Script thật trong vitest, nên hai thuật toán CŨ được PORT 1:1 từ
-// nguồn gốc và chạy trên chính gói dữ liệu legacy mà cầu RPC trả cho giao diện:
+// Không chạy được Google Apps Script thật trong vitest, nên các thuật toán được PORT 1:1 và chạy
+// trên chính gói dữ liệu legacy mà cầu RPC trả cho giao diện:
 //   • `getSummaryStatsCu`  ← Code.clean.gs `getSummaryStats` (backend cũ, 5 số).
 //   • `renderStatsCu`      ← app.js `renderStats` + `getFilteredProjects/Tasks` (số ĐANG HIỆN
 //                            trên UI — chuẩn đối chiếu theo §7 Phase 6).
-//   • Sáu hàm `bieuDo*Cũ`  ← sáu hàm render*Chart của app.js.
+//   • Các hàm `bieuDo*Cũ`  ← các hàm render*Chart của app.js.
+//
+// Bug 2 (8b): RIÊNG E4 (phân bố tiến độ) và E3 (so sánh, cột «rates») đã bỏ cách đếm theo TRẠNG
+// THÁI nhiệm vụ — chuẩn mới là bình quân GIA QUYỀN theo «tỷ lệ công việc» của các ĐẦU MỤC
+// (việc con cấp 2, hoặc nhiệm vụ cấp 3 không nằm trong việc con), mỗi đầu mục lấy % hoàn thành
+// các NHÓM FILE KẾT QUẢ. Hai port `tienDoWorkCu`/`laDauMucCu` dưới đây chép đúng luật ấy.
 //
 // Kết luận đã ghi ở §13.5: UI tự tính lại và BỎ QUA tham số summaryStats; allTasks gồm cả cấp 2.
 // Chuẩn so = phép tính phía UI. Vì vậy mỗi phép khớp đều tính trên TẦNG CẤP 3 của mảng legacy,
@@ -105,7 +110,7 @@ function renderStatsCu(projects, tasks) {
   };
 }
 
-// ─── Port: sáu hàm render*Chart của app.js ───────────────────────────────────
+// ─── Port: các hàm render*Chart của app.js ───────────────────────────────────
 function bieuDoStatusCu(tasks) {
   const dem = new Map();
   for (const t of tasks) {
@@ -124,16 +129,32 @@ function bieuDoPriorityCu(tasks) {
   }
   return { labels: ['Thấp', 'Trung bình', 'Cao'], data: [d.Thấp, d['Trung bình'], d.Cao] };
 }
+// Bug 2 (8b): ĐẦU MỤC chịu tỷ lệ — việc con cấp 2, hoặc nhiệm vụ cấp 3 KHÔNG nằm trong việc con.
+function laDauMucCu(t) {
+  return (
+    Number(t[COL.T_LEVEL]) === 2 ||
+    (Number(t[COL.T_LEVEL]) === 3 && !t[COL.T_PARENT])
+  );
+}
+// Bug 2 (8b): tiến độ công việc = bình quân GIA QUYỀN theo «Tỷ lệ công việc (%)» của các đầu mục,
+// mỗi đầu mục lấy «Tiến độ (%)» mới (mức hoàn thành các nhóm file kết quả, máy chủ gắn sẵn).
+// Chép đúng luật tienDoWork/tienDo.js phía máy chủ.
+function tienDoWorkCu(tasks) {
+  let tu = 0;
+  let mau = 0;
+  for (const t of tasks) {
+    if (!laDauMucCu(t)) continue;
+    const tyLe = Math.max(0, Number(t[COL.T_TY_LE]) || 0);
+    if (tyLe <= 0) continue;
+    mau += tyLe;
+    tu += tyLe * (Math.max(0, Number(t[COL.T_COMPLETION]) || 0));
+  }
+  return mau > 0 ? Math.round(tu / mau) : 0;
+}
 function bieuDoProgressCu(projects, tasks) {
   const buckets = { '0-25%': 0, '26-50%': 0, '51-75%': 0, '76-99%': 0, '100%': 0 };
   for (const p of projects) {
-    const cua = tasks.filter((t) => t[COL.T_PID] === p[COL.P_ID]);
-    const xong = cua.filter((t) =>
-      String(t[COL.T_STATUS] || '')
-        .toLowerCase()
-        .includes('hoàn thành')
-    ).length;
-    const pct = cua.length > 0 ? Math.round((xong / cua.length) * 100) : 0;
+    const pct = tienDoWorkCu(tasks.filter((t) => t[COL.T_PID] === p[COL.P_ID]));
     if (pct === 100) buckets['100%'] += 1;
     else if (pct >= 76) buckets['76-99%'] += 1;
     else if (pct >= 51) buckets['51-75%'] += 1;
@@ -194,16 +215,14 @@ function bieuDoComparisonCu(projects, tasks) {
   const hang = projects
     .map((p) => {
       const cua = tasks.filter((t) => t[COL.T_PID] === p[COL.P_ID]);
-      const xong = cua.filter((t) =>
-        String(t[COL.T_STATUS] || '')
-          .toLowerCase()
-          .includes('hoàn thành')
-      ).length;
+      // «Tổng nhiệm vụ» vẫn đếm TẦNG CẤP 3 theo luật cũ; RIÊNG «rates» đã chuyển sang tiến độ
+      // tính từ file kết quả (bug 2 — 8b) nên lấy cả hai tầng như itemsByWork phía máy chủ.
+      const nhiemVu = cua.filter((t) => Number(t[COL.T_LEVEL]) === 3);
       const ten = p[COL.P_NAME] || p[COL.P_ID];
       return {
         name: ten.length > 15 ? ten.slice(0, 15) + '...' : ten,
-        total: cua.length,
-        rate: cua.length > 0 ? Math.round((xong / cua.length) * 100) : 0,
+        total: nhiemVu.length,
+        rate: tienDoWorkCu(cua),
       };
     })
     .filter((r) => r.total > 0)
@@ -375,6 +394,34 @@ beforeEach(async () => {
     assignee_id: hung.id,
     assignee_name: hung.full_name,
   });
+
+  // Bug 2 (8b): «tỷ lệ công việc» + file kết quả cho đồ thị E4/E3. Các INSERT thô ở trên đi
+  // đường vòng (không qua service) nên ty_le giữ mặc định 0 — tự chia tay đúng luật chia đều
+  // của từng công việc: các ĐẦU MỤC là việc con cấp 2 và nhiệm vụ cấp 3 mồ côi.
+  //   CV001: CV001-01 (40%) gộp file của con CV001-02 ⇒ 1/2 = 50; CV001-03 (35%) ⇒ 3/4 = 75;
+  //          CV001-04 (25%) không file ⇒ 0 → tiến độ việc = round(40·50 + 35·75)/100 = 46.
+  //   CV002: hai đầu mục 50/50, chưa file nào ⇒ 0.   CV003: một đầu mục 100%, 3/3 file ⇒ 100.
+  await pool.query(
+    `UPDATE work_items SET ty_le = v.ty_le
+       FROM (VALUES ('CV001-01', 40), ('CV001-03', 35), ('CV001-04', 25),
+                    ('CV002-09', 50), ('CV002-10', 50),
+                    ('CV003-21', 100)) v(code, ty_le)
+      WHERE work_items.code = v.code`
+  );
+  await pool.query(
+    `INSERT INTO task_files (item_id, ten_goc, trang_thai)
+     SELECT i.id, v.ten, v.tt
+       FROM (VALUES ('CV001-02', 'ho-so-1.pdf',    'hoan-thanh'),
+                    ('CV001-02', 'ho-so-2.pdf',    'cho-xem'),
+                    ('CV001-03', 'bao-cao-1.docx', 'hoan-thanh'),
+                    ('CV001-03', 'bao-cao-2.docx', 'da-duyet'),
+                    ('CV001-03', 'bao-cao-3.docx', 'hoan-thanh'),
+                    ('CV001-03', 'bao-cao-4.docx', 'cho-lanh-dao'),
+                    ('CV003-21', 'ket-qua.xlsx',   'hoan-thanh'),
+                    ('CV003-21', 'phu-luc.xlsx',   'da-duyet'),
+                    ('CV003-21', 'bien-ban.xlsx',  'hoan-thanh')) v(code, ten, tt)
+       JOIN work_items i ON i.code = v.code`
+  );
 });
 
 afterAll(async () => {
@@ -427,7 +474,8 @@ describe('TC-STAT-16 — đối chiếu 6 biểu đồ: thuật toán render*Cha
     const kyVong = {
       status: bieuDoStatusCu(tasks3),
       'task-priority': bieuDoPriorityCu(tasks3),
-      'project-progress': bieuDoProgressCu(ui.projects, tasks3),
+      // Bug 2 (8b): E4/E3 tính trên MỌI tầng (đầu mục gồm cả cấp 2) — chuẩn mới theo file.
+      'project-progress': bieuDoProgressCu(ui.projects, ui.tasks),
       'timeline-progress': bieuDoTimelineCu(tasks3),
       'staff-performance': (() => {
         const kq = bieuDoStaffCu(
@@ -436,7 +484,7 @@ describe('TC-STAT-16 — đối chiếu 6 biểu đồ: thuật toán render*Cha
         );
         return { labels: kq.labels, data: kq.data };
       })(),
-      'project-comparison': bieuDoComparisonCu(ui.projects, tasks3),
+      'project-comparison': bieuDoComparisonCu(ui.projects, ui.tasks),
     };
 
     for (const [type, mong] of Object.entries(kyVong)) {

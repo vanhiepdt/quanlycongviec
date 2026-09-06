@@ -38,6 +38,9 @@ const createSchema = z.object({
   dueDate: dateInput,
   reportDate: dateInput,
   completion: z.coerce.number().int().min(0).max(100).optional(),
+  // Tỷ lệ công việc (8b lỗi 2): phần trăm đóng góp của mục thuộc diện vào tiến độ công việc.
+  // Quyền sửa kiểm ở service bằng ACTION_TY_LE; với nhiệm vụ nằm trong việc con thì 400.
+  tyLe: z.coerce.number().int().min(0).max(100).optional(),
   target: text(2000).optional(),
   output: text(2000).optional(),
   notes: text(2000).optional(),
@@ -84,6 +87,7 @@ function toRow(body) {
     dueDate: 'due_date',
     reportDate: 'report_date',
     completion: 'completion',
+    tyLe: 'ty_le',
     target: 'target',
     output: 'output',
     notes: 'notes',

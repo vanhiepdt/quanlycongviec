@@ -43,6 +43,10 @@ export const ENTITIES = Object.freeze(['work', 'subwork', 'task', 'file', 'user'
 /** 4 hành động của ma trận §6. `approve` là hành động thứ 5, xét riêng vì chỉ có ở 3 thực thể. */
 export const ACTIONS = Object.freeze(['read', 'create', 'update', 'delete']);
 export const ACTION_APPROVE = 'approve';
+// Hành động thứ 6 (8b lỗi 2): sửa TỶ LỆ CÔNG VIỆC của việc con / nhiệm vụ độc lập. Tách hằng như
+// `approve` vì KHÔNG được chui vào ACTIONS (test TC-RBAC-01 đóng đinh 4 hành động gốc) và vì chỉ
+// có ở subwork/task, không phải hành động chung của mọi thực thể.
+export const ACTION_TY_LE = 'ty-le';
 
 // ============================================================================
 // BẢNG KHAI BÁO DUY NHẤT — nguồn sự thật của phân quyền.
@@ -58,8 +62,8 @@ export const PERMISSIONS = Object.freeze({
   // Toàn quyền toàn đơn vị (§6 dòng 1).
   admin: {
     work: ['read', 'create', 'update', 'delete', 'approve'],
-    subwork: ['read', 'create', 'update', 'delete', 'approve'],
-    task: ['read', 'create', 'update', 'delete', 'approve'],
+    subwork: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
     // Kết quả file của nhiệm vụ (014): Giám đốc nộp/duyệt — giá trị hiệu lực mặc định ✓.
     file: ['read', 'create', 'approve'],
     user: ['read', 'create', 'update', 'delete'],
@@ -69,8 +73,8 @@ export const PERMISSIONS = Object.freeze({
   // 'deputy_director'). Duyệt được — đây là vai duy nhất ngoài admin có quyền duyệt (§6).
   'Phó Giám đốc': {
     work: ['read', 'create', 'update', 'delete', 'approve'],
-    subwork: ['read', 'create', 'update', 'delete', 'approve'],
-    task: ['read', 'create', 'update', 'delete', 'approve'],
+    subwork: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
     // Phó GĐ là cấp chốt cuối của luồng file ⇒ nộp là chốt luôn, duyệt được (giaTriHieuLuc).
     file: ['read', 'create', 'approve'],
     user: ['read'],
@@ -80,8 +84,8 @@ export const PERMISSIONS = Object.freeze({
   // phải của rbac). KHÔNG duyệt được — kể cả việc do chính mình tạo.
   'Trưởng phòng': {
     work: ['read', 'create', 'update', 'delete'],
-    subwork: ['read', 'create', 'update', 'delete'],
-    task: ['read', 'create', 'update', 'delete'],
+    subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'ty-le'],
     // 014: TP/PP là NGƯỜI DUYỆT đầu tiên của file kết quả — nút «Hoàn thành / Duyệt» (chốt
     // 'hoan-thanh') và nút «Trình Phó giám đốc». admin bật ⏳ ô «Duyệt kết quả» ⇒ mất nút chốt.
     file: ['read', 'create', 'approve'],
@@ -92,8 +96,8 @@ export const PERMISSIONS = Object.freeze({
   // thay vì trỏ tham chiếu để bảng đọc được bằng mắt và test so được từng ô.
   'Phó phòng': {
     work: ['read', 'create', 'update', 'delete'],
-    subwork: ['read', 'create', 'update', 'delete'],
-    task: ['read', 'create', 'update', 'delete'],
+    subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'ty-le'],
     file: ['read', 'create', 'approve'],
     user: ['read'],
     department: ['read'],
@@ -299,6 +303,7 @@ const ACTION_LABEL = Object.freeze({
   update: 'sửa',
   delete: 'xoá',
   approve: 'duyệt',
+  'ty-le': 'sửa tỷ lệ',
 });
 
 const deny = (code, message) => ({ ok: false, code, message });
@@ -321,7 +326,7 @@ export function can(user, action, entityType, row = null) {
   if (!ENTITIES.includes(entityType)) {
     return deny('FORBIDDEN', `Không rõ loại dữ liệu "${entityType}"`);
   }
-  if (![...ACTIONS, ACTION_APPROVE].includes(action)) {
+  if (![...ACTIONS, ACTION_APPROVE, ACTION_TY_LE].includes(action)) {
     return deny('FORBIDDEN', `Không rõ hành động "${action}"`);
   }
 

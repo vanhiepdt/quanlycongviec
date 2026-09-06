@@ -145,14 +145,36 @@ describe('GET /api/v1/gantt — nhóm theo Phó Giám đốc + cây 4 mức', ()
       name: 'Nhiệm vụ mồ côi',
     });
 
+    // Bug 2 (8b): tiến độ = bình quân gia quyền TỶ LỆ × mức hoàn thành FILE KẾT QUẢ.
+    // Đặt tỷ lệ 60/40 cho hai đầu mục; cấp 2 có 2 nhóm file (1 đã hoàn thành ⇒ 50%),
+    // nhiệm vụ mồ côi 1 nhóm đã duyệt ⇒ 100% ⇒ công việc = (60×50 + 40×100)/100 = 70.
+    await pool.query(
+      `UPDATE work_items SET ty_le = 60 WHERE code = 'CV001-001'`
+    );
+    await pool.query(
+      `UPDATE work_items SET ty_le = 40 WHERE code = 'CV001-009'`
+    );
+    await pool.query(
+      `INSERT INTO task_files (item_id, ten_goc, trang_thai)
+       SELECT i.id, 'ket-qua.docx', 'hoan-thanh' FROM work_items i WHERE i.code = 'CV001-002'
+       UNION ALL
+       SELECT i.id, 'ban-nhap.docx', 'cho-xem' FROM work_items i WHERE i.code = 'CV001-002'
+       UNION ALL
+       SELECT i.id, 'bao-cao.pdf', 'da-duyet' FROM work_items i WHERE i.code = 'CV001-009'`
+    );
+
     const res = await apiAdmin.get('/api/v1/gantt');
     const workNode = res.body.data.groups[0].works[0];
     expect(workNode.subs).toHaveLength(1);
     expect(workNode.subs[0].children.map((t) => t.code)).toEqual(['CV001-002']);
     expect(workNode.tasks.map((t) => t.name)).toEqual(['Nhiệm vụ mồ côi']);
     expect(workNode.taskCount).toBe(2);
-    expect(workNode.completedCount).toBe(1);
-    expect(workNode.progress).toBe(50);
+    expect(workNode.completedCount).toBe(1); // vẫn đếm theo TRẠNG THÁI cấp 3
+    expect(workNode.progress).toBe(70);
+    // Thanh Gantt của từng dòng tô theo tiến độ file, không đọc `completion` cũ.
+    expect(workNode.subs[0].completion).toBe(50);
+    expect(workNode.subs[0].children[0].completion).toBe(50);
+    expect(workNode.tasks[0].completion).toBe(100);
   });
 });
 

@@ -50,6 +50,9 @@ export const COL = Object.freeze({
   T_START: 'Ngày bắt đầu',
   T_DUE: 'Hạn chót',
   T_COMPLETION: 'Tiến độ (%)',
+  // Tỷ lệ công việc (8b lỗi 2) — khoá MỚI cho phần trăm đóng góp của việc con / nhiệm vụ độc lập
+  // vào tiến độ công việc. Khoá phải có ở CẢ HAI phía COL (client app.js) — test col-parity chốt.
+  T_TY_LE: 'Tỷ lệ công việc (%)',
   T_REPORT_DATE: 'Ngày hoàn thành',
   T_TARGET: 'Mục tiêu',
   T_RESULT_LINKS: 'Link kết quả',
@@ -216,6 +219,9 @@ export function taskFromLegacy(data = {}) {
     dueDate: Object.hasOwn(data, 'dueDate') ? dateOrNull(data.dueDate) : undefined,
     reportDate: Object.hasOwn(data, 'reportDate') ? dateOrNull(data.reportDate) : undefined,
     completion: numberOrUndefined(pick(data, 'completion')),
+    // Tỷ lệ công việc (8b lỗi 2): ô nhập chỉ hiện với mục thuộc diện và người có quyền; service
+    // là rào cuối (403/400), cầu chỉ truyền.
+    tyLe: numberOrUndefined(pick(data, 'tyLe')),
     target: pick(data, 'target'),
     output: pick(data, 'output'),
     notes: pick(data, 'notes'),
@@ -506,7 +512,12 @@ export function taskToLegacy(row, ctx = {}) {
     [COL.T_PRIORITY]: row.priority ?? '',
     [COL.T_START]: row.start_date ?? '',
     [COL.T_DUE]: row.due_date ?? '',
-    [COL.T_COMPLETION]: row.completion ?? 0,
+    // Bug 2 (8b): tiến độ KHÔNG còn là ô nhập tay — tính từ mức hoàn thành các file kết quả
+    // (cột `tien_do` do máy chủ gắn ở bootstrap/thống kê). `completion` giữ làm fallback cho
+    // các đường đọc chưa kịp gắn (ví dụ getProjects chỉ tải works) và cho đường GHI cũ.
+    [COL.T_COMPLETION]: row.tien_do ?? row.completion ?? 0,
+    // Tỷ lệ công việc (%) của đầu mục (cấp 2, hoặc nhiệm vụ không nằm trong công việc con).
+    [COL.T_TY_LE]: row.ty_le ?? 0,
     [COL.T_REPORT_DATE]: row.report_date ?? '',
     [COL.T_TARGET]: row.target ?? '',
     // Giao diện cũ đọc ô này bằng `parseLinks`: MỖI DÒNG MỘT LINK. Trả JSON vào đây thì cả khối

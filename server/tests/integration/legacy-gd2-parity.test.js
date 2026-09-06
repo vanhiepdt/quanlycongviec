@@ -112,6 +112,9 @@ describe('[1] deleteTask xoá đệ quy — 9 phép kiểm cũ', () => {
     const a = await add({ level: 3, name: 'Vòng A' });
     const b = await add({ level: 3, name: 'Vòng B' });
     await pool.query('ALTER TABLE work_items DISABLE TRIGGER trg_work_items_check_parent');
+    // Tỷ lệ chỉ nằm ở đầu mục KHÔNG cha; service luôn về 0 trước khi đổi cấu trúc —
+    // test dựng dữ liệu bẩn cũng phải đúng trình tự đó (CHECK `work_items_ty_le_doi_tuong`).
+    await pool.query('UPDATE work_items SET ty_le = 0 WHERE id IN ($1, $2)', [a.id, b.id]);
     await pool.query('UPDATE work_items SET parent_id = $1 WHERE id = $2', [a.id, b.id]);
     await pool.query('UPDATE work_items SET parent_id = $1 WHERE id = $2', [b.id, a.id]);
     await pool.query('ALTER TABLE work_items ENABLE TRIGGER trg_work_items_check_parent');
@@ -325,6 +328,9 @@ describe('[3] getTasks / extractTasksFromProjectValues — 8 phép kiểm cũ', 
     const lone = await add({ level: 3, name: 'Việc lẻ' });
     // Dòng bẩn kiểu chỉ dữ liệu cũ mới có: nhiệm vụ cấp 3 trỏ cha là một nhiệm vụ cấp 3 khác.
     await pool.query('ALTER TABLE work_items DISABLE TRIGGER trg_work_items_check_parent');
+    // `lone` đang mang tỷ lệ của đầu mục không cha; service luôn về 0 trước khi đổi cấu trúc —
+    // test dựng dữ liệu bẩn cũng phải đúng trình tự đó (CHECK `work_items_ty_le_doi_tuong`).
+    await pool.query('UPDATE work_items SET ty_le = 0 WHERE id = $1', [lone.id]);
     await pool.query('UPDATE work_items SET parent_id = $1 WHERE id = $2', [good.id, lone.id]);
     await pool.query('ALTER TABLE work_items ENABLE TRIGGER trg_work_items_check_parent');
 

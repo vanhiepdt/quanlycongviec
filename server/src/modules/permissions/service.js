@@ -9,7 +9,10 @@ import { PERMISSIONS } from '../../middleware/rbac.js';
 import * as repo from './repo.js';
 
 const THUC_THE_DUOC_SUA = ['work', 'subwork', 'task', 'file'];
-const HANH_DONG_DUOC_SUA = ['read', 'create', 'update', 'delete', 'approve'];
+// 'ty-le' (8b lỗi 2): ô «Sửa tỷ lệ công việc» trên subwork/task chỉnh được như các ô khác.
+// 'cho-duyet' cho nó đã bị chặn hai lớp: CHECK `po_cho_duyet` hiện hành không kể tên 'ty-le',
+// và cửa `choDuyetHopLe` bên dưới cũng loại nó (chỉ create/update/delete được chờ duyệt).
+const HANH_DONG_DUOC_SUA = ['read', 'create', 'update', 'delete', 'approve', 'ty-le'];
 const GIA_TRI_HOP_LE = ['cho-phep', 'tu-choi', 'cho-duyet'];
 
 /** Vai được chỉnh trong bảng: mọi vai nghiệp vụ TRỪ admin (chính người sửa bảng). */

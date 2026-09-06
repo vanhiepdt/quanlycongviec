@@ -465,6 +465,20 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
 
   it('TC-RPC-26: getTasks trả mảng khoá tiếng Việt, «Mã dự án» đọc từ công việc cha', async () => {
     const taskId = (await call('addTaskWithAuth', [form()])).taskId;
+    // Bug 2 (8b): «Tiến độ (%)» không còn đọc ô nhập tay `completion` (vẫn ghi 40 ở TC-RPC-24)
+    // mà tính từ mức hoàn thành các NHÓM FILE KẾT QUẢ — 2/5 nhóm ở trạng thái kết ⇒ 40%.
+    await pool.query(
+      `INSERT INTO task_files (item_id, ten_goc, trang_thai)
+       SELECT i.id, v.ten, v.tt
+         FROM work_items i
+         JOIN (VALUES ('bao-cao-1.docx', 'hoan-thanh'),
+                      ('bao-cao-2.pdf',   'da-duyet'),
+                      ('ban-nhap-1.docx', 'cho-xem'),
+                      ('ban-nhap-2.docx', 'can-sua'),
+                      ('ban-nhap-3.docx', 'cho-lanh-dao')) v(ten, tt) ON TRUE
+        WHERE i.code = $1`,
+      [taskId]
+    );
     const list = await call('getTasks');
     expect(Array.isArray(list)).toBe(true);
     expect(list).toHaveLength(1);
@@ -474,6 +488,8 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     expect(row['Tên nhiệm vụ']).toBe('Viết tài liệu');
     expect(row['Người thực hiện']).toBe('Lê Văn C');
     expect(row['Tiến độ (%)']).toBe(40);
+    // Nhiệm vụ duy nhất của công việc ⇒ đầu mục duy nhất, tỷ lệ mặc định trọn 100.
+    expect(row['Tỷ lệ công việc (%)']).toBe(100);
     expect(row['Hạn chót']).toBe('2026-09-10');
     expect(row['Cấp']).toBe(3);
     expect(row['Mã cha']).toBe('');

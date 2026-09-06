@@ -20,13 +20,18 @@ export const QUERIES = Object.freeze({
                  w.status, w.start_date, w.end_date,
                  w.supervisor_id, w.leader_ids
             FROM v_countable_works w`,
+  // Bug 2 (8b): thêm `ty_le` — tiến độ công việc là bình quân GIA QUYỀN theo tỷ lệ của các đầu
+  // mục (tienDo.js). ORDER BY theo đúng thứ tự bootstrap (level, sort_order, code) để biểu đồ
+  // «nhãn theo thứ tự gặp thấy» khớp gói legacy — câu SELECT không ORDER BY bị planner đổi thứ
+  // tự dòng khi kế hoạch JOIN thay đổi.
   items: `SELECT i.id, i.code, i.work_id, i.parent_id, i.level, i.department_id,
                  i.name, i.assignee_id, i.assignee_name, i.status, i.priority,
-                 i.start_date, i.due_date, i.report_date, i.completion,
+                 i.start_date, i.due_date, i.report_date, i.completion, i.ty_le,
                  i.leader_ids, i.output,
                  w.manager_id AS work_manager_id
             FROM v_countable_items i
-            JOIN v_countable_works w ON w.id = i.work_id`,
+            JOIN v_countable_works w ON w.id = i.work_id
+           ORDER BY i.level, i.sort_order, i.code`,
 });
 
 async function run(sql) {

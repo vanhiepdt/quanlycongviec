@@ -340,3 +340,28 @@ export async function nguoiTheoId(id, client = null) {
   );
   return rows[0] ?? null;
 }
+
+/**
+ * ĐẾM NHÓM kết quả theo nhiệm vụ — một câu cho TOÀN bảng, dùng khi gắn tiến độ (8b lỗi 2,
+ * tienDo.js) cho cả bó dòng: bootstrap, thống kê, gantt, cây xuất Excel.
+ *
+ * Đơn vị đếm là NHÓM (task_files), không phải bản: `tong` là số nhóm đã khai, `xong` là số nhóm ở
+ * trạng thái kết thúc ('hoan-thanh' / 'da-duyet'). Nhóm «Chưa có» 0 bản vẫn đếm vào `tong` — khai
+ * kết quả mà chưa nộp là chưa xong kết quả ấy. Không JOIN bản nào nên câu đếm rẻ.
+ *
+ * Trả `Map<String(itemId), { tong, xong }>` — khoá dạng chuỗi vì pg trả bigint dạng chuỗi.
+ */
+export async function demNhomFileTheoItem(client = null) {
+  const { rows } = await db(client).query(
+    `SELECT item_id,
+            COUNT(*)::int AS tong,
+            COUNT(*) FILTER (WHERE trang_thai IN ('hoan-thanh', 'da-duyet'))::int AS xong
+       FROM task_files
+      GROUP BY item_id`
+  );
+  const dem = new Map();
+  for (const row of rows) {
+    dem.set(String(row.item_id), { tong: row.tong, xong: row.xong });
+  }
+  return dem;
+}

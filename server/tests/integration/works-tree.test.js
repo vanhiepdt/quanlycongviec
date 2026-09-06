@@ -112,6 +112,9 @@ describe('GET /api/v1/works/tree — ba tầng lồng sẵn', () => {
     const b = await add({ level: 3, name: 'Vòng B' });
     // Trigger không cho tạo vòng; tắt tạm để dựng đúng dữ liệu bẩn bản cũ có thể để lại.
     await pool.query('ALTER TABLE work_items DISABLE TRIGGER trg_work_items_check_parent');
+    // Tỷ lệ chỉ nằm ở đầu mục KHÔNG cha; lớp service luôn về 0 trước khi đổi cấu trúc —
+    // test cũng phải làm đúng trình tự đó nếu không sẽ vướng CHECK `work_items_ty_le_doi_tuong`.
+    await pool.query('UPDATE work_items SET ty_le = 0 WHERE id IN ($1, $2)', [a.id, b.id]);
     await pool.query('UPDATE work_items SET parent_id = $1 WHERE id = $2', [a.id, b.id]);
     await pool.query('UPDATE work_items SET parent_id = $1 WHERE id = $2', [b.id, a.id]);
     await pool.query('ALTER TABLE work_items ENABLE TRIGGER trg_work_items_check_parent');

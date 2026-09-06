@@ -26,9 +26,11 @@ import { groupManagerEmails, toPublic as departmentRest } from '../departments/s
 import * as notiRepo from '../notifications/repo.js';
 import * as proposalsService from '../proposals/service.js';
 import * as remindersRepo from '../reminders/repo.js';
+import { demNhomFileTheoItem } from '../taskFiles/repo.js';
 import * as usersRepo from '../users/repo.js';
 import { publicStaff } from '../users/service.js';
 import * as itemsRepo from '../workItems/repo.js';
+import { ganTienDo } from '../workItems/tienDo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
 import * as worksService from '../works/service.js';
 
@@ -244,6 +246,10 @@ export async function cayChoUser(user, works = null) {
       // chỉ chỗ này bắt được — đây là đường đọc của cả gói bootstrap và cầu RPC `getTasks`.
       thayDuocNhap(user, row)
   );
+  // Bug 2 (8b): tiến độ = mức hoàn thành các NHÓM FILE KẾT QUẢ, không còn là ô nhập tay.
+  // Gắn `tien_do` ở đây — chỗ duy nhất cả gói bootstrap lẫn cầu RPC `getTasks` cùng đi qua —
+  // một câu đếm cho toàn cây, không N+1. Cấp 2 tự cộng cả nhóm file của con trực tiếp.
+  ganTienDo(visibleItems, await demNhomFileTheoItem());
   // Tên theo tháng của cấp 2/cấp 3 gắn Ở ĐÂY, không phải trong `attachReminders`: đây là chỗ duy
   // nhất cả gói bootstrap và cầu RPC `getTasks` cùng đi qua, nên gắn một lần là cả hai đường đọc có.
   // `works` đã được `worksService.list` gắn sẵn phần của cấp 1.

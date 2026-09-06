@@ -18,6 +18,7 @@
 import * as deptRepo from '../departments/repo.js';
 import * as userRepo from '../users/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
+import { tienDoWork } from '../workItems/tienDo.js';
 import { banDoTenThang, khoaThang } from '../../utils/monthNames.js';
 import { boLocPhong, dungPhong, giaoNhau, ngayCua, taiDuLieuDem } from '../stats/service.js';
 
@@ -38,7 +39,9 @@ function nutItem(row) {
     startDate: row.start_date,
     dueDate: row.due_date,
     assigneeName: row.assignee_name ?? null,
-    completion: Number(row.completion ?? 0),
+    // Bug 2 (8b): thanh Gantt tô theo tiến độ từ FILE KẾT QUẢ (`tien_do` do `taiDuLieuDem`
+    // gắn), không đọc ô `completion` nhập tay cũ nữa.
+    completion: Number(row.tien_do ?? 0),
     // Phân công ba lớp + kết quả đầu ra — dữ liệu cho tooltip của giao diện Gantt.
     output: row.output ?? '',
     leaderNames: row.leader_names ?? [],
@@ -52,8 +55,9 @@ function nutItem(row) {
  * Gắn cây con vào một công việc: cấp 2 làm nhánh, cấp 3 là lá — nhiệm vụ MỒ CÔI (không cha)
  * nằm thẳng trong `work.tasks` chứ không biến mất (TC-TREE-24 giữ nguyên tinh thần ở đây).
  *
- * Tiến độ công việc TÍNH Ở SERVER từ nhiệm vụ cấp 3 (chuẩn §0.1), thay cho cách bản cũ đếm
- * trên mảng trộn cả cấp 2.
+ * Số nhiệm vụ hoàn thành đếm theo TRẠNG THÁI cấp 3 như cũ (chuẩn §0.1 · TC-TREE). RIÊNG
+ * `progress` (bug 2 · 8b) là bình quân gia quyền tỷ lệ × mức hoàn thành file kết quả của các
+ * đầu mục — cùng phép tính với thống kê E4 và cầu `getTasks`.
  */
 function ganCayCon(work, items) {
   const subs = [];
@@ -76,7 +80,7 @@ function ganCayCon(work, items) {
   ).length;
   work.taskCount = tong;
   work.completedCount = xong;
-  work.progress = tong > 0 ? Math.round((xong / tong) * 100) : 0;
+  work.progress = tienDoWork(items);
   return work;
 }
 

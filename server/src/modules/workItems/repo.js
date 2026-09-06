@@ -15,7 +15,7 @@ const COLUMNS = `id, code, work_id, parent_id, level, department_id,
                  supervisor_id, leader_ids,
                  name, description,
                  assignee_id, assignee_name, status, priority,
-                 start_date, due_date, report_date, completion,
+                 start_date, due_date, report_date, completion, ty_le,
                  target, output, notes, result_links,
                  approval_status, approver_id, approved_at, reject_reason,
                  xoa_yeu_cau_boi, xoa_yeu_cau_luc, xoa_ly_do,
@@ -37,6 +37,10 @@ const prefix = (alias) =>
  * Cột nghiệp vụ được phép ghi tự do. KHÔNG có `work_id`, `parent_id`, `level`, `code`: ba cột đầu
  * là cấu trúc cây (đổi chúng phải đi qua đúng một đường có kiểm tra ở service), còn `code` do
  * máy chủ sinh và không bao giờ đổi (§13.4 mục 6 — chuyển công việc thì GIỮ NGUYÊN mã).
+ *
+ * `ty_le` cũng KHÔNG có ở đây (8b lỗi 2): tỷ lệ công việc không phải dữ liệu của riêng một dòng
+ * mà là QUAN HỆ giữa các mục thuộc diện của cùng công việc — sửa một ô là co giãn cả tập, nên chỉ
+ * đi qua `updateTyLe` dưới sự điều phối của service (tyLe.js), ghi tự do ở đây sẽ phá tổng 100.
  *
  * `department_id` cũng KHÔNG có ở đây: phòng của cấp 2/cấp 3 luôn khớp phòng của công việc cha
  * (§4.1, 002_work_items_department.sql). Đổi phòng thì đổi ở công việc cấp 1 rồi trigger lan
@@ -433,6 +437,31 @@ export async function copyRow(
       o.assigned_at,
       sourceId,
     ]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Các mục THUỘC DIỆN mang tỷ lệ của một công việc (8b lỗi 2): việc con cấp 2 + nhiệm vụ cấp 3
+ * không cha — đúng đối tượng của CHECK `work_items_ty_le_doi_tuong` (018). Thứ tự ổn định
+ * (level, sort_order, id) để mọi phép chia trong tyLe.js bám đúng một cách xếp hàng ở cả hai đầu.
+ */
+export async function listTyLe(workId, client = null) {
+  const { rows } = await db(client).query(
+    `SELECT id, ty_le
+       FROM work_items
+      WHERE work_id = $1 AND (level = 2 OR (level = 3 AND parent_id IS NULL))
+      ORDER BY level, sort_order, id`,
+    [workId]
+  );
+  return rows;
+}
+
+/** Ghi tỷ lệ của MỘT dòng — chỉ service điều phối tyLe.js được gọi (xem chú thích WRITABLE). */
+export async function updateTyLe(id, tyLe, client = null) {
+  const { rows } = await db(client).query(
+    `UPDATE work_items SET ty_le = $2, updated_at = now() WHERE id = $1 RETURNING id, ty_le`,
+    [id, tyLe]
   );
   return rows[0] ?? null;
 }

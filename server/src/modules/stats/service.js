@@ -9,7 +9,9 @@
 //      phòng mình dù query string nói gì (TC-STAT-10).
 import { can } from '../../middleware/rbac.js';
 import * as deptRepo from '../departments/repo.js';
+import { demNhomFileTheoItem } from '../taskFiles/repo.js';
 import * as usersRepo from '../users/repo.js';
+import { ganTienDo, tienDoWork } from '../workItems/tienDo.js';
 import * as repo from './repo.js';
 
 /** "yyyy-MM-dd" theo giờ địa phương — cùng quy ước với `bootstrap/service.js` (`cron.js`). */
@@ -134,10 +136,16 @@ export function dungPhong(row, phongIds) {
  * đường đọc chênh nhau một chữ là đối chiếu số liệu (6.9) vô nghĩa.
  */
 export async function taiDuLieuDem(user) {
-  const [works, items] = await Promise.all([repo.listCountableWorks(), repo.listCountableItems()]);
+  const [works, itemsRaw] = await Promise.all([repo.listCountableWorks(), repo.listCountableItems()]);
+  const items = itemsRaw.filter((row) =>
+    can(user, 'read', row.level === 2 ? 'subwork' : 'task', row).ok
+  );
+  // Bug 2 (8b): tiến độ = mức hoàn thành các NHÓM FILE KẾT QUẢ. Gắn `tien_do` ở nguồn chung
+  // này để thống kê lẫn Gantt (cùng uống `taiDuLieuDem`) kể một câu chuyện.
+  ganTienDo(items, await demNhomFileTheoItem());
   return {
     works: works.filter((row) => can(user, 'read', 'work', row).ok),
-    items: items.filter((row) => can(user, 'read', row.level === 2 ? 'subwork' : 'task', row).ok),
+    items,
   };
 }
 
@@ -260,24 +268,19 @@ function bieuDoUuTien(tasks) {
   };
 }
 
-/** Tiến độ một công việc = % nhiệm vụ cấp 3 đã hoàn thành; không có nhiệm vụ nào ⇒ 0%. */
-const tienDo = (nhiemVuCuaWork) => {
-  if (nhiemVuCuaWork.length === 0) return 0;
-  const xong = nhiemVuCuaWork.filter((r) => laHoanThanh(r.status)).length;
-  return Math.round((xong / nhiemVuCuaWork.length) * 100);
-};
-
-/** E4 — tiến độ công việc (`renderProjectProgressChart`): 5 bucket cố định. */
-function bieuDoTienDoWorks(works, tasks) {
+/**
+ * E4 — tiến độ công việc (`renderProjectProgressChart`): 5 bucket cố định.
+ *
+ * Bug 2 (8b): tiến độ một công việc = bình quân GIA QUYỀN tỷ lệ × mức hoàn thành file kết quả
+ * của các đầu mục (cấp 2 / nhiệm vụ độc lập), KHÔNG đếm nhiệm vụ hoàn thành theo trạng thái.
+ * `itemsByWork` là nhiệm vụ đã lọc PHÒNG nhưng KHÔNG lọc tháng — tiến độ là thuộc tính của cả
+ * công việc, bộ lọc tháng chỉ quyết công việc nào được vẽ, không cắt khúc tiến độ của nó.
+ */
+function bieuDoTienDoWorks(works, itemsByWork) {
   if (works.length === 0) return RONG('project-progress');
   const buckets = { '0-25%': 0, '26-50%': 0, '51-75%': 0, '76-99%': 0, '100%': 0 };
-  const tasksByWork = new Map();
-  for (const row of tasks) {
-    if (!tasksByWork.has(row.work_id)) tasksByWork.set(row.work_id, []);
-    tasksByWork.get(row.work_id).push(row);
-  }
   for (const work of works) {
-    const pct = tienDo(tasksByWork.get(work.id) ?? []);
+    const pct = tienDoWork(itemsByWork.get(work.id) ?? []);
     if (pct === 100) buckets['100%'] += 1;
     else if (pct >= 76) buckets['76-99%'] += 1;
     else if (pct >= 51) buckets['51-75%'] += 1;
@@ -351,8 +354,13 @@ function bieuDoThoiGian(tasks) {
   return { type: 'timeline-progress', labels, data: [...dem.values()] };
 }
 
-/** E3 — so sánh công việc (`renderProjectComparisonChart`): top 5 theo tổng nhiệm vụ. */
-function bieuDoSoSanh(works, tasks) {
+/**
+ * E3 — so sánh công việc (`renderProjectComparisonChart`): top 5 theo tổng nhiệm vụ.
+ *
+ * Số nhiệm vụ đếm theo trạng thái như cũ; RIÊNG `completionRate` (bug 2 · 8b) là tiến độ
+ * bình quân gia quyền theo file kết quả — cùng một phép tính với E4.
+ */
+function bieuDoSoSanh(works, tasks, itemsByWork) {
   if (works.length === 0) return RONG('project-comparison');
   const tasksByWork = new Map();
   for (const row of tasks) {
@@ -368,7 +376,7 @@ function bieuDoSoSanh(works, tasks) {
         name: ten.length > 15 ? `${ten.slice(0, 15)}...` : ten,
         totalTasks: nhiemVu.length,
         completedTasks: xong,
-        completionRate: tienDo(nhiemVu),
+        completionRate: tienDoWork(itemsByWork.get(work.id) ?? []),
       };
     })
     .filter((row) => row.totalTasks > 0)
@@ -396,6 +404,14 @@ export async function charts(user, type, filters = {}) {
     duLieu.items.filter((row) => Number(row.level) === 3),
     { ...loc, cotKetThuc: 'due_date' }
   );
+  // Bug 2 (8b): nguồn của E4/E3 — nhiệm vụ MỌI CẤP đã gắn `tien_do`, lọc PHÒNG nhưng không
+  // lọc tháng (tiến độ là thuộc tính của cả công việc).
+  const itemsByWork = new Map();
+  for (const row of duLieu.items) {
+    if (!dungPhong(row, loc.phongIds)) continue;
+    if (!itemsByWork.has(row.work_id)) itemsByWork.set(row.work_id, []);
+    itemsByWork.get(row.work_id).push(row);
+  }
   switch (type) {
     case 'status':
       return bieuDoTrangThai(tasks);
@@ -406,9 +422,9 @@ export async function charts(user, type, filters = {}) {
     case 'staff-performance':
       return bieuDoNhanSu(tasks);
     case 'project-progress':
-      return bieuDoTienDoWorks(works, tasks);
+      return bieuDoTienDoWorks(works, itemsByWork);
     case 'project-comparison':
-      return bieuDoSoSanh(works, tasks);
+      return bieuDoSoSanh(works, tasks, itemsByWork);
     default:
       return RONG(type);
   }

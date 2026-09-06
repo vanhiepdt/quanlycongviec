@@ -9,7 +9,7 @@
 //     và những thứ CSDL không biết — cha có phải con cháu của chính nó không (CYCLE), tên người
 //     thực hiện tra ra ai, ngày nào đáng cảnh báo.
 import { withTransaction } from '../../db/pool.js';
-import { can } from '../../middleware/rbac.js';
+import { ACTION_TY_LE, can } from '../../middleware/rbac.js';
 import { mergeWarnings, warnDueBeforeStart, warnOutsideWorkRange } from '../../utils/dateChecks.js';
 import { AppError, notFound } from '../../utils/errors.js';
 import { attachRefs } from '../../utils/historyRefs.js';
@@ -34,6 +34,7 @@ import * as worksRepo from '../works/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
 import { assertThangDatDuoc } from '../workMonthNames/service.js';
 import * as repo from './repo.js';
+import { chiaKhiSua, chiaKhiThem, chiaKhiXoa, laDauMuc } from './tyLe.js';
 
 /** Cấp 2 và cấp 3 là HAI loại thực thể khác nhau trong ma trận quyền §6, không được gộp. */
 const entityOf = (level) => (Number(level) === repo.LEVEL_SUBWORK ? 'subwork' : 'task');
@@ -66,6 +67,52 @@ async function mustFindWork(ref, client = null) {
   const work = await worksRepo.findByRef(ref, client);
   if (!work) throw notFound(`Không tìm thấy công việc "${ref}"`);
   return work;
+}
+
+// ============================================================================
+// Tỷ lệ công việc (8b lỗi 2) — luật chia là các hàm THUẦN trong tyLe.js, phần ở đây chỉ là
+// điều phối: đọc trạng thái MỚI NHẤT của công việc trong cùng giao dịch vừa biến động, tính
+// mảng tỷ lệ mới, và chỉ ghi những dòng thực sự đổi.
+// ============================================================================
+
+/**
+ * Cân lại tỷ lệ của MỘT công việc sau thêm / xoá / sửa. Luông gọi BÊN TRONG giao dịch vừa gây
+ * biến động và SAU câu ghi cấu trúc — để `listTyLe` đọc đúng bức tranh mới.
+ *
+ * @param {string} workId công việc cần cân
+ * @param {object} cho biết biến động nào: `themId` / `xoaId` / `suaId` (+ `suaGiaTri`)
+ * @returns {Map<String, number>} id → tỷ lệ MỚI của những dòng bị đổi, để service vá dòng trả về
+ *   (RETURNING của câu ghi cấu trúc chạy trước khi cân nên giá trị trong đó đã cũ).
+ */
+async function canLaiTyLeWork(
+  workId,
+  client,
+  { themId = null, xoaId = null, suaId = null, suaGiaTri = null } = {}
+) {
+  const rows = await repo.listTyLe(workId, client);
+  const values = rows.map((r) => Number(r.ty_le) || 0);
+  let ketQua;
+  if (themId != null) {
+    const viTri = rows.findIndex((r) => String(r.id) === String(themId));
+    if (viTri < 0) return new Map(); // không (còn) thuộc diện của công việc này — không đụng
+    ketQua = chiaKhiThem(values.filter((_, i) => i !== viTri), viTri);
+  } else if (xoaId != null) {
+    ketQua = chiaKhiXoa(values);
+  } else if (suaId != null) {
+    const viTri = rows.findIndex((r) => String(r.id) === String(suaId));
+    if (viTri < 0) return new Map();
+    ketQua = chiaKhiSua(values, viTri, suaGiaTri);
+  } else {
+    return new Map();
+  }
+  const daThayDoi = new Map();
+  for (let i = 0; i < rows.length; i += 1) {
+    if ((Number(rows[i].ty_le) || 0) !== ketQua[i]) {
+      await repo.updateTyLe(rows[i].id, ketQua[i], client);
+      daThayDoi.set(String(rows[i].id), ketQua[i]);
+    }
+  }
+  return daThayDoi;
 }
 
 /** So tên người: cắt trắng, bỏ phân biệt hoa/thường — dữ liệu nhập tay có cả hai kiểu. */
@@ -348,8 +395,27 @@ export function create(user, input) {
       )
     );
 
+    // Tỷ lệ công việc (8b lỗi 2): dòng mới THUỘC DIỆN thì tham gia cân tỷ lệ — đọc sau insert nên
+    // danh sách đã có mặt dòng này, mọi câu ghi vẫn trong giao dịch đang mở. Không thuộc diện
+    // (nhiệm vụ cấp 3 nằm trong việc con) thì ty_le mặc định 0 là đúng, khỏi cân.
+    let rowCuoi = row;
+    if (laDauMuc(row)) {
+      const daThayDoi = await canLaiTyLeWork(work.id, client, { themId: row.id });
+      rowCuoi = { ...row, ty_le: daThayDoi.get(String(row.id)) ?? row.ty_le };
+      // Tỷ lệ gửi tường minh: người tạo có quyền sửa tỷ lệ thì áp SAU lượt chia đều («khi tạo có
+      // thể chỉnh sửa»). Không quyền thì LẶNG LẼ BỎ QUA — tạo mới không được thất bại vì một ô
+      // gia vị của form; rào 403 dành cho đường SỬA nơi ô tỷ lệ là nội dung chính của request.
+      if (input.ty_le !== undefined && input.ty_le !== null && can(user, ACTION_TY_LE, entityOf(level), row).ok) {
+        const lanHai = await canLaiTyLeWork(work.id, client, {
+          suaId: row.id,
+          suaGiaTri: input.ty_le,
+        });
+        rowCuoi = { ...rowCuoi, ty_le: lanHai.get(String(row.id)) ?? rowCuoi.ty_le };
+      }
+    }
+
     return {
-      item: { ...row, reminders: [] },
+      item: { ...rowCuoi, reminders: [] },
       warnings: mergeWarnings(
         assignee.warnings,
         warnDueBeforeStart(row.start_date, row.due_date),
@@ -478,6 +544,32 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
       parentMoi = parent ?? null;
     }
 
+    // Tỷ lệ công việc (8b lỗi 2). Nếu có gửi thì kiểm quyền TRƯỚC mọi câu ghi — 403 phải nổ khi
+    // chưa có gì thay đổi. Giá trị này KHÔNG vào patch SQL (không thuộc WRITABLE): các lời gọi
+    // canLaiTyLeWork cuối hàm sẽ ghi nó, trong cùng giao dịch, sau mọi thay đổi cấu trúc.
+    const coGuiTyLe = Object.hasOwn(patch, 'ty_le') && patch.ty_le !== undefined;
+    if (coGuiTyLe) assertCan(user, ACTION_TY_LE, current);
+
+    // Sau các thay đổi cấu trúc thì dòng còn THUỘC DIỆN mang tỷ lệ không? Cấp không đổi
+    // (LEVEL_IMMUTABLE), chỉ work_id / parent_id có thể đổi.
+    const truocLaDauMuc = laDauMuc(current);
+    const parentIdSau = Object.hasOwn(structural, 'parent_id')
+      ? structural.parent_id
+      : current.parent_id;
+    const sauLaDauMuc = laDauMuc({ level: current.level, parent_id: parentIdSau });
+    if (coGuiTyLe && !sauLaDauMuc) {
+      throw err(
+        'VALIDATION_ERROR',
+        'Dòng này không mang tỷ lệ công việc (nhiệm vụ nằm trong công việc con)',
+        { field: 'tyLe' }
+      );
+    }
+    // Mất diện thì PHẢI về 0 TRƯỚC câu ghi cấu trúc: CHECK `work_items_ty_le_doi_tuong` (018)
+    // nghiệm theo từng câu, để sau updateStructure mới dọn là nổ giữa giao dịch.
+    if (truocLaDauMuc && !sauLaDauMuc) {
+      await repo.updateTyLe(current.id, 0, client);
+    }
+
     const assignee = await resolveAssignee(patch, current, client);
     // Phân công ba lớp: kiểm nguồn khi leader/cha/công việc liên quan thay đổi (005_phan_cong.sql).
     await kiemPhanCongKhiSua(
@@ -519,14 +611,40 @@ export function update(user, ref, patch = {}, { targetWorkRef = undefined } = {}
       )
     );
 
+    // Cân tỷ lệ TRONG CÙNG GIAO DỊCH với thay đổi cấu trúc — đọc sau updateStructure để
+    // listTyLe thấy đúng bức tranh mới. Bốn ca theo diện trước/sau và công việc chứa dòng:
+    //   diện → mất diện      : cân công việc cũ như vừa xoá dòng này (giá trị đã về 0 ở trên);
+    //   diện → diện, khác việc: công việc cũ mất một phần, công việc mới thêm một phần;
+    //   không diện → diện     : cân công việc mới như vừa thêm dòng này;
+    //   diện → diện, cùng việc: không cân cấu trúc (tỷ lệ giữ nguyên).
+    const workIdSau = Object.hasOwn(structural, 'work_id') ? structural.work_id : current.work_id;
+    const daThayDoi = new Map();
+    const gop = (m) => {
+      for (const [k, v] of m) daThayDoi.set(k, v);
+    };
+    if (truocLaDauMuc && !sauLaDauMuc) {
+      gop(await canLaiTyLeWork(current.work_id, client, { xoaId: current.id }));
+    } else if (truocLaDauMuc && sauLaDauMuc && workIdSau !== current.work_id) {
+      await canLaiTyLeWork(current.work_id, client, { xoaId: current.id });
+      gop(await canLaiTyLeWork(workIdSau, client, { themId: current.id }));
+    } else if (!truocLaDauMuc && sauLaDauMuc) {
+      gop(await canLaiTyLeWork(workIdSau, client, { themId: current.id }));
+    }
+    // Sửa tay ô tỷ lệ — sau lượt cân cấu trúc để giá trị đặt trên bức tranh cuối cùng.
+    if (coGuiTyLe) {
+      gop(await canLaiTyLeWork(workIdSau, client, { suaId: current.id, suaGiaTri: patch.ty_le }));
+    }
+    const rowCuoi = { ...row, ty_le: daThayDoi.get(String(row.id)) ?? row.ty_le };
+
     return {
-      item: { ...row, reminders: await remindersRepo.listByItem(row.id, client) },
+      item: { ...rowCuoi, reminders: await remindersRepo.listByItem(row.id, client) },
       moved,
       choDuyetLai: phaiDuyetLai,
       parentCleared: moved && current.parent_id != null && row.parent_id == null,
       // Nhật ký "các lần chỉnh sửa" (§2.3): kể cả hai cột cấu trúc, vì "chuyển sang công việc
-      // khác" là thay đổi người dùng cần thấy nhất trong nhật ký.
-      changes: diffRows(current, row, [...repo.WRITABLE, 'work_id', 'parent_id']),
+      // khác" là thay đổi người dùng cần thấy nhất trong nhật ký; `ty_le` (8b lỗi 2) cũng là
+      // chỉnh sửa người dùng thấy được.
+      changes: diffRows(current, rowCuoi, [...repo.WRITABLE, 'work_id', 'parent_id', 'ty_le']),
       warnings: mergeWarnings(
         assignee.warnings,
         warnDueBeforeStart(row.start_date, row.due_date),
@@ -559,6 +677,12 @@ export function remove(user, ref) {
     if (!xoaOk.ok) throw new AppError('FORBIDDEN', xoaOk.message, { canXinXoa: true });
     const children = await repo.listDescendants(current.id, client);
     await repo.remove(current.id, client);
+    // Tỷ lệ công việc (8b lỗi 2): dòng vừa xoá THUỘC DIỆN thì cân phần còn lại về đúng 100, cùng
+    // giao dịch. Con cháu xoá theo CASCADE đều là cấp 3 nằm trong việc con — không thuộc diện —
+    // nên chỉ cần một lượt cân của chính công việc này.
+    if (laDauMuc(current)) {
+      await canLaiTyLeWork(current.work_id, client, { xoaId: current.id });
+    }
     return {
       deletedItem: current.code,
       deletedChildren: children.map((r) => r.code),
@@ -654,8 +778,17 @@ export function copy(user, ref, { name = null } = {}) {
       copiedCodes.push(copied.code);
     }
 
+    // Tỷ lệ công việc (8b lỗi 2): bản sao KHÔNG thừa hưởng tỷ lệ (copyRow để ty_le mặc định 0);
+    // nếu bản sao thuộc diện thì nó tham gia cân như một mục mới tạo. Chỉ bản sao dòng GỐC có thể
+    // thuộc diện — các con cháu bản sao đều nằm trong việc con.
+    let itemCuoi = item;
+    if (laDauMuc(item)) {
+      const daThayDoi = await canLaiTyLeWork(source.work_id, client, { themId: item.id });
+      itemCuoi = { ...item, ty_le: daThayDoi.get(String(item.id)) ?? item.ty_le };
+    }
+
     return {
-      item: { ...item, reminders: [] },
+      item: { ...itemCuoi, reminders: [] },
       copiedChildren: copiedCodes,
       copiedCount: 1 + copiedCodes.length,
     };
