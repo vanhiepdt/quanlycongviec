@@ -74,6 +74,12 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     ports:
       - '127.0.0.1:3000:3000'
+    volumes:
+      # File người dùng upload (GOC_STORAGE trong taskFiles/service.js) phải nằm NGOÀI
+      # ảnh — không thì dựng lại ảnh là mất hết. Thư mục trên host phải thuộc về
+      # uid 1000 (user `node` trong ảnh):
+      #   mkdir -p server/storage && chown 1000:1000 server/storage
+      - ../server/storage:/app/storage
     depends_on:
       db:
         # server.js tự SELECT 1 trước khi listen và thoát nếu hỏng, nhưng đợi db
