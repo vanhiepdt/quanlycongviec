@@ -1,0 +1,111 @@
+# Bản chạy THẬT trên VPS (Phase 8 việc 2) — bản cho máy dev là docker-compose.dev.yml.
+#
+#   TRÊN VPS, TRƯỚC KHI CHẠY LẦN ĐẦU: tạo swap 2–4 GB (máy 6 GB RAM đang 0 swap,
+#   OnlyOffice ngốn RAM lúc dịch tài liệu) — lệnh trong deploy/runbook.md.
+#
+#   cd /opt/qlcv/deploy && docker compose build && docker compose up -d
+#
+#   app        — API Node (ảnh dựng từ Dockerfile ở GỐC repo). Chỉ buộc 127.0.0.1:3000;
+#                NGINX CHẠY TRÊN HOST (việc 4) mới là cửa HTTPS ra Internet — KHÔNG
+#                nhúng nginx vào compose.
+#   db         — PostgreSQL 16. KHÔNG publish port: chỉ app nối qua mạng nội bộ
+#                compose, Internet không thấy được.
+#   onlyoffice — Document Server (việc 5). JWT BẮT BUỘC (thiếu ONLYOFFICE_JWT_SECRET
+#                là compose từ chối chạy) và cũng chỉ buộc 127.0.0.1.
+#
+# Biến môi trường lấy từ deploy/.env (compose ở deploy/ nên tự nạp để thế chỗ ${...}
+# và nạp cho env_file). `environment:` LUÔN ĐÈ `env_file:` — DATABASE_URL của .env bị
+# đè thành địa chỉ nội bộ `db`, NODE_ENV luôn là production.
+#
+# Chỉ dẫn cho VPS (ghi ở đây khỏi quên, chi tiết trong runbook):
+#   - ONLYOFFICE_CALLBACK_BASE trong .env phải là http://app:3000 — container
+#     OnlyOffice gọi ngược app qua TÊN dịch vụ trong mạng compose (KHÔNG phải
+#     host.docker.internal như máy dev).
+#   - CRON_ENABLED=true, SESSION_COOKIE_SECURE=true, APP_BASE_URL=https://ttdt.site,
+#     ZALO_BOT_NHAN=webhook (dev để false/tat).
+
+name: quanlycongviec
+
+# Xoay vòng log cho cả ba dịch vụ: 10 MB × 5 file — không để log nuốt đĩa VPS.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: qlcv-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?thiếu POSTGRES_DB trong deploy/.env}
+      POSTGRES_USER: ${POSTGRES_USER:?thiếu POSTGRES_USER trong deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?thiếu POSTGRES_PASSWORD trong deploy/.env}
+      # Cần cho so sánh chữ có dấu và sắp xếp tên tiếng Việt (đồng bộ compose dev).
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C.UTF-8'
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # KHÔNG có ports — chủ ý: db không được lộ ra host/Internet (Phase 8 việc 2).
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-qlcv} -d ${POSTGRES_DB:-quanlycongviec}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *logging
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: qlcv-app
+    restart: unless-stopped
+    # PID 1 là node — init:true để thu hoạch tiến trình con và tín hiệu SIGTERM chuẩn
+    # (server.js thoát lịch sự trong 10 giây khi nhận SIGTERM).
+    init: true
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      # Đè DATABASE_URL của .env: trong compose phải nối db qua tên dịch vụ `db`.
+      # Mật khẩu chỉ dùng chữ-số: ký tự đặc biệt (@ : /) phá vỡ chuỗi URL này.
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      db:
+        # server.js tự SELECT 1 trước khi listen và thoát nếu hỏng, nhưng đợi db
+        # khỏe ở đây cho lần chạy đầu (initdb) khỏi phải khởi động lại app.
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/healthz || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *logging
+
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: qlcv-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: 'true'
+      # Không chạy OnlyOffice không JWT (Phase 8): thiếu biến là compose dừng ngay.
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?thiếu ONLYOFFICE_JWT_SECRET — không chạy OnlyOffice không JWT}
+      JWT_HEADER: Authorization
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+    ports:
+      # nginx trên host (việc 4) proxy office.ttdt.site về 127.0.0.1:8081.
+      - '127.0.0.1:8081:80'
+    volumes:
+      - oo-data:/var/www/onlyoffice/Data
+      - oo-logs:/var/log/onlyoffice
+    logging: *logging
+
+volumes:
+  pgdata:
+  oo-data:
+  oo-logs:

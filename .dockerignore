@@ -1,0 +1,46 @@
+# Ngữ cảnh dựng ảnh là GỐC repo (Dockerfile + deploy/docker-compose.yml, Phase 8 việc 2).
+# Chỉ cần server/package*.json + server/src + server/scripts — loại hết phần còn lại
+# để ngữ cảnh nhỏ và KHÔNG mang bí mật vào ảnh.
+
+# Mã nguồn cũ Google Apps Script, tài liệu, dữ liệu mẫu
+*.gs
+*.gs.moi
+*.bak
+*.html
+KE-HOACH-*.md
+HUONG-DAN-*.md
+README.md
+unmapped_report.txt
+docs/
+data/
+web/
+tools/
+
+# Cấu hình triển khai và BÍ MẬT — tuyệt đối không vào ảnh
+deploy/
+.env
+*.env
+chay.bat
+chay-test.bat
+
+# Thư viện npm (cài lại trong ảnh bằng npm ci) và dữ liệu người dùng
+node_modules/
+server/node_modules/
+server/storage/
+
+# Phần của server không cần trong ảnh chạy thật
+server/tests/
+server/tools/
+server/web/
+server/deploy/
+server/eslint.config.js
+server/vitest.config.js
+server/_*
+
+# Tạp
+.git/
+.gitignore
+.vscode/
+.claude/
+coverage/
+*.log
