@@ -3,7 +3,9 @@
 // Đây là tầng thấp nhất của phòng tuyến "Chờ duyệt không được vào bất kỳ con số nào": nếu view
 // sai thì mọi thẻ số và biểu đồ đọc qua nó cũng sai theo, mà không truy vấn nào báo lỗi. Nên
 // kiểm thẳng trên SQL, không qua HTTP: một dòng dữ liệu, một câu SELECT, một con số.
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { QUERIES } from '../../src/modules/stats/repo.js';
 import { closePool } from '../../src/db/pool.js';
 import { makeDepartment, makeItem, makeWork, pool, resetTables } from '../helpers/db.js';
 
@@ -22,6 +24,74 @@ const codesIn = async (view) => {
   const { rows } = await pool.query(`SELECT code FROM ${view} ORDER BY code`);
   return rows.map((r) => r.code);
 };
+
+const migration019 = readFileSync(
+  new URL('../../src/db/migrations/019_refresh_countable_views.sql', import.meta.url),
+  'utf8'
+)
+  .split('-- Up Migration')[1]
+  .split('-- Down Migration')[0];
+
+// Fixture tạo TRƯỚC giao dịch, mọi DDL và thay đổi trạng thái dùng cùng client;
+// finally rollback cả khi assertion lỗi, không để view thiếu cột lọt sang file khác.
+describe('019 sửa view cũ thiếu ty_le', () => {
+  it.each(['Nháp', 'Chờ duyệt'])('giữ dữ liệu/tỷ lệ và lọc %s ở cả ba cấp', async (status) => {
+    const work = await makeWork({ code: 'CV001', department_id: dept.id });
+    const sub = await makeItem({ code: 'CV001-001', work_id: work.id, level: 2 });
+    await makeItem({ code: 'CV001-002', work_id: work.id, parent_id: sub.id, level: 3 });
+    const db = await pool.connect();
+    try {
+      await db.query('BEGIN');
+      await db.query('UPDATE work_items SET ty_le = 73 WHERE id = $1', [sub.id]);
+      const snapshot = async () => ({
+        works: (await db.query('SELECT * FROM works ORDER BY id')).rows,
+        items: (await db.query('SELECT * FROM work_items ORDER BY id')).rows,
+      });
+      const before = await snapshot();
+      const base = await db.query('SELECT * FROM work_items LIMIT 0');
+      const columns = base.fields.filter((f) => f.name !== 'ty_le').map((f) => `i."${f.name}"`);
+      await db.query('DROP VIEW v_countable_items');
+      await db.query(`CREATE VIEW v_countable_items AS SELECT ${columns.join(', ')}
+        FROM work_items i JOIN works w ON w.id = i.work_id
+        LEFT JOIN work_items p ON p.id = i.parent_id
+        WHERE i.approval_status NOT IN ('Chờ duyệt','Nháp')
+          AND w.approval_status NOT IN ('Chờ duyệt','Nháp')
+          AND (p.id IS NULL OR p.approval_status NOT IN ('Chờ duyệt','Nháp'))`);
+      await db.query('SAVEPOINT stale');
+      await expect(db.query(`${QUERIES.items} LIMIT 0`)).rejects.toMatchObject({ code: '42703' });
+      await db.query('ROLLBACK TO SAVEPOINT stale');
+      await db.query(migration019);
+      await db.query(migration019); // đã sửa rồi: chạy lại vẫn hợp lệ, không đụng dữ liệu
+      expect(await snapshot()).toEqual(before);
+      for (const [table, view] of [
+        ['works', 'v_countable_works'],
+        ['work_items', 'v_countable_items'],
+      ]) {
+        const original = await db.query(`SELECT * FROM ${table} LIMIT 0`);
+        const repaired = await db.query(`SELECT * FROM ${view} LIMIT 0`);
+        expect(repaired.fields.map((f) => f.name)).toEqual(original.fields.map((f) => f.name));
+      }
+      expect((await db.query(QUERIES.works)).rows).toHaveLength(1);
+      const items = (await db.query(QUERIES.items)).rows;
+      expect(items).toHaveLength(2);
+      expect(items.find((i) => i.id === sub.id).ty_le).toBe(73);
+      await db.query('UPDATE work_items SET approval_status = $1 WHERE level = 3', [status]);
+      expect((await db.query(QUERIES.items)).rows).toHaveLength(1);
+      await db.query("UPDATE work_items SET approval_status = 'Đã duyệt' WHERE level = 3");
+      await db.query('UPDATE work_items SET approval_status = $1 WHERE id = $2', [status, sub.id]);
+      expect((await db.query(QUERIES.items)).rows).toHaveLength(0);
+      await db.query("UPDATE work_items SET approval_status = 'Đã duyệt'");
+      await db.query('UPDATE works SET approval_status = $1', [status]);
+      expect((await db.query(QUERIES.works)).rows).toHaveLength(0);
+      expect((await db.query(QUERIES.items)).rows).toHaveLength(0);
+    } finally {
+      await db.query('ROLLBACK');
+      db.release();
+    }
+    // Kiểm thêm rằng ROLLBACK trả lại view thật, không để lọt fixture cũ sang test sau.
+    await expect(pool.query(`${QUERIES.items} LIMIT 0`)).resolves.toBeDefined();
+  });
+});
 
 const setApproval = (table, id, status) =>
   pool.query(`UPDATE ${table} SET approval_status = $1 WHERE id = $2`, [status, id]);
