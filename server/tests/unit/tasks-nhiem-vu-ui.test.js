@@ -90,6 +90,22 @@ beforeEach(() => {
   window.__tasks('phong', '');
 });
 
+it('TC-QLCV-MONTH: việc tháng 10 bị lọc có hướng dẫn, Tất cả tháng hiện mà không đổi ngày', () => {
+  document.body.innerHTML = '<div id="tasks-grid"></div>';
+  window.__tasks('user', { name: 'QL', role: 'Quản lý công việc', department_id: 3 });
+  window.__tasks('projects', [
+    { [C.P_ID]: 'CV1', [C.P_NAME]: 'Việc tháng 10', [window.COL.P_DEPT_ID]: 3 },
+  ]);
+  const task = nhiemVu('NV1', 'CV1', '', '2026-10-01', '2026-10-31', '', 'Chưa gán');
+  window.__tasks('tasks', [task]);
+  window.renderTasks();
+  expect(document.getElementById('tasks-grid').textContent).toContain('Tất cả tháng');
+  window.__tasks('thang', 0);
+  window.renderTasks();
+  expect(document.getElementById('tasks-grid').textContent).toContain('Nhiệm vụ NV1');
+  expect(task[C.T_START]).toBe('2026-10-01');
+});
+
 describe('TC-TASKUI-01..04 — lọc THÁNG bằng luật GIAO khoảng, so bằng số thứ tự ngày', () => {
   it('TC-TASKUI-01: nhiệm vụ nằm trọn trong tháng thì hiện', () => {
     expect(

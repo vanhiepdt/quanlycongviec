@@ -411,6 +411,11 @@ function showProjectDetailsModal(projectId, projectName) {
     orphanHtml +
     "\n            </div>\n" +
     "        </div>\n" +
+    (!chiDocDuyet() && project[COL.P_APPROVAL] === "Nháp"
+      ? '<footer class="project-draft-footer flex justify-end gap-3 px-5 py-4 border-t bg-white flex-shrink-0">' +
+        '<button type="button" class="btn-secondary draft-close-btn">Lưu tạm</button>' +
+        '<button type="button" class="btn-primary draft-submit-btn">Gửi đi phê duyệt</button></footer>'
+      : "") +
     "    </div>\n" +
     "</div>\n";
 
@@ -418,6 +423,28 @@ function showProjectDetailsModal(projectId, projectName) {
   const modalEl = document.getElementById("project-details-modal");
   if (!modalEl) return;
   modalEl.classList.add("active");
+  modalEl.querySelector(".draft-close-btn")?.addEventListener("click", () => {
+    // Cha và từng lần sửa con đã được lưu riêng; không gửi một lệnh lưu giả.
+    closeModal("project-details-modal");
+  });
+  modalEl.querySelector(".draft-submit-btn")?.addEventListener("click", async event => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    const controls = modalEl.querySelectorAll(".draft-close-btn, .draft-submit-btn, .close-modal");
+    controls.forEach(control => { control.disabled = true; });
+    button.textContent = "Đang gửi…";
+    try {
+      const sent = await guiDuyetCaCay("work", projectId);
+      if (sent && document.getElementById("project-details-modal") === modalEl) {
+        showProjectDetailsModal(projectId, projectName);
+      }
+    } catch (_) {
+      showToast("Không gửi được công việc. Vui lòng thử lại.", "error");
+    } finally {
+      controls.forEach(control => { control.disabled = false; });
+      button.textContent = "Gửi đi phê duyệt";
+    }
+  });
   modalEl.querySelectorAll(".close-modal").forEach(closeButton => {
     closeButton.addEventListener("click", event => {
       event.preventDefault();

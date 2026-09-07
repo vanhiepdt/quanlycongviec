@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260906-2");
+console.info("[QLCV] app.js 20260907-1");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -653,9 +653,11 @@ function setupEventListeners() {
       const target = event.target.matches(".gui-duyet-btn") ? event.target : event.target.closest(".gui-duyet-btn"),
         entity = target.dataset.entity || "work",
         id = target.dataset.id;
-      if (id) {
+      if (id && !target.disabled) {
         target.disabled = true;
-        guiDuyetCaCay(entity, id);
+        guiDuyetCaCay(entity, id)
+          .catch(() => showToast("Không gửi được công việc. Vui lòng thử lại.", "error"))
+          .finally(() => { target.disabled = false; });
       }
       return;
     }
@@ -1139,6 +1141,12 @@ function dsPhongToiPhuTrach() {
  * Nhiệm vụ không có cột phòng riêng nên phòng lấy từ CÔNG VIỆC cha (`COL.P_DEPT`, cùng cách với
  * `taskMatchesDeptFilter`). Công việc chung (không phòng) KHÔNG vào: máy chủ cũng không cho.
  */
+// Chỉ bổ sung quyền ĐỌC của Quản lý công việc, dùng ID có ngay trong bootstrap.
+function quanLyCungPhong(project) {
+  const dept = String(currentUser?.department_id ?? "").trim();
+  return currentUser?.role === "Quản lý công việc" && dept !== "" &&
+    dept === String(project?.[COL.P_DEPT_ID] ?? "").trim();
+}
 function dsNhiemVuToiDuocThay() {
   if (isAdmin()) return allTasks;
   const phongPhuTrach = dsPhongToiPhuTrach();
@@ -1149,6 +1157,7 @@ function dsNhiemVuToiDuocThay() {
     if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
     const project = allProjects.find(project2 => project2[COL.P_ID] === task[COL.T_PID]);
     if (!project) return false;
+    if (quanLyCungPhong(project)) return true;
     if (project[COL.P_MANAGER] === currentUser.name) return true;
     const phongCongViec = String(project[COL.P_DEPT] || "").trim();
     if (laLanhDaoPhong() && phongCuaToi !== "" && phongCongViec === phongCuaToi) return true;
@@ -1181,7 +1190,7 @@ function renderTasks() {
       xep = xepNhiemVuTheoCongViecCon(data[sorted2], sorted2);
     if (xep.khoi.length === 0) return;
     text += createTasksWorkSeparatorHtml(sorted2, projectName, project, xep.tongSoNhiemVu) + xep.khoi.map(khoi => createTasksSubworkBlockHtml(khoi)).join("");
-  }), tasksGridEl.innerHTML = text || "<div class=\"loading-card\">Không có nhiệm vụ nào khớp bộ lọc đã chọn</div>";
+  }), tasksGridEl.innerHTML = text || "<div class=\"loading-card\">Không có nhiệm vụ nào khớp bộ lọc đã chọn. Chọn «Tất cả tháng» trong ô Tháng hoặc điều chỉnh các bộ lọc để xem nhiệm vụ khác.</div>";
 }
 /**
  * Dải phân cách MỎNG của công việc cấp 1 (2026-08-27): chỉ một dòng tiêu đề, không lặp lại thanh
@@ -4724,7 +4733,7 @@ function getUserAllowedProjects() {
       filteredTasks2 = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name),
       values2 = [...new Set(filteredTasks2.map(filteredTasks22 => filteredTasks22[COL.T_PID]))],
       set2 = new Set([...filteredProjects2.map(filteredProjects22 => filteredProjects22[COL.P_ID]), ...values2]);
-    return allProjects.filter(project => set2.has(project[COL.P_ID]));
+    return allProjects.filter(project => quanLyCungPhong(project) || set2.has(project[COL.P_ID]));
   }
   const filteredTasks = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name),
     values = [...new Set(filteredTasks.map(filteredTask => filteredTask[COL.T_PID]))],
@@ -7586,8 +7595,14 @@ async function guiDuyetCaCay(entity, ref) {
       "Đã gửi duyệt " + ((ketQua.row && ketQua.row.code) || "") + (soCon > 0 ? " kèm " + soCon + " mục bên trong" : ""),
       "success"
     );
-    await napLaiSauDuyet();
+    try {
+      await napLaiSauDuyet();
+    } catch (_) {
+      showToast("Đã gửi duyệt, nhưng chưa tải lại được danh sách. Hãy tải lại trang.", "info");
+    }
+    return true;
   }
+  return false;
 }
 
 /**

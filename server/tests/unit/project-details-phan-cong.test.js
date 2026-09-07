@@ -10,7 +10,7 @@
 // Chạy app.js THẬT + project-details.js THẬT trong jsdom (mẫu project-form-phan-cong.test.js).
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const DETAILS_SRC = readFileSync(
@@ -35,12 +35,55 @@ const EXPORTS = `;Object.assign(window, {
   },
   moChiTietCheDoDuyet,
   mockRefresh: (fn) => { refreshData = fn; },
+  mockSubmit: (fn) => { restPost = fn; napLaiSauDuyet = async () => {}; },
+  guiDuyetCaCay,
 });`;
 
 /** Nạp app.js + project-details.js trong MỘT lời gọi (mọi biến chia sẻ cùng phạm vi hàm). */
 function khoiDong() {
   new Function(APP_SRC + STUBS + DETAILS_SRC + EXPORTS)();
 }
+
+describe('TC-DRAFT-FOOTER: chân modal nháp', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="modals-container"></div>';
+    khoiDong();
+    window.dangNhapTen('admin', 'Quản trị Hệ thống');
+    const { cv, tasks } = duLieu(window.COL);
+    cv[0][window.COL.P_APPROVAL] = 'Nháp';
+    window.datDuLieu(cv, tasks);
+  });
+  it('footer ngoài vùng cuộn; Lưu tạm chỉ đóng, không POST', () => {
+    const post = vi.fn();
+    window.mockSubmit(post);
+    window.moChiTiet('CV001', 'Hội nghị');
+    const footer = document.querySelector('.project-draft-footer');
+    expect(footer.closest('.overflow-y-auto')).toBeNull();
+    footer.querySelector('.draft-close-btn').click();
+    expect(post).not.toHaveBeenCalled();
+  });
+  it('chặn nhấp đôi, lỗi mở lại nút và gửi thành công làm mất footer', async () => {
+    let finish;
+    const post = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    window.mockSubmit(post);
+    window.moChiTiet('CV001', 'Hội nghị');
+    const button = document.querySelector('.draft-submit-btn');
+    button.click();
+    button.click();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith('/api/v1/approvals/work/CV001/submit');
+    finish(null);
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    button.click();
+    finish({ row: { code: 'CV001' } });
+    await vi.waitFor(() => expect(document.querySelector('.project-draft-footer')).toBeNull());
+  });
+});
 
 function duLieu(C) {
   const cv = [

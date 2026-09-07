@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, isAdmin, isManager, laQuanTriTrongPhamVi, laLanhDaoPhong, updateUIForUser, canUserCreateTask,
-  canUserEditResource, canUserDeleteResource, getUserAllowedProjects,
+  canUserEditResource, canUserDeleteResource, getUserAllowedProjects, dsNhiemVuToiDuocThay,
   __pq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
     allProjects: () => { allProjects = giaTri; },
@@ -64,6 +64,41 @@ function dangNhap(user, deputyContext) {
   if (deputyContext !== undefined) window.__pq('isDeputyDirectorUser', deputyContext);
   window.updateUIForUser(user);
 }
+
+describe('TC-QLCV-READ: cùng phòng ngay lần vẽ đầu', () => {
+  it.each([3, '3'])(
+    'thấy cây chưa phân công theo ID %s, không lấy ngoài phòng hoặc thiếu phòng',
+    (dept) => {
+      const C = window.COL;
+      window.__pq('currentUser', {
+        name: 'Quản lý',
+        role: 'Quản lý công việc',
+        department_id: dept,
+      });
+      const projects = [3, 4, null].map((id, i) => ({
+        [C.P_ID]: 'CV' + i,
+        [C.P_DEPT_ID]: id,
+        [C.P_MANAGER]: '',
+        [C.P_DEPT]: 'Tên trùng',
+      }));
+      const tasks = projects.flatMap((p) =>
+        [2, 3].map((level) => ({
+          [C.T_ID]: p[C.P_ID] + level,
+          [C.T_PID]: p[C.P_ID],
+          [C.T_LEVEL]: level,
+          [C.T_ASSIGNEE]: '',
+        }))
+      );
+      window.__pq('allProjects', projects);
+      window.__pq('allTasks', tasks);
+      expect(window.getUserAllowedProjects()).toEqual([projects[0]]);
+      expect(window.dsNhiemVuToiDuocThay()).toEqual(tasks.slice(0, 2));
+      window.__pq('currentUser', { name: 'Quản lý', role: 'Quản lý công việc' });
+      expect(window.getUserAllowedProjects()).toEqual([]);
+      expect(window.dsNhiemVuToiDuocThay()).toEqual([]);
+    }
+  );
+});
 
 describe('TC-PGD-UI-01: tab «Quản lý công việc» của Phó Giám đốc', () => {
   it('Phó Giám đốc KHÔNG quản lý công việc nào vẫn thấy #projects-nav', () => {
