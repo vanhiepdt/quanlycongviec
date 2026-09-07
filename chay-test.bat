@@ -9,6 +9,7 @@ REM  Khac chay.bat: KHONG xoa CSDL, KHONG seed lai -> giu du lieu.
 REM  Goi san che do neu muon:  chay-test.bat /giu | /seed | /v14 | /reset
 REM
 REM  2026-08-28 - sua 3 cho lam script khong dung duoc de test:
+REM   Lich su (hien tai KHONG tu taskkill):
 REM   (1) "npm run dev" = "node --watch src/server.js" -> tien trinh giu cong 3000
 REM       la CON cua watcher. Truoc day chi taskkill PID con => watcher bat lai
 REM       may chu CU (DATABASE_URL cu, thuong la CSDL dev) va chiem lai cong 3000,
@@ -45,7 +46,7 @@ REM     Bam dup file nay trong Explorer, hoac go ten no trong cmd -> co console
 REM     that nen menu dung lai duoc. Chay tu Git Bash / terminal VS Code thi
 REM     KHONG bam chon duoc, hay dua san che do bang co:
 REM       chay-test.bat /giu | /seed | /reset      va them /f de khoi hoi gi ca
-REM       (/f = tu dung tien trinh dang giu cong 3000 roi bat lai Node). ---
+REM       (/f = bo pause, KHONG tu dung tien trinh). ---
 set "MODE="
 if /i "!ARG1!"=="/giu"   set "MODE=1"
 if /i "!ARG1!"=="/seed"  set "MODE=2"
@@ -56,6 +57,7 @@ echo ===================================================
 echo   QLCV - MAY CHU TEST TAY   ^(CSDL %DB%^)
 echo ===================================================
 
+if not defined MODE if defined EPBUOC set "MODE=1"
 if not defined MODE (
   echo.
   echo   1 = Giu du lieu dang co                       ^(mac dinh^)
@@ -117,12 +119,21 @@ if not defined PGP (
   !DUNG! & exit /b 1
 )
 set "DATABASE_URL=postgres://!PGU!:!PGP!@127.0.0.1:!PGPORT!/%DB%"
+REM HTTP local: khong muon cookie production hay lich day Zalo tu PC.
+set "NODE_ENV=development"
+set "PORT=3000"
+set "SESSION_COOKIE_SECURE=false"
+set "APP_BASE_URL=http://127.0.0.1:8099"
+set "CRON_ENABLED=false"
+set "ZALO_BOT_NHAN=tat"
 echo   nguoi dung=!PGU!  cong=!PGPORT!  csdl=%DB%
 echo.
 
 REM --- [2/7] Bat container CSDL, giu nguyen du lieu ---
 echo [2/7] Bat container CSDL ...
-docker compose -f deploy/docker-compose.dev.yml up -d
+REM Chan truoc migration/seed neu may chu cu van chay.
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { exit 1 }" || (echo   Dong cua so server cu tren cong 3000 truoc. & !DUNG! & exit /b 1)
+docker compose -f deploy/docker-compose.dev.yml up -d db adminer || (!DUNG! & exit /b 1)
 set "READY=0"
 for /l %%i in (1,1,30) do (
   if "!READY!"=="0" (
@@ -150,9 +161,9 @@ if defined XOASACH (
 if "!CO!"=="1" (
   echo   Da co - giu nguyen du lieu.
 ) else (
-  echo   Chua co - tao moi, se nap du lieu mau.
+  echo   Chua co - tao moi; chi seed khi da chon che do seed.
   docker exec qlcv-dev-db psql -U !PGU! -d postgres -c "CREATE DATABASE %DB%;" || (!DUNG! & exit /b 1)
-  set "SEED=1"
+  REM CSDL moi van khong tu seed: nguoi dung chon ro che do seed.
 )
 echo.
 
@@ -160,6 +171,8 @@ REM --- [4/7] Migration + (tuy chon) du lieu mau ---
 echo [4/7] Chay migration len %DB% ...
 pushd server
 call npm run migrate:up || (echo   MIGRATION LOI & popd & !DUNG! & exit /b 1)
+REM Chi doc, khong lay dong: dung CHINH truy van thong ke de bat view cu thieu cot.
+node --input-type=module -e "import { QUERIES } from './src/modules/stats/repo.js'; import { pool } from './src/db/pool.js'; try { for (const sql of Object.values(QUERIES)) await pool.query(sql + ' LIMIT 0'); console.log('  Schema thong ke OK - du cot, gom ty_le.'); } catch { console.error('  SCHEMA THONG KE LOI - kiem migration 019 va view v_countable_items; KHONG seed/reset.'); process.exitCode = 1; } finally { await pool.end(); }" || (popd & !DUNG! & exit /b 1)
 if "!SEED!"=="1" (
   echo.
   echo   Nap du lieu mau BO CU: dat lai 13 tai khoan mau ve Test@12345, mo khoa,
@@ -190,7 +203,7 @@ for /f %%s in ('docker inspect -f "{{.State.Running}}" app 2^>nul') do set "S=%%
 if /i "!S!"=="true" (
   echo   cau "app" dang chay.
 ) else (
-  docker rm -f app >nul 2>&1
+  docker inspect app >nul 2>&1 && (echo   Container app da ton tai nhung dung. Kiem tra va tu khoi dong dung container. & !DUNG! & exit /b 1)
   docker run -d --name app --network qlcv-uat alpine/socat tcp-listen:3000,fork,reuseaddr tcp-connect:host.docker.internal:3000 >nul || (!DUNG! & exit /b 1)
   echo   cau "app" da dung.
 )
@@ -199,7 +212,7 @@ for /f %%s in ('docker inspect -f "{{.State.Running}}" qlcv-uat-nginx 2^>nul') d
 if /i "!S!"=="true" (
   echo   nginx dang chay.
 ) else (
-  docker rm -f qlcv-uat-nginx >nul 2>&1
+  docker inspect qlcv-uat-nginx >nul 2>&1 && (echo   Container qlcv-uat-nginx da ton tai nhung dung. Tu khoi dong lai sau khi kiem tra. & !DUNG! & exit /b 1)
   docker run -d --name qlcv-uat-nginx --network qlcv-uat -p 127.0.0.1:8099:80 -v "%cd%/deploy/nginx/app.conf:/etc/nginx/conf.d/app.conf:ro" -v "%cd%/deploy/nginx/security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro" -v "%cd%/web:/srv/web:ro" nginx:1.27-alpine >nul || (!DUNG! & exit /b 1)
   echo   nginx da dung.
 )
@@ -210,58 +223,19 @@ echo [6/7] Cong 3000 ...
 set "PID3000="
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"TCP .*:3000 .*LISTENING"') do if not defined PID3000 set "PID3000=%%p"
 if defined PID3000 (
-  echo   Co tien trinh PID !PID3000! dang giu cong 3000.
-  echo   May chu cu thuong noi CSDL dev ^(khong phai %DB%^) nen phai dung no.
-  if defined EPBUOC (
-    echo   Co /f - dung luon, khong hoi.
-    set "DAP=1"
-  ) else (
-    choice /c YN /n /m "  Dung PID !PID3000! va khoi dong lai voi CSDL test? [Y/N] "
-    set "DAP=!errorlevel!"
-  )
-  if not "!DAP!"=="1" (
-    echo.
-    echo   Giu nguyen tien trinh cu. CANH BAO: 8099 van la may chu cu, co the sai CSDL.
-    echo   Muon khoi dong lai ma khong bam chon duoc thi chay:  chay-test.bat /giu /f
-    goto :xong
-  )
-  REM Diet CA CAY: "npm run dev" = "node --watch src/server.js" nen tien trinh
-  REM giu cong 3000 chi la CON; diet mot minh no thi watcher (cha) bat lai ngay
-  REM may chu CU voi DATABASE_URL cu. Tim cha (chi khi cha cung la node.exe)
-  REM roi diet cha truoc -> khong dung tien trinh node cua viec khac.
-  set "PIDCHA="
-  for /f %%c in ('powershell -NoProfile -Command "$ds=Get-CimInstance Win32_Process; $me=$ds ^| Where-Object { $_.ProcessId -eq !PID3000! }; if ($me) { $cha=$ds ^| Where-Object { $_.ProcessId -eq $me.ParentProcessId }; if ($cha -and $cha.Name -eq 'node.exe') { $cha.ProcessId } }"') do set "PIDCHA=%%c"
-  if defined PIDCHA (
-    echo   Cha cua no la watcher node PID !PIDCHA! - diet cha truoc.
-    taskkill /PID !PIDCHA! /T /F >nul 2>&1
-  )
-  taskkill /PID !PID3000! /T /F >nul 2>&1
-  REM Cho cong 3000 rong THAT - watcher co the con hap hoi vai giay.
-  set "RONG=0"
-  for /l %%i in (1,1,15) do (
-    if "!RONG!"=="0" (
-      set "CON="
-      for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"TCP .*:3000 .*LISTENING"') do if not defined CON set "CON=%%p"
-      if not defined CON (set "RONG=1") else (timeout /t 1 /nobreak >nul)
-    )
-  )
-  if "!RONG!"=="0" (
-    echo.
-    echo   CONG 3000 VAN BI GIU - dung lai de khoi bat may chu chet vi EADDRINUSE.
-    echo   Xem ai giu:  netstat -ano ^| findstr :3000
-    echo   Roi diet tay:  taskkill /PID ^<pid^> /T /F
-    !DUNG! & exit /b 1
-  )
-  echo   Da dung may chu cu, cong 3000 rong.
+  echo   Cong 3000 dang bi giu boi PID !PID3000!.
+  echo   Hay dong dung cua so QLCV cu roi chay lai. KHONG tu diet tien trinh ke ca /f.
+  !DUNG! & exit /b 1
 ) else (
   echo   Cong 3000 dang rong.
 )
-start "QLCV TEST - Node (%DB%)" cmd /k "cd /d "%~dp0server" & set "DATABASE_URL=!DATABASE_URL!" & npm run dev"
+REM Moi truong duoc ke thua, khong chen mat khau vao dong lenh tien trinh.
+start "QLCV TEST - Node (%DB%)" /D "%~dp0server" cmd /k npm run dev
 echo   Da mo cua so "QLCV TEST - Node". Cho may chu len ...
 set "UP=0"
 for /l %%i in (1,1,40) do (
   if "!UP!"=="0" (
-    curl -s -f -o nul http://127.0.0.1:3000/healthz && set "UP=1"
+    curl --max-time 5 -s -f -o nul http://127.0.0.1:3000/healthz && set "UP=1"
     if "!UP!"=="0" timeout /t 1 /nobreak >nul
   )
 )
@@ -269,60 +243,41 @@ if "!UP!"=="1" (
   echo   /healthz OK.
 ) else (
   echo   Chua thay /healthz - doc loi trong cua so "QLCV TEST - Node".
+  !DUNG! & exit /b 1
 )
 
 :xong
 echo.
 REM --- [7/7] Kiem lai bang mat may: ban app.js, migration, duong 8099 ---
 echo [7/7] Kiem lai truoc khi test ...
-REM Ban hieu trong app.js: dong 'console.log("[QLCV] app.js 20260828-86");'
-REM -> tokens=3 lay '20260828-86");' roi cat 3 ky tu duoi.
-set "BAN="
-for /f "tokens=3 delims= " %%a in ('findstr /r /c:"\[QLCV\] app.js" web\assets\js\app.js') do if not defined BAN set "BAN=%%a"
-if defined BAN set "BAN=!BAN:~0,-3!"
-REM Bo dem trong index.html: 'app.js?v=20260828-86"></script>' -> cat 11 ky tu duoi.
-set "BUS="
-for /f "tokens=3 delims==" %%a in ('findstr /r /c:"app.js?v=" web\index.html') do if not defined BUS set "BUS=%%a"
-if defined BUS set "BUS=!BUS:~0,-11!"
-if not defined BAN (
-  echo   Khong doc duoc ban hieu trong web\assets\js\app.js - kiem tra tay.
-) else (
-  if "!BAN!"=="!BUS!" (
-    echo   Ban app.js = !BAN!  ^(index.html khop^).
-  ) else (
-    echo   LECH BO DEM: app.js=!BAN!  nhung index.html app.js?v=!BUS!
-    echo   -^> trinh duyet se dung ban CU. Sua app.js?v= trong web\index.html cho khop.
-  )
-)
+node tools/local-assets-check.mjs --live || (!DUNG! & exit /b 1)
 set "MIG="
 for /f %%m in ('docker exec qlcv-dev-db psql -U !PGU! -d %DB% -tAc "SELECT name FROM pgmigrations ORDER BY id DESC LIMIT 1" 2^>nul') do set "MIG=%%m"
 if defined MIG (
   echo   Migration moi nhat tren %DB%: !MIG!
 ) else (
   echo   Khong doc duoc bang pgmigrations - migration co the chua chay.
+  !DUNG! & exit /b 1
 )
 set "NHIEUTHANG="
 REM Trong for /f ('...') thi < va > van la chuyen huong cua cmd -> dung
 REM IS DISTINCT FROM thay cho <> de khoi phai boc dau ^.
 for /f %%n in ('docker exec qlcv-dev-db psql -U !PGU! -d %DB% -tAc "SELECT count(*) FROM works WHERE start_date IS NOT NULL AND end_date IS NOT NULL AND date_trunc('month',start_date) IS DISTINCT FROM date_trunc('month',end_date)" 2^>nul') do set "NHIEUTHANG=%%n"
 if defined NHIEUTHANG echo   Cong viec dai hon 1 thang ^(co tab "Ten theo thang"^): !NHIEUTHANG!
-curl -s -f -o nul http://127.0.0.1:8099/healthz && (echo   8099 /healthz OK.) || (echo   8099 /healthz LOI - xem: docker logs qlcv-uat-nginx)
+curl --max-time 5 -s -f -o nul http://127.0.0.1:8099/healthz && (echo   8099 /healthz OK.) || (echo   8099 /healthz LOI - xem: docker logs qlcv-uat-nginx)
 REM Diem quan trong nhat: may chu dang noi CSDL NAO. /readyz chi noi "db up",
 REM khong noi ten CSDL -> goi /readyz de chac chan co ket noi roi dem phien
 REM trong pg_stat_activity. Neu = 0 thi may chu dang noi CSDL khac (thuong la dev).
-curl -s -f -o nul http://127.0.0.1:8099/readyz >nul 2>&1
+curl --max-time 5 -s -f -o nul http://127.0.0.1:8099/readyz >nul 2>&1 || (!DUNG! & exit /b 1)
 set "PHIEN=0"
 for /f %%d in ('docker exec qlcv-dev-db psql -U !PGU! -d postgres -tAc "SELECT count(*) FROM pg_stat_activity WHERE datname='%DB%'" 2^>nul') do set "PHIEN=%%d"
 if "!PHIEN!"=="0" (
   echo   CANH BAO: khong co phien nao tren %DB% - may chu dang noi CSDL KHAC.
   echo   -^> dong cua so "QLCV TEST - Node" roi chay lai:  chay-test.bat /giu /f
+  !DUNG! & exit /b 1
 ) else (
-  echo   May chu dang noi %DB% ^(!PHIEN! phien^) - dung CSDL test.
+  echo   %DB% co !PHIEN! phien; day chi la chi bao, khong tu no chung minh danh tinh server.
 )
-if defined BAN (
-  curl -s http://127.0.0.1:8099/assets/js/app.js 2>nul | findstr /c:"[QLCV] app.js !BAN!" >nul && (echo   Nginx dang phuc vu app.js !BAN!.) || (echo   Nginx phuc vu app.js KHAC !BAN! - Ctrl+Shift+R, hoac dung lai qlcv-uat-nginx.)
-)
-
 REM --- ONLYOFFICE (Vong 14): nut "sua truc tuyen" chi hien khi CA HAI bien duoi
 REM     co gia tri. Thieu thi KHONG co loi nao - nut bien mat lang le, nen phai
 REM     kiem o day chu khong doi luc bam moi biet. ---
@@ -340,9 +295,9 @@ if not defined OOURL (
   if not defined OOSEC (
     echo   ONLYOFFICE: TAT ^(thieu ONLYOFFICE_JWT_SECRET^) - nut sua truc tuyen SE AN.
   ) else (
-    echo   ONLYOFFICE: BAT  url=!OOURL!
-    if defined OOCB (echo     DS goi nguoc ve app qua: !OOCB!) else (echo     CANH BAO: thieu ONLYOFFICE_CALLBACK_BASE - trong Docker phai la http://host.docker.internal:3000)
-    curl -s -f -o nul !OOURL!/healthcheck && (echo     Document Server song ^(/healthcheck OK^).) || (echo     Document Server KHONG tra loi - kiem: docker ps ^| findstr documentserver)
+    echo   ONLYOFFICE: da cau hinh URL va secret.
+    if defined OOCB (echo     DS callback: da cau hinh.) else (echo     CANH BAO: thieu ONLYOFFICE_CALLBACK_BASE - trong Docker phai la http://host.docker.internal:3000)
+    curl --max-time 5 -s -f -o nul !OOURL!/healthcheck && (echo     Document Server song ^(/healthcheck OK^).) || (echo     Document Server KHONG tra loi - kiem: docker ps ^| findstr documentserver)
   )
 )
 
@@ -362,12 +317,12 @@ echo   Ket qua file: !SOBAN! ban trong CSDL; ban DANG CHO XU: !COFILE! co file t
 if "!COFILE!"=="0" (
   echo     -^> KHONG co ban nao bam sua truc tuyen duoc: hay TU NOP mot file .docx o NV-01.
 ) else (
-  echo     -^> Co !COFILE! ban bam nut but chi la mo duoc editor.
+  echo     -^> Co !COFILE! ban co file; van can test editor va callback bang trinh duyet.
 )
 echo.
 echo ===================================================
 echo  Mo:  http://127.0.0.1:8099    ^(Ctrl+Shift+R^)
-if defined BAN (echo  Console phai in:  [QLCV] app.js !BAN!) else (echo  Console phai in:  [QLCV] app.js ^<xem web\assets\js\app.js^>)
+echo  Console phai in dung ban da kiem o buoc [7/7].
 echo.
 REM In dung bo tai khoan dang co trong CSDL: dem email theo tung bo thay vi doan
 REM theo che do vua chon - nguoi dung co the chon 1 (giu du lieu) sau khi da seed v14.
@@ -400,7 +355,7 @@ if "!COV14!"=="0" (
   echo    se bao loi tai file. Dung thiet ke, khong phai loi moi.
 )
 echo.
-echo  Xem thong bao ^(chua co chuong tren giao dien^):
+echo  Xem thong bao bang chuong tren giao dien, hoac SQL:
 echo    docker exec qlcv-dev-db psql -U !PGU! -d %DB% -c "SELECT content FROM notifications ORDER BY id DESC LIMIT 5;"
 echo  Xem cac ban file va ai nop:
 echo    docker exec qlcv-dev-db psql -U !PGU! -d %DB% -c "SELECT v.id, v.version_no, v.ten_goc, u.full_name FROM task_file_versions v JOIN users u ON u.id = v.uploaded_by ORDER BY v.id;"
