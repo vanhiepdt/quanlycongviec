@@ -18,7 +18,7 @@ const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 
 const EXPORTS = `;Object.assign(window, {
   COL, renderTrangTaiKhoan, setupTrangTaiKhoan, buildTaiKhoanDong, tenPhongTaiKhoan,
   hienLoiTaiKhoan, hienOkTaiKhoan, buildBangPhanQuyenHtml, veBangPhanQuyen,
-  chiSoGhiDe,
+  chiSoGhiDe, createStaffModal,
   __tk: (ten, giaTri) => {
     ({
       currentUser: () => { currentUser = giaTri; },
@@ -102,6 +102,47 @@ const loi = () => document.getElementById('account-password-error').textContent;
 
 beforeEach(() => {
   khoiDong();
+});
+
+describe('Form tài khoản chỉ có năm vai hợp lệ', () => {
+  it.each(['Nhân viên', 'Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'])(
+    'sửa %s giữ đúng vai, không hiện Quản lý',
+    (role) => {
+      vi.useFakeTimers();
+      try {
+        const staff = {
+          [window.COL.S_ROLE]: role,
+          [window.COL.S_NAME]: 'Tên mẫu',
+          [window.COL.S_ID]: 'NV100',
+        };
+        document.body.innerHTML = window.createStaffModal(true, staff);
+        const select = document.querySelector('#staff-modal select[name="role"]');
+        expect([...select.options].map((option) => option.value)).toEqual([
+          'Nhân viên',
+          'Trưởng phòng',
+          'Phó phòng',
+          'Phó Giám đốc',
+          'Admin',
+        ]);
+        expect(select.value).toBe(role === 'admin' ? 'Admin' : role);
+        vi.advanceTimersByTime(100);
+        const deptRole = document.querySelector('#staff-modal select[name="deptRole"]');
+        if (['Trưởng phòng', 'Phó phòng'].includes(role)) expect(deptRole.value).toBe(role);
+        deptRole.value = 'Phó phòng';
+        deptRole.dispatchEvent(new window.Event('change'));
+        expect(select.value).toBe(
+          ['admin', 'Phó Giám đốc'].includes(role)
+            ? role === 'admin'
+              ? 'Admin'
+              : role
+            : 'Phó phòng'
+        );
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+      }
+    }
+  );
 });
 
 describe('TC-TK — thông tin tài khoản', () => {
@@ -483,10 +524,14 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(bang).toContain('Sửa tỷ lệ công việc (%) — Công việc con (cấp 2)');
     expect(bang).toContain('Sửa tỷ lệ công việc (%) — Nhiệm vụ (cấp 3)');
     // data-entity/data-action đúng cặp để nút Lưu gửi đúng khoá ghi đè.
-    const hangSw = bang.split('<tr').find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Công việc con'));
+    const hangSw = bang
+      .split('<tr')
+      .find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Công việc con'));
     expect(hangSw).toContain('data-entity="subwork"');
     expect(hangSw).toContain('data-action="ty-le"');
-    const hangTask = bang.split('<tr').find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Nhiệm vụ'));
+    const hangTask = bang
+      .split('<tr')
+      .find((tr) => tr.includes('Sửa tỷ lệ công việc (%) — Nhiệm vụ'));
     expect(hangTask).toContain('data-entity="task"');
     expect(hangTask).toContain('data-action="ty-le"');
     // Ma trận cho PGĐ/TP/PP ⇒ ✓ Cho phép; Cán bộ KHÔNG có ty-le ⇒ ✕ Tắt.
