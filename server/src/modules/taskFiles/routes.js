@@ -68,6 +68,8 @@ const gopYSchema = z.object({
 });
 
 const downloadSchema = z.object({ inline: z.enum(['0', '1']).optional() });
+const guiBanMoiSchema = z.object({ noiDung: text(2000).optional() });
+const luuTamSchema = z.object({ ghiChu: z.string().max(2000) });
 
 /**
  * KHAI DÒNG KẾT QUẢ TRƯỚC KHI CÓ FILE (016) — nút ＋ của khối «Kết quả». JSON, KHÔNG multipart:
@@ -88,6 +90,35 @@ const baoCaoSchema = z.object({
 });
 
 taskFilesRouter.use(requireAuth);
+
+taskFilesRouter.get('/task-files/lenh-sua', async (req, res, next) => {
+  try {
+    return ok(res, await service.lenhSua(req.user));
+  } catch (err) {
+    return next(err);
+  }
+});
+
+for (const [method, duong, schema, xuLy] of [
+  ['post', 'gui-ban-moi', guiBanMoiSchema, service.guiBanMoi],
+  ['post', 'huy-lenh-sua', z.object({}), service.huyLenhSua],
+  ['patch', 'luu-tam', luuTamSchema, service.luuTam],
+]) {
+  taskFilesRouter[method](`/task-files/:id/${duong}`, validate(schema), async (req, res, next) => {
+    try {
+      const ketQua = await xuLy(req.user, req.params.id, req.body);
+      res.locals.audit = {
+        action: `taskFiles.${duong}`,
+        entityType: 'task',
+        entityId: ketQua.nhom.item_id,
+        details: { fileId: ketQua.nhom.id, trangThai: ketQua.nhom.trang_thai },
+      };
+      return ok(res, ketQua);
+    } catch (err) {
+      return next(err);
+    }
+  });
+}
 
 /** Nộp bản mới (multipart). Không có `fileId` = mở nhóm mới (v1); có = thêm bản vào nhóm. */
 taskFilesRouter.post(

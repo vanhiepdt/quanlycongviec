@@ -69,7 +69,7 @@ taskFilesDsRouter.post('/callback/:id', async (req, res, next) => {
         status: 403,
       });
     }
-    const { status, url, users, actions } = req.body ?? {};
+    const { status, url, users, actions, userdata } = req.body ?? {};
     // status: 1 = đang cùng sửa, 2 = đã đóng và sẵn sàng lưu, 3 = lỗi khi lưu, 4 = đóng mà không
     // đổi gì, 6 = force-save (Ctrl+S / nút Lưu / lệnh forcesave), 7 = lỗi khi force-save.
     // Chỉ 2 và 6 mới có `url` bản đã sửa; các status khác chỉ cần xác nhận đã nhận.
@@ -79,7 +79,7 @@ taskFilesDsRouter.post('/callback/:id', async (req, res, next) => {
     const nguoiSua =
       (Array.isArray(users) && users.length > 0 ? users[0] : null) ??
       (Array.isArray(actions) && actions.length > 0 ? actions[0]?.userid : null);
-    const ketQua = await service.luuTuCallback(req.params.id, url, nguoiSua);
+    const ketQua = await service.luuTuCallback(req.params.id, url, nguoiSua, userdata);
     res.locals.audit = {
       action: 'taskFiles.sua-truc-tuyen',
       entityType: 'task',

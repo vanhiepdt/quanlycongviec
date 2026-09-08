@@ -15,6 +15,7 @@ import { pool } from '../../db/pool.js';
 const db = (client) => client ?? pool;
 
 const NHOM = `f.id, f.item_id, f.ten_goc, f.ten_ket_qua, f.dinh_dang, f.trang_thai,
+              f.lenh_sua_cho, f.lenh_sua_ly_do, f.lenh_sua_ghi_chu,
               f.created_by, f.created_at, cu.full_name AS ten_nguoi_tao`;
 const BAN = `v.id, v.file_id, v.version_no, v.ten_luu, v.ten_goc, v.loai_mime, v.kich_thuoc,
              v.noi_dung, v.uploaded_by, v.uploaded_at, uu.full_name AS ten_nguoi_nop`;
@@ -184,10 +185,41 @@ export async function listLuongByFile(fileId, client = null) {
 
 export async function doiTrangThai(fileId, trangThai, client) {
   const { rows } = await db(client).query(
-    'UPDATE task_files SET trang_thai = $2 WHERE id = $1 RETURNING id, trang_thai',
+    `UPDATE task_files SET trang_thai = $2,
+       lenh_sua_cho = CASE WHEN $2 = 'can-sua' THEN lenh_sua_cho ELSE NULL END,
+       lenh_sua_ly_do = CASE WHEN $2 = 'can-sua' THEN lenh_sua_ly_do ELSE '' END,
+       lenh_sua_ghi_chu = CASE WHEN $2 = 'can-sua' THEN lenh_sua_ghi_chu ELSE '' END
+     WHERE id = $1 RETURNING id, trang_thai, lenh_sua_cho, lenh_sua_ly_do, lenh_sua_ghi_chu`,
     [fileId, trangThai]
   );
   return rows[0] ?? null;
+}
+
+export async function datLenhSua(fileId, cho, lyDo, client) {
+  const { rows } = await db(client).query(
+    `UPDATE task_files SET trang_thai = 'can-sua', lenh_sua_cho = $2,
+       lenh_sua_ly_do = $3, lenh_sua_ghi_chu = '' WHERE id = $1
+     RETURNING id, trang_thai, lenh_sua_cho, lenh_sua_ly_do, lenh_sua_ghi_chu`,
+    [fileId, cho, lyDo]
+  );
+  return rows[0];
+}
+
+export async function luuGhiChu(fileId, ghiChu, client) {
+  await db(client).query('UPDATE task_files SET lenh_sua_ghi_chu = $2 WHERE id = $1', [
+    fileId,
+    ghiChu,
+  ]);
+}
+
+export async function nguoiRaLenh(fileId, client) {
+  const { rows } = await db(client).query(
+    `SELECT nguoi_id FROM task_file_flow WHERE file_id = $1
+       AND hanh_dong IN ('yeu-cau-sua', 'tra-ve-cbo', 'tra-ve-tp')
+     ORDER BY id DESC LIMIT 1`,
+    [fileId]
+  );
+  return rows[0]?.nguoi_id ?? null;
 }
 
 /**
@@ -255,16 +287,26 @@ export async function lanhDaoPhuTrach(phongId, client = null) {
  * KHÔNG vào hàng chờ. Chưa có bản nào thì không có gì để duyệt: hiện ra là dòng trống không bấm
  * được nút nào, lại còn đội con số trên tab lên. Nộp bản đầu (file hoặc «Báo cáo») là nó xuất hiện.
  */
-export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = null) {
+export async function listChoDuyetKetQua(
+  { vai, nguoiId, phongIds, lenhSua = false },
+  client = null
+) {
   let dieuKienTrangThai;
   let dieuKienPhong;
   const tham = [];
-  if (vai === 'admin') {
+  if (lenhSua) {
+    if (nguoiId == null) return [];
+    tham.push(Number(nguoiId), ['Trưởng phòng', 'Phó phòng'].includes(vai));
+    dieuKienTrangThai = `f.trang_thai = 'can-sua'`;
+    dieuKienPhong = `((f.lenh_sua_cho = 'can-bo' AND i.assignee_id = $1)
+      OR (f.lenh_sua_cho = 'lanh-dao' AND $2::boolean AND $1::bigint = ANY(i.leader_ids)))`;
+  } else if (vai === 'admin') {
     dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua', 'cho-lanh-dao')`;
     dieuKienPhong = 'TRUE';
   } else if (vai === 'Trưởng phòng' || vai === 'Phó phòng') {
     if (nguoiId == null) return [];
-    dieuKienTrangThai = `f.trang_thai IN ('cho-xem', 'can-sua')`;
+    dieuKienTrangThai = `(f.trang_thai = 'cho-xem'
+      OR (f.trang_thai = 'can-sua' AND f.lenh_sua_cho IS DISTINCT FROM 'lanh-dao'))`;
     tham.push(Number(nguoiId));
     dieuKienPhong = `$${tham.length}::bigint = ANY(i.leader_ids)`;
   } else if (vai === 'Phó Giám đốc') {
@@ -278,6 +320,7 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
   }
   const { rows } = await db(client).query(
     `SELECT f.id, f.item_id, f.ten_goc, f.ten_ket_qua, f.dinh_dang, f.trang_thai, f.created_at,
+            f.lenh_sua_cho, f.lenh_sua_ly_do, f.lenh_sua_ghi_chu,
             cu.full_name AS ten_nguoi_tao,
             i.code AS ma_nhiem_vu, i.name AS ten_nhiem_vu, i.department_id, i.leader_ids,
             i.assignee_id, i.parent_id, i.work_id,
@@ -305,7 +348,7 @@ export async function listChoDuyetKetQua({ vai, nguoiId, phongIds }, client = nu
        ) v ON TRUE
        LEFT JOIN users vu  ON vu.id = v.uploaded_by
       WHERE ${dieuKienTrangThai} AND ${dieuKienPhong}
-        AND v.id IS NOT NULL
+        AND (v.id IS NOT NULL OR ${lenhSua ? 'TRUE' : 'FALSE'})
       ORDER BY w.code, cha.code NULLS FIRST, i.code,
                COALESCE(v.uploaded_at, f.created_at) DESC, f.id DESC
       LIMIT 200`,

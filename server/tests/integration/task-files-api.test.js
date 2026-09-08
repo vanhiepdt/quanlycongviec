@@ -10,7 +10,8 @@
 //  4. **Máy chủ là rào chặn cuối**: vai ngoài phòng 403, vai không có quyền verdict 403, file
 //     sai loại/quá 20 MB 400, nhóm đã chốt thì nộp tiếp 409.
 import { rm } from 'node:fs/promises';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { env } from '../../src/config/env.js';
 import { closePool } from '../../src/db/pool.js';
@@ -348,7 +349,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(bao.some((x) => x.content.includes('được trình Phó GĐ phụ trách xem'))).toBe(true);
   });
 
-  it('TC-TF-08: PGD «Trả về TP/PP» kèm ý kiến ⇒ về «cho-xem» + thông báo TP/PP phòng', async () => {
+  it('TC-TF-08: PGD «Trả về TP/PP» kèm ý kiến ⇒ lệnh sửa lãnh đạo + thông báo TP/PP', async () => {
     const ma = await taoNhiemVuCho('TF-08');
     const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
     await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
@@ -360,7 +361,8 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       noiDung: 'Cần bổ sung số liệu đối chiếu giữa hai bảng trước khi trình lại',
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(await trangThaiNhom(nhom.id)).toBe('cho-xem');
+    expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
+    expect(res.body.data.nhom.lenh_sua_cho).toBe('lanh-dao');
     const bao = await thongBaoCua(tp.id);
     expect(bao.some((x) => x.content.includes('trả về Trưởng phòng/Phó phòng'))).toBe(true);
     // Nội dung ngắn bị chặn — tra-ve-tp cũng bắt buộc ≥ 10 ký tự.
@@ -789,6 +791,253 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     const res2 = await nopFile(apiNv, ma2, { ...DOCX, ten: 'ket-qua-ascii.docx' });
     expect(res2.status).toBe(200);
     expect((await docFiles(apiNv, ma2))[0].ten_goc).toBe('ket-qua-ascii.docx');
+  });
+});
+
+describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
+  async function taoLenh(cho = 'can-bo') {
+    const ma = await taoNhiemVuCho('Lenh sua');
+    const { nhom, ban } = (await nopFile(apiNv, ma, DOCX)).body.data;
+    if (cho === 'lanh-dao') {
+      await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+        hanhDong: 'trinh-lanh-dao',
+        noiDung: 'Trình lãnh đạo xem kết quả',
+      });
+    }
+    const res = await (cho === 'can-bo' ? apiTp : apiPgdA).post(
+      `/api/v1/task-files/${nhom.id}/verdict`,
+      {
+        hanhDong: cho === 'can-bo' ? 'yeu-cau-sua' : 'tra-ve-tp',
+        noiDung: 'Bổ sung số liệu đối chiếu trước khi gửi lại',
+      }
+    );
+    expect(res.status).toBe(200);
+    return { ma, nhom, ban };
+  }
+
+  it('TC-LS-01: cán bộ chỉ thấy lệnh của mình, lưu tạm không chuyển cửa', async () => {
+    expect((await apiNv.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+    const { nhom } = await taoLenh();
+    const res = await apiNv.get('/api/v1/task-files/lenh-sua');
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0]).toMatchObject({
+      id: nhom.id,
+      lenh_sua_cho: 'can-bo',
+      lenh_sua_ly_do: 'Bổ sung số liệu đối chiếu trước khi gửi lại',
+      duocGui: true,
+    });
+    expect((await apiNv.get('/api/v1/task-files/cho-duyet')).body.data.items).toEqual([]);
+    expect((await apiNvNgoai.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+    expect((await apiTp.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+    const luu = await apiNv.patch(`/api/v1/task-files/${nhom.id}/luu-tam`, {
+      ghiChu: 'Đang đối chiếu',
+    });
+    expect(luu.status).toBe(200);
+    expect(luu.body.data.nhom).toMatchObject({
+      trang_thai: 'can-sua',
+      lenh_sua_ghi_chu: 'Đang đối chiếu',
+    });
+    expect((await apiNv.patch(`/api/v1/task-files/${nhom.id}/luu-tam`, {})).status).toBe(400);
+  });
+
+  it('TC-LS-02: gửi lại dùng bản mới nhất, xóa lệnh, thông báo TP và chặn gửi lặp', async () => {
+    const { nhom, ban } = await taoLenh();
+    const res = await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`, {
+      noiDung: 'Đã đối chiếu',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.ban.id).toBe(ban.id);
+    expect(res.body.data.nhom).toMatchObject({
+      trang_thai: 'cho-xem',
+      lenh_sua_cho: null,
+      lenh_sua_ly_do: '',
+      lenh_sua_ghi_chu: '',
+    });
+    expect((await apiNv.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(1);
+    expect((await thongBaoCua(tp.id)).at(-1).type).toBe('approval_pending');
+    expect((await luongCuaNhom(nhom.id)).at(-1)).toMatchObject({
+      hanh_dong: 'nop',
+      version_no: 1,
+      noi_dung: 'Gửi bản mới nhất — Đã đối chiếu',
+    });
+    expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(409);
+  });
+
+  it.each(['can-bo', 'lanh-dao'])(
+    'TC-LS-03: hủy lệnh %s giữ file và báo đúng người ra lệnh',
+    async (cho) => {
+      const { nhom, ban } = await taoLenh(cho);
+      const api = cho === 'can-bo' ? apiNv : apiTp;
+      const res = await api.post(`/api/v1/task-files/${nhom.id}/huy-lenh-sua`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.nhom).toMatchObject({
+        trang_thai: cho === 'can-bo' ? 'cho-xem' : 'cho-lanh-dao',
+        lenh_sua_cho: null,
+        lenh_sua_ly_do: '',
+        lenh_sua_ghi_chu: '',
+      });
+      expect((await api.get(`/api/v1/task-files/${ban.id}/download`)).status).toBe(200);
+      expect((await luongCuaNhom(nhom.id)).at(-1).hanh_dong).toBe('huy-lenh-sua');
+      expect((await thongBaoCua(cho === 'can-bo' ? tp.id : pgdA.id)).at(-1).type).toBe(
+        'approval_rejected'
+      );
+    }
+  );
+
+  it.each(['cho-duyet', 'cho-phep'])(
+    'TC-LS-04: TP nhận lệnh riêng và gửi theo quyền %s',
+    async (quyen) => {
+      const { nhom } = await taoLenh('lanh-dao');
+      expect((await apiTp.get('/api/v1/task-files/lenh-sua')).body.data.items).toHaveLength(1);
+      expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toEqual([]);
+      expect((await apiNv.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+      expect((await apiPgdA.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+      expect((await apiAdmin.get('/api/v1/task-files/lenh-sua')).body.data.items).toEqual([]);
+      await datGhiDe('Trưởng phòng', 'file', 'create', quyen);
+      const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data.nhom.trang_thai).toBe(
+        quyen === 'cho-phep' ? 'da-duyet' : 'cho-lanh-dao'
+      );
+      expect(res.body.data.nhom.lenh_sua_cho).toBeNull();
+    }
+  );
+
+  it('TC-LS-05: cán bộ không xử lệnh TP; ngoài phòng và người cùng phòng không phải chủ bị chặn', async () => {
+    const { ma, nhom } = await taoLenh('lanh-dao');
+    for (const api of [apiNv, apiNvNgoai, apiAdmin]) {
+      for (const action of ['gui-ban-moi', 'huy-lenh-sua']) {
+        expect((await api.post(`/api/v1/task-files/${nhom.id}/${action}`)).status).toBe(403);
+      }
+      expect(
+        (await api.patch(`/api/v1/task-files/${nhom.id}/luu-tam`, { ghiChu: 'Không phải chủ' }))
+          .status
+      ).toBe(403);
+    }
+    expect((await nopFile(apiNv, ma, DOCX, { fileId: nhom.id })).status).toBe(403);
+    await datGhiDe('Trưởng phòng', 'file', 'create', 'tu-choi');
+    expect((await apiTp.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(403);
+  });
+
+  it('TC-LS-06: callback chỉ lưu; sau đó gửi đúng bản vừa lưu', async () => {
+    const { ma, nhom, ban } = await taoLenh();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(Buffer.from('ban da sua')),
+    });
+    try {
+      const res = await apiNv.agent
+        .post(`/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`)
+        .send({ status: 6, users: [String(nv.id)], url: 'http://onlyoffice.test/edited.docx' });
+      expect(res.body).toEqual({ error: 0 });
+    } finally {
+      fetchMock.mockRestore();
+    }
+    expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
+    const bans = (await docFiles(apiNv, ma))[0].bans;
+    expect(bans).toHaveLength(2);
+    const gui = await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`);
+    expect(gui.status).toBe(200);
+    expect(gui.body.data.ban.id).toBe(bans[1].id);
+  });
+
+  it('TC-LS-08: save xác nhận đúng callback trước khi báo đã lưu, không tự gửi', async () => {
+    const { nhom, ban } = await taoLenh();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/command')) {
+        const command = JSON.parse(options.body);
+        const callback = await apiNv.agent
+          .post(`/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`)
+          .send({
+            status: 6,
+            users: [String(tp.id)],
+            userdata: command.userdata,
+            url: 'http://onlyoffice.test/edited.docx',
+          });
+        expect(callback.body).toEqual({ error: 0 });
+        return { ok: true, json: () => Promise.resolve({ error: 0 }) };
+      }
+      return { ok: true, arrayBuffer: () => Promise.resolve(Buffer.from('noi dung sau khi sua')) };
+    });
+    try {
+      const res = await apiNv.post(`/api/v1/task-file-versions/${ban.id}/save`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.data).toMatchObject({ daLuu: true, versionNo: 2 });
+      const stored = await pool.query('SELECT uploaded_by FROM task_file_versions WHERE id = $1', [
+        res.body.data.banId,
+      ]);
+      expect(Number(stored.rows[0].uploaded_by)).toBe(Number(nv.id));
+      expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it.each([4, 3, null])('TC-LS-09: save mã %s không xác nhận đã lưu nhầm', async (maLoi) => {
+    const { ban } = await taoLenh();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(maLoi === null ? {} : { error: maLoi }),
+    });
+    try {
+      const res = await apiNv.post(`/api/v1/task-file-versions/${ban.id}/save`);
+      expect(res.status).toBe(maLoi === 4 ? 200 : 400);
+      if (maLoi === 4) expect(res.body.data.daLuu).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('TC-LS-10: migration 020 down/up có dữ liệu hủy lệnh, backfill lý do, giữ bản file', async () => {
+    const { nhom } = await taoLenh();
+    await apiNv.post(`/api/v1/task-files/${nhom.id}/huy-lenh-sua`);
+    const sql = readFileSync(
+      new URL('../../src/db/migrations/020_task_file_lenh_sua.sql', import.meta.url),
+      'utf8'
+    );
+    const [up, down] = sql.split('-- Up Migration')[1].split('-- Down Migration');
+    const db = await pool.connect();
+    try {
+      await db.query('BEGIN');
+      const bans = (await db.query('SELECT * FROM task_file_versions ORDER BY id')).rows;
+      await db.query(down);
+      expect(
+        (
+          await db.query(
+            "SELECT count(*)::int AS n FROM task_file_flow WHERE hanh_dong = 'huy-lenh-sua'"
+          )
+        ).rows[0].n
+      ).toBe(0);
+      await db.query("UPDATE task_files SET trang_thai = 'can-sua' WHERE id = $1", [nhom.id]);
+      await db.query(up);
+      expect(
+        (
+          await db.query('SELECT lenh_sua_cho, lenh_sua_ly_do FROM task_files WHERE id = $1', [
+            nhom.id,
+          ])
+        ).rows[0]
+      ).toEqual({
+        lenh_sua_cho: 'can-bo',
+        lenh_sua_ly_do: 'Bổ sung số liệu đối chiếu trước khi gửi lại',
+      });
+      expect((await db.query('SELECT * FROM task_file_versions ORDER BY id')).rows).toEqual(bans);
+    } finally {
+      await db.query('ROLLBACK');
+      db.release();
+    }
+  });
+
+  it('TC-LS-07: chưa có bản thì 409; không cần tạo file mới để hủy lệnh', async () => {
+    const ma = await taoNhiemVuCho('Chưa có bản');
+    const res = await apiNv.post(`/api/v1/work-items/${ma}/results`, { tenKetQua: 'Chờ bổ sung' });
+    const nhom = res.body.data.nhom;
+    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'yeu-cau-sua',
+      noiDung: 'Bổ sung file kết quả trước khi gửi',
+    });
+    expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(409);
+    expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/huy-lenh-sua`)).status).toBe(200);
   });
 });
 

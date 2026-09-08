@@ -24,6 +24,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as cho } from 'node:timers/promises';
 import { withTransaction } from '../../db/pool.js';
 import { can, giaTriHieuLuc } from '../../middleware/rbac.js';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../../utils/errors.js';
@@ -283,6 +284,9 @@ async function nhomDeThemBan(user, item, fileId, client) {
   if (KET_THUC.includes(nhom.trang_thai)) {
     throw conflict(`File này đã ${NHAN_TRANG_THAI[nhom.trang_thai]} — không nộp thêm được`);
   }
+  if (nhom.trang_thai === 'can-sua' && nhom.lenh_sua_cho && !laChuLenhSua(user, nhom, item)) {
+    throw forbidden('Chỉ người đang nhận lệnh sửa mới được gửi bản thay thế');
+  }
   if (
     nhom.trang_thai === 'cho-lanh-dao' &&
     !['Trưởng phòng', 'Phó phòng', 'Phó Giám đốc', 'admin'].includes(user.role)
@@ -475,7 +479,7 @@ export async function nopBaoCao(user, ref, { noiDung, tenGoc = '', fileId = null
     }
 
     return {
-      nhom: { ...nhom, trang_thai: capNhat.trang_thai },
+      nhom: { ...nhom, ...capNhat },
       ban,
       tuDong: trangThaiMoi === 'da-duyet',
     };
@@ -608,7 +612,7 @@ export async function nop(user, ref, { buffer, tenGoc, loaiMime, fileId = null, 
     }
 
     return {
-      nhom: { ...nhom, trang_thai: capNhat.trang_thai },
+      nhom: { ...nhom, ...capNhat },
       ban,
       tuDong: trangThaiMoi === 'da-duyet',
     };
@@ -649,7 +653,7 @@ const BANG_VERDICT = Object.freeze({
   }),
   'tra-ve-cbo': Object.freeze({
     vai: ['Trưởng phòng', 'Phó phòng'],
-    tu: ['cho-xem', 'cho-lanh-dao'],
+    tu: ['cho-xem', 'cho-lanh-dao', 'can-sua'],
     den: 'can-sua',
     canDuyet: false,
     canNoiDung: false,
@@ -666,7 +670,7 @@ const BANG_VERDICT = Object.freeze({
   'tra-ve-tp': Object.freeze({
     vai: ['Phó Giám đốc', 'admin'],
     tu: ['cho-lanh-dao'],
-    den: 'cho-xem',
+    den: 'can-sua',
     canDuyet: false,
     canNoiDung: true,
     canKiem: 'approve',
@@ -755,10 +759,18 @@ export function verdict(user, fileId, { hanhDong, noiDung = '' }) {
       },
       client
     );
-    await repo.doiTrangThai(nhom.id, luat.den, client);
+    const capNhat =
+      luat.den === 'can-sua'
+        ? await repo.datLenhSua(
+            nhom.id,
+            hanhDong === 'tra-ve-tp' ? 'lanh-dao' : 'can-bo',
+            lyDo,
+            client
+          )
+        : await repo.doiTrangThai(nhom.id, luat.den, client);
     await thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, client);
 
-    return { nhom: { ...nhom, trang_thai: luat.den }, hanhDong };
+    return { nhom: { ...nhom, ...capNhat }, hanhDong };
   });
 }
 
@@ -770,7 +782,7 @@ async function thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, cl
     case 'yeu-cau-sua':
       await bao(
         user,
-        nguoiPhaiSua,
+        [item.assignee_id],
         `Nhiệm vụ "${item.name}": "${nhom.ten_goc}" được yêu cầu sửa lại. Ghi chú: ${lyDo}`,
         notificationsRepo.LOAI.TU_CHOI,
         nhom.id,
@@ -790,7 +802,7 @@ async function thongBaoVerdict(user, item, nhom, { hanhDong, lyDo, banCuoi }, cl
     case 'tra-ve-cbo':
       await bao(
         user,
-        nguoiPhaiSua,
+        [item.assignee_id],
         `Nhiệm vụ "${item.name}": "${nhom.ten_goc}" được trả về để sửa. ${lyDo}`.trim(),
         notificationsRepo.LOAI.TU_CHOI,
         nhom.id,
@@ -970,6 +982,135 @@ export async function choDuyetKetQua(user) {
 export async function demChoDuyetKetQua(user) {
   const { items } = await choDuyetKetQua(user);
   return items.length;
+}
+
+function laChuLenhSua(user, nhom, item) {
+  if (nhom.trang_thai !== 'can-sua') return false;
+  if (nhom.lenh_sua_cho === 'can-bo') return sameId(item.assignee_id, user.id);
+  return (
+    nhom.lenh_sua_cho === 'lanh-dao' &&
+    ['Trưởng phòng', 'Phó phòng'].includes(user.role) &&
+    laLanhDaoPhuTrachNhiemVu(user, item)
+  );
+}
+
+async function khoaLenhSua(user, fileId, client) {
+  const nhom = await repo.lockNhomById(Number(fileId), client);
+  if (!nhom) throw notFound('Không tìm thấy nhóm file kết quả');
+  const item = await mustFindNhiemVu(nhom.item_id, client);
+  assertCan(user, 'read', item, 'task');
+  if (nhom.trang_thai !== 'can-sua' || !nhom.lenh_sua_cho) {
+    throw conflict('Lệnh sửa không còn hoặc kết quả đã chốt — hãy tải lại hàng chờ');
+  }
+  if (!laChuLenhSua(user, nhom, item)) {
+    throw forbidden('Chỉ người đang nhận lệnh sửa mới được thực hiện hành động này');
+  }
+  return { nhom, item };
+}
+
+export async function lenhSua(user) {
+  const rows = await repo.listChoDuyetKetQua({ vai: user.role, nguoiId: user.id, lenhSua: true });
+  const items = rows
+    .filter(
+      (row) =>
+        can(user, 'read', 'task', {
+          ...row,
+          id: row.item_id,
+          level: 3,
+        }).ok
+    )
+    .map((row) => {
+      const duocSua = duocSuaTrucTiep(user, row, { ...row, id: row.item_id, level: 3 });
+      return { ...row, duocSua, duocGui: duocSua && row.ban_cuoi_id != null };
+    });
+  return { items, onlyOffice: onlyOfficeBat() };
+}
+
+export function luuTam(user, fileId, { ghiChu }) {
+  return withTransaction(async (client) => {
+    const { nhom } = await khoaLenhSua(user, fileId, client);
+    await repo.luuGhiChu(nhom.id, ghiChu, client);
+    return { nhom: { ...nhom, lenh_sua_ghi_chu: ghiChu } };
+  });
+}
+
+export function huyLenhSua(user, fileId) {
+  return withTransaction(async (client) => {
+    const { nhom, item } = await khoaLenhSua(user, fileId, client);
+    const nguoiRaLenh = await repo.nguoiRaLenh(nhom.id, client);
+    const ban = await repo.banCuoiCung(nhom.id, client);
+    const capNhat = await repo.doiTrangThai(
+      nhom.id,
+      nhom.lenh_sua_cho === 'can-bo' ? 'cho-xem' : 'cho-lanh-dao',
+      client
+    );
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: ban?.id,
+        nguoiId: user.id,
+        vai: user.role,
+        hanhDong: 'huy-lenh-sua',
+        noiDung: 'Hủy lệnh sửa — giữ nguyên file và trả về cửa chờ trước',
+      },
+      client
+    );
+    const nguoiNhan =
+      nguoiRaLenh != null
+        ? [nguoiRaLenh]
+        : nhom.lenh_sua_cho === 'can-bo'
+          ? item.leader_ids
+          : (await phoGiamDocPhuTrach(item.department_id, client)).map(
+              (row) => row.id ?? row.user_id
+            );
+    await bao(
+      user,
+      nguoiNhan ?? [],
+      `Nhiệm vụ "${item.name}": ${user.full_name} hủy lệnh sửa — kết quả trở về cửa chờ duyệt.`,
+      notificationsRepo.LOAI.TU_CHOI,
+      nhom.id,
+      client
+    );
+    return { nhom: { ...nhom, ...capNhat } };
+  });
+}
+
+export function guiBanMoi(user, fileId, { noiDung = '' } = {}) {
+  return withTransaction(async (client) => {
+    const { nhom, item } = await khoaLenhSua(user, fileId, client);
+    if (!duocSuaTrucTiep(user, nhom, item)) {
+      throw forbidden('Bạn không có quyền gửi bản mới của kết quả này');
+    }
+    const ban = await repo.banCuoiCung(nhom.id, client);
+    if (!ban) throw conflict('Chưa có bản nào được lưu để gửi đi phê duyệt');
+    const yKien = String(noiDung ?? '').trim();
+    await repo.themLuong(
+      {
+        fileId: nhom.id,
+        versionId: ban.id,
+        nguoiId: user.id,
+        vai: user.role,
+        hanhDong: 'nop',
+        noiDung: 'Gửi bản mới nhất' + (yKien ? ` — ${yKien}` : ''),
+      },
+      client
+    );
+    const trangThai = await apTuDong(user, nhom, ban, client);
+    const capNhat = await repo.doiTrangThai(nhom.id, trangThai, client);
+    const { rows: lanhDao, thieuLanhDao } = await nguoiNhanLanhDao(item, client);
+    const nguoiNhan =
+      trangThai === 'cho-lanh-dao' ? await phoGiamDocPhuTrach(item.department_id, client) : lanhDao;
+    await baoNguoiNhan(
+      user,
+      nguoiNhan,
+      `Nhiệm vụ "${item.name}": ${user.full_name} gửi bản mới nhất (${ban.version_no}) — ${NHAN_TRANG_THAI[trangThai]}.` +
+        (trangThai === 'cho-xem' && thieuLanhDao ? NHAC_GAN_LANH_DAO : ''),
+      trangThai === 'da-duyet' ? notificationsRepo.LOAI.DA_DUYET : notificationsRepo.LOAI.CHO_DUYET,
+      nhom.id,
+      client
+    );
+    return { nhom: { ...nhom, ...capNhat }, ban, tuDong: trangThai === 'da-duyet' };
+  });
 }
 
 /**
@@ -1166,6 +1307,7 @@ export async function moEditor(user, versionId) {
     item,
     nhom,
     duocSua,
+    duocGui: duocSua && laChuLenhSua(user, nhom, item),
   };
 }
 
@@ -1190,6 +1332,8 @@ const LOI_COMMAND_DS = Object.freeze({
   6: 'ONLYOFFICE_JWT_SECRET của máy chủ không trùng JWT_SECRET của Document Server.',
 });
 
+const luotLuuDangCho = new Map();
+
 export async function luuNgay(user, versionId) {
   if (!onlyOfficeBat()) {
     throw badRequest('Sửa trực tuyến đang tắt — chưa cấu hình ONLYOFFICE trong deploy/.env');
@@ -1199,26 +1343,38 @@ export async function luuNgay(user, versionId) {
   if (!duocSuaTrucTiep(user, nhom, item)) {
     throw forbidden('Bạn chỉ được XEM bản này, không lưu được bản mới');
   }
-  const than = { c: 'forcesave', key: khoaDs(ban), userdata: String(user.id) };
-  const dsUrl = env.ONLYOFFICE_URL.replace(/\/$/, '');
-  let phanHoi;
+  const maLuu = randomUUID();
+  const luot = { banId: Number(ban.id), nguoiId: user.id, ban: null };
+  luotLuuDangCho.set(maLuu, luot);
   try {
-    phanHoi = await fetch(`${dsUrl}/command`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...than, token: kyJwt(than, env.ONLYOFFICE_JWT_SECRET) }),
-    });
-  } catch (err) {
-    throw badRequest(`Không gọi được Document Server (${dsUrl}): ${err?.message ?? 'không rõ'}`);
+    const than = { c: 'forcesave', key: khoaDs(ban), userdata: maLuu };
+    const dsUrl = env.ONLYOFFICE_URL.replace(/\/$/, '');
+    let phanHoi;
+    try {
+      phanHoi = await fetch(`${dsUrl}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...than, token: kyJwt(than, env.ONLYOFFICE_JWT_SECRET) }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (err) {
+      throw badRequest(`Không gọi được Document Server (${dsUrl}): ${err?.message ?? 'không rõ'}`);
+    }
+    if (!phanHoi.ok) throw badRequest(`Document Server trả ${phanHoi.status} cho lệnh lưu`);
+    const ketQua = await phanHoi.json().catch(() => ({}));
+    const ma = Number(ketQua?.error ?? -1);
+    if (ma === 4) return { daLuu: false, lyDo: 'Chưa có thay đổi nào để lưu' };
+    if (ma !== 0) {
+      throw badRequest(LOI_COMMAND_DS[ma] ?? `Document Server trả mã lỗi ${ma} khi lưu`);
+    }
+    const hetHan = Date.now() + 20000;
+    while (!luot.ban && Date.now() < hetHan) await cho(100);
+    if (!luot.ban)
+      throw conflict('Chưa xác nhận bản mới đã lưu — chưa gửi đi. Hãy đợi rồi thử lại');
+    return { daLuu: true, banId: luot.ban.id, versionNo: luot.ban.version_no };
+  } finally {
+    luotLuuDangCho.delete(maLuu);
   }
-  if (!phanHoi.ok) throw badRequest(`Document Server trả ${phanHoi.status} cho lệnh lưu`);
-  const ketQua = await phanHoi.json().catch(() => ({}));
-  const ma = Number(ketQua?.error ?? 0);
-  if (ma === 4) return { daLuu: false, lyDo: 'Chưa có thay đổi nào để lưu' };
-  if (ma !== 0) {
-    throw badRequest(LOI_COMMAND_DS[ma] ?? `Document Server trả mã lỗi ${ma} khi lưu`);
-  }
-  return { daLuu: true };
 }
 
 /**
@@ -1318,7 +1474,7 @@ export function cspEditor(dsUrl) {
 }
 
 /** Trang editor nhúng DS — HTML riêng, mở trong tab mới (index.html không đụng tới). */
-export function htmlEditor({ dsUrl, token, config, ban, item, duocSua }) {
+export function htmlEditor({ dsUrl, token, config, ban, item, nhom, duocSua, duocGui }) {
   const cauHinh = JSON.stringify({
     document: config.document,
     documentType: config.documentType,
@@ -1335,6 +1491,8 @@ export function htmlEditor({ dsUrl, token, config, ban, item, duocSua }) {
   const nhanNhiemVu = escapeHtmlServer(`${item?.code ?? ''} — ${item?.name ?? ''}`.trim());
   const nhanFile = escapeHtmlServer(ban?.ten_goc ?? '');
   const idBan = Number(ban?.id ?? 0);
+  const idNhom = Number(nhom?.id ?? ban?.file_id ?? 0);
+  const idNhiemVu = Number(item?.id ?? 0);
   // `events` + khối #loi: trước đây hỏng gì cũng chỉ thấy TRANG TRẮNG. Nay mọi đường thất bại
   // (script bị chặn, DS chết, DS không tải được file) đều hiện một câu tiếng Việt kèm chỗ cần xem.
   return `<!DOCTYPE html>
@@ -1347,11 +1505,15 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
 #thanh .file{color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
 #thanh button{font:inherit;padding:5px 12px;border:0;border-radius:6px;cursor:pointer}
 #luu{background:#2563eb;color:#fff}
+#gui{background:#b45309;color:#fff}
+#y-kien{position:absolute;top:44px;left:0;right:0;height:50px;background:#1f2937;color:#fff;padding:6px 12px;box-sizing:border-box;display:flex;align-items:center;gap:12px}
+#noi-dung{flex:1;resize:none;height:30px;font:inherit}
 #luu:disabled{background:#64748b;cursor:default}
 #dong{background:#374151;color:#e5e7eb}
 #tinh{color:#a7f3d0;white-space:nowrap}
-#placeholder{position:absolute;top:44px;left:0;right:0;bottom:0}
-#loi{position:absolute;top:44px;left:0;right:0;bottom:0;display:none;padding:24px;background:#fff;overflow:auto}
+#placeholder{position:absolute;top:94px;left:0;right:0;bottom:0}
+#loi{position:absolute;top:94px;left:0;right:0;bottom:0;display:none;padding:24px;background:#fff;overflow:auto}
+#chan-sua{position:absolute;top:94px;left:0;right:0;bottom:0;z-index:10;background:#ffffff80;display:none}
 #loi h3{margin:0 0 8px;color:#b91c1c}
 #loi code{background:#f3f4f6;padding:1px 4px;border-radius:3px}
 #loi li{margin:4px 0}
@@ -1362,8 +1524,11 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
   <span class="file">${nhanFile}</span>
   <span id="tinh"></span>
   ${duocSua ? '<button type="button" id="luu">Lưu thành bản mới</button>' : '<span id="tinh-xem">Chỉ xem</span>'}
+  ${duocGui ? '<button type="button" id="gui">Gửi bản mới nhất đi</button>' : ''}
   <button type="button" id="dong">Đóng</button>
 </div>
+<div id="y-kien"><label for="noi-dung">Ghi ý kiến</label><textarea id="noi-dung" maxlength="2000" ${duocGui ? '' : 'disabled'}>${escapeHtmlServer(nhom?.lenh_sua_ghi_chu ?? '')}</textarea></div>
+<div id="chan-sua" aria-label="Đang lưu và gửi, vui lòng chờ"></div>
 <div id="placeholder"></div>
 <div id="loi" role="alert" aria-live="assertive">
   <h3>Không mở được trình chỉnh sửa</h3>
@@ -1391,49 +1556,109 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
 <script>
 (function () {
   var ID_BAN = ${idBan};
+  var ID_NHOM = ${idNhom};
+  var ID_NHIEM_VU = ${idNhiemVu};
+  var soBan = ${Number(ban?.version_no ?? 0)};
+  var nguoiId = ${JSON.stringify(String(config.editorConfig.user.id))};
+  var daSua = false, dangDongBo = false, dangXuLy = false, lanSua = 0, daGui = false;
   var tinh = document.getElementById("tinh");
   var nutLuu = document.getElementById("luu");
+  var nutGui = document.getElementById("gui");
   var nutDong = document.getElementById("dong");
+  var yKien = document.getElementById("noi-dung");
   function bao(cau, mau) { tinh.textContent = cau; tinh.style.color = mau || "#a7f3d0"; }
   // Cookie CSRF đọc được (double-submit) — phải gửi lại ở header, đúng như app.js làm.
   function layCsrf() {
     var m = document.cookie.match(/(?:^|; )qlcv_sid_csrf=([^;]*)/);
     return m ? decodeURIComponent(m[1]) : "";
   }
-  nutDong && nutDong.addEventListener("click", function () { window.close(); });
+  function dong() {
+    if (!dangXuLy && (!daSua || window.confirm("Còn thay đổi chưa lưu. Bạn vẫn muốn đóng?"))) window.close();
+  }
+  nutDong && nutDong.addEventListener("click", dong);
+  window.__dongEditor = dong;
+  window.__doiTrangThaiTaiLieu = function (event) {
+    dangDongBo = event.data === true;
+    if (dangDongBo) { daSua = true; lanSua++; bao("Có thay đổi chưa lưu thành bản mới", "#fde68a"); }
+  };
   if (!nutLuu) return;
-  nutLuu.addEventListener("click", async function () {
-    nutLuu.disabled = true;
-    bao("Đang lưu…", "#fde68a");
+  function khoa(bat) {
+    dangXuLy = bat;
+    nutLuu.disabled = bat;
+    nutDong.disabled = bat;
+    yKien.disabled = bat || !nutGui;
+    if (nutGui) nutGui.disabled = bat;
+    document.getElementById("chan-sua").style.display = bat ? "block" : "none";
+  }
+  function daLuu() {
+    bao("Đã lưu bản mới — chưa gửi đi");
+    try { localStorage.setItem("qlcv_file_da_luu", String(Date.now())); } catch (error) {}
+  }
+  async function yeuCau(url, method, body) {
+    var res = await fetch(url, {
+      method: method || "GET", credentials: "same-origin",
+      headers: { "X-CSRF-Token": layCsrf(), "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    var json = await res.json();
+    if (!res.ok || !json.ok) throw new Error((json.error && json.error.message) || "Lỗi " + res.status);
+    return json.data;
+  }
+  async function luu() {
+    var lan = lanSua;
+    if (dangDongBo) throw new Error("Đang đồng bộ nội dung với OnlyOffice — hãy chờ rồi thử lại");
+    var ketQua = await yeuCau("/api/v1/task-file-versions/" + ID_BAN + "/save", "POST");
+    if (ketQua.daLuu) {
+      soBan = Math.max(soBan, Number(ketQua.versionNo) || 0);
+      if (lan === lanSua) daSua = false;
+      daLuu();
+    } else if (daSua) {
+      throw new Error("Chưa xác nhận thay đổi đã lưu — chưa gửi đi. Hãy nhấn Ctrl+S và chờ");
+    } else bao(ketQua.lyDo || "Chưa có thay đổi nào để lưu", "#fde68a");
+  }
+  async function thucHien(gui) {
+    if (dangXuLy || daGui) return;
+    if (gui && !window.confirm("Chắc chắn gửi bản mới nhất đi phê duyệt?")) return;
+    khoa(true);
+    bao(gui ? "Đang chuẩn bị gửi…" : "Đang lưu…", "#fde68a");
     try {
-      var res = await fetch("/api/v1/task-file-versions/" + ID_BAN + "/save", {
-        method: "POST",
-        headers: { "X-CSRF-Token": layCsrf() },
-        credentials: "same-origin",
-      });
-      var json = await res.json().catch(function () { return null; });
-      if (!res.ok) {
-        var cau = (json && json.error && json.error.message) || ("Lỗi " + res.status);
-        bao(cau, "#fca5a5");
-        nutLuu.disabled = false;
-        return;
+      if (nutGui && !gui) await yeuCau("/api/v1/task-files/" + ID_NHOM + "/luu-tam", "PATCH", { ghiChu: yKien.value });
+      if (!gui || daSua) await luu();
+      if (gui) {
+        if (daSua || dangDongBo) throw new Error("Còn thay đổi chưa lưu — chưa gửi đi");
+        await yeuCau("/api/v1/task-files/" + ID_NHOM + "/gui-ban-moi", "POST", { noiDung: yKien.value });
+        daGui = true;
+        bao("Đã gửi bản mới nhất — bạn có thể đóng tab");
+        try { localStorage.setItem("qlcv_file_da_luu", String(Date.now())); } catch (error) {}
+        window.close();
       }
-      var d = (json && json.data) || {};
-      if (d.daLuu) {
-        bao("Đã lưu thành bản mới — có thể đóng tab.", "#a7f3d0");
-        // Trang nhiệm vụ đang mở ở tab kia: đánh dấu để nó nạp lại danh sách bản.
-        try { localStorage.setItem("qlcv_file_da_luu", String(Date.now())); } catch (e) {}
-      } else {
-        bao(d.lyDo || "Chưa có thay đổi nào để lưu.", "#fde68a");
+    } catch (error) { bao(error.message || "Không thực hiện được yêu cầu", "#fca5a5"); }
+    finally { if (!daGui) khoa(false); }
+  }
+  nutLuu.addEventListener("click", function () { thucHien(false); });
+  if (nutGui) nutGui.addEventListener("click", function () { thucHien(true); });
+  async function kiemBanDaLuu() {
+    if (daGui) return;
+    try {
+      if (!dangXuLy && document.visibilityState !== "hidden") {
+        var lan = lanSua;
+        var duLieu = await yeuCau("/api/v1/work-items/" + ID_NHIEM_VU + "/files");
+        var nhom = (duLieu.nhom || []).find(function (row) { return Number(row.id) === ID_NHOM; });
+        var banMoi = nhom && (nhom.bans || []).filter(function (row) {
+          return Number(row.version_no) > soBan && String(row.uploaded_by) === nguoiId &&
+            (nhom.luong || []).some(function (flow) { return flow.hanh_dong === "sua-truc-tuyen" && Number(flow.version_id) === Number(row.id); });
+        }).pop();
+        if (banMoi && !dangXuLy && !dangDongBo && lan === lanSua) {
+          soBan = Number(banMoi.version_no); daSua = false; daLuu();
+        }
       }
-    } catch (err) {
-      bao("Không gửi được yêu cầu lưu: " + (err && err.message ? err.message : err), "#fca5a5");
-    }
-    nutLuu.disabled = false;
-  });
+    } catch (error) {}
+    if (!daGui) setTimeout(kiemBanDaLuu, 2000);
+  }
+  setTimeout(kiemBanDaLuu, 2000);
 })();
 </script>
-<script src="${dsUrl}/web-apps/apps/api/documents/api.js"
+<script src="${escapeHtmlServer(dsUrl)}/web-apps/apps/api/documents/api.js"
         onerror="window.__hienLoi('Không nạp được api.js của Document Server — trình duyệt chặn (Content-Security-Policy) hoặc DS không chạy.')"></script>
 <script>
 (function () {
@@ -1448,7 +1673,8 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
       var d = (e && e.data) || {};
       window.__hienLoi("Document Server báo lỗi " + (d.errorCode ?? "?") + ": " + (d.errorDescription || "không rõ"));
     },
-    onRequestClose: function () { window.close(); },
+    onDocumentStateChange: function (event) { window.__doiTrangThaiTaiLieu(event); },
+    onRequestClose: function () { window.__dongEditor(); },
   };
   try {
     window.docEditor = new DocsAPI.DocEditor("placeholder", cauHinh);
@@ -1471,7 +1697,7 @@ html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,sans-serif}
  * và gửi thông báo cho lãnh đạo phòng phụ trách + người nộp bản trước (yêu cầu người dùng
  * 2026-09-02: «đồng thời nhận được thông báo về sửa file»).
  */
-export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
+export async function luuTuCallback(versionId, url, nguoiSuaId = null, maLuu = null) {
   const ban = await repo.findBanById(Number(versionId));
   if (!ban) throw notFound('Không tìm thấy bản file');
   const nhom = await repo.findNhomById(ban.file_id);
@@ -1492,12 +1718,18 @@ export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
 
   // Người sửa phải là người CÓ THẬT và còn hoạt động; DS gửi id lạ (phiên cũ, dữ liệu rác) thì lùi
   // về người nộp bản đang sửa — không bao giờ để `uploaded_by` trỏ vào id không tồn tại.
-  const nguoiSua = nguoiSuaId == null ? null : await repo.nguoiTheoId(Number(nguoiSuaId));
+  const luot = luotLuuDangCho.get(maLuu);
+  const luotHopLe = luot?.banId === Number(versionId) ? luot : null;
+  const idNguoiSua = luotHopLe?.nguoiId ?? nguoiSuaId;
+  const nguoiSua = idNguoiSua == null ? null : await repo.nguoiTheoId(Number(idNguoiSua));
   const nguoiGhi = nguoiSua ?? { id: ban.uploaded_by, full_name: ban.ten_nguoi_nop, role: '' };
 
   const item = await itemsRepo.findById(nhom.item_id);
-  return withTransaction(async (client) => {
-    await repo.lockNhomById(nhom.id, client);
+  const ketQua = await withTransaction(async (client) => {
+    const nhomHienTai = await repo.lockNhomById(nhom.id, client);
+    if (!nhomHienTai || KET_THUC.includes(nhomHienTai.trang_thai)) {
+      return { boQua: true, lyDo: 'Kết quả đã chốt, không nhận bản mới' };
+    }
     const versionNo = (await repo.soBanCaoNhat(nhom.id, client)) + 1;
     const duoi = path.extname(ban.ten_luu) || '.docx';
     const tenLuu = `v${versionNo}-${randomUUID()}${duoi}`;
@@ -1545,4 +1777,6 @@ export async function luuTuCallback(versionId, url, nguoiSuaId = null) {
     }
     return { boQua: false, version: moi };
   });
+  if (luotHopLe && !ketQua.boQua) luotHopLe.ban = ketQua.version;
+  return ketQua;
 }
