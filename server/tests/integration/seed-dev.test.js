@@ -90,18 +90,11 @@ describe('dữ liệu mẫu dev.sql', () => {
     ]);
   });
 
-  it('đủ 6 vai trò hợp lệ xuất hiện trong dữ liệu mẫu', async () => {
+  it('đủ 5 vai trò hợp lệ xuất hiện trong dữ liệu mẫu', async () => {
     await runSeed('dev.sql');
     const { rows } = await pool.query('SELECT DISTINCT role FROM users ORDER BY role');
     expect(rows.map((r) => r.role).sort()).toEqual(
-      [
-        'admin',
-        'Nhân viên',
-        'Phó Giám đốc',
-        'Phó phòng',
-        'Quản lý công việc',
-        'Trưởng phòng',
-      ].sort()
+      ['admin', 'Nhân viên', 'Phó Giám đốc', 'Phó phòng', 'Trưởng phòng'].sort()
     );
   });
 
@@ -362,7 +355,7 @@ describe('dữ liệu nghiệp vụ mẫu đủ để chạy Phase 3', () => {
     const bad = await list(
       `SELECT a.code, r AS role FROM apps a, unnest(a.allowed_roles) AS r
         WHERE r NOT IN ('admin','Phó Giám đốc','Trưởng phòng','Phó phòng',
-                        'Quản lý công việc','Nhân viên')`
+                        'Nhân viên')`
     );
     expect(bad).toEqual([]);
 

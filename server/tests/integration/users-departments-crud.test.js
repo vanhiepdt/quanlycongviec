@@ -81,7 +81,7 @@ describe('POST/PATCH/DELETE /api/v1/users — ghi chỉ admin', () => {
     expect(rows[0].password_hash.startsWith('$2')).toBe(true);
   });
 
-  it('nhãn form Admin → admin, Quản lý → Quản lý công việc', async () => {
+  it('nhãn form Admin → admin, Quản lý cũ bị từ chối', async () => {
     const a = await api.post('/api/v1/users', {
       name: 'Người Admin',
       email: 'a2@congty.vn',
@@ -97,8 +97,59 @@ describe('POST/PATCH/DELETE /api/v1/users — ghi chỉ admin', () => {
       password: TEST_PASSWORD,
       role: 'Quản lý',
     });
-    expect(q.status).toBe(200);
-    expect(q.body.data.person.role).toBe('Quản lý công việc');
+    expect(q.status).toBe(400);
+    expect(q.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it.each(['Quản lý', 'Quản lý công việc'])('REST/RPC không tạo lại vai cũ %s', async (role) => {
+    const body = { name: 'Vai đã bỏ', email: 'old-role@congty.vn', password: TEST_PASSWORD, role };
+    expect((await api.post('/api/v1/users', body)).status).toBe(400);
+    expect((await api.patch(`/api/v1/users/${admin.id}`, { role })).status).toBe(400);
+    const rpc = await api.post('/api/rpc/addStaffWithAuth', { args: [body] });
+    expect(JSON.stringify(rpc.body)).not.toContain('password_hash');
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS total FROM users WHERE email='old-role@congty.vn'"
+        )
+      ).rows[0].total
+    ).toBe(0);
+  });
+
+  it.each(['Trưởng phòng', 'Phó phòng'])(
+    'vai phòng %s tạo đúng quyền, không tái sinh Quản lý',
+    async (deptRole) => {
+      const created = await api.post('/api/v1/users', {
+        name: 'Lãnh đạo phòng',
+        email: 'leader-role@congty.vn',
+        password: TEST_PASSWORD,
+        role: 'Nhân viên',
+        departmentId: dept.id,
+        deptRole,
+      });
+      expect(created.status).toBe(200);
+      expect(created.body.data.person).toMatchObject({ role: deptRole, dept_role: deptRole });
+      const changed = await api.patch(`/api/v1/users/${created.body.data.person.id}`, {
+        deptRole: 'Nhân viên',
+      });
+      expect(changed.body.data.person.role).toBe('Nhân viên');
+      const promoted = await api.patch(`/api/v1/users/${created.body.data.person.id}`, {
+        role: deptRole,
+      });
+      expect(promoted.body.data.person).toMatchObject({ role: deptRole, dept_role: deptRole });
+    }
+  );
+
+  it('sửa vai phòng không hạ admin và không đụng mật khẩu/Zalo', async () => {
+    const before = (
+      await pool.query('SELECT password_hash, zalo_chat_id FROM users WHERE id=$1', [admin.id])
+    ).rows[0];
+    const response = await api.patch(`/api/v1/users/${admin.id}`, { deptRole: 'Phó phòng' });
+    expect(response.body.data.person.role).toBe('admin');
+    expect(
+      (await pool.query('SELECT password_hash, zalo_chat_id FROM users WHERE id=$1', [admin.id]))
+        .rows[0]
+    ).toEqual(before);
   });
 
   it('email trùng → 409 CONFLICT tiếng Việt', async () => {

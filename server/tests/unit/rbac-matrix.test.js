@@ -21,12 +21,12 @@ import {
 } from '../../src/middleware/rbac.js';
 import { principal, rowInScope } from '../helpers/rbac.js';
 
-describe('TC-RBAC-01: ma trận 6 vai × 6 thực thể × 4 hành động', () => {
-  it('đúng 144 phép kiểm — nếu số này đổi thì §6 hoặc §7 Phase 1 hoặc 014 đã đổi, sửa kế hoạch trước', () => {
-    expect(ROLES.length).toBe(6);
+describe('TC-RBAC-01: ma trận 5 vai × 6 thực thể × 4 hành động', () => {
+  it('đúng 120 phép kiểm sau khi bỏ vai Quản lý công việc', () => {
+    expect(ROLES.length).toBe(5);
     expect(ENTITIES.length).toBe(6);
     expect(ACTIONS.length).toBe(4);
-    expect(ROLES.length * ENTITIES.length * ACTIONS.length).toBe(144);
+    expect(ROLES.length * ENTITIES.length * ACTIONS.length).toBe(120);
   });
 
   // 120 `it()` sinh tự động. Tên test ghi rõ vai · thực thể · hành động để khi đỏ là biết ngay ô nào.
@@ -93,7 +93,7 @@ describe('bảng khai báo khớp §6', () => {
     expect(PERMISSIONS['Phó Giám đốc'].file).toEqual(['read', 'create', 'approve']);
     expect(PERMISSIONS['Trưởng phòng'].file).toEqual(['read', 'create', 'approve']);
     expect(PERMISSIONS['Phó phòng'].file).toEqual(['read', 'create', 'approve']);
-    expect(PERMISSIONS['Quản lý công việc'].file).toEqual(['read']);
+    expect(PERMISSIONS).not.toHaveProperty('Quản lý công việc');
     expect(PERMISSIONS['Nhân viên'].file).toEqual(['read', 'create']);
   });
 
@@ -103,14 +103,25 @@ describe('bảng khai báo khớp §6', () => {
     expect(PERMISSIONS['Nhân viên'].task).toContain('create');
   });
 
-  it('§6: cả 6 vai đều tạo được nhiệm vụ (cột "Tạo Nhiệm vụ" = Có ở mọi dòng)', () => {
+  it('§6: cả 5 vai đều tạo được nhiệm vụ (cột "Tạo Nhiệm vụ" = Có ở mọi dòng)', () => {
     for (const role of ROLES) expect(PERMISSIONS[role].task).toContain('create');
   });
 
-  it('§6: Trưởng phòng / Phó phòng / Quản lý công việc tạo được công việc nhưng không duyệt', () => {
-    for (const role of ['Trưởng phòng', 'Phó phòng', 'Quản lý công việc']) {
+  it('§6: Trưởng phòng / Phó phòng tạo được công việc nhưng không duyệt', () => {
+    for (const role of ['Trưởng phòng', 'Phó phòng']) {
       expect(PERMISSIONS[role].work).toContain('create');
       expect(PERMISSIONS[role].work).not.toContain(ACTION_APPROVE);
     }
   });
+});
+
+describe('Vai Quản lý công việc đã bỏ luôn bị từ chối', () => {
+  for (const entity of ENTITIES) {
+    for (const action of [...ACTIONS, ACTION_APPROVE]) {
+      it(`${entity}:${action} không cấp quyền từ vai cũ`, () => {
+        const user = principal('Quản lý công việc');
+        expect(can(user, action, entity, rowInScope(user.role, entity, user)).ok).toBe(false);
+      });
+    }
+  }
 });

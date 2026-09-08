@@ -353,13 +353,13 @@ describe('Quyền đặt nhắc việc (§13.4 mục 13 + mục 15)', () => {
     expect(await countRows()).toBe(0);
   });
 
-  it('Quản lý công việc ⇒ 403 dù §6 cho họ sửa nhiệm vụ (chốt cứng chỗ siết có chủ ý)', async () => {
+  it('Cán bộ được giao quản lý công việc không thành lãnh đạo phòng để đặt nhắc việc', async () => {
     // Ghi lại bằng test để lần sau ai thấy "lạ" thì đọc §13.4 mục 13 chứ không tự nới ra.
     const manager = await makeLoginUser({
       code: 'NV030',
       full_name: 'Quản lý D',
       email: 'd@congty.vn',
-      role: 'Quản lý công việc',
+      role: 'Nhân viên',
       department_id: dept.id,
     });
     await pool.query('UPDATE works SET manager_id = $1 WHERE id = $2', [manager.id, work.id]);
@@ -367,7 +367,7 @@ describe('Quyền đặt nhắc việc (§13.4 mục 13 + mục 15)', () => {
     await asManager.login(manager.email);
     const res = await asManager.post(url(mine.code), { remindDate: '2026-09-08' });
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toMatch(/Trưởng phòng|Phó phòng/);
+    expect(res.body.error.message).toMatch(/ngoài phạm vi/);
     expect(await countRows()).toBe(0);
   });
 

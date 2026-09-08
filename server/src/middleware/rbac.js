@@ -17,13 +17,12 @@
 // bảng nào, chỉ biết các khoá phạm vi.
 import { AppError } from '../utils/errors.js';
 
-/** 6 vai trò của cột `users.role` — khớp đúng CHECK `users_role_valid` trong 001_init.sql. */
+/** Năm vai trò của cột `users.role`, theo migration 021. */
 export const ROLES = Object.freeze([
   'admin',
   'Phó Giám đốc',
   'Trưởng phòng',
   'Phó phòng',
-  'Quản lý công việc',
   'Nhân viên',
 ]);
 
@@ -99,16 +98,6 @@ export const PERMISSIONS = Object.freeze({
     subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
     task: ['read', 'create', 'update', 'delete', 'ty-le'],
     file: ['read', 'create', 'approve'],
-    user: ['read'],
-    department: ['read'],
-  },
-  // Phạm vi là các công việc mình quản lý (`works.manager_id`), không phải theo phòng.
-  'Quản lý công việc': {
-    work: ['read', 'create', 'update', 'delete'],
-    subwork: ['read', 'create', 'update', 'delete'],
-    task: ['read', 'create', 'update', 'delete'],
-    // 014: vai này KHÔNG nằm trong luồng file (chỉ đọc) — prompt chốt.
-    file: ['read'],
     user: ['read'],
     department: ['read'],
   },

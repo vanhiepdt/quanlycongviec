@@ -3,8 +3,7 @@
 // Ba chỗ khác bản Sheets, mỗi chỗ sửa một lỗ thật:
 //  1. Mật khẩu băm bcrypt, không lưu thuần. Form cũ gửi mật khẩu (hoặc chuỗi rỗng khi sửa);
 //     chuỗi rỗng lúc SỬA nghĩa là "giữ nguyên" — cột `password_hash` NOT NULL, không được ghi rỗng.
-//  2. Vai trò form (`Admin` / `Quản lý`) ánh xạ sang đúng CHECK `users_role_valid`
-//     (`admin` / `Quản lý công việc`). REST vẫn nhận đủ 6 vai của CSDL.
+//  2. Vai trò form (`Admin`) ánh xạ sang đúng CHECK `users_role_valid` (`admin`).
 //  3. Ghi chỉ admin (§6). Không nới quyền.
 import { withTransaction } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
@@ -16,20 +15,18 @@ import { assertPasswordUsable, hashPassword, UNUSABLE_HASH } from '../auth/passw
 import * as deptRepo from '../departments/repo.js';
 import * as repo from './repo.js';
 
-/** 6 vai trò của CHECK `users_role_valid`. */
+/** Các vai trò được tạo mới qua REST. */
 export const DB_ROLES = Object.freeze([
   'admin',
   'Phó Giám đốc',
   'Trưởng phòng',
   'Phó phòng',
-  'Quản lý công việc',
   'Nhân viên',
 ]);
 
-/** Nhãn form cũ → giá trị CSDL. Form chỉ có 4 ô; 2 vai Trưởng/Phó phòng gán qua `deptRole`. */
+/** Nhãn form → giá trị CSDL. */
 export const FORM_ROLE_MAP = Object.freeze({
   Admin: 'admin',
-  'Quản lý': 'Quản lý công việc',
 });
 
 const DEPT_ROLES = new Set(['Trưởng phòng', 'Phó phòng', 'Nhân viên']);
@@ -51,7 +48,7 @@ export function publicStaff(row) {
 }
 
 /**
- * Đổi nhãn form (`Admin`, `Quản lý`) sang vai CSDL. Giá trị đã đúng CHECK thì giữ nguyên.
+ * Đổi nhãn form (`Admin`) sang vai CSDL. Giá trị đã đúng CHECK thì giữ nguyên.
  * Trả `undefined` khi không gửi — PATCH không đụng cột.
  */
 export function mapRole(value) {
@@ -79,6 +76,10 @@ function mapDeptRole(value) {
     });
   }
   return trimmed;
+}
+
+function roleTheoPhong(role, deptRole) {
+  return DEPT_ROLES.has(role) && deptRole !== undefined ? (deptRole ?? 'Nhân viên') : role;
 }
 
 /**
@@ -165,9 +166,16 @@ export async function create(user, input) {
   if (!fullName) {
     throw new AppError('VALIDATION_ERROR', 'Tên nhân viên là bắt buộc.', { field: 'name' });
   }
-  const role = mapRole(input.role ?? 'Nhân viên');
+  const roleInput = mapRole(input.role ?? 'Nhân viên');
   const objectType = objectTypeOf(input);
-  const deptRole = mapDeptRole(Object.hasOwn(input, 'dept_role') ? input.dept_role : 'Nhân viên');
+  const deptRole = mapDeptRole(
+    Object.hasOwn(input, 'dept_role')
+      ? input.dept_role
+      : DEPT_ROLES.has(roleInput)
+        ? roleInput
+        : 'Nhân viên'
+  );
+  const role = roleTheoPhong(roleInput, deptRole);
   const departmentId = await resolveDepartmentId(input);
   let email = emailOrEmpty(input.email);
   if (email === '') email = '';
@@ -216,7 +224,9 @@ export async function update(user, ref, patch) {
   const current = await mustFind(ref);
   assertCan(user, 'update', current);
 
-  const nextRole = Object.hasOwn(patch, 'role') ? mapRole(patch.role) : current.role;
+  const roleInput = Object.hasOwn(patch, 'role') ? mapRole(patch.role) : current.role;
+  const deptRole = Object.hasOwn(patch, 'dept_role') ? mapDeptRole(patch.dept_role) : undefined;
+  const nextRole = roleTheoPhong(roleInput, deptRole);
   await assertNotLastAdmin(current, nextRole, 'hạ cấp');
 
   const objectType = Object.hasOwn(patch, 'object_type')
@@ -231,12 +241,13 @@ export async function update(user, ref, patch) {
     }
     rowPatch.full_name = fullName;
   }
-  if (Object.hasOwn(patch, 'role')) rowPatch.role = nextRole;
+  if (Object.hasOwn(patch, 'role') || nextRole !== current.role) rowPatch.role = nextRole;
   if (Object.hasOwn(patch, 'object_type')) rowPatch.object_type = objectType;
   if (Object.hasOwn(patch, 'position')) rowPatch.position = patch.position ?? '';
   if (Object.hasOwn(patch, 'notes')) rowPatch.notes = patch.notes ?? '';
   if (Object.hasOwn(patch, 'is_active')) rowPatch.is_active = patch.is_active !== false;
-  if (Object.hasOwn(patch, 'dept_role')) rowPatch.dept_role = mapDeptRole(patch.dept_role);
+  if (deptRole !== undefined) rowPatch.dept_role = deptRole;
+  else if (Object.hasOwn(patch, 'role') && DEPT_ROLES.has(nextRole)) rowPatch.dept_role = nextRole;
 
   const departmentId = await resolveDepartmentId(patch);
   if (departmentId !== undefined) rowPatch.department_id = departmentId;

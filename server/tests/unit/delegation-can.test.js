@@ -154,11 +154,11 @@ describe('TC-UQ-12: phạm vi mượn bó theo `department_ids` của bản ghi'
 
   // L3 với vai `Quản lý công việc`: phạm vi thật của họ là các công việc mình quản lý, KHÔNG phải
   // cả phòng. Nếu lớp mượn chỉ xét phòng thì người mượn được nhiều hơn người cho.
-  it('TC-UQ-12e: mượn từ «Quản lý công việc» chỉ mở đúng công việc của người đó', () => {
+  it('TC-UQ-12e: vai Quản lý công việc đã bỏ không cho mượn quyền', () => {
     const uq = uyQuyen({ fromRole: 'Quản lý công việc', fromUserId: 210 });
     const user = nguoiMuon([uq]);
-    expect(can(user, 'update', 'work', dongCV({ manager_id: 210 })).ok).toBe(true);
-    expect(can(user, 'update', 'work', dongCV({ assignee_id: 210 })).ok).toBe(true);
+    expect(can(user, 'update', 'work', dongCV({ manager_id: 210 })).ok).toBe(false);
+    expect(can(user, 'update', 'work', dongCV({ assignee_id: 210 })).ok).toBe(false);
     expect(can(user, 'update', 'work', dongCV({ manager_id: 999 })).ok).toBe(false);
   });
 

@@ -59,11 +59,9 @@ VALUES
    'Trưởng phòng',      'Trưởng phòng',        'Nội bộ',
    (SELECT id FROM departments WHERE code = 'PH03'), 'Trưởng phòng'),
 
-  -- Vai trò ĐÚNG là 'Quản lý công việc' (§0 Từ vựng). Viết 'Quản lý dự án' là vi phạm
-  -- CHECK users_role_valid và câu seed sẽ đổ ngay tại đây.
   ('TEST007', 'Quản lý Công việc',       'qlcv@test.local',
    '$2y$12$MeTdJlT/v3hUz4i0LdHBj.5Htma4Oh2iABUBBq7QDMr8Cw/WGXOIK', true,
-   'Chuyên viên',       'Quản lý công việc',   'Nội bộ',
+   'Chuyên viên',       'Nhân viên',           'Nội bộ',
    (SELECT id FROM departments WHERE code = 'PH01'), 'Nhân viên'),
 
   ('TEST008', 'Nhân viên Đào tạo',       'nv01@test.local',

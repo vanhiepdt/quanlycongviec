@@ -83,21 +83,14 @@ describe('001_init — lược đồ', () => {
     expect(err.code).toBe('23505'); // unique_violation
   });
 
-  it('TC-DB-04: users.role chỉ nhận đúng 6 vai trò, "Trợ lý admin" bị chặn', async () => {
+  it('TC-DB-04: users.role chỉ nhận đúng 5 vai trò, "Trợ lý admin" bị chặn', async () => {
     await resetTables();
     const err = await expectReject(
       `INSERT INTO users (code, full_name, email, password_hash, role)
        VALUES ('NV009','Trợ lý','tro.ly@congty.vn','x','Trợ lý admin')`
     );
     expect(err.code).toBe('23514'); // check_violation
-    for (const role of [
-      'admin',
-      'Phó Giám đốc',
-      'Trưởng phòng',
-      'Phó phòng',
-      'Quản lý công việc',
-      'Nhân viên',
-    ]) {
+    for (const role of ['admin', 'Phó Giám đốc', 'Trưởng phòng', 'Phó phòng', 'Nhân viên']) {
       await expect(
         makeUser({ code: `C-${role}`, email: `${encodeURIComponent(role)}@x.vn`, role })
       ).resolves.toBeTruthy();

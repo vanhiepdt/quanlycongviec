@@ -210,7 +210,9 @@ describe('TC-RBAC-10: gọi bằng id của thực thể ngoài phạm vi (IDOR)
     for (const [role, row] of cases) {
       const user = principal(role);
       // Quyền chung có (row = null) …
-      expect(can(user, 'update', 'work', null).ok).toBe(role !== 'Nhân viên');
+      expect(can(user, 'update', 'work', null).ok).toBe(
+        ['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'].includes(role)
+      );
       // … nhưng đúng dòng đó thì không.
       expect(can(user, 'update', 'work', row).ok).toBe(false);
     }
@@ -221,28 +223,27 @@ describe('TC-RBAC-10: gọi bằng id của thực thể ngoài phạm vi (IDOR)
   });
 });
 
-describe('Quản lý công việc — phạm vi theo công việc mình quản lý', () => {
+describe('Vai Quản lý công việc đã bỏ — không tự cấp quyền dù trùng người quản lý', () => {
   const qlcv = principal('Quản lý công việc', { id: 400 });
 
-  it('sửa được công việc mình quản lý', () => {
-    expect(can(qlcv, 'update', 'work', { id: 20, manager_id: qlcv.id }).ok).toBe(true);
+  it('không sửa được công việc mình quản lý', () => {
+    expect(can(qlcv, 'update', 'work', { id: 20, manager_id: qlcv.id }).ok).toBe(false);
   });
 
   it('không sửa được công việc người khác quản lý, kể cả cùng phòng', () => {
     const row = { id: 21, department_id: OWN_DEPT, manager_id: 999 };
     expect(can(qlcv, 'update', 'work', row).ok).toBe(false);
-    // Vẫn ĐỌC được vì cùng phòng.
-    expect(can(qlcv, 'read', 'work', row).ok).toBe(true);
+    expect(can(qlcv, 'read', 'work', row).ok).toBe(false);
   });
 
-  it('sửa được nhiệm vụ của chính mình dù không quản lý công việc đó', () => {
+  it('không sửa được nhiệm vụ của chính mình bằng vai cũ', () => {
     const row = { id: 22, level: 3, department_id: OTHER_DEPT, assignee_id: qlcv.id };
-    expect(can(qlcv, 'update', 'task', row).ok).toBe(true);
+    expect(can(qlcv, 'update', 'task', row).ok).toBe(false);
   });
 
-  it('nhận diện được cột work_manager_id khi kiểm nhiệm vụ trong công việc mình quản lý', () => {
+  it('work_manager_id không khôi phục quyền của vai cũ', () => {
     const row = { id: 23, level: 3, work_department_id: OTHER_DEPT, work_manager_id: qlcv.id };
-    expect(can(qlcv, 'update', 'task', row).ok).toBe(true);
+    expect(can(qlcv, 'update', 'task', row).ok).toBe(false);
   });
 });
 
