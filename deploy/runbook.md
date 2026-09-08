@@ -26,6 +26,34 @@ docker compose ps                                # cả ba (trạng thái health
 
 Nếu đổi biến trong `deploy/.env`: `docker compose up -d app` là đủ để app nhận giá trị mới (container được tạo lại).
 
+### 1.1 Chạy lại Docker bằng một lệnh — không xóa dữ liệu
+
+**Script `deploy/restart.sh` đã phát hành trên VPS ngày 2026-09-08 (commit `fcc8aed`).**
+Sau khi đã pull một bản mới sạch, chạy qua SSH:
+
+```bash
+cd /opt/qlcv
+bash deploy/restart.sh --check     # chỉ kiểm trạng thái/health, không thay đổi
+bash deploy/restart.sh            # backup, build, migrate và tạo lại ba container
+```
+
+Lưu và đóng các tài liệu OnlyOffice trước khi chạy; có gián đoạn dịch vụ. Script không tự
+`git pull`, không seed/reset, không xóa volume/storage/.env, không gửi tin Zalo thử.
+Nó yêu cầu tracked files sạch, khóa chống chạy chồng, backup riêng vào
+`/var/backups/qlcv/restart-<ngay-gio>-<ma>/` (dump + storage nếu có + checksum cấu hình).
+Backup dùng umask077 trong phạm vi riêng; build dùng022. Kiểm danh mục dump/gzip trước khi
+dừng app/OnlyOffice; đây không thay thế thử restore. Backup trước dừng dịch vụ có thể không
+đồng bộ file/DB nếu người dùng vẫn đang ghi, nên tránh chạy khi đang sửa/nộp file.
+Thứ tự: build app → dừng app/OnlyOffice → tạo lại db/OnlyOffice → đợi db healthy →
+chạy migration bằng app một lần → tạo lại app → kiểm app/db healthy, readyz và OO=true.
+Nginx chạy trên host, không phải container; script không restart Docker daemon hoặc nginx.
+Nếu lỗi, script trả mã khác0 và báo bước dừng, không tự rollback; đặc biệt lỗi migration
+thì app vẫn dừng, xử lý nguyên nhân/rollback theo §2 trước khi bật lại. Không dán log thô
+chứa thông tin nhạy cảm. Backup riêng không nằm trong vòng xoay hằng ngày, cần quản lý dung lượng.
+
+**Lỗi vai Quản lý công việc:** restart cùng mã cũ không chữa được role trong CSDL. Migration021
+và máy chủ/form mới đã phát hành ngày 2026-09-08; không reset database lần nữa.
+
 ## 2. ROLLBACK (deploy hỏng)
 
 **a) Hỏng mã, chưa đụng CSDL** — quay về commit cũ và dựng lại:

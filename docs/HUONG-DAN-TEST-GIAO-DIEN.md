@@ -1147,6 +1147,26 @@ OnlyOffice phải sống; các file vật lý của seed có thể thiếu, nên
 cho riêng đợt này. Trước đó **không commit, push hay deploy VPS**. Kiểm Zalo thật chỉ thực hiện
 theo cổng phát hành; PC không tự gửi tin bằng bot production.
 
+### 9b.14 Bỏ vai phân quyền Quản lý công việc (2026-09-08)
+
+**Đã phát hành VPS ngày 2026-09-08 sau OK riêng.** Không seed/reset dữ liệu
+để test; dùng `chay-test.bat /giu` sau khi tự đóng đúng cửa sổ máy chủ cũ nếu cổng3000 bận.
+Launcher tự lấy migration021; Ctrl+Shift+R, banner app phải **20260908-1**.
+
+1. Đăng nhập admin → Quản lý tài khoản → tạo/sửa Cán bộ. Ô phân quyền có đúng năm lựa chọn:
+   Cán bộ, Trưởng phòng, Phó phòng, Phó Giám đốc, Giám đốc; không có «Quản lý»/vai cũ.
+2. Chọn Trưởng phòng ở vai phòng → phân quyền chuyển Trưởng phòng; đổi phân quyền Phó phòng
+   → vai phòng chuyển Phó phòng. Lưu và mở lại: cả hai trường giữ đúng, không trở thành vai cũ.
+3. Sửa tên/ghi chú của admin rồi mở lại: vẫn Giám đốc; đăng nhập lại bằng mật khẩu cũ,
+   trạng thái liên kết Zalo vẫn còn. Không gửi tin Zalo thử hoặc đổi token.
+4. Với TP/PP đang phụ trách nhiệm vụ, đăng nhập lại → xem nhiệm vụ/file/hàng chờ đúng phạm vi;
+   người ngoài phòng không được mở rộng quyền. Việc chưa phân công lãnh đạo không tự xuất hiện.
+5. Đối chiếu tài khoản cũ sau021: Quản lý công việc + chức vụ TP/PP → đúng TP/PP;
+   không có chức vụ đó → Cán bộ. Dữ liệu công việc/file vẫn còn, không tạo lại tài khoản.
+
+Đây là **vai phân quyền**, không đổi tên trang «Quản lý công việc». Mục9b.13 và luồng
+OnlyOffice/chuông/Zalo vẫn phải hoạt động; không coi test tự động thay cho nghiệm thu tay.
+
 ## 10. Dọn dẹp sau buổi test
 
 Cách nhanh nhất: `chay-test.bat` chọn **2** (về bộ cũ) hoặc **4** (về bộ Vòng 14) — cả hai đều

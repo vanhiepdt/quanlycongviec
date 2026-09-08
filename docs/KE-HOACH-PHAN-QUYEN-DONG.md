@@ -33,9 +33,18 @@ dưới cùng; **admin thay đổi được Phân quyền hệ thống bằng dr
    sửa gì thì hàng tương ứng nên đổi nhãn ⏳/✕) — hiện trình sửa là nguồn chân lý động.
 2. **Khôi phục một klik**: nút «Về mặc định tất cả».
 3. **Ghi đè theo PHÒNG** (hiện theo vai toàn cục) — cần thêm cột department_id nullable.
-4. **Quản lý công việc**: đã ẩn khỏi bảng + trình sửa; vai cũ vẫn hoạt động phía máy chủ cho dữ
-   liệu cũ. Nếu bỏ HẲN: cần migration đổi role người dùng hiện có + dọn FORM_ROLE_MAP/DB_ROLES —
-   chờ người dùng chốt (§13.4).
+4. **Quản lý công việc — ĐÃ phát hành ngày 2026-09-08.**
+   Nguyên nhân: trước đây chỉ ẩn cột bảng quyền, form vẫn gửi «Quản lý» và máy chủ đổi thành
+   vai cũ; `dept_role` TP/PP không đồng bộ `role`. Migration021 chuyển vai cũ theo chức vụ
+   phòng (TP→TP, PP→PP, còn lại→Nhân viên), đồng bộ Nhân viên đang giữ chức vụ TP/PP;
+   giữ admin/PGD, mật khẩu, liên kết Zalo và dữ liệu. Form còn năm vai, sửa admin không hạ
+   thành Nhân viên; REST/RPC/CHECK chặn vai cũ, RBAC không cấp quyền hay quyền mượn từ vai đó.
+   Xóa ghi đè vai cũ, không chuyển quyền sang vai khác. App chỉ giới hạn vai cũ chuyển thành
+   `['admin']` (admin vốn luôn thấy), tiếp tục đóng với người dùng thường; app có thêm vai khác
+   chỉ bỏ vai cũ, không biến thành công khai. Không để lựa chọn vai đã bỏ thành ô trống khi
+   sửa app rồi vô tình lưu `[]` (= mọi người).
+   Down migration chỉ nới CHECK, không hoàn tác dữ liệu. VPS `f23fd34` đã có021;
+   restart script đã chạy exit0. Buster app **20260908-1**.
 
 ## 4. VÒNG 10 (cùng ngày) — dropdown trên BẢNG 15 chức năng + điều kiện phạm vi
 
