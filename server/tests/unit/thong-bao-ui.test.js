@@ -25,6 +25,8 @@ const EXPORTS = `;Object.assign(window, {
   datDangNhap: (v) => { isAuthenticated = v; },
   datDuLieu: (cv, nv) => { allProjects = cv; allTasks = nv; },
   datHamMo: (moCv, suaNv) => { showProjectDetailsModal = moCv; openEditModal = suaNv; },
+  datMoHangCho: (mo, role) => { switchSection = mo; currentUser = { role }; },
+  tabHangCho: () => tabChoDuyetHienTai,
 });`;
 
 /** Mỗi lần gọi trả phản hồi kế tiếp trong hàng đợi; ghi lại (method, path, body) để soi. */
@@ -233,6 +235,27 @@ describe('TC-TBUI-04: bấm một dòng — đánh dấu đã đọc rồi mở 
     expect(moCv).not.toHaveBeenCalled();
     expect(suaNv).not.toHaveBeenCalled();
     expect(daGoi.some((g) => g.method === 'PATCH')).toBe(true);
+  });
+});
+
+describe('TC-TBUI-07: thông báo task_file mở đúng cửa', () => {
+  it.each([
+    ['Nhân viên', [{ id: 12 }], 'lenh-sua'],
+    ['Trưởng phòng', [{ id: 12 }], 'lenh-sua'],
+    ['Trưởng phòng', [], 'ket-qua'],
+    ['Phó Giám đốc', [], 'ket-qua'],
+  ])('%s mở tab %s', async (role, items, tab) => {
+    const mo = vi.fn();
+    window.datMoHangCho(mo, role);
+    datFetch([{ csrfToken: 'x' }, { changed: 1, unread: 0 }, { items: [], unread: 0 }, { items }]);
+    document.getElementById('thong-bao-danh-sach').innerHTML = window.buildDanhSachThongBao([
+      tb({ ref_type: 'task_file', ref_id: 12 }),
+    ]);
+    const nut = document.querySelector('.tb-dong');
+    expect(nut.getAttribute('data-mo')).toBe('1');
+    await window.moThongBao(nut);
+    expect(mo).toHaveBeenCalledWith('cho-duyet');
+    expect(window.tabHangCho()).toBe(tab);
   });
 });
 

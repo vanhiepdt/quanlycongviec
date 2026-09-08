@@ -797,8 +797,35 @@
                         <span id="tab-ket-qua-count"
                             class="ml-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">0</span>
                     </button>
+                    <button type="button" class="tab-cho-duyet" data-tab="lenh-sua" onclick="moTabChoDuyet('lenh-sua')" style="background:#fef3c7;color:#92400e">
+                        Yêu cầu sửa
+                        <span id="tab-lenh-sua-count" class="ml-1 text-xs px-2 rounded-full" style="background:#f59e0b;color:#111827">0</span>
+                    </button>
                 </div>
 
+                <div id="panel-cho-duyet-lenh-sua" class="panel-cho-duyet hidden">
+                    <p class="text-sm mb-3">Lệnh sửa được giao cho chính bạn. Lưu tạm không gửi đi; hủy lệnh giữ nguyên file.</p>
+                    <div id="lenh-sua-list" aria-live="polite"></div>
+                    <template id="lenh-sua-dong-mau">
+                        <article class="rounded-lg p-4 mb-3" style="background:#fffbeb;border:1px solid #f59e0b">
+                            <strong data-lenh="ten"></strong>
+                            <span class="ml-2 px-2 rounded-full text-xs" style="background:#fef3c7;color:#92400e">Yêu cầu sửa</span>
+                            <p data-lenh="nhiem-vu" class="text-sm mt-1"></p>
+                            <a data-lenh="file" class="text-blue-700 text-sm" target="_blank" rel="noopener"></a>
+                            <p class="text-sm mt-2"><strong>Lý do: </strong><span data-lenh="ly-do" style="white-space:pre-wrap"></span></p>
+                            <label class="block mt-2 text-sm">Ghi chú tạm / ý kiến gửi lại
+                                <textarea data-lenh="ghi-chu" maxlength="2000" class="w-full border rounded-lg p-2" rows="2"></textarea>
+                            </label>
+                            <div class="flex gap-2 mt-2">
+                                <button type="button" data-lenh="huy" class="btn-secondary">Hủy lệnh</button>
+                                <button type="button" data-lenh="sua" class="btn-secondary">Sửa</button>
+                                <button type="button" data-lenh="gui" class="btn-primary">Gửi đi phê duyệt lại</button>
+                                <button type="button" data-lenh="luu" class="btn-secondary">Lưu tạm</button>
+                            </div>
+                            <p data-lenh="tinh" class="text-sm mt-2" role="status"></p>
+                        </article>
+                    </template>
+                </div>
                 <div id="panel-cho-duyet-viec" class="panel-cho-duyet">
                     <div id="approvals-panel" class="glass-card p-4 mb-4 hidden">
                         <div class="flex items-center justify-between mb-2">
@@ -1278,7 +1305,7 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260907-1"></script>
+    <script src="assets/js/app.js?v=20260907-2"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
 <script src="assets/js/project-details.js?v=20260907-1"></script>
 

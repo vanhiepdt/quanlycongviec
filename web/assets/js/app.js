@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260907-1");
+console.info("[QLCV] app.js 20260907-2");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2280,6 +2280,7 @@ const NHAN_LUONG_FILE = Object.freeze({
   "trinh-lanh-dao": "Trình lãnh đạo",
   "tra-ve-tp": "Trả về TP/PP",
   "tra-ve-cbo": "Trả về Cán bộ",
+  "huy-lenh-sua": "Hủy lệnh sửa",
   "duyet-tu-dong": "Phê duyệt tự động",
   duyet: "Duyệt",
   "hoan-thanh": "Hoàn thành",
@@ -3177,7 +3178,7 @@ function dsVerdictFile(n) {
         ds.push({ hanhDong: "hoan-thanh", nhan: "Hoàn thành / Duyệt", canNoiDung: false, laChot: true });
       }
     }
-    if (["cho-xem", "cho-lanh-dao"].includes(tt)) {
+    if (["cho-xem", "cho-lanh-dao", "can-sua"].includes(tt)) {
       ds.push({ hanhDong: "tra-ve-cbo", nhan: "Đẩy về Cán bộ", canNoiDung: false, laChot: false });
     }
   }
@@ -5857,7 +5858,7 @@ function buildMotThongBao(row) {
     chuaDoc = row.is_read !== true,
     ref = String(row.ref_type || ""),
     refId = row.ref_id == null ? "" : String(row.ref_id),
-    moDuoc = refId !== "" && (ref === "work" || ref === "work_item");
+    moDuoc = refId !== "" && ["work", "work_item", "task_file"].includes(ref);
   return "<button type=\"button\" class=\"tb-dong w-full text-left px-4 py-3 border-b border-gray-100/50 hover:bg-blue-50/60 transition-colors " +
     (chuaDoc ? "bg-blue-50/30" : "") + "\" data-id=\"" + escapeHtmlAttr(String(row.id)) +
     "\" data-ref=\"" + escapeHtmlAttr(ref) + "\" data-ref-id=\"" + escapeHtmlAttr(refId) +
@@ -5956,6 +5957,18 @@ async function moThongBao(nut) {
     refId = String(nut.getAttribute("data-ref-id") || "");
   if (Number.isInteger(id) && id > 0) await danhDauThongBaoDaDoc([id]);
   if (nut.getAttribute("data-mo") !== "1") return;
+  if (ref === "task_file") {
+    const duLieu = await restGetIm("/api/v1/task-files/lenh-sua");
+    if (!duLieu) {
+      showToast("Chưa tải được lệnh sửa — hãy thử lại", "error");
+      return;
+    }
+    demLenhSuaCuaToi = { nguoiId: currentUser?.id, soLenh: (duLieu.items || []).length };
+    tabChoDuyetHienTai = (duLieu.items || []).some(row => String(row.id) === refId)
+      || currentUser?.role === "Nhân viên" ? "lenh-sua" : "ket-qua";
+    switchSection("cho-duyet");
+    return;
+  }
   if (ref === "work") {
     const cv = allProjects.find(p => String(p.id) === refId || String(p[COL.P_ID]) === refId);
     if (cv) showProjectDetailsModal(cv[COL.P_ID], cv[COL.P_NAME]);
@@ -7635,23 +7648,39 @@ async function napLaiSauDuyet() {
 //   'ket-qua' — file kết quả nhiệm vụ (014) đang chờ CHÍNH người này xử.
 // ============================================================================
 let tabChoDuyetHienTai = "viec";
+let demLenhSuaCuaToi = { nguoiId: null, soLenh: 0 };
 
 /** Bấm tab: đổi lớp `active` + ẩn/hiện panel, rồi nạp đúng panel vừa mở. */
 function moTabChoDuyet(tab) {
-  tabChoDuyetHienTai = tab === "ket-qua" ? "ket-qua" : "viec";
+  tabChoDuyetHienTai = currentUser?.role === "Nhân viên" ? "lenh-sua"
+    : ["ket-qua", "lenh-sua"].includes(tab) ? tab : "viec";
+  capNhatTabChoDuyet();
+  return napTrangChoDuyet();
+}
+
+function capNhatTabChoDuyet() {
+  const laNhanVien = currentUser?.role === "Nhân viên";
+  const coTabLenh = ["Nhân viên", "Trưởng phòng", "Phó phòng"].includes(currentUser?.role) ||
+    (demLenhSuaCuaToi.nguoiId === currentUser?.id && demLenhSuaCuaToi.soLenh > 0);
+  if (laNhanVien) tabChoDuyetHienTai = "lenh-sua";
+  else if (!coTabLenh && tabChoDuyetHienTai === "lenh-sua") tabChoDuyetHienTai = "ket-qua";
   document.querySelectorAll(".tab-cho-duyet").forEach((nut) => {
     nut.classList.toggle("active", nut.dataset.tab === tabChoDuyetHienTai);
+    nut.classList.toggle("hidden", (laNhanVien && nut.dataset.tab !== "lenh-sua") ||
+      (!coTabLenh && nut.dataset.tab === "lenh-sua"));
   });
   const viec = document.getElementById("panel-cho-duyet-viec");
   const ketQua = document.getElementById("panel-cho-duyet-ket-qua");
   viec && viec.classList.toggle("hidden", tabChoDuyetHienTai !== "viec");
   ketQua && ketQua.classList.toggle("hidden", tabChoDuyetHienTai !== "ket-qua");
-  napTrangChoDuyet();
+  const lenh = document.getElementById("panel-cho-duyet-lenh-sua");
+  lenh && lenh.classList.toggle("hidden", tabChoDuyetHienTai !== "lenh-sua");
 }
 
 /** Nạp trang: vẽ danh sách của tab đang mở rồi cập nhật badge thanh điều hướng. */
 async function napTrangChoDuyet() {
   if (!document.getElementById("cho-duyet-section")) return;
+  capNhatTabChoDuyet();
   goiNutChoDuyetPanel(); // gắn listener MỘT lần cho cả hai khung của tab «Công việc / Nhiệm vụ»
   if (tabChoDuyetHienTai === "viec") {
     // `renderChoDuyetPanel` tự ẩn panel với người không có cửa duyệt — khi đó hiện câu giải thích
@@ -7662,10 +7691,95 @@ async function napTrangChoDuyet() {
     const dem = document.getElementById("approvals-count");
     const oTab = document.getElementById("tab-viec-count");
     oTab && dem && (oTab.textContent = dem.textContent);
+  } else if (tabChoDuyetHienTai === "lenh-sua") {
+    await renderLenhSua();
   } else {
     await renderChoDuyetKetQua();
   }
   capNhatNavChoDuyet();
+}
+
+let luotNapLenhSua = 0;
+
+async function renderLenhSua() {
+  const khung = document.getElementById("lenh-sua-list");
+  const mau = document.getElementById("lenh-sua-dong-mau");
+  if (!khung || !mau) return;
+  const luot = ++luotNapLenhSua;
+  const duLieu = await restGetIm("/api/v1/task-files/lenh-sua");
+  if (luot !== luotNapLenhSua || !khung.isConnected) return;
+  if (!duLieu) {
+    if (!khung.childElementCount) khung.textContent = "Chưa tải được yêu cầu sửa — hãy thử lại";
+    return;
+  }
+  khung.replaceChildren();
+  const items = duLieu.items || [];
+  const dem = document.getElementById("tab-lenh-sua-count");
+  if (dem) dem.textContent = String(items.length);
+  if (!items.length) khung.textContent = "Không có yêu cầu sửa nào được giao cho bạn.";
+  items.forEach(row => {
+    const dong = mau.content.firstElementChild.cloneNode(true);
+    const o = ten => dong.querySelector('[data-lenh="' + ten + '"]');
+    dong.dataset.fileId = String(row.id);
+    o("ten").textContent = row.ten_ket_qua || row.ten_goc || "Kết quả";
+    o("nhiem-vu").textContent = [row.ten_cong_viec, row.ten_cv_con, row.ten_nhiem_vu].filter(Boolean).join(" / ");
+    o("ly-do").textContent = row.lenh_sua_ly_do || "Không có lý do kèm theo";
+    o("ghi-chu").value = row.lenh_sua_ghi_chu || "";
+    o("file").textContent = row.ban_cuoi_ten || "Chưa có file";
+    if (row.ban_cuoi_id && !row.ban_cuoi_la_bao_cao) {
+      o("file").href = "/api/v1/task-files/" + encodeURIComponent(row.ban_cuoi_id) + "/download";
+    }
+    const coEditor = duLieu.onlyOffice && row.duocSua && row.ban_cuoi_id &&
+      /\.(docx?|xlsx?|pptx?|pdf)$/i.test(row.ban_cuoi_ten || "");
+    o("sua").disabled = !coEditor;
+    o("gui").disabled = row.duocGui !== true;
+    if (!coEditor) o("sua").title = "File chưa có hoặc không hỗ trợ sửa trực tuyến";
+    o("sua").addEventListener("click", () => {
+      window.open("/api/v1/task-file-versions/" + encodeURIComponent(row.ban_cuoi_id) + "/editor", "_blank", "noopener");
+    });
+    for (const action of ["huy", "gui", "luu"]) {
+      o(action).addEventListener("click", () => xuLyLenhSua(dong, row, action));
+    }
+    khung.append(dong);
+  });
+}
+
+async function xuLyLenhSua(dong, row, action) {
+  if (dong.dataset.dangLuu === "1") return;
+  if (action === "huy" && !window.confirm("Hủy lệnh sửa, giữ nguyên file và trả về cửa chờ trước?")) return;
+  if (action === "gui" && !window.confirm("Chắc chắn gửi bản mới nhất đã lưu đi phê duyệt lại?")) return;
+  const ghiChu = dong.querySelector('[data-lenh="ghi-chu"]');
+  const tinh = dong.querySelector('[data-lenh="tinh"]');
+  const nuts = [...dong.querySelectorAll("button")];
+  const trangThaiNut = nuts.map(nut => nut.disabled);
+  dong.dataset.dangLuu = "1";
+  nuts.forEach(nut => { nut.disabled = true; });
+  ghiChu.disabled = true;
+  tinh.textContent = "Đang xử lý…";
+  try {
+    const duong = { huy: "huy-lenh-sua", gui: "gui-ban-moi", luu: "luu-tam" }[action];
+    const body = action === "luu" ? { ghiChu: ghiChu.value }
+      : action === "gui" ? { noiDung: ghiChu.value } : {};
+    const ketQua = await restGhi(action === "luu" ? "PATCH" : "POST",
+      "/api/v1/task-files/" + encodeURIComponent(row.id) + "/" + duong, body);
+    if (!ketQua.ok) throw new Error(ketQua.error || "Không thực hiện được yêu cầu");
+    if (action === "luu") tinh.textContent = "Đã lưu tạm — vẫn đang yêu cầu sửa, chưa gửi đi";
+    else {
+      dong.remove();
+      showToast(action === "gui" ? "Đã gửi bản mới nhất" : "Đã hủy lệnh, giữ nguyên file", "success");
+      if (!document.getElementById("lenh-sua-list").childElementCount) {
+        document.getElementById("lenh-sua-list").textContent = "Không có yêu cầu sửa nào được giao cho bạn.";
+      }
+    }
+    await capNhatNavChoDuyet();
+    await napSoThongBaoChuaDoc();
+  } catch (error) {
+    tinh.textContent = error.message || "Không thực hiện được yêu cầu — hãy thử lại";
+  } finally {
+    delete dong.dataset.dangLuu;
+    nuts.forEach((nut, index) => { nut.disabled = trangThaiNut[index]; });
+    ghiChu.disabled = false;
+  }
 }
 
 /** Vẽ danh sách «Phê duyệt kết quả» — mỗi nhóm file một dòng, nút do MÁY CHỦ trả về. */
@@ -7885,13 +7999,22 @@ async function xuLyVerdictChoDuyet(fileId, hanhDong, canNoiDung) {
 async function capNhatNavChoDuyet() {
   const nav = document.getElementById("nav-cho-duyet");
   if (!nav || !isAuthenticated || !currentUser) return;
-  const coCua = laNguoiDuyetHeThong() || ["Trưởng phòng", "Phó phòng"].includes(currentUser.role);
+  capNhatTabChoDuyet();
+  const nguoi = currentUser;
+  const lenh = await restGetIm("/api/v1/task-files/lenh-sua");
+  if (currentUser !== nguoi || !isAuthenticated) return;
+  const soLenh = ((lenh && lenh.items) || []).length;
+  demLenhSuaCuaToi = { nguoiId: currentUser.id, soLenh };
+  capNhatTabChoDuyet();
+  const coCua = laNguoiDuyetHeThong() || ["Nhân viên", "Trưởng phòng", "Phó phòng"].includes(currentUser.role) || soLenh > 0;
   nav.classList.toggle("hidden", !coCua);
   if (!coCua) return;
   const badge = document.getElementById("nav-cho-duyet-badge");
   if (!badge) return;
-  const kq = await restGet("/api/v1/task-files/cho-duyet");
-  let tong = ((kq && kq.items) || []).length;
+  const kq = currentUser.role === "Nhân viên" ? null : await restGet("/api/v1/task-files/cho-duyet");
+  let tong = ((kq && kq.items) || []).length + soLenh;
+  const tabLenh = document.getElementById("tab-lenh-sua-count");
+  if (tabLenh && lenh) tabLenh.textContent = String(soLenh);
   if (laNguoiDuyetHeThong()) {
     const dem = await restGet("/api/v1/approvals/pending-count");
     tong += Number((dem && (dem.total ?? dem.works)) || 0);
@@ -9230,8 +9353,3 @@ async function huyUyQuyen(id, nguoi) {
   }
   showToast("Đã huỷ ủy quyền", "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
 }
-
-
-
-
-

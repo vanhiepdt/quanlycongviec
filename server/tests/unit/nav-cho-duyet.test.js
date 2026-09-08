@@ -30,9 +30,11 @@ function khoiDong(traVe = {}) {
   window.fetch = (url) => {
     goi.push(String(url));
     const duong = String(url);
-    const than = duong.includes('/task-files/cho-duyet')
-      ? { items: traVe.ketQua ?? [] }
-      : { total: traVe.viec ?? 0 };
+    const than = duong.includes('/task-files/lenh-sua')
+      ? { items: traVe.lenhSua ?? [] }
+      : duong.includes('/task-files/cho-duyet')
+        ? { items: traVe.ketQua ?? [] }
+        : { total: traVe.viec ?? 0 };
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -80,12 +82,25 @@ describe('TC-NAV — mục «Hàng chờ phê duyệt» mở cho MỌI vai có c
     }
   });
 
-  it('TC-NAV-04: Nhân viên KHÔNG thấy mục và không gọi REST nào', async () => {
-    const goi = khoiDong({ ketQua: [{ id: 1 }] });
+  it('TC-NAV-04: Nhân viên luôn thấy hàng chờ, badge chỉ đếm lệnh sửa', async () => {
+    const goi = khoiDong({ ketQua: [{ id: 1 }], lenhSua: [{ id: 2 }, { id: 3 }] });
     window.__nav({ id: 4, name: 'Cán bộ', role: 'Nhân viên' });
     await window.capNhatNavChoDuyet();
-    expect(NAV().classList.contains('hidden')).toBe(true);
-    expect(goi.length).toBe(0);
+    expect(NAV().classList.contains('hidden')).toBe(false);
+    expect(BADGE().textContent).toBe('2');
+    expect(goi).toEqual(['/api/v1/task-files/lenh-sua']);
+  });
+
+  it('TC-NAV-08: TP cộng lệnh của mình; nhân viên không có lệnh vẫn thấy nav', async () => {
+    khoiDong({ ketQua: [{ id: 1 }], lenhSua: [{ id: 2 }] });
+    window.__nav({ id: 3, role: 'Trưởng phòng' });
+    await window.capNhatNavChoDuyet();
+    expect(BADGE().textContent).toBe('2');
+    khoiDong();
+    window.__nav({ id: 4, role: 'Nhân viên' });
+    await window.capNhatNavChoDuyet();
+    expect(NAV().classList.contains('hidden')).toBe(false);
+    expect(BADGE().classList.contains('hidden')).toBe(true);
   });
 
   it('TC-NAV-05: hàng chờ rỗng ⇒ mục vẫn mở nhưng badge ẩn', async () => {

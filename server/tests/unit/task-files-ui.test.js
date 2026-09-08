@@ -9,11 +9,12 @@
 //  4. Tên file chứa HTML phải thoát; chặn sai đuôi file ngay ở client (không gọi máy chủ).
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhoiFile, buildYKienPanel, batTatKetQua,
+  renderLenhSua, xuLyLenhSua, capNhatTabChoDuyet,
   buildBangLuongFile, buildNutVerdictFile, buildBanFileList, giaTriHieuLucFile,
   coTheNopFile, uploadKetQua, guiYKien, xuLyVerdictFile, createTaskModal,
   buildDongChoDuyetKetQua, moTabChoDuyet, renderChoDuyetKetQua, xuLyVerdictChoDuyet,
@@ -54,6 +55,122 @@ function khoiDong() {
   window.__tf('currentUser', { name: 'Trần Thị Trưởng', role: 'Trưởng phòng', id: 2 });
   window.__tfPq(null, {});
 }
+
+describe('TCKQ-LS: tab vàng dùng DOM an toàn và bốn nút', () => {
+  const row = {
+    id: 7,
+    ten_ket_qua: '<em>Kết quả</em>',
+    ten_nhiem_vu: 'Nhiệm vụ',
+    ban_cuoi_id: 11,
+    ban_cuoi_ten: 'ban-moi.docx',
+    lenh_sua_ly_do: '<b>Bổ sung</b>',
+    lenh_sua_ghi_chu: 'Đang sửa',
+    duocSua: true,
+    duocGui: true,
+  };
+  function dungHangCho() {
+    const trang = new DOMParser().parseFromString(
+      readFileSync(resolve(process.cwd(), '../web/index.html'), 'utf8'),
+      'text/html'
+    );
+    document.body.append(trang.getElementById('cho-duyet-section'));
+    window.fetch = vi.fn((url) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            data: String(url).includes('/lenh-sua')
+              ? { items: [row], onlyOffice: true }
+              : { unread: 0, csrfToken: 'x' },
+          }),
+      })
+    );
+  }
+
+  it('vẽ từ template thật: tên/lý do là chữ, bốn nút, màu hổ phách', async () => {
+    dungHangCho();
+    await window.renderLenhSua();
+    const dong = document.querySelector('#lenh-sua-list article');
+    expect(dong.querySelectorAll('button')).toHaveLength(4);
+    expect(dong.querySelector('[data-lenh="ten"]').textContent).toBe(row.ten_ket_qua);
+    expect(dong.querySelector('[data-lenh="ly-do"]').textContent).toBe(row.lenh_sua_ly_do);
+    expect(dong.querySelector('em, b')).toBeNull();
+    expect(dong.style.background).toBe('rgb(255, 251, 235)');
+    expect(dong.querySelector('[data-lenh="file"]').getAttribute('href')).toBe(
+      '/api/v1/task-files/11/download'
+    );
+    window.open = vi.fn();
+    dong.querySelector('[data-lenh="sua"]').click();
+    expect(window.open).toHaveBeenCalledWith(
+      '/api/v1/task-file-versions/11/editor',
+      '_blank',
+      'noopener'
+    );
+  });
+
+  it('nhân viên mặc định tab vàng và ẩn hai tab cũ', () => {
+    dungHangCho();
+    window.__tf('currentUser', { role: 'Nhân viên', id: 4 });
+    window.capNhatTabChoDuyet();
+    expect(document.getElementById('panel-cho-duyet-lenh-sua').classList.contains('hidden')).toBe(
+      false
+    );
+    expect(
+      document.querySelector('.tab-cho-duyet[data-tab="viec"]').classList.contains('hidden')
+    ).toBe(true);
+    expect(
+      document.querySelector('.tab-cho-duyet[data-tab="ket-qua"]').classList.contains('hidden')
+    ).toBe(true);
+    window.__tf('currentUser', { role: 'admin', id: 1 });
+    window.capNhatTabChoDuyet();
+    expect(
+      document.querySelector('.tab-cho-duyet[data-tab="lenh-sua"]').classList.contains('hidden')
+    ).toBe(true);
+  });
+
+  it('lưu tạm PATCH giữ dòng và ghi chú; hủy confirm Không không gọi mạng', async () => {
+    dungHangCho();
+    await window.renderLenhSua();
+    const dong = document.querySelector('#lenh-sua-list article');
+    dong.querySelector('[data-lenh="ghi-chu"]').value = 'Ghi chú đang soạn';
+    await window.xuLyLenhSua(dong, row, 'luu');
+    const patch = window.fetch.mock.calls.find(([, opts]) => opts?.method === 'PATCH');
+    expect(patch[0]).toBe('/api/v1/task-files/7/luu-tam');
+    expect(JSON.parse(patch[1].body)).toEqual({ ghiChu: 'Ghi chú đang soạn' });
+    expect(dong.isConnected).toBe(true);
+    expect(dong.textContent).toContain('chưa gửi đi');
+    window.confirm = () => false;
+    const soLan = window.fetch.mock.calls.length;
+    await window.xuLyLenhSua(dong, row, 'huy');
+    expect(window.fetch.mock.calls).toHaveLength(soLan);
+  });
+
+  it.each(['gui', 'huy'])('%s thành công bỏ dòng mà không xóa nhóm file', async (action) => {
+    dungHangCho();
+    await window.renderLenhSua();
+    const dong = document.querySelector('#lenh-sua-list article');
+    await window.xuLyLenhSua(dong, row, action);
+    expect(dong.isConnected).toBe(false);
+    const post = window.fetch.mock.calls.find(([, opts]) => opts?.method === 'POST');
+    expect(post[0]).toBe(
+      '/api/v1/task-files/7/' + (action === 'gui' ? 'gui-ban-moi' : 'huy-lenh-sua')
+    );
+    expect(window.fetch.mock.calls.some(([, opts]) => opts?.method === 'DELETE')).toBe(false);
+  });
+
+  it('lỗi gửi giữ ghi chú và mở lại nút', async () => {
+    dungHangCho();
+    await window.renderLenhSua();
+    const dong = document.querySelector('#lenh-sua-list article');
+    window.fetch = () => Promise.reject(new Error('Mất mạng'));
+    await window.xuLyLenhSua(dong, row, 'gui');
+    expect(dong.isConnected).toBe(true);
+    expect(dong.querySelector('[data-lenh="ghi-chu"]').value).toBe('Đang sửa');
+    expect(dong.querySelector('[data-lenh="gui"]').disabled).toBe(false);
+  });
+});
 
 const NHOM = (over = {}) => ({
   id: 7,
@@ -536,6 +653,12 @@ describe('TCKQ — bảng luồng và danh sách bản', () => {
 
 describe('TCKQ — nút verdict theo VAI + GIÁ TRỊ HIỆU LỰC', () => {
   it('TCKQ-06: TP có file:approve = ✓ (mặc định) ⇒ cả «Hoàn thành / Duyệt» lẫn «Trình Phó giám đốc»', () => {
+    expect(
+      window.buildNutVerdictFile(
+        NHOM({ trang_thai: 'can-sua', lenh_sua_cho: 'lanh-dao' }),
+        'CV001-001'
+      )
+    ).toContain('Đẩy về Cán bộ');
     const nut = window.buildNutVerdictFile(NHOM(), 'CV001-002');
     expect(nut).toContain('Yêu cầu sửa');
     expect(nut).toContain('Trình Phó giám đốc');
