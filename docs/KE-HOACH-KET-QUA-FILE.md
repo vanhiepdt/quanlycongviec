@@ -44,7 +44,7 @@ xem bằng iframe trình duyệt, DOCX tải về + góp ý trong app (§7 trả
 | Trạng thái | Nghĩa | Ai đang giữ file | Nhãn / màu badge |
 |---|---|---|---|
 | `cho-xem` | Chờ TP/PP xem (mặc định sau nộp của Cán bộ) | TP/PP phòng của công việc | vàng |
-| `can-sua` | Người phải sửa cần nộp bản mới | Cán bộ (người được giao) và/hoặc TP/PP | đỏ nhạt |
+| `can-sua` | Lệnh sửa cho đúng chủ; lưu nội dung chưa phải gửi duyệt | `lenh_sua_cho=can-bo`: người được giao; `lanh-dao`: TP/PP trong `leader_ids` | hổ phách ở tab Yêu cầu sửa; badge modal cũ giữ nguyên |
 | `cho-lanh-dao` | Chờ Phó GĐ phụ trách / GĐ xử | PGD phụ trách (fallback GĐ) | tím |
 | `hoan-thanh` | TP/PP chốt «Hoàn thành / Duyệt» | — (kết thúc) | xanh |
 | `da-duyet` | PGD/GĐ bấm «Duyệt» hoặc TỰ ĐỘNG theo phân quyền | — (kết thúc) | xanh đậm |
@@ -53,11 +53,11 @@ xem bằng iframe trình duyệt, DOCX tải về + góp ý trong app (§7 trả
 |---|---|---|---|---|---|
 | — | nộp bản mới | người được giao nhiệm vụ / TP/PP / PGD / GĐ theo trạng thái (§2, §4) | `cho-xem` (Cán bộ ⏳) · `cho-lanh-dao` (TP/PP ⏳) · `da-duyet` (✓) | `nop` (+ `duyet-tu-dong` nếu ✓) | TP/PP phòng (`cho-xem`) · PGD phụ trách (`cho-lanh-dao`) · người nộp + TP/PP (tự động) |
 | `cho-xem`/`can-sua` | góp ý | TP/PP + PGD phụ trách + GĐ/admin | giữ nguyên | `gom-y` | — (thread hiện tại chỗ) |
-| `cho-xem`/`can-sua` | Yêu cầu sửa (nội dung ≥ 10 ký tự) | TP/PP | `can-sua` | `yeu-cau-sua` | người phải sửa (người nộp bản cuối + người được giao nhiệm vụ) |
+| `cho-xem`/`can-sua` | Yêu cầu sửa (nội dung ≥ 10 ký tự) | TP/PP | `can-sua`, lệnh `can-bo` | `yeu-cau-sua` | người được giao nhiệm vụ |
 | `cho-xem`/`can-sua` | Trình Phó giám đốc (nội dung ≥ 10 ký tự) | TP/PP | `cho-lanh-dao` | `trinh-lanh-dao` | PGD phụ trách phòng |
 | `cho-xem`/`can-sua` | Hoàn thành / Duyệt (không cần nội dung) | TP/PP khi giá trị hiệu lực `file:approve` = ✓ | `hoan-thanh` | `hoan-thanh` | người nộp + TP/PP phòng |
-| `cho-xem`/`cho-lanh-dao` | Đẩy về Cán bộ (nội dung không bắt buộc) | TP/PP | `can-sua` | `tra-ve-cbo` | người phải sửa |
-| `cho-lanh-dao` | Trả về TP/PP (nội dung ≥ 10 ký tự) | PGD phụ trách / GĐ/admin | `cho-xem` (bàn của TP/PP) | `tra-ve-tp` | TP/PP phòng |
+| `cho-xem`/`cho-lanh-dao`/`can-sua` | Đẩy về Cán bộ (nội dung không bắt buộc) | TP/PP phụ trách | `can-sua`, lệnh `can-bo` | `tra-ve-cbo` | người được giao nhiệm vụ |
+| `cho-lanh-dao` | Trả về TP/PP (nội dung ≥ 10 ký tự) | PGD phụ trách / GĐ/admin | `can-sua`, lệnh `lanh-dao` | `tra-ve-tp` | TP/PP trong `leader_ids` |
 | `cho-lanh-dao` | Duyệt (không cần nội dung) | PGD phụ trách / GĐ/admin khi `file:approve` = ✓ | `da-duyet` — KHÓA | `duyet` | người nộp + TP/PP phòng |
 
 ## 2. Ánh xạ 2 hàng phân quyền → từng cửa
@@ -162,7 +162,7 @@ Endpoint (máy chủ là rào chặn cuối; mọi ghi chạy `withTransaction`)
 **TC-TF-01..14:** 01 cán bộ nộp ⇒ `cho-xem` · 02 TP góp ý · 03 TP yêu cầu sửa ⇒ `can-sua` + thông
 báo · 04 nộp v2 ⇒ `cho-xem` · 05 admin đổi `file:create` Cán bộ = `cho-phep` qua PUT ⇒ lần nộp sau
 TỰ ĐỘNG `da-duyet` + flow `duyet-tu-dong` · 06 đổi lại `⏳` ⇒ luồng thường (hiệu lực NGAY) · 07 TP
-trình PGD ⇒ thông báo PGD phụ trách · 08 PGD trả về TP (nội dung ≥ 10) ⇒ `cho-xem` · 09 TP nộp
+trình PGD ⇒ thông báo PGD phụ trách · 08 PGD trả về TP (nội dung ≥ 10) ⇒ `can-sua` + lệnh `lanh-dao` · 09 TP nộp
 chính mình (`⏳`) ⇒ `cho-lanh-dao` · 10 TP đẩy về Cán bộ ⇒ `can-sua` · 11 TP `file:approve` = ✓ ⇒
 «Hoàn thành / Duyệt» chốt `hoan-thanh`; = ⏳ ⇒ 403 · 12 PGD Duyệt ⇒ `da-duyet` khóa (nộp tiếp 409)
 · 13 Cán bộ không verdict ⇒ 403; vai ngoài phòng 403 · 14 sai loại file/quá 20MB ⇒ 400.
@@ -238,7 +238,7 @@ duyệt/góp ý/bảng luồng hiện có không đổi. (Nguồn: https://api.o
 | 1 | TP/PP chốt = `hoan-thanh`; `da-duyet` chỉ do PGD/GĐ hoặc tự động | ✅ người dùng chốt (§0) |
 | 2 | PGD/GĐ nộp file (hiếm): giá trị hiệu lực `file:create` mặc định = ✓ ⇒ nộp là tự động chốt | ✅ chấp nhận 2026-09-01 |
 | 3 | 2 hàng file là dropdown cho cả 3 vai như hàng thường, nhưng option `⏳` chỉ có ở `file:create` × (Cán bộ, TP, PP) và `file:approve` × (TP, PP) | ✅ chấp nhận 2026-09-01 |
-| 4 | PGD «Trả về TP/PP» ⇒ trạng thái `cho-xem` (bàn của TP/PP), TP/PP từ đó nộp bản mới hoặc «Đẩy về Cán bộ» | ✅ chấp nhận 2026-09-01 |
+| 4 | PGD «Trả về TP/PP» ⇒ `can-sua` + `lenh_sua_cho=lanh-dao`; TP/PP nhận lệnh vàng, gửi bản mới nhất hoặc đẩy tiếp về Cán bộ | ✅ đổi hành vi có chủ ý trong Phase 8b ngày 2026-09-08; thay quyết định `cho-xem` ngày 2026-09-01 |
 | 5 | «Đẩy về Cán bộ» (`tra-ve-cbo`) KHÔNG bắt buộc nội dung | ✅ chấp nhận 2026-09-01 |
 | 6 | «Trình» = TP/PP tự chọn (mục 21) | ✅ chốt — khớp cách đã làm |
 | 7 | Ô **«Ý kiến»** trong khối file: gửi vào bản mới nhất; nút Yêu cầu sửa/Trình/Trả về đọc ô này trước khi hỏi lại (người dùng yêu cầu «cho thêm phần Ý kiến vào») | ✅ đã làm (TCKQ-14/15) |
@@ -414,7 +414,54 @@ thành hàm `khoaDs(ban)` dùng chung, vì lệnh forcesave **phải gửi đún
 Người chỉ được xem thì không có nút này (`duocSuaTrucTiep` = false ⇒ hiện chữ «Chỉ xem»).
 
 
-## 10. Test thủ công cho người dùng (bấm tay sau khi deploy)
+## 13. Phase 8b — lệnh sửa và gửi bản mới nhất (2026-09-08)
+
+**Phát hành 2026-09-08:** người dùng đã test PC và nói OK; mã `63f05b0`/`4cc8bba`
+đã lên VPS, migration020, ba container tạo lại. CSDL production đã được làm sạch theo
+yêu cầu riêng, giữ admin/mật khẩu/liên kết Zalo; không seed lại. Chi tiết backup/reset
+và kiểm chứng xem §13.3 `KE-HOACH-VPS.md` và runbook §3.1.
+
+Migration **020_task_file_lenh_sua** thêm `lenh_sua_cho`, `lenh_sua_ly_do`,
+`lenh_sua_ghi_chu`; giữ nguyên năm trạng thái. Backfill nhóm đang `can-sua` từ dòng trả về
+gần nhất, không đổi các nhóm `cho-xem` cũ. Rời `can-sua` thì xóa cả ba cột lệnh.
+Down xóa flow `huy-lenh-sua` trước khi siết CHECK; bản file không bị xóa.
+
+| REST mới, có xác thực và CSRF cho đường ghi | Hợp đồng |
+|---|---|
+| `GET /api/v1/task-files/lenh-sua` | Chỉ lệnh của chính người gọi theo người được giao hoặc TP/PP trong `leader_ids`; kiểm lại phạm vi đọc nhiệm vụ |
+| `PATCH /api/v1/task-files/:id/luu-tam` | `{ ghiChu }` tối đa 2.000 ký tự, chỉ chủ lệnh; không đổi trạng thái |
+| `POST /api/v1/task-files/:id/gui-ban-moi` | `{ noiDung? }`; chủ lệnh + `duocSuaTrucTiep`; khóa nhóm, lấy bản mới nhất, dùng lại `apTuDong`; 409 khi hết lệnh/đã chốt/chưa có bản |
+| `POST /api/v1/task-files/:id/huy-lenh-sua` | Chủ lệnh; giữ file, về `cho-xem` nếu lệnh Cán bộ hoặc `cho-lanh-dao` nếu lệnh TP/PP; flow `huy-lenh-sua` |
+
+Gửi lại ghi flow `nop` với nhãn «Gửi bản mới nhất» và ý kiến. Quyền `file:create=✓`
+vẫn tự duyệt; ⏳ đưa Cán bộ về TP/PP, TP/PP về PGD. Thông báo nằm cùng transaction:
+ra lệnh/hủy = `approval_rejected`, gửi chờ duyệt = `approval_pending`;
+hủy báo người ra lệnh gần nhất (lùi về lãnh đạo phụ trách khi dữ liệu cũ thiếu flow).
+Không sửa `LOAI_DAY_ZALO`, không thêm tên file/ý kiến vào mẫu tin Zalo.
+
+OnlyOffice: ô «Ghi ý kiến», nút «Gửi bản mới nhất đi» chỉ cho chủ lệnh có quyền sửa.
+«Lưu thành bản mới» lưu ghi chú tạm khi có lệnh, lưu file nhưng không chuyển cửa.
+`POST /save` chờ callback tương ứng bằng mã lượt lưu trong `userdata`, chỉ báo đã lưu
+sau khi transaction lưu bản hoàn tất; quá hạn không gửi đi. Callback vẫn trả đúng
+`{"error":0}`, không chứa logic gửi duyệt. Sau Ctrl+S, trang kiểm bản đã lưu qua REST đọc sẵn có
+rồi hiện «Đã lưu bản mới — chưa gửi đi». Đang dirty phải lưu thành công trước khi gửi;
+confirm Không/lưu lỗi không gửi và không đóng. Trang editor giữ `Cache-Control: no-store`.
+
+Tab «Yêu cầu sửa» dùng template HTML tĩnh và `textContent`/`value` cho dữ liệu, giữ pin XSS
+**106/903**. Nhân viên luôn thấy nav, mặc định tab vàng, ẩn hai tab cũ; TP/PP có ba tab.
+PGD/GĐ/admin không thấy tab vàng khi không có lệnh của chính mình. Badge gồm đúng các cửa
+thuộc người gọi. `GET /task-files/cho-duyet` vẫn trả danh sách rỗng cho Nhân viên;
+lệnh `lanh-dao` không còn xuất hiện trong hàng chờ duyệt kết quả của TP/PP.
+Chuông `task_file` mở tab vàng nếu giữ lệnh, nếu không mở tab phê duyệt kết quả
+(Nhân viên vẫn về tab vàng). Buster **app.js `20260907-2`**, `project-details.js` giữ
+**`20260907-1`**, CSS giữ **`20260906-1`**.
+
+Kiểm thử: `task-files-api.test.js` TC-LS-01..10, `task-files-editor.test.js`,
+`task-files-ui.test.js`, TC-NAV-04/08, TC-TBUI-07 và XSS guard.
+Nghiệm thu tay **trên PC trước commit/push/deploy**: mục **9b.13** của
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md`. OK phát hành đợt trước không áp dụng đợt này.
+
+## 10. Test thủ công cho người dùng (lịch sử; đợt mới xem mục 13)
 
 `Ctrl+Shift+R` → Console phải thấy banner `[QLCV] app.js 20260901-3` → mở modal một nhiệm vụ có gán
 cho mình → tab **«Kết quả & Luồng»**:

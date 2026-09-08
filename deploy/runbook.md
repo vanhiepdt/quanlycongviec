@@ -64,6 +64,37 @@ ls -ln /opt/qlcv/server/storage    # phải thuộc uid:gid 1000:1000; nếu kh�
 docker compose restart app
 ```
 
+### 3.1 Bản sao lưu trước reset được người dùng yêu cầu ngày 2026-09-08
+
+Đợt reset đã hoàn tất: giữ nguyên admin/mật khẩu/liên kết Zalo, xóa dữ liệu nghiệp vụ,
+hai tài khoản còn lại và phòng cũ; giữ volume, cấu hình, file storage, sequence và migration020.
+**Không chạy reset lại hoặc seed production.** Admin cần đăng nhập lại vì phiên cũ đã xóa.
+
+Bộ backup riêng (thư mục700, dump600, ngoài vòng xoay backup hằng ngày):
+`/var/backups/qlcv/release-20260908-140701/`.
+
+- `pre-reset.dump`: CSDL trước reset, 112569 bytes; `pre-reset-storage.tar.gz`: 73197 bytes.
+- `post-reset.dump`: CSDL sạch sau reset, đã restore chuẩn với `--exit-on-error` thành công.
+- `reset-database.sql` và `reset-result.txt`: thao tác đã thực hiện + kết quả; **không chạy lại**.
+- `restore-original.list`, `source-fingerprints.txt`, `restored-fingerprints.txt`: dùng kiểm bản cũ.
+
+**Lưu ý quan trọng nếu muốn quay lại dữ liệu TRƯỚC reset:** source cũ có bốn dòng
+`works.created_by` trỏ người dùng đã mất, dù FK đánh dấu validated. Vì vậy restore chuẩn
+của `pre-reset.dump` lỗi khi tạo `works_created_by_fkey`; không được coi là đã restore xong.
+Đã kiểm trên DB TẠM: restore theo `restore-original.list` (bỏ đúng FK đó), thêm lại FK
+`FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL NOT VALID` chỉ trên DB tạm,
+rồi đối chiếu fingerprint toàn dòng **đủ21 bảng trùng source**. DB tạm đã xóa.
+Muốn phục hồi bản cũ phải thử lại trên DB tạm và quyết định cách xử lý bốn tham chiếu mồ côi
+trước khi chuyển production; **không tắt toàn bộ constraint hoặc tự sửa dữ liệu nguồn**.
+Bản `post-reset.dump` không còn vấn đề này, restore chuẩn xanh.
+
+**Bẫy triển khai qua SSH:** `umask077` chỉ dành cho backup/secrets; đổi về `umask022`
+trước `git pull`/build. Nếu giữ077, file Git mới có mode600, user node/nginx không đọc được
+(đã gặp EACCES migration020). Chỉ khôi phục0644 cho file nguồn tracked bị ảnh hưởng;
+không chmod đệ quy và không đổi `.env`600/backup600. Khi pipe script vào `ssh ... bash -s`,
+Docker có thể đọc mất phần script còn lại từ stdin: bọc nhóm lệnh bằng `{ ...; } < /dev/null`,
+chỉ cấp stdin riêng cho pg_restore/psql cần nhận dữ liệu.
+
 ## 4. Lệnh chỉ dùng khi THIẾT LẬP VPS MỚI (hoặc mất cấu hình)
 
 Tạo swap 4 GB (máy 6 GB RAM, OnlyOffice ngốn RAM lúc dịch tài liệu):

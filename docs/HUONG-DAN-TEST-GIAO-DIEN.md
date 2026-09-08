@@ -1110,6 +1110,43 @@ nút 🔔, `web/index.html` chưa được sync. Nếu bấm 🔔 mà hộp ghi 
 
 ---
 
+### 9b.13 Lệnh sửa, ý kiến OnlyOffice, gửi lại và hủy lệnh — Phase 8b (2026-09-08)
+
+**Đã nghiệm thu/phát hành 2026-09-08:** người dùng xác nhận test PC OK; bản này đã deploy.
+VPS đã reset database theo yêu cầu riêng, giữ admin và liên kết Zalo, xóa phiên cũ.
+Đăng nhập lại bằng mật khẩu admin cũ, tạo lại phòng/tài khoản/dữ liệu cần dùng; **không seed
+production**. Các bước dưới là checklist hồi quy PC; healthcheck VPS không thay thế test
+DOCX/gửi Zalo người thật sau khi tạo dữ liệu mới.
+
+**Chỉ thử trên PC** tại `http://127.0.0.1:8099`; Ctrl+Shift+R, banner **app.js 20260907-2**.
+Migration mới nhất phải là **020_task_file_lenh_sua**. Giữ dữ liệu đang có:
+không seed/reset; nếu cần chạy lại stack dùng `chay-test.bat /giu` sau khi tự đóng server cũ.
+OnlyOffice phải sống; các file vật lý của seed có thể thiếu, nên thử với **DOCX thật mới nộp**.
+
+1. Cán bộ nộp file cho TP/PP phụ trách; TP/PP «Yêu cầu sửa» và nhập lý do.
+2. Cán bộ vào **Hàng chờ phê duyệt**: chỉ thấy tab vàng **Yêu cầu sửa**, badge bằng số lệnh
+   của mình; dòng có tên kết quả/file mới nhất/lý do/ghi chú và đủ **bốn nút**.
+3. Nhập ghi chú → **Lưu tạm** → Tải lại: ghi chú còn, dòng vẫn vàng, chưa về cửa TP/PP.
+4. **Sửa** mở OnlyOffice riêng: sửa nội dung rồi Ctrl+S; đợi hiện
+   **«Đã lưu bản mới — chưa gửi đi»**. Quay về hàng chờ, lệnh vẫn còn.
+5. Nhập ý kiến ở OnlyOffice → **Gửi bản mới nhất đi** → confirm **Không**: tab không đóng,
+   trạng thái không đổi. Bấm lại → **Có**: gửi đúng bản vừa lưu, tab đóng sau thành công;
+   TP/PP thấy lại file chờ xem và chuông, lệnh vàng của Cán bộ mất.
+6. Lặp lại với thay đổi **chưa Ctrl+S**: bấm Gửi phải chờ lưu xong rồi mới gửi. Nếu lưu lỗi,
+   không gửi bản cũ, không đóng tab và nút được mở lại. «Lưu thành bản mới» riêng không gửi duyệt.
+7. Tạo lại lệnh → **Hủy lệnh**: confirm Không không đổi gì; Có thì file/bản vẫn tải được,
+   về `cho-xem` và người ra lệnh nhận chuông.
+8. TP/PP trình PGD → PGD **Trả về TP/PP** có lý do: TP/PP nhận lệnh vàng riêng (`can-sua`,
+   `lanh-dao`), không còn dòng đó ở tab phê duyệt kết quả. Cán bộ không thấy/không xử được lệnh TP.
+9. TP/PP **Gửi lại** với quyền ⏳ → `cho-lanh-dao`; quyền ✓ → `da-duyet`.
+   TP/PP **Hủy lệnh** → `cho-lanh-dao`. TP/PP vẫn có thể đẩy tiếp về Cán bộ qua menu kết quả.
+10. Chuông có tham chiếu file phải mở được đúng hàng chờ/tab; người cùng phòng không phải
+    chủ lệnh và người ngoài phòng không được gửi/hủy/lưu tạm hộ. PGD/GĐ không có lệnh thì ẩn tab vàng.
+
+**Kết quả cần người dùng xác nhận:** sau khi thử đúng các bước, nói **«Đã test PC và OK»**
+cho riêng đợt này. Trước đó **không commit, push hay deploy VPS**. Kiểm Zalo thật chỉ thực hiện
+theo cổng phát hành; PC không tự gửi tin bằng bot production.
+
 ## 10. Dọn dẹp sau buổi test
 
 Cách nhanh nhất: `chay-test.bat` chọn **2** (về bộ cũ) hoặc **4** (về bộ Vòng 14) — cả hai đều
