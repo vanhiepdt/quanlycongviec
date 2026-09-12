@@ -2276,6 +2276,17 @@ Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã
 pin XSS **`101 sink / 986 nội suy`** ở `docs/XSS-4.6.md`. Test tự động: **2076/2076 · 115 file · exit 0**
 (+11 ca mới trong `approvals-pending-da-sua.test.js`, +4 ca pin CSS trong `approvals-ui.test.js`).
 
+> **⚠ MỤC NÀY NAY TEST TRÊN PRODUCTION, KHÔNG PHẢI TRÊN PC.** Ngày **12/09/2026** người dùng ra lệnh
+> «deloy lên vps đi, đảm bảo vps chạy code mới nhất và ko lỗi, restart lại docker cho chắc» — lệnh đó
+> **thay cho bước nghiệm thu giao diện**, nên bốn việc MỚI-3…MỚI-6 **đã lên `https://ttdt.site` trước khi
+> được bấm thử**. VPS nay ở commit `7929f62`, `pgmigrations` = **029** (đã áp 022 → 029), ba container
+> `qlcv-app` / `qlcv-db` / `qlcv-onlyoffice` đều healthy, buster qua nginx đúng **`20260912-02`**, log app
+> không có dòng lỗi. Các bước 61 → 79 bên dưới **vẫn giữ nguyên giá trị**: bấm trực tiếp trên
+> `https://ttdt.site` bằng **Ctrl+F5**, và vì đây là dữ liệu thật nên **đừng tạo nhiệm vụ thử bừa** — dùng
+> việc/cây đang có, hoặc tạo rồi xoá lại. Nếu một bước sai thì ghi nguyên văn câu thông báo, **đừng tự sửa
+> mã trên VPS**; bản backup chụp trước deploy là `/var/backups/qlcv/qlcv-2026-09-12.dump` (khôi phục bằng
+> `bash deploy/restore.sh <đường dẫn>`).
+
 > **⚠ Ctrl+F5, KHÔNG phải chạy lại `chay-test.bat`.** Đợt này không có migration mới. Sau Ctrl+F5, thẻ
 > Network phải thấy `assets/js/app.js?v=20260912-02` và Console in `[QLCV] app.js 20260912-02`. Nếu vẫn
 > là `20260912-01` thì trình duyệt còn giữ bản cũ — **tắt hẳn tab rồi mở lại**, đừng đoán.

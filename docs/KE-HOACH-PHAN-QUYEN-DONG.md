@@ -10,7 +10,8 @@ không xóa cột DB/khóa RPC/nhật ký cũ. Đây không phải cấp thêm q
 Metadata danh sách file gắn theo phạm vi đầu việc đã được lọc; chỉ tên/định dạng/trạng thái/tỷ lệ/
 tiến độ/id bản mới nhất, không đưa đường dẫn lưu, nội dung hay các phiên bản cũ vào gói này.
 Luật nháp trong hàng chờ lãnh đạo và Q2/Q3/Gửi BLĐ không thay đổi.
-Buster **20260910-10**; người dùng còn cần nghiệm thu **9b.15–9b.18**, không commit/push/deploy.
+Buster **20260910-10**; **ĐÃ lên VPS 12/09/2026 mà CHƯA nghiệm thu** — nay bấm **9b.15–9b.18** trực tiếp
+trên `https://ttdt.site` (commit `b17f878` + `3689bc2` + `7929f62`, `pgmigrations` = **029**).
 
 ## Cập nhật V2/V4/V7 — 10/09/2026, chờ nghiệm thu
 
@@ -39,7 +40,8 @@ Luồng trả lại/gửi lại/duyệt cây không được xóa hoặc tự á
 Migration 026 đã lên UAT và nới CHECK đủ ba ký hiệu; 027 lưu cấu hình. Có mặc định cứng khi đọc
 không được, chặn số ngoài 0–100 và mốc giảm theo từng nhánh. Full **1946/1946**, lint exit 0;
 `TC-V7-01..15`, test ma trận và UI đối chứng. Buster **20260910-7**, kiểm asset live exit 0.
-Checklist **9b.17** và các bước hai phiên còn phải nghiệm thu PC; không commit/push/deploy.
+Checklist **9b.17** và các bước hai phiên **nay nghiệm thu trên `https://ttdt.site`** — đã deploy
+12/09/2026 theo lệnh người dùng, chưa qua nghiệm thu.
 
 Yêu cầu người dùng: bỏ đối tượng «Quản lý công việc» khỏi bảng; chuyển chú thích ký hiệu xuống
 dưới cùng; **admin thay đổi được Phân quyền hệ thống bằng dropdown**.

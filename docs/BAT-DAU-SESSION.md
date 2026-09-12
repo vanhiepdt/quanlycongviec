@@ -2,10 +2,13 @@
 
 ## Ưu tiên hiện tại — ĐỢT B BỔ SUNG LƯỢT 2 12/09/2026: nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
 
-**ĐỢT B, bản sửa Q6/Q11, đợt bổ sung 12/09 và lượt 2 này CHƯA NGHIỆM THU — nghiệm thu GỘP MỘT LẦN.** Đọc
+**ĐÃ PHÁT HÀNH VPS 12/09/2026 — NHƯNG CHƯA NGHIỆM THU GIAO DIỆN.** Người dùng ra lệnh «deloy lên vps đi,
+đảm bảo vps chạy code mới nhất và ko lỗi, restart lại docker cho chắc»; lệnh đó **thay cho bước nghiệm thu**
+của cả ĐỢT B, bản sửa Q6/Q11, đợt bổ sung 12/09 và lượt 2 này, nên bốn việc nay **đang chạy trên dữ liệu
+thật** mà chưa ai bấm thử. Đọc
 khối này trước; các khối «Snapshot trước đợt B bổ sung lượt 2 …», «Snapshot trước đợt B bổ sung — BẢN SỬA
 Q6/Q11» và «Snapshot trước bản sửa Q6 — ĐỢT B» bên dưới vẫn còn hiệu lực ở mọi chỗ **không mâu thuẫn**
-với khối này.
+với khối này — **riêng mọi câu «CHƯA COMMIT/PUSH/DEPLOY» trong các khối cũ nay đã HẾT hiệu lực**.
 
 **KHÔNG CÓ MIGRATION — CSDL GIỮ `029`, NGƯỜI ĐANG TEST CHỈ CẦN Ctrl+F5.** Không phải chạy lại
 `chay-test.bat`. Buster + banner **`20260912-01` → `20260912-02`** (5 chỗ: `web/index.html` dòng
@@ -85,11 +88,21 @@ vụ KHÔNG tích ⇒ `tp@` mất «Gửi đi duyệt» chỉ còn «Hoàn thàn
 CÓ tích ⇒ vẫn `cho-lanh-dao` cho PGĐ, nhóm `luu-tam` 0 bản thì không hiện nút chốt · 79 các mục cũ **không
 đổi luật**. Rồi giữ xanh **9b.15 → 9b.24**.
 
-**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Chỉ khi nghe **OK RIÊNG ĐỢT NÀY** mới commit bằng
-**explicit paths** (không `git add .`), push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md` — **VPS
-đang ở `pgmigrations=021`, phải áp 022 → 029, backup VPS trước**. OK ngày 2026-09-08 của bản bỏ vai cũ
-**KHÔNG** áp dụng cho đợt này. Danh sách file untracked phải `git add` đích danh: xem cuối khối ĐỢT B bên
-dưới, **cộng thêm `server/tests/integration/approvals-pending-da-sua.test.js`**.
+**ĐÃ COMMIT + PUSH + DEPLOY XONG NGÀY 12/09/2026.** Ba commit theo **explicit paths** (không `git add .`):
+`b17f878` `may-chu:` (114 file, +14256/−1417 — gồm cả 8 migration `022 → 029` và 34 file untracked trước
+đó) · `3689bc2` `giao-dien:` (5 file `web/`) · `7929f62` `tai-lieu:` (9 file). Đã push
+`68d4b75..7929f62` lên `origin/vps/sua-loi-vat`; cây làm việc **sạch hoàn toàn**. Trên VPS:
+`bash deploy/backup.sh` → `git fetch` → `git pull --ff-only` (HEAD `7929f62`, quyền file mới `644`) →
+`bash deploy/restart.sh` **exit 0**: «Migrations complete!», «OK: app/db healthy, readyz DB up, OnlyOffice
+healthcheck=true». Xác minh sau deploy: `pgmigrations` = **29** (029 → 021 đúng thứ tự; bảng này có schema
+`id / name / run_on`, **KHÔNG có cột `version`/`dirty`**) · bốn cột mới có thật (`task_files.tp_duyet_boi`,
+`tp_duyet_luc`, `approval_changes.file_id`, `work_items.supervisor_ids`) · `task_file_flow_hanh_dong_check`
+nay **12 action**, đã bỏ `trinh-lanh-dao` · `readyz {"ok":true,"db":"up"}` · buster qua nginx
+`https://ttdt.site/` = **`20260912-02`** ở cả 4 URL · `docker logs qlcv-app`: **0** dòng error/fatal, ba
+lịch cron (quét quá hạn 07:00, dọn tin chat, đẩy Zalo `*/2`) đều bật. Backup chụp trước deploy:
+`/var/backups/qlcv/qlcv-2026-09-12.dump` + thư mục `restart-<ngày giờ>-<mã>/` của `restart.sh`.
+**VIỆC CÒN NỢ: NGHIỆM THU GIAO DIỆN TRÊN PRODUCTION** — bấm `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.25
+(bước 61 → 79)** ngay trên `https://ttdt.site` với **Ctrl+F5**, giữ dữ liệu thật cẩn thận.
 
 **TÀI LIỆU ĐÃ CẬP NHẬT TRONG ĐỢT NÀY:** `docs/KE-HOACH-DUYET-CAY.md` **§13 (MỚI, 5 tiểu mục)** ·
 `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.25 (MỚI)** + dòng mới ở bảng §11 · `docs/KE-HOACH-KET-QUA-FILE.md`

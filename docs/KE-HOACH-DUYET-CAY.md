@@ -178,7 +178,8 @@ xoá cả cây» **giữ nguyên**.
 
 Banner + buster **`20260909-4`** cho cả `app.js`/`project-details.js`/`phase8b-review.js`/`app.css`.
 Full suite **1841 test / 103 file xanh**. Hướng dẫn test tay: `docs/HUONG-DAN-TEST-GIAO-DIEN.md` mục **9b.15** phần G.
-**Chưa phát hành VPS — chờ người dùng OK riêng đợt này.**
+**ĐÃ phát hành VPS 12/09/2026** (commit `b17f878` + `3689bc2` + `7929f62`, `pgmigrations` = **029**) **mà
+CHƯA nghiệm thu giao diện** — nay bấm thử mục **9b.15** phần G trực tiếp trên `https://ttdt.site`.
 
 ## 10. ĐỢT A (2026-09-11): «Ban lãnh đạo kiểm soát» thành BA CẤP, gửi ĐÚNG NGƯỜI
 
@@ -264,9 +265,12 @@ Full suite **1987 test / 111 file xanh**, `npm run lint` exit 0, `format:check` 
 
 - ~~**ĐỢT B** (Q1+Q2+Q3+Q4, R4+R4'+R4'', R5, R6, thay `trinh-lanh-dao`, gộp `yeu-cau-sua`, siết
   `dungNguoiDuyetFile`)~~ — **ĐÃ LÀM XONG 11/09/2026, xem mục 11**.
-- **Chưa phát hành VPS.** Người dùng phải test PC mục **9b.23** (và giữ xanh 9b.15 → 9b.22) rồi nói
-  **OK RIÊNG ĐỢT NÀY**. VPS đang ở migration 021 ⇒ khi phát hành phải chạy **022 → 029**, và **sao
-  lưu trước** (029 **không lùi tự động được**).
+- ~~**Chưa phát hành VPS.**~~ — **ĐÃ PHÁT HÀNH VPS 12/09/2026** theo lệnh người dùng (ba commit
+  `b17f878` + `3689bc2` + `7929f62`, `bash deploy/restart.sh` **exit 0**): VPS **đã áp 022 → 029**,
+  `pgmigrations` nay = **029**, backup chụp trước deploy ở `/var/backups/qlcv/qlcv-2026-09-12.dump`
+  (029 **không lùi tự động được** — muốn rút phải `restore.sh` bản đó). **Chưa nghiệm thu**: người dùng
+  nay bấm mục **9b.23** (và giữ xanh 9b.15 → 9b.22) **trực tiếp trên `https://ttdt.site`**, không phải
+  trên PC.
 
 ## 11. ĐỢT B (2026-09-11): «gộp hai trục» duyệt cây + duyệt file kết quả
 
@@ -405,12 +409,14 @@ exit 0, `format:check` còn đúng **2 nợ cũ** (`workItems/tyLe.js`, `stats-p
   tài khoản». Đã chọn **cảnh báo to trong `chay-test.bat`** thay vì bịa dữ liệu seed, vì chuỗi R2
   (cấp 2 ⊆ cấp 1, cấp 3 ⊆ cấp 2) chỉ được giữ ở **tầng service**, bịa vài cái id «cho đủ» rất dễ tạo
   hành vi khó hiểu. Muốn thử thật: `/giu`, hoặc mở nhiệm vụ và chọn người trong biểu mẫu.
-- **Chưa phát hành VPS.** Người dùng phải test PC mục **9b.23 — gồm cả mục J của bản sửa 11.6** (và giữ
-  xanh 9b.15 → 9b.22) rồi nói **OK RIÊNG ĐỢT NÀY** — OK của ĐỢT A và của các đợt 3/4/5 **không** áp
-  dụng. Sau đó mới commit explicit paths, push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md`: **sao
-  lưu trước**, VPS đang ở migration **021** ⇒ phải chạy **022 → 029**. Dữ liệu VPS **khác** UAT, nên chốt
-  `DO $$` trong 029 có thể nêu ra mã verdict lạ mà UAT không có — lúc đó **không tự đổi dữ liệu**, xử lý
-  tay rồi migrate lại.
+- ~~**Chưa phát hành VPS.**~~ — **ĐÃ PHÁT HÀNH 12/09/2026 mà CHƯA QUA NGHIỆM THU**: người dùng ra lệnh
+  «deloy lên vps đi, đảm bảo vps chạy code mới nhất và ko lỗi, restart lại docker cho chắc», lệnh đó
+  **thay cho OK RIÊNG ĐỢT NÀY** (OK của ĐỢT A và của các đợt 3/4/5 vẫn không áp dụng). Đã commit bằng
+  explicit paths (`b17f878` máy chủ · `3689bc2` giao diện · `7929f62` tài liệu), push `vps/sua-loi-vat`,
+  rồi trên VPS `backup.sh` → `git pull --ff-only` → `bash deploy/restart.sh` **exit 0**. **Chốt `DO $$`
+  trong 029 KHÔNG nêu mã verdict lạ nào** — migration chạy sạch trên dữ liệu thật (dữ liệu VPS **khác**
+  UAT), `pgmigrations` nay = **29**. Việc còn nợ: bấm **9b.23 — gồm cả mục J của bản sửa 11.6** và giữ
+  xanh 9b.15 → 9b.22 **ngay trên `https://ttdt.site`**, không phải trên PC.
 - **`server/_uat-9b22-20260911-0648/`** (bằng chứng UAT) — **không commit**, chưa xác nhận nguồn gốc.
 - **Ba worktree cũ của subagent** ở `.claude/worktrees/agent-*/` — **không đụng tới**, xoá là thao tác
   git phá hoại, phải hỏi người dùng.
@@ -516,8 +522,11 @@ chỉ «Hoàn thành / Duyệt»; BẬT ⇒ chỉ «TP/PP phê duyệt»; TẮT 
   Duyệt»**. Hoặc tạo nhiệm vụ mới cho sạch.
 - **`nutVerdictFile` / `buildNutVerdictFile` vẫn là CODE CHẾT** trong `app.js` — chưa dọn vì ngoài phạm
   vi đợt này.
-- **Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.23 (gồm mục J)** rồi nói **«OK RIÊNG ĐỢT
-  NÀY»**. Trước đó **không commit, không push, không deploy**.
+- ~~**Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.23 (gồm mục J)** rồi nói **«OK RIÊNG
+  ĐỢT NÀY»**. Trước đó **không commit, không push, không deploy**.~~ — **ĐÃ DEPLOY LÊN VPS 12/09/2026 MÀ
+  CHƯA NGHIỆM THU**: lệnh «deloy lên vps đi…» của người dùng thay cho cổng đó, mã đã lên `https://ttdt.site`
+  trong ba commit `b17f878` + `3689bc2` + `7929f62`. Nay bấm **9b.15 → 9b.23 (gồm mục J)** trực tiếp trên
+  production với **Ctrl+F5**.
 
 ## 12. ĐỢT B BỔ SUNG (2026-09-12): «Tình trạng» và «Người thực hiện» ghi Ở TỪNG BẢN · bản đầu chỉ người thực hiện trực tiếp nộp
 
@@ -632,8 +641,10 @@ của `phase8d-ban-dau.test.js`), `npm run lint` exit 0, `format:check` còn đ�
 - **Cột «Tình trạng» của DÒNG CHA vẫn là tình trạng của cả NHÓM** — không đổi ở đợt này, vì người dùng chỉ
   yêu cầu ghi «ở từng bản».
 - **`nutVerdictFile` / `buildNutVerdictFile` vẫn là CODE CHẾT** trong `app.js` — nợ từ §11.6.5, chưa dọn.
-- **Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.24** rồi nói **«OK RIÊNG ĐỢT NÀY»**. Trước
-  đó **không commit, không push, không deploy**.
+- ~~**Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.24** rồi nói **«OK RIÊNG ĐỢT NÀY»**.
+  Trước đó **không commit, không push, không deploy**.~~ — **ĐÃ DEPLOY LÊN VPS 12/09/2026 MÀ CHƯA NGHIỆM
+  THU**: lệnh «deloy lên vps đi…» của người dùng thay cho cổng đó. Nay bấm **9b.15 → 9b.24** trực tiếp
+  trên `https://ttdt.site` với **Ctrl+F5**.
 
 ## 13. ĐỢT B BỔ SUNG LƯỢT 2 (2026-09-12): nhãn «duyệt cái gì» + popup «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
 
@@ -791,5 +802,12 @@ trên **CV002**: nhiệm vụ không tích mà file vẫn lên PGĐ, và ở chi
 - **`nutVerdictFile` / `buildNutVerdictFile` vẫn là CODE CHẾT** trong `app.js` — nợ từ §11.6.5, chưa dọn.
 - **Mười một chỗ `text-[11px]` nợ cũ trong `app.js`** vẫn còn (class không tồn tại trong Tailwind đóng
   băng) — ngoài phạm vi, **cố ý không sửa** để không đụng màn khác.
-- **Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.25** rồi nói **«OK RIÊNG ĐỢT NÀY»**. Trước
-  đó **không commit, không push, không deploy**.
+- ~~**Cổng nghiệm thu chưa qua:** người dùng test PC **9b.15 → 9b.25** rồi nói **«OK RIÊNG ĐỢT NÀY»**.
+  Trước đó **không commit, không push, không deploy**.~~ — **ĐÃ DEPLOY LÊN VPS 12/09/2026 MÀ CHƯA NGHIỆM
+  THU**: người dùng ra lệnh «deloy lên vps đi, đảm bảo vps chạy code mới nhất và ko lỗi, restart lại docker
+  cho chắc», lệnh đó thay cho cổng nghiệm thu. Ba commit `b17f878` (máy chủ) + `3689bc2` (giao diện) +
+  `7929f62` (tài liệu) đã push lên `vps/sua-loi-vat`; trên VPS `backup.sh` → `git pull --ff-only` →
+  `bash deploy/restart.sh` **exit 0**, `pgmigrations` = **29**, buster qua nginx = **`20260912-02`**, log
+  app 0 lỗi. **Việc còn nợ duy nhất: bấm 9b.15 → 9b.25 ngay trên `https://ttdt.site`** với **Ctrl+F5** —
+  đây là dữ liệu thật, đừng tạo nhiệm vụ thử bừa; nếu bắt được lỗi thì ghi nguyên văn câu thông báo,
+  **không tự sửa mã trên VPS**.

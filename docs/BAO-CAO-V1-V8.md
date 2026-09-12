@@ -1,10 +1,13 @@
 # Báo cáo kiểm tra và đợt V1–V8 — 10/09/2026
 
-Chưa nghiệm thu, chưa commit/push/deploy. Nhánh vps/sua-loi-vat. Giữ nguyên dữ liệu UAT và các thay đổi đợt trước.
+**ĐÃ PHÁT HÀNH VPS 12/09/2026** — toàn bộ nội dung báo cáo này (V1–V8 và bốn yêu cầu sau đó) đã lên
+production trong ba commit `b17f878` (máy chủ) + `3689bc2` (giao diện) + `7929f62` (tài liệu), VPS ở
+`pgmigrations` = **029**, theo lệnh «deloy lên vps đi…» của người dùng. **Chưa nghiệm thu giao diện** — bấm
+thử trực tiếp trên `https://ttdt.site`. Nhánh vps/sua-loi-vat. Giữ nguyên dữ liệu UAT và các thay đổi đợt trước.
 
 ## Bốn yêu cầu mới sau V1–V8 — hoàn thành từ kết quả đã duyệt, 10/09/2026
 
-**Đã sửa mã, chưa nghiệm thu PC; không commit/push/deploy.** Checklist mới: **9b.18**.
+**Đã sửa mã và ĐÃ LÊN VPS 12/09/2026; chưa nghiệm thu giao diện.** Checklist: **9b.18**.
 
 1. Bỏ checkbox Hoàn thành nhiệm vụ. Hoàn thành khi có nhóm kết quả và **mọi nhóm có bản đã duyệt**
    (`hoan-thanh`/`da-duyet`); chưa có file hoặc có nhóm tỷ lệ 0 chưa duyệt vẫn chưa hoàn thành.
@@ -533,7 +536,11 @@ modal cấp 2 không gọi UI file; editor thật tải được. Ảnh/báo cá
    chưa coi là kiểm tay bằng seed.
 4. V8 chưa tái hiện được lỗi NV gửi thẳng PGĐ. Bằng chứng đang có cho thấy TP nộp hộ đúng luồng;
    nếu người dùng còn thấy sai cần mã nhiệm vụ/nhóm/bản và đúng người bấm gửi để đối chiếu 4 lớp.
-5. Hai nợ format cũ cố ý để nguyên. Không commit, không push, không deploy.
+5. Hai nợ format cũ cố ý để nguyên.
 
-**Dừng ở mốc chờ test PC và “OK RIÊNG ĐỢT NÀY”. 9b.15/9b.16 cũng chưa được nghiệm thu;
-OK ngày 08/09/2026 không áp dụng cho các đợt này.**
+**ĐÃ LÊN VPS 12/09/2026 mà CHƯA NGHIỆM THU.** Người dùng ra lệnh «deloy lên vps đi, đảm bảo vps chạy code
+mới nhất và ko lỗi, restart lại docker cho chắc» — lệnh đó thay cho “OK RIÊNG ĐỢT NÀY”, nên toàn bộ V1–V8
+và bốn yêu cầu trên **đã lên production** trong ba commit `b17f878` (máy chủ) + `3689bc2` (giao diện) +
+`7929f62` (tài liệu): `pgmigrations` = **029**, `bash deploy/restart.sh` **exit 0**, buster qua nginx =
+**`20260912-02`**. **9b.15/9b.16/9b.17/9b.18 nay phải nghiệm thu TRỰC TIẾP TRÊN `https://ttdt.site`**,
+không phải trên PC; OK ngày 08/09/2026 vẫn không áp dụng cho các đợt này.
