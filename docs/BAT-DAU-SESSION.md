@@ -1,6 +1,107 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
-## Ưu tiên hiện tại — ĐỢT B BỔ SUNG LƯỢT 2 12/09/2026: nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
+## Ưu tiên hiện tại — ĐỢT NHÃN NHẬT KÝ 12/09/2026: «Hoạt động gần đây» chuẩn hoá tên + hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin — VÀ CHỈ ĐẠO MỚI CHƯA LÀM: tách «Cập nhật» thành LƯU CHỜ + nút GỬI DUYỆT có popup thay đổi
+
+**MÃ ĐỢT NÀY ĐÃ XONG, TEST XANH, ĐÃ COMMIT LOCAL — CHƯA PUSH, CHƯA DEPLOY VPS.** Đọc khối này trước;
+các khối «Snapshot trước đợt nhãn nhật ký …» (đợt B bổ sung lượt 2) và mọi khối bên dưới vẫn còn hiệu
+lực ở mọi chỗ **không mâu thuẫn** với khối này.
+
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `029`, NGƯỜI ĐANG TEST CHỈ CẦN Ctrl+F5.** Không phải chạy lại
+`chay-test.bat` cho phần CSDL. Buster + banner **`20260912-02` → `20260912-03`** (5 chỗ: `web/index.html`
+dòng 21/1230/1232/1233 + `app.js:9`); `node tools/local-assets-check.mjs` in
+`Ban app.js = 20260912-03 (index.html khop).` exit 0. **Hình dạng phản hồi RPC/REST không đổi** —
+`recentActivities` vẫn bốn khoá cũ, chỉ nội dung `A_DETAILS` nay là câu tiếng Việt. Env **MỚI**
+`DUE_SOON_DAYS` (mặc định `3`, không cần khai trong `.env`).
+
+**BA CHỈ ĐẠO (nguyên văn, một tin nhắn):**
+
+> «auth.changePassword
+>
+> {"revokedSessions":0}
+>
+> mấy cái ở Hoạt động gần đây vẫn chưa chuẩn hóa đúng tên, tìm các trường hợp để hiển thị đúng
+>
+> zalo vẫn chưa thấy hoạt động, kiểm tra xem khi có duyệt hoặc liên quan đến duyệt thì thông báo, trễ
+> hạn, gần đến hạn mà tiến độ chưa xong cũng thông báo. test zalo đi»
+
+**Ba quyết định người dùng đã chốt qua hộp chọn (ràng buộc phần mã):** ngưỡng «gần đến hạn» = **3
+ngày** (có `DUE_SOON_DAYS` để đổi không cần sửa mã) · «tiến độ chưa xong» = **`tien_do < 100%`** (con
+số tiến độ tính từ file kết quả đang hiển thị trên lưới — chưa nộp file nào = 0% vẫn báo, đang sửa 80%
+vẫn báo) · **ĐẨY THÊM tin «Đã duyệt» (`approval_approved`) sang Zalo — ĐỔI quyết định ngày
+2026-09-06** («duyệt xong là tin vui, không cần rung điện thoại» đã bị người dùng bác: người nộp bài
+cần biết ngay kết quả để làm bước kế). Quyết định «tôi cầm bot» ngày 2026-09-06 vẫn đúng ở mọi phần
+còn lại.
+
+**VIỆC (1) — ĐÃ LÀM XONG.** 31 nhãn mới trong `NHAT_KY_HANH_DONG` (bảng đầy đủ ở
+`docs/NHAT-KY-HOAT-DONG-GAN-DAY.md` mục 6); viết lại **CẢ HAI** bản dịch `details`
+(`moTaChiTietHoatDong` giao diện + `moTaNhatKy` máy chủ) theo tầng «dịch theo KHOÁ»
+`dichKhoaNhatKy`/`dichKhoa`, **bỏ hẳn `JSON.stringify`**; máy chủ thêm bản sao `NHAN_COT_NHAT_KY` +
+`NHAN_TRANG_THAI_NHAT_KY` + `CAP_DAU_VIEC` + `ngayNgan()`; chặn 4 route sinh dòng tên máy;
+`DIEU_KIEN_LOAI_DONG_RAC` thêm `action NOT LIKE '% /api/%'`; đổi `text-teal-600` → `text-indigo-600`
+(màu chết trong artifact đóng băng).
+
+**VIỆC (2) — ĐÃ LÀM XONG.** `quetSapDenHan()` trong `services/cron.js`: nhiệm vụ cấp 3
+(`v_countable_items`) có người thực hiện, `due_date` trong cửa sổ `DUE_SOON_DAYS` và tiến độ tính từ
+**file kết quả** (`demNhomFileTheoItem` + `ganTienDo` — đúng con số của lưới) chưa đủ 100%; chống trùng
+bằng `notiRepo.exists(... since: hôm nay)`; loại mới `due_soon` (`LOAI.SAP_DEN_HAN` + icon
+`fa-hourglass-half` hổ phách ở `THONG_BAO_LOAI`); gọi trong CÙNG lịch `CRON_OVERDUE` bằng **hai
+try/catch riêng**. Nội dung: `Nhiệm vụ "…" (MÃ) còn N ngày (dd/MM/yyyy) mà tiến độ mới X%.` hoặc
+`đến hạn hôm nay`.
+
+**VIỆC (3) — ĐÃ TEST ZALO THẬT TRÊN PRODUCTION 12/09. KẾT LUẬN: ZALO KHÔNG HỎNG, CHỈ CHƯA CÓ GÌ ĐỂ
+GỬI.** Token hợp lệ (bot «Bot Trung tâm Đào tạo», BASIC) · webhook
+`https://ttdt.site/api/zalo-bot/webhook`, `npm run zalo:webhook -- thu` → `{"ok":true,"outcome":"webhook.ok"}`
+· log app có POST từ IP Zalo `118.102.2.29` → **200**, POST giả không secret → **403**, GET → 404 ·
+**chỉ 1/5 người đã liên kết** (id 1 `vanhiepdt95@gmail.com`) · `notifications` **0 dòng** ·
+`v_countable_items` cấp 3 = **0**, quá hạn 0, hạn trong 7 ngày 0 ⇒ cron 07:00 không có gì để báo ·
+gửi thử notification id=5 (`overdue`) → `{"trongDoi":1,"daGui":1,"boQua":0,"thatBai":0,"tat":false}`,
+`zalo_sent_at = 10:15:18 12/09 (+07)`, tin đi là `[Quá hạn] Nhiệm vụ "TIN THỬ ĐƯỜNG ZALO"
+(KHÔNG-CÓ-THẬT) đã quá hạn 12/09/2026. Mở hệ thống để xem chi tiết.` (giữ trong CSDL làm bằng chứng,
+đừng xoá). `LOAI_DAY_ZALO` nay **5 loại**: `approval_pending`, `approval_rejected`,
+`approval_approved`, `overdue`, `due_soon`; `NHAN_ZALO` 5 nhãn `[Chờ duyệt] [Trả lại] [Đã duyệt] [Quá
+hạn] [Sắp đến hạn]`; `loCanDay` thêm `ORDER BY n.id`.
+
+**TEST.** `hoat-dong-ui` **6 → 10 ca** (TC-HD-07 nhãn mới + pin màu không chết, TC-HD-08 hết JSON thô,
+TC-HD-09 dịch khoá nghiệp vụ, **TC-HD-10 pin máy chủ ↔ giao diện khớp TỪNG CHỮ trên 33 mẫu**);
+`cron-due-soon.test.js` **MỚI 16 ca**; TC-ZL-10 viết lại thành «đẩy 5 loại tin». **Full suite
+`2096/2096 · 116 file · exit 0`** (289s). eslint 0 lỗi, prettier sạch (scoped `--write` cho
+`legacyFields.js` + 2 file test). Pin XSS **không đổi `101 sink / 986 nội suy`** — hai hàm dịch mới chỉ
+trả **văn bản**, không dựng thẻ, và chỗ render đã có `escapeHtml(chiTiet)`.
+
+**NGƯỜI DÙNG TEST TRÊN PC:** Ctrl+F5, xác nhận Network có `assets/js/app.js?v=20260912-03` và Console in
+`[QLCV] app.js 20260912-03`, rồi bấm theo `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.26 (bước 80 → 95)**:
+mục A (bước 80 → 88) cho nhãn + mô tả hoạt động, mục B (bước 89 → 95) cho `due_soon` và 5 loại tin
+Zalo. **OK rồi mới push GitHub + deploy VPS.** §9b.25 (bước 61 → 79) **vẫn còn nợ nghiệm thu TRÊN
+PRODUCTION** `https://ttdt.site` từ đợt phát hành 12/09.
+
+**MÓN NỢ HIỂN THỊ MỚI PHÁT HIỆN — KHÔNG TỰ SỬA VÌ NGOÀI PHẠM VI «HOẠT ĐỘNG GẦN ĐÂY»:** badge trạng
+thái file dùng ba class **không có** trong `tailwind.min.css` đóng băng ⇒ badge hiện không nền không
+màu: `bg-slate-100 text-slate-600` (`luu-tam`), `bg-yellow-100 text-yellow-700` (`cho-xem`),
+`bg-green-800 text-white` (`da-duyet`); `app.js` còn **11 chỗ `text-[11px]`** nợ cũ. Đã báo người dùng,
+chờ quyết định có làm đợt riêng.
+
+**CHỈ ĐẠO MỚI NHẬN CUỐI PHIÊN 12/09 — CHƯA LÀM GÌ, CẦN KHẢO SÁT + CÓ THỂ PHẢI HỎI THÊM (nguyên văn):**
+
+> «Khi sửa công việc, nhiệm vụ, trên giao diện của công việc con, và giao diện của tab nhiệm vụ cũng
+> đang chưa hợp lý. tôi muốn khi sửa thông tin gì cũng có chế độ lưu chờ (tức là cho sửa tiếp), rồi nút
+> ấn gửi duyệt thay gì gửi duyệt luôn khi ấn cập nhật như bây giờ, và trước khi ấn nút gửi duyệt thì
+> phải hiển thị popup những cái thay đổi, chắc chắc rồi ấn ok để gửi đi duyệt. Nếu trong màn hình công
+> việc con thì cho sửa cả nhiệm vụ cùng lưu tạm đấy, còn nếu màn hình chỉ có sửa nhiệm vụ thì chỉ nhiệm
+> vụ thôi»
+
+Diễn giải bốn ý: (a) bấm **«Cập nhật»** khi sửa công việc/nhiệm vụ **KHÔNG** gửi duyệt nữa mà chỉ
+**LƯU CHỜ** (nháp sửa, cho sửa tiếp nhiều lượt); (b) thêm nút **«Gửi duyệt»** riêng; (c) trước khi gửi
+phải **popup liệt kê những thay đổi**, người dùng **OK** mới thật sự gửi đi duyệt; (d) phạm vi lưu tạm
+theo màn hình — **màn hình công việc con** thì sửa **cả nhiệm vụ** trong đó và lưu tạm **chung**,
+**màn hình chỉ có nhiệm vụ** thì chỉ nhiệm vụ. **Đụng trực tiếp Q9** («GIỮ cơ chế ghi đè
+`update = ⏳`» — hiện sửa việc `Đã duyệt` là hạ về `Chờ duyệt` NGAY khi bấm Cập nhật) và **R4''**
+(`approval_changes`, giá trị CŨ giữ nguyên tới khi duyệt) ⇒ phải khảo sát `works/service.js`,
+`workItems/service.js`, `approvals/*`, hai modal trong `app.js` rồi **hỏi lại người dùng** về trạng
+thái trung gian (cây `Đã duyệt` đang có sửa chờ thì hiện gì trên lưới, có bị chặn gửi duyệt lần nữa
+không, ai được bấm «Gửi duyệt», «lưu chờ» có cần tên trạng thái mới trong `approval_status` hay chỉ là
+dòng `approval_changes` chưa gửi) **TRƯỚC KHI** viết mã.
+
+## Snapshot trước đợt nhãn nhật ký — ĐỢT B BỔ SUNG LƯỢT 2 12/09/2026: nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
 
 **ĐÃ PHÁT HÀNH VPS 12/09/2026 — NHƯNG CHƯA NGHIỆM THU GIAO DIỆN.** Người dùng ra lệnh «deloy lên vps đi,
 đảm bảo vps chạy code mới nhất và ko lỗi, restart lại docker cho chắc»; lệnh đó **thay cho bước nghiệm thu**

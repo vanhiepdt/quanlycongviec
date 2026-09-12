@@ -81,3 +81,57 @@ Ctrl+Shift+R → Console thấy `[QLCV] app.js 20260829-1` → vào **Tổng qua
 2. Dòng tên theo tháng hiện «Quyết toán Q3 · Tháng 8/2026 · tên mới: …» — không còn mã CV003.
 3. Dòng rác cũ trong CSDL bị ẩn luôn (không cần dọn CSDL); từ giờ máy chủ không sinh thêm.
 4. Tab Nhật ký trong modal sửa và mọi luồng duyệt/ủy quyền không đổi — nhật ký GHI vẫn đầy đủ.
+
+## 6. Bổ sung 12/09/2026 — chuẩn hoá nốt 31 nhãn còn thiếu và bỏ HẲN JSON thô
+
+Người dùng gửi đúng hai dòng đang hiện trên panel:
+
+```
+auth.changePassword        ← tên action thô, đợt 29/08 chưa phủ tới
+{"revokedSessions":0}      ← nhánh JSON.stringify cuối hàm dịch
+```
+
+Ba việc đã làm:
+
+**(1) 31 nhãn mới** trong `NHAT_KY_HANH_DONG` (`app.js`) — mọi action máy chủ GHI mà bảng còn thiếu,
+kể cả action DỰNG ĐỘNG (`taskFiles.<hành động>` của nút chốt, `approvals.<loại>.<action>` của đề nghị
+tỷ lệ / BLĐ kiểm soát):
+
+| Nhóm | Action → nhãn |
+|---|---|
+| Tài khoản | `auth.changePassword` → Đổi mật khẩu · `settings.update` → Sửa thiết lập hệ thống · `permissions.update` → Sửa phân quyền |
+| Zalo | `zalo.tao-ma` → Lấy mã liên kết Zalo · `zalo.lien-ket` → Liên kết Zalo · `zalo.bo-lien-ket` → Bỏ liên kết Zalo |
+| Duyệt | `approvals.return` → Trả lại để sửa · `approvals.requestDelete` → Đề nghị xoá · `approvals.approveDelete` → Duyệt xoá · `approvals.rejectDelete` → Từ chối xoá |
+| Tỷ lệ / BLĐKS | `approvals.ty-le.approve` → Duyệt tỷ lệ mới · `approvals.ty-le.reject` → Từ chối tỷ lệ mới · `approvals.gui-bld.approve` → Duyệt đổi BLĐ kiểm soát · `approvals.gui-bld.reject` → Từ chối đổi BLĐ kiểm soát |
+| Kết quả file | `taskFiles.khai` → Khai kết quả · `.nop` → Nộp file kết quả · `.nop-bao-cao` → Nộp báo cáo · `.luu-tam` → Lưu tạm kết quả · `.luu-ngay` → Lưu kết quả · `.ty-le` → Sửa tỷ lệ file · `.gui-di-duyet` → Gửi kết quả đi duyệt · `.gui-ban-moi` → Gửi bản mới · `.huy-lenh-sua` → Huỷ lệnh sửa · `.sua-truc-tuyen` → Sửa trực tuyến · `.gom-y` → Góp ý kết quả · `.xoa` → Xoá file kết quả |
+| Nút chốt | `taskFiles.tp-phe-duyet` → TP/PP phê duyệt · `.tra-ve-cbo` → Trả về cán bộ · `.hoan-thanh` → Hoàn thành / Duyệt · `.tra-ve-tp` → Trả về TP/PP · `.duyet` → Duyệt kết quả |
+
+Nhãn lấy đúng chữ của `NHAN_VERDICT` (`taskFiles/service.js`) để tab Nhật ký và nút bấm nói cùng một
+giọng. Màu đều nằm trong tập class CÓ THẬT của `tailwind.min.css` đóng băng — đợt này phát hiện
+`text-teal-600` (hai nhãn «Đặt tên theo tháng») là **màu chết** và đổi sang `text-indigo-600`.
+
+**(2) Dịch `details` theo KHOÁ, không in JSON.** Cả HAI bản dịch — `moTaChiTietHoatDong` (giao diện,
+đường REST `/stats/activities`) và `moTaNhatKy` (máy chủ, đường RPC `recentActivities`) — cùng đổ vào
+MỘT panel, nên viết lại cùng luật và pin khớp **từng chữ** (ca TC-HD-10, 33 mẫu). Thêm tầng
+`dichKhoaNhatKy`/`dichKhoa`: khoá nghiệp vụ → cụm tiếng Việt ngắn, nối bằng « · »; khoá kỹ thuật
+(`fileId`, `versionId`, `changeId`, `viaDelegationId`) và khoá lạ → **im lặng**; giá trị `0`/`false`
+rỗng nghĩa → im lặng. **Bỏ hẳn nhánh `JSON.stringify`** — hết `{"revokedSessions":0}`. Máy chủ cần bản
+sao `NHAN_COT_NHAT_KY` + `NHAN_TRANG_THAI_NHAT_KY` để in nhãn cột và trạng thái file y như giao diện.
+
+**(3) Chặn dòng rác mới.** Bốn route không còn sinh dòng tên máy: `PATCH /notifications/read`,
+`POST /approvals/changes/:id/acknowledge`, `DELETE /zalo/lien-ket` đặt `res.locals.skipAudit = true`
+(«đã xem» không phải hành động nghiệp vụ; `boLienKet` đã tự ghi `zalo.bo-lien-ket` khi thật sự có gỡ);
+`POST /zalo/ma-lien-ket` đặt tên nghiệp vụ `zalo.tao-ma` với `details: {}` — **cố ý không ghi `ma`**
+vì mã sống 15 phút, ai đọc được nhật ký trong khoảng đó thì liên kết được Zalo của người này. Bộ lọc
+`DIEU_KIEN_LOAI_DONG_RAC` thêm nhánh `action NOT LIKE '% /api/%'` để bắt mọi dòng do `defaultAction`
+của `audit.js` sinh ra.
+
+Test: `hoat-dong-ui.test.js` **TC-HD-01…06 → 01…10** (+4 ca: nhãn mới, hết JSON thô, dịch khoá nghiệp
+vụ, song song máy chủ ↔ giao diện). Full suite **2096/2096 · 116 file · exit 0**. Pin XSS **không đổi
+`101 sink / 986 nội suy`** — hai hàm dịch mới nối chuỗi nhưng không dựng thẻ nào. Buster
+**`20260912-02` → `20260912-03`** (5 chỗ). Kiểm tay: `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.26**.
+
+**Còn nợ (phát hiện khi đo màu, KHÔNG tự sửa vì ngoài phạm vi «Hoạt động gần đây»):** badge trạng
+thái file dùng ba class không có trong artifact đóng băng — `bg-slate-100 text-slate-600` (`luu-tam`),
+`bg-yellow-100 text-yellow-700` (`cho-xem`), `bg-green-800 text-white` (`da-duyet`) ⇒ badge hiện không
+nền không màu; `app.js` còn 11 chỗ `text-[11px]` nợ cũ.

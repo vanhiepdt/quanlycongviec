@@ -141,7 +141,9 @@ Alpine `x-data="{ open: false }"` + `@click.away` của Chat, badge cùng kiểu
   `buildDanhSachThongBao(items)` / `buildMotThongBao(row)` (tên `build*` để bộ soát XSS xếp HTML-LONG
   đúng — **bẫy đã biết** §13.5: hàm trả HTML không đặt tên `build*` thì mỗi chỗ gọi bị đếm `CAN-THOAT`).
 - Icon + màu theo `type`, dùng lại bản đồ đang có ở `app.js:2058` (`approval_pending` → `fa-bell`
-  hổ phách, `approval_approved` → xanh, `approval_rejected` → đỏ, `overdue` → cam).
+  hổ phách, `approval_approved` → xanh, `approval_rejected` → đỏ, `overdue` → cam). Bổ sung
+  12/09/2026: `due_soon` → `fa-hourglass-half` hổ phách — cùng họ với quá hạn nhưng NHẠT hơn một
+  bậc, vì việc chưa trễ, chỉ sắp trễ.
 - **Bấm vào thông báo có `ref_type`/`ref_id`** thì mở đúng mục: `work` → `showProjectDetailsModal`,
   `work_item` → `openEditModal('task', ...)`. Không có ref ⇒ chỉ đánh dấu đã đọc.
 - `capNhatBadgeThongBao(n)` — cùng khuôn `updateChatBadge`.
@@ -253,9 +255,13 @@ hàm thường nhận đồng hồ từ ngoài, lịch chỉ gọi nó (để te
 - Mỗi lượt lấy tối đa 50 dòng `zalo_sent_at IS NULL AND zalo_attempts < 3`, **JOIN** `users` để có
   `zalo_chat_id`; người **chưa liên kết** ⇒ đánh `zalo_sent_at = now()` với
   `zalo_error = 'chưa liên kết Zalo'` để không quét lại mãi.
-- Chỉ đẩy các `type` đáng làm phiền: `approval_pending`, `approval_rejected`, `overdue`. **Không**
-  đẩy `approval_approved` và `info` — duyệt xong là tin vui, không cần rung điện thoại; và không đẩy
-  thông báo cũ hơn **24 giờ** (container tắt ba ngày rồi bật lại không được dội một tràng tin).
+- Chỉ đẩy các `type` đáng làm phiền: `approval_pending`, `approval_rejected`, `approval_approved`,
+  `overdue`, `due_soon` — đúng hằng `LOAI_DAY_ZALO` ở `zalo/repo.js`. **ĐỔI QUYẾT ĐỊNH 12/09/2026**:
+  bản 06/09/2026 KHÔNG đẩy `approval_approved` với lý lẽ «duyệt xong là tin vui, không cần rung điện
+  thoại»; người dùng đã bác lý lẽ đó — người nộp bài cần biết ngay kết quả để làm bước kế, im lặng mới
+  là hại việc. `due_soon` là loại mới, do `quetSapDenHan()` sinh ra khi nhiệm vụ còn ≤ `DUE_SOON_DAYS`
+  ngày (mặc định 3) mà tiến độ chưa đủ 100%. Vẫn **không** đẩy `info`, và không đẩy thông báo cũ hơn
+  **24 giờ** (container tắt ba ngày rồi bật lại không được dội một tràng tin).
 - Thất bại ⇒ `zalo_attempts += 1`, ghi `zalo_error`; đủ 3 lần thì thôi (chỉ mục đã lọc sẵn).
 
 **Vì sao hàng đợi trong bảng chứ không đẩy ngay tại chỗ gọi**: (a) không giữ khoá transaction theo độ
@@ -300,8 +306,9 @@ bộ) ⇒ **phần B5 chỉ nghiệm thu được ở Phase 8**. Trước đó, 
 | TC-ZL-04 | Token trống ⇒ **không** gọi `fetch` một lần nào |
 | TC-ZL-05..08 | `zalo-webhook.test.js`: thiếu / sai `X-Bot-Api-Secret-Token` ⇒ 403; đúng mã ⇒ gán `zalo_chat_id`; mã hết hạn / đã dùng ⇒ không gán; sự kiện lạ ⇒ 200 và không làm gì |
 | TC-ZL-09 | `chat_id` đã thuộc người khác ⇒ chặn bởi unique index, trả câu tiếng Việt chứ không 500 |
-| TC-ZL-10..13 | `zalo-push.test.js`: `dayThongBaoZalo` chỉ đẩy 3 loại đã chọn; người chưa liên kết bị đánh dấu bỏ qua; thất bại tăng `zalo_attempts`, quá 3 lần thì thôi; thông báo quá 24h bị bỏ |
+| TC-ZL-10..13 | `zalo-push.test.js`: `dayThongBaoZalo` chỉ đẩy 5 loại đã chọn (kể từ 12/09/2026, thêm `approval_approved` và `due_soon`); người chưa liên kết bị đánh dấu bỏ qua; thất bại tăng `zalo_attempts`, quá 3 lần thì thôi; thông báo quá 24h bị bỏ |
 | TC-ZL-14 | **Zalo chết không làm đổ luồng duyệt** — `guiTinZalo` ném lỗi, `POST /approvals/:entity/:id/approve` vẫn 200 và `approval_status` vẫn đổi |
+| `cron-due-soon` (16 ca, không đánh mã — cùng lệ với `cron-overdue`) | `cron-due-soon.test.js` (thêm 12/09/2026): `quetSapDenHan` chọn đúng nhiệm vụ trong cửa sổ `DUE_SOON_DAYS`, chỉ báo khi tiến độ tính từ FILE KẾT QUẢ chưa đủ 100%, và không sinh thông báo trùng trong cùng ngày |
 
 ## 5. Thứ tự làm và điểm dừng an toàn
 

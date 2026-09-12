@@ -2406,6 +2406,87 @@ pin XSS **`101 sink / 986 nội suy`** ở `docs/XSS-4.6.md`. Test tự động:
 Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
 đừng tự sửa mã.
 
+### 9b.26 «Hoạt động gần đây» hết tên máy và hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin (12/09/2026, đợt nhãn nhật ký) — bấm để tự nghiệm
+
+**KHÔNG có migration — CSDL giữ nguyên `029`.** Có đổi mã máy chủ + giao diện, buster
+**`20260912-02` → `20260912-03`** ⇒ **Ctrl+F5 là đủ**. Env MỚI **`DUE_SOON_DAYS`** (mặc định `3`,
+không cần khai trong `.env`; chỉ thêm khi muốn đổi ngưỡng). Pin XSS **không đổi: `101 sink / 986 nội
+suy`**. Test tự động: **2096/2096 · 116 file · exit 0** (+4 ca trong `hoat-dong-ui.test.js`, +16 ca
+mới trong `cron-due-soon.test.js`, TC-ZL-10 viết lại thành 5 loại tin).
+
+> **⚠ MỤC NÀY TEST TRÊN PC BẰNG `chay-test.bat`.** Đợt này **chưa** được lệnh lên VPS: bấm thử trên
+> máy trước, báo kết quả, rồi mới deploy. Network phải thấy `assets/js/app.js?v=20260912-03` và Console
+> in `[QLCV] app.js 20260912-03`; nếu vẫn `20260912-02` thì **tắt hẳn tab rồi mở lại**.
+
+> **⚠ HAI BẢN DỊCH, MỘT MÀN HÌNH.** Panel «Hoạt động gần đây» nhận dữ liệu từ HAI đường: REST
+> `/api/v1/stats/activities` (giao diện tự dịch) và RPC `recentActivities` (máy chủ dịch sẵn). Đợt này
+> viết lại **cả hai** và ca `TC-HD-10` pin chúng khớp **từng chữ** trên 33 mẫu. Nếu một dòng hiện khác
+> nhau tuỳ lúc vừa tải trang hay vừa gọi RPC — đó là hồi quy thật, ghi lại **nguyên văn cả hai**.
+
+**A. Nhãn và mô tả hoạt động (bước 80 → 88)**
+
+80. **Hiện trường.** Đăng nhập `admin@`, mở trang tổng quan, cuộn tới panel **«Hoạt động gần đây»**.
+    Chụp lại vài dòng đầu để so với các bước dưới.
+81. **Tên action thô đã thành nhãn tiếng Việt.** Dòng nào trước đây in `auth.changePassword` nay in
+    **«Đổi mật khẩu»** kèm icon chìa khoá. Tương tự: `settings.update` → «Sửa thiết lập hệ thống»,
+    `permissions.update` → «Sửa phân quyền», `departments.create`/`users.create`/`works.create` vẫn giữ
+    nhãn cũ. **31 nhãn mới** — xem bảng đầy đủ ở `docs/NHAT-KY-HOAT-DONG-GAN-DAY.md`.
+82. **Hết JSON thô.** Đổi mật khẩu của chính mình (`admin@`) trong khi đang đăng nhập ở một tab khác.
+    Dòng mới trong panel: nhãn **«Đổi mật khẩu»**, mô tả **RỖNG** — không còn `{"revokedSessions":0}`.
+    Nếu thật sự có phiên khác bị thu hồi thì mô tả là **«Đã đăng xuất N phiên khác»** với N ≥ 1.
+83. **Hết dòng tên máy.** Bấm chuông thông báo (đánh dấu đã đọc), mở một đề nghị thay đổi rồi bấm «Đã
+    xem», vào trang cá nhân bấm «Bỏ liên kết Zalo». Panel **không** được sinh dòng nào có dạng
+    `PATCH /api/v1/notifications/read`, `POST /api/v1/approvals/changes/5/acknowledge` hay
+    `DELETE /api/v1/zalo/lien-ket`. Ba việc đó không phải hành động nghiệp vụ.
+84. **«Lấy mã liên kết Zalo» có dòng riêng và KHÔNG in mã.** Trang cá nhân → «Thông báo Zalo» → bấm lấy
+    mã. Panel hiện **«Lấy mã liên kết Zalo»**, mô tả rỗng. Nếu mô tả in ra 6 chữ số thì **dừng test và
+    báo ngay** — đó là lỗ bảo mật (mã sống 15 phút).
+85. **Nhãn của luồng kết quả file.** Làm một lượt: khai kết quả → nộp file → TP/PP phê duyệt → trả về
+    cán bộ → gửi bản mới → hoàn thành. Panel phải hiện lần lượt «Khai kết quả», «Nộp file kết quả»,
+    «TP/PP phê duyệt», «Trả về cán bộ», «Gửi bản mới», «Hoàn thành / Duyệt» — **không** còn
+    `taskFiles.hoan-thanh`.
+86. **Mô tả nghiệp vụ đọc được.** Dòng của lượt nộp file có mô tả dạng **«Trạng thái file: Cần sửa —
+    nộp bản mới»** (không phải `can-sua`); dòng đề nghị tỷ lệ có **«Tỷ lệ đề nghị 30%»** (không phải
+    `tyLeDeNghi: 30`); dòng duyệt cây có **«Duyệt: Chờ duyệt · Đã báo 2 người»**; dòng xoá cây có
+    **«Nhiệm vụ · kèm 2 mục con · Xoá 3 dòng»**. Khoá kỹ thuật (`fileId`, `versionId`, `changeId`,
+    `viaDelegationId`) **không** hiện chữ nào.
+87. **Tab «Nhật ký» khớp panel.** Mở một nhiệm vụ → tab **«Nhật ký»**: mô tả do MÁY CHỦ dịch, phải
+    cùng giọng với panel. Dòng sửa nội dung hiện **«Cập nhật N trường: Ngày hết hạn, Người thực hiện»**
+    (nhãn cột tiếng Việt, tối đa 3 cột đầu). Cột lạ chưa có nhãn thì **giữ nguyên tên cột** — thà thô
+    một chữ còn hơn giấu mất lượt sửa.
+88. **Dòng rác biến mất.** Panel không còn dòng nào của `rpc.*`, `bootstrap.get`, `stats.summary`,
+    `stats.charts`, `stats.activities`, `gantt.tree`. Lọc bớt 22 dòng/lần hỏi, nên panel nay toàn việc
+    có ý nghĩa; **số dòng hiện ra sẽ ít hơn trước** — đó là chủ đích, không phải mất dữ liệu.
+
+**B. Thông báo sắp đến hạn + Zalo (bước 89 → 95)**
+
+89. **Loại tin mới `due_soon`.** Chuông thông báo: dòng «sắp đến hạn» có icon **đồng hồ cát** màu hổ
+    phách, nhạt hơn dòng «quá hạn» (icon tam giác cảm thán, màu cam).
+90. **Điều kiện sinh tin.** Tạo nhiệm vụ cấp 3 có **người thực hiện**, **ngày hết hạn trong 3 ngày
+    tới** (kể cả hôm nay), và **tiến độ tính từ file kết quả chưa đủ 100 %**. Chờ lịch `CRON_OVERDUE`
+    (mặc định **07:00** giờ Hà Nội) hoặc đổi `DUE_SOON_DAYS` rồi khởi động lại app cho nhanh. Người
+    thực hiện nhận thông báo dạng **«Nhiệm vụ "…" (MÃ) còn 2 ngày (14/09/2026) mà tiến độ mới 40 %.»**;
+    đúng ngày hạn thì là **«… đến hạn hôm nay …»**.
+91. **Tiến độ là con số của lưới, không phải của cây.** Nhiệm vụ có hai file `da-duyet` 60 % và
+    `can-sua` 40 % ⇒ tiến độ **68 %** (có trọng số theo tỷ lệ) ⇒ **vẫn báo** vì chưa 100. Nhiệm vụ
+    **chưa nộp file nào** ⇒ 0 % ⇒ báo. Nhiệm vụ đã **đủ 100 %** ⇒ **không** báo.
+92. **Không trùng trong ngày.** Chạy lượt quét lần thứ hai trong cùng ngày: **không** sinh thông báo
+    mới cho cùng nhiệm vụ. Sang ngày hôm sau mới được báo lại.
+93. **Zalo nay đẩy 5 loại tin.** Trong `zalo_link_codes`/trang cá nhân, liên kết Zalo cho tài khoản
+    người thực hiện. Tin đẩy đi có tiền tố đúng loại: **`[Chờ duyệt]`**, **`[Trả lại]`**,
+    **`[Đã duyệt]`** (MỚI — đổi quyết định 06/09/2026), **`[Quá hạn]`**, **`[Sắp đến hạn]`** (MỚI).
+    `info` vẫn **không** đẩy; tin cũ hơn **24 giờ** vẫn bị bỏ.
+94. **Kiểm bằng tay không cần chờ lịch.** Từ `server/`: `npm run zalo:kiem` (token + webhook), rồi
+    `npm run zalo:webhook` để đăng ký lại. Muốn xem hàng đợi: `SELECT id, type, left(content,60),
+    zalo_sent_at, zalo_attempts, zalo_error FROM notifications ORDER BY id DESC LIMIT 10;`.
+95. **9b.15 → 9b.25 KHÔNG đổi luật.** Đợt này chỉ (a) dịch nhãn + mô tả nhật ký, (b) chặn bốn route
+    sinh dòng tên máy, (c) thêm lượt quét sắp đến hạn, (d) thêm hai loại tin Zalo. **Hình dạng phản
+    hồi RPC/REST không đổi** (`recentActivities` vẫn bốn khoá cũ, chỉ nội dung `A_DETAILS` nay là câu
+    tiếng Việt). Luồng duyệt, OnlyOffice, tỷ lệ, `approval_changes` không đụng tới.
+
+Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
+đừng tự sửa mã.
+
 ## 10. Dọn dẹp sau buổi test
 
 > **Cảnh báo đợt V1–V8 (10/09/2026):** các cách reset/seed bên dưới là hướng dẫn lịch sử.
