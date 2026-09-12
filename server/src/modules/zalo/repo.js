@@ -17,12 +17,21 @@ const db = (client) => client ?? pool;
 export const HAN_MA_PHUT = 15;
 
 /**
- * Ba loại thông báo ĐƯỢC đẩy sang Zalo.
+ * Năm loại thông báo ĐƯỢC đẩy sang Zalo.
  *
- * Không đẩy `approval_approved` và `info`: duyệt xong là tin vui, không đáng rung điện thoại của
- * người ta; và tin chung do admin phát thì đã có chuông trong ứng dụng. Người dùng chốt 2026-09-06.
+ * `approval_approved` ĐƯỢC THÊM ngày 2026-09-12 theo yêu cầu «khi có duyệt hoặc liên quan đến duyệt
+ * thì thông báo»: trước đó (chốt 2026-09-06) tin «đã duyệt» chỉ có ở chuông trong ứng dụng, nhưng
+ * người gửi đề nghị không mở hệ thống thì không biết cây của mình đã được duyệt hay chưa.
+ * `due_soon` là loại mới của cùng đợt — «gần đến hạn mà tiến độ chưa xong».
+ * Vẫn KHÔNG đẩy `info`: tin chung do admin phát đã có chuông trong ứng dụng, đẩy Zalo chỉ thành ồn.
  */
-export const LOAI_DAY_ZALO = Object.freeze(['approval_pending', 'approval_rejected', 'overdue']);
+export const LOAI_DAY_ZALO = Object.freeze([
+  'approval_pending',
+  'approval_rejected',
+  'approval_approved',
+  'overdue',
+  'due_soon',
+]);
 
 /** Số lần thử tối đa cho một dòng. Khớp vị từ của `idx_notifications_zalo_pending`. */
 export const SO_LAN_THU_TOI_DA = 3;
@@ -137,7 +146,7 @@ export async function nguoiGiuChatId(chatId, client = null) {
  * Bốn điều kiện, mỗi cái có lý do riêng:
  *  · `zalo_sent_at IS NULL AND zalo_attempts < N` — khớp ĐÚNG vị từ của
  *    `idx_notifications_zalo_pending` để câu này dùng được chỉ mục bộ phận.
- *  · `type = ANY($1)` — chỉ ba loại đáng làm phiền (xem `LOAI_DAY_ZALO`).
+ *  · `type = ANY($1)` — chỉ năm loại đáng làm phiền (xem `LOAI_DAY_ZALO`).
  *  · `created_at >= …` — container tắt ba ngày rồi bật lại không dội tin cũ. Mốc mặc định tính theo
  *    đồng hồ CSDL (`now() - interval`); lịch chạy có thể truyền `muonNhat` để cầm đồng hồ từ ngoài
  *    (đúng khuôn `quetQuaHan` — test chạy được với ngày giả).

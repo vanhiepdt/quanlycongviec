@@ -65,8 +65,8 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 
-describe('TC-ZL-10: chỉ đẩy 3 loại tin, gắn nhãn đầu tin, KHÔNG đẩy phần «Lý do:»', () => {
-  it('5 dòng trong hàng đợi ⇒ đúng 3 tin đi, 2 loại ngoài danh sách nằm nguyên', async () => {
+describe('TC-ZL-10: đẩy 5 loại tin, gắn nhãn đầu tin, KHÔNG đẩy phần «Lý do:»', () => {
+  it('6 dòng trong hàng đợi ⇒ đúng 5 tin đi, tin `info` ngoài danh sách nằm nguyên', async () => {
     await pool.query('UPDATE users SET zalo_chat_id = $1 WHERE id = $2', ['chat-A', nguoiA.id]);
     const idCho = await themThongBao(nguoiA.id, {
       type: 'approval_pending',
@@ -80,16 +80,23 @@ describe('TC-ZL-10: chỉ đẩy 3 loại tin, gắn nhãn đầu tin, KHÔNG đ
       type: 'overdue',
       content: 'Nhiệm vụ «Gửi báo cáo tuần» đã quá hạn',
     });
+    // `approval_approved` vào danh sách đẩy ngày 2026-09-12 theo yêu cầu «có duyệt hoặc liên quan đến
+    // duyệt thì thông báo»: trước đó tin đã duyệt chỉ có ở chuông, người gửi không mở hệ thống thì
+    // không biết cây của mình được duyệt chưa.
     const idDuyet = await themThongBao(nguoiA.id, {
-      type: 'approval_approved', // ngoài danh sách đẩy
+      type: 'approval_approved',
       content: 'Đề xuất mua sắm đã được duyệt',
+    });
+    const idSap = await themThongBao(nguoiA.id, {
+      type: 'due_soon',
+      content: 'Nhiệm vụ «Gửi báo cáo tháng» còn 2 ngày mà tiến độ mới 40%.',
     });
     const idTin = await themThongBao(nguoiA.id, { type: 'info', content: 'Thông báo chung' });
 
     const kq = await dayThongBaoZalo();
-    expect(kq).toEqual({ trongDoi: 3, daGui: 3, boQua: 0, thatBai: 0, tat: false });
+    expect(kq).toEqual({ trongDoi: 5, daGui: 5, boQua: 0, thatBai: 0, tat: false });
 
-    expect(goiZalo).toHaveLength(3);
+    expect(goiZalo).toHaveLength(5);
     expect(goiZalo.every((g) => g.body.chat_id === 'chat-A')).toBe(true);
     expect(goiZalo[0].body.text).toBe(
       '[Chờ duyệt] Phê duyệt đề xuất mua sắm của Phòng Kỹ thuật Mở hệ thống để xem chi tiết.'
@@ -101,15 +108,20 @@ describe('TC-ZL-10: chỉ đẩy 3 loại tin, gắn nhãn đầu tin, KHÔNG đ
     expect(goiZalo[1].body.text).not.toContain('Lý do');
     expect(goiZalo[1].body.text).not.toContain('Thiếu báo giá');
     expect(goiZalo[2].body.text).toContain('[Quá hạn]');
+    expect(goiZalo[3].body.text).toBe(
+      '[Đã duyệt] Đề xuất mua sắm đã được duyệt Mở hệ thống để xem chi tiết.'
+    );
+    expect(goiZalo[4].body.text).toBe(
+      '[Sắp đến hạn] Nhiệm vụ «Gửi báo cáo tháng» còn 2 ngày mà tiến độ mới 40%.' +
+        ' Mở hệ thống để xem chi tiết.'
+    );
 
-    for (const id of [idCho, idTra, idHan]) {
+    for (const id of [idCho, idTra, idHan, idDuyet, idSap]) {
       const dong = await trangThaiZalo(id);
       expect(dong.zalo_sent_at).not.toBeNull();
       expect(dong.zalo_error).toBe('');
     }
-    for (const id of [idDuyet, idTin]) {
-      expect((await trangThaiZalo(id)).zalo_sent_at).toBeNull(); // chưa từng chạm
-    }
+    expect((await trangThaiZalo(idTin)).zalo_sent_at).toBeNull(); // chưa từng chạm
   });
 
   it('lượt thứ hai KHÔNG gửi lại tin đã gửi (zalo_sent_at là chốt chống trùng)', async () => {

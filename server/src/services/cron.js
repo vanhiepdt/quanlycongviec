@@ -23,6 +23,8 @@ import { pool } from '../db/pool.js';
 import { logger } from '../utils/logger.js';
 import * as chatService from '../modules/chat/service.js';
 import * as notiRepo from '../modules/notifications/repo.js';
+import * as taskFilesRepo from '../modules/taskFiles/repo.js';
+import { ganTienDo } from '../modules/workItems/tienDo.js';
 import * as zaloRepo from '../modules/zalo/repo.js';
 import * as zaloApi from './zalo.js';
 
@@ -129,6 +131,124 @@ export async function quetQuaHan({ now = new Date() } = {}) {
   }
 }
 
+/**
+ * Nhiệm vụ cấp 3 có hạn rơi VÀO khoảng `[tuNgay, denNgay]` — nửa "gần đến hạn" của lịch quét.
+ *
+ * Khác `timNhiemVuQuaHan` ở hai chỗ: mốc là khoảng ngày TRƯỚC hạn chứ không phải sau hạn, và
+ * KHÔNG lọc "chưa xong" ngay trong SQL. Lọc ở đây nghĩa là tự đặt ra cách tính tiến độ THỨ HAI,
+ * lệch với con số người dùng nhìn thấy trên lưới (tiến độ tính từ nhóm file kết quả, có trọng số,
+ * có trạng thái duyệt của từng bản). Câu này vì vậy chỉ lấy danh sách; còn "chưa xong" do
+ * `quetSapDenHan` hỏi lại bằng đúng hàm `ganTienDo` đang nuôi giao diện.
+ */
+async function timNhiemVuSapDenHan({ tuNgay, denNgay }, client) {
+  const { rows } = await client.query(
+    `SELECT i.id, i.code, i.name, i.due_date, i.assignee_id, i.level, i.parent_id, i.work_id
+       FROM v_countable_items i
+      WHERE i.due_date IS NOT NULL
+        AND i.due_date >= $1::date
+        AND i.due_date <= $2::date
+        AND i.level = 3
+        AND i.assignee_id IS NOT NULL
+      ORDER BY i.due_date, i.id`,
+    [tuNgay, denNgay]
+  );
+  return rows;
+}
+
+/** Một mốc `date` của CSDL thành `Date` — pg đã trả `Date`, nhưng chuỗi ISO vẫn phải chịu được. */
+function sangNgay(value) {
+  return value instanceof Date ? value : new Date(value);
+}
+
+/** Số NGÀY DƯƠNG LỊCH giữa hai mốc: bỏ giờ, bỏ múi giờ, không làm tròn theo giờ mùa hè. */
+function soNgayChenh(tu, den) {
+  const a = sangNgay(tu);
+  const b = sangNgay(den);
+  const utc = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((utc(b) - utc(a)) / 86_400_000);
+}
+
+/**
+ * Một lượt quét "gần đến hạn mà tiến độ chưa xong" — người dùng yêu cầu ngày 2026-09-12.
+ *
+ * Đúng khuôn `quetQuaHan`: hàm thường, nhận đồng hồ từ ngoài, chống trùng bằng CSDL. Lý do có loại
+ * riêng thay vì gộp vào `overdue`: tin `overdue` nói "đã trễ", tin này nói "còn N ngày" — gộp lại
+ * thì người nhận không phân biệt được việc nào còn cứu được, và mốc quét cũng khác nhau.
+ *
+ * Ngưỡng `soNgay` lấy từ `DUE_SOON_DAYS` (mặc định 3). "Chưa xong" là `tien_do < 100` theo đúng
+ * con số trên lưới: chưa nộp file nào là 0% vẫn báo, đang sửa ở 80% vẫn báo.
+ *
+ * @param {object} opts
+ * @param {Date} opts.now đồng hồ — test truyền đồng hồ giả, lịch chạy truyền `new Date()`
+ * @param {number} opts.soNgay số ngày coi là "gần đến hạn" (mặc định `DUE_SOON_DAYS`)
+ * @returns {Promise<{sapDenHan: number, chuaXong: number, daBao: number, boQua: number}>} số nhiệm vụ
+ *   sắp đến hạn, số chưa xong tiến độ, số thông báo mới tạo, số bỏ qua vì hôm nay đã báo rồi
+ */
+export async function quetSapDenHan({ now = new Date(), soNgay = env.DUE_SOON_DAYS } = {}) {
+  const client = await pool.connect();
+  try {
+    const homNay = dauNgay(now);
+    const cuoi = new Date(homNay);
+    cuoi.setDate(cuoi.getDate() + soNgay);
+    const danhSach = await timNhiemVuSapDenHan(
+      { tuNgay: ngaySo(homNay), denNgay: ngaySo(cuoi) },
+      client
+    );
+    if (danhSach.length === 0) return { sapDenHan: 0, chuaXong: 0, daBao: 0, boQua: 0 };
+
+    // Gắn `tien_do` cho danh sách bằng chính bộ đếm nhóm file mà lưới đang dùng. Truyền danh sách id
+    // để không kéo bảng `task_files` của cả hệ thống về chỉ cho vài chục dòng sắp đến hạn.
+    const dem = await taskFilesRepo.demNhomFileTheoItem(
+      client,
+      danhSach.map((nv) => nv.id)
+    );
+    ganTienDo(danhSach, dem);
+    const chuaXong = danhSach.filter((nv) => Number(nv.tien_do) < 100);
+
+    const canTao = [];
+    let boQua = 0;
+    for (const nv of chuaXong) {
+      const daCo = await notiRepo.exists(
+        {
+          userId: nv.assignee_id,
+          type: notiRepo.LOAI.SAP_DEN_HAN,
+          refType: 'work_item',
+          refId: nv.id,
+          since: homNay,
+        },
+        client
+      );
+      if (daCo) {
+        boQua += 1;
+        continue;
+      }
+      const conLai = soNgayChenh(homNay, nv.due_date);
+      const mocHan = conLai <= 0 ? 'đến hạn hôm nay' : `còn ${conLai} ngày`;
+      canTao.push({
+        userId: nv.assignee_id,
+        content:
+          `Nhiệm vụ "${nv.name}" (${nv.code}) ${mocHan} (${ngayVietNam(nv.due_date)})` +
+          ` mà tiến độ mới ${Number(nv.tien_do)}%.`,
+        type: notiRepo.LOAI.SAP_DEN_HAN,
+        refType: 'work_item',
+        refId: nv.id,
+      });
+    }
+
+    const daTao = await notiRepo.insertMany(canTao, client);
+    const ketQua = {
+      sapDenHan: danhSach.length,
+      chuaXong: chuaXong.length,
+      daBao: daTao.length,
+      boQua,
+    };
+    logger.info(ketQua, 'Quét nhiệm vụ sắp đến hạn xong');
+    return ketQua;
+  } finally {
+    client.release();
+  }
+}
+
 /** Việc đã đăng ký, giữ lại để `dungLichChay()` gỡ được — tránh chồng lịch khi test/khởi động lại. */
 let viecDaDangKy = null;
 /** Lịch dọn chat cũ (việc 7.4) — giữ riêng để gỡ được độc lập với lịch quét quá hạn. */
@@ -140,7 +260,9 @@ let viecDayZalo = null;
 const NHAN_ZALO = Object.freeze({
   approval_pending: '[Chờ duyệt]',
   approval_rejected: '[Trả lại]',
+  approval_approved: '[Đã duyệt]',
   overdue: '[Quá hạn]',
+  due_soon: '[Sắp đến hạn]',
 });
 
 /**
@@ -260,10 +382,20 @@ export function batLichChay() {
       } catch (err) {
         logger.error({ err: err.message }, 'Lượt quét nhiệm vụ quá hạn hỏng');
       }
+      // Cùng một giờ quét nhưng try/catch RIÊNG: hai lượt quét đọc hai tập nhiệm vụ khác nhau, một
+      // lượt hỏng (CSDL bận, thiếu dữ liệu file) không được phép kéo theo lượt kia.
+      try {
+        await quetSapDenHan({ now: new Date() });
+      } catch (err) {
+        logger.error({ err: err.message }, 'Lượt quét nhiệm vụ sắp đến hạn hỏng');
+      }
     },
     { timezone: env.TZ }
   );
-  logger.info({ lich: env.CRON_OVERDUE, tz: env.TZ }, 'Đã bật lịch quét nhiệm vụ quá hạn');
+  logger.info(
+    { lich: env.CRON_OVERDUE, tz: env.TZ, sapDenHanNgay: env.DUE_SOON_DAYS },
+    'Đã bật lịch quét nhiệm vụ quá hạn'
+  );
 
   // Lịch dọn chat sai biểu thức thì BỎ RIÊNG nó, không kéo theo lịch quét quá hạn đã đăng ký xong.
   if (cron.validate(env.CRON_CHAT_CLEANUP)) {

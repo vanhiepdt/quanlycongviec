@@ -315,6 +315,9 @@ approvalsRouter.post(
   validate(z.object({ id: z.coerce.number().int().positive() }), 'params'),
   async (req, res, next) => {
     try {
+      // «Đã xem thay đổi» là việc của người đọc, không đổi dữ liệu nghiệp vụ nào — ghi vào nhật ký
+      // thì mỗi lần mở popup xem thay đổi lại thêm một dòng tên máy vào «Hoạt động gần đây».
+      res.locals.skipAudit = true;
       return ok(res, await changes.acknowledge(req.user, req.params.id));
     } catch (err) {
       return next(err);

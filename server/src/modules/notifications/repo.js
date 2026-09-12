@@ -14,6 +14,10 @@ export const LOAI = Object.freeze({
   DA_DUYET: 'approval_approved',
   TU_CHOI: 'approval_rejected',
   QUA_HAN: 'overdue',
+  // «Gần đến hạn mà tiến độ chưa xong» — người dùng yêu cầu 2026-09-12. Loại riêng chứ không dùng
+  // lại `overdue`: nhãn Zalo khác nhau ([Sắp đến hạn] / [Quá hạn]) và mốc quét khác nhau (trước hạn
+  // `DUE_SOON_DAYS` ngày / sau hạn). Cột `type` là text tự do nên không cần migration.
+  SAP_DEN_HAN: 'due_soon',
 });
 
 /**

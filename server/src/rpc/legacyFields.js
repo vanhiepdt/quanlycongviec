@@ -654,8 +654,10 @@ function joinEmails(value) {
 /**
  * Dòng `activity_logs` → khoá `COL.A_*` mà `renderActivity` đọc.
  *
- * `details` là jsonb tự do: hiện `code` nếu có (nhật ký cây/duyệt luôn ghi mã), không thì
- * chuỗi JSON — `renderActivity` thoát HTML nên không phải lỗ XSS.
+ * `details` là jsonb tự do. Chuỗi mô tả ở đây và chuỗi do `moTaChiTietHoatDong` của `app.js` sinh ra
+ * hiện TRÊN CÙNG MỘT panel «Hoạt động gần đây» — đường RPC (`bootstrap`) đi qua hàm này, đường REST
+ * (`/api/v1/stats/activities`) đi qua hàm kia — nên hai bên phải khớp nhau từng chữ. Sửa một bên mà
+ * không sửa bên kia là cùng một hành động hiện hai kiểu.
  */
 export function activityToLegacy(row) {
   return {
@@ -666,12 +668,162 @@ export function activityToLegacy(row) {
   };
 }
 
+/** BẢN SAO của `NHAT_KY_COT` bên `app.js` — nhãn cột tiếng Việt cho cụm «Cập nhật N trường». */
+const NHAN_COT_NHAT_KY = Object.freeze({
+  name: 'Tên',
+  description: 'Mô tả',
+  status: 'Trạng thái cũ (lịch sử)',
+  priority: 'Ưu tiên',
+  manager_id: 'Người quản lý',
+  manager_name: 'Người quản lý',
+  department_id: 'Phòng',
+  supervisor_ids: 'Ban lãnh đạo kiểm soát',
+  supervisor_id: 'Ban lãnh đạo kiểm soát',
+  leader_ids: 'Lãnh đạo phòng phụ trách',
+  assignee_id: 'Người thực hiện trực tiếp',
+  assignee_name: 'Người thực hiện trực tiếp',
+  start_date: 'Ngày bắt đầu',
+  end_date: 'Ngày kết thúc',
+  due_date: 'Ngày hết hạn',
+  report_date: 'Ngày báo cáo',
+  completion: 'Hoàn thành (%)',
+  target: 'Chỉ tiêu',
+  output: 'Kết quả đầu ra',
+  notes: 'Ghi chú',
+  result_links: 'Liên kết kết quả',
+  approval_status: 'Trạng thái duyệt',
+  approver_id: 'Người duyệt',
+  approved_at: 'Thời điểm duyệt',
+  reject_reason: 'Lý do từ chối',
+  sort_order: 'Thứ tự',
+  work_id: 'Thuộc công việc',
+  parent_id: 'Thuộc công việc con',
+});
+
+/** BẢN SAO của `NHAN_TRANG_THAI_FILE` bên `app.js` — cùng nhãn badge của lưới kết quả. */
+const NHAN_TRANG_THAI_NHAT_KY = Object.freeze({
+  'luu-tam': 'Lưu tạm',
+  'cho-xem': 'Chờ TP/PP xem',
+  'can-sua': 'Cần sửa — nộp bản mới',
+  'cho-lanh-dao': 'Chờ Phó GĐ/Giám đốc',
+  'hoan-thanh': 'Hoàn thành',
+  'da-duyet': 'Đã duyệt',
+});
+
+/** BẢN SAO của `NHAT_KY_CAP` bên `app.js`. */
+const CAP_DAU_VIEC = Object.freeze({ 1: 'Công việc', 2: 'Công việc con', 3: 'Nhiệm vụ' });
+
+/** `2026-09-12` / chuỗi ISO → `12/09/2026`. Không phải ngày thì trả nguyên chuỗi, không đoán. */
+function ngayNgan(value) {
+  if (!value) return '';
+  const text = String(value).slice(0, 10);
+  const khop = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return khop ? `${khop[3]}/${khop[2]}/${khop[1]}` : text;
+}
+
+/**
+ * Dịch MỘT khoá của `details` thành cụm tiếng Việt ngắn; trả `''` nếu khoá đó không đáng hiện.
+ *
+ * Khoá LẠ cũng trả `''`: thà bớt một chi tiết còn hơn in JSON thô kiểu `{"revokedSessions":0}` ra
+ * panel (người dùng phàn nàn đúng chuyện đó, 2026-09-12). Các khoá kỹ thuật cố ý bỏ qua: `fileId`,
+ * `versionId`, `changeId`, `reminderId`, `fromUserId`, `toUserId`, `departmentIds`,
+ * `viaDelegationId`, `viaDelegationIds`, `fields`, `type`, `target`.
+ */
+function dichKhoa(khoa, giaTri) {
+  if (giaTri == null || giaTri === '') return '';
+  const so = Number(giaTri);
+  switch (khoa) {
+    case 'revokedSessions':
+      return so > 0 ? `Đã đăng xuất ${so} phiên khác` : '';
+    case 'approvalStatus':
+      return `Duyệt: ${giaTri}`;
+    case 'notified':
+      return so > 0 ? `Đã báo ${so} người` : '';
+    case 'soCon':
+      return so > 0 ? `${so} mục con` : '';
+    case 'deletedChildren':
+      return so > 0 ? `kèm ${so} mục con` : '';
+    case 'deletedCount':
+      return so > 0 ? `Xoá ${so} dòng` : '';
+    case 'copiedCount':
+      return so > 0 ? `Sao ${so} dòng` : '';
+    case 'skipped':
+      return so > 0 ? `Bỏ qua ${so}` : '';
+    case 'count':
+      return so > 0 ? `${so} mục` : '';
+    case 'total':
+      return so > 0 ? `${so} người nhận` : '';
+    case 'length':
+      return so > 0 ? `${so} ký tự` : '';
+    case 'level':
+      return CAP_DAU_VIEC[so] || '';
+    case 'tyLe':
+      return `Tỷ lệ ${so}%`;
+    case 'tyLeDeNghi':
+      return `Tỷ lệ đề nghị ${so}%`;
+    case 'versionNo':
+      return `Bản ${so}`;
+    case 'trangThai':
+      return `Trạng thái file: ${NHAN_TRANG_THAI_NHAT_KY[String(giaTri)] || giaTri}`;
+    case 'dinhDang':
+      return `Định dạng: ${giaTri}`;
+    case 'role':
+      return `Vai trò: ${giaTri}`;
+    case 'allowedRoles':
+      return `Vai trò được phép: ${Array.isArray(giaTri) ? giaTri.join(', ') : giaTri}`;
+    case 'loai':
+      return `Loại: ${giaTri}`;
+    case 'status':
+      return typeof giaTri === 'object'
+        ? `Trạng thái: ${giaTri.from || '(trống)'} → ${giaTri.to || '(trống)'}`
+        : `Trạng thái: ${giaTri}`;
+    case 'origin':
+      return `Nguồn: ${giaTri}`;
+    case 'createdByName':
+      return `Người lập: ${giaTri}`;
+    case 'assignedByName':
+      return `Người giao: ${giaTri}`;
+    case 'workName':
+      return `Công việc: ${giaTri}`;
+    case 'itemName':
+      return `Nhiệm vụ: ${giaTri}`;
+    case 'from':
+      return `Từ ${giaTri}`;
+    case 'remindDate':
+      return `Ngày nhắc ${ngayNgan(giaTri)}`;
+    case 'fromDate':
+      return `Từ ${ngayNgan(giaTri)}`;
+    case 'toDate':
+      return `Đến ${ngayNgan(giaTri)}`;
+    case 'toAll':
+      return giaTri === true ? 'Gửi toàn hệ thống' : '';
+    case 'choDuyet':
+      return giaTri === true ? 'Chờ duyệt' : '';
+    case 'tuDong':
+      return giaTri === true ? 'Tự động' : '';
+    case 'daLuu':
+      return giaTri === true ? 'Đã lưu' : '';
+    case 'boQua':
+      return giaTri === true ? 'Bỏ qua' : '';
+    case 'cancelled':
+      return giaTri === true ? 'Đã hủy' : '';
+    case 'guiBldPheDuyet':
+      return giaTri === true ? 'Gửi BLĐ phê duyệt' : 'Không gửi BLĐ phê duyệt';
+    case 'changed':
+      if (typeof giaTri === 'number') return so > 0 ? `${so} thay đổi` : '';
+      return giaTri === true ? 'Có thay đổi' : '';
+    default:
+      return '';
+  }
+}
+
 function moTaNhatKy(details) {
   if (details == null || details === '') return '';
   if (typeof details === 'string') return details;
   if (typeof details !== 'object') return String(details);
   // Object rỗng (dòng rác `rpc.*` của thời cầu cũ) ⇒ rỗng — đừng in "{}" ra màn hình.
-  if (Object.keys(details).length === 0) return '';
+  const cacKhoa = Object.keys(details);
+  if (cacKhoa.length === 0) return '';
   // Đặt/bỏ tên theo tháng: hiện theo ĐẦU VIỆC (tên, không mã) + Tháng n/YYYY + tên mới/cũ.
   if (details.month) {
     const thang = String(details.month);
@@ -683,16 +835,29 @@ function moTaNhatKy(details) {
     if (details.previousName) phan.push(`tên cũ: ${details.previousName}`);
     return phan.filter(Boolean).join(' · ');
   }
+  let dau;
+  let boQua;
   if (details.changes && typeof details.changes === 'object') {
-    const soTruong = Object.keys(details.changes).length;
-    return soTruong === 0 ? '' : `Cập nhật ${soTruong} trường`;
+    const cacCot = Object.keys(details.changes);
+    if (cacCot.length === 0) return '';
+    const goiY = cacCot
+      .slice(0, 3)
+      .map((cot) => NHAN_COT_NHAT_KY[cot] || cot)
+      .join(', ');
+    dau = `Cập nhật ${cacCot.length} trường${goiY ? `: ${goiY}` : ''}`;
+    // Mã/tên đầu việc không nhắc lại (nhãn hành động đã nói), nhưng khoá NGHIỆP VỤ đi kèm lần sửa
+    // thì phải hiện: `workItems.update` ghi `{ code, changes, tyLeDeNghi }`.
+    boQua = { changes: 1, name: 1, code: 1 };
+  } else {
+    dau = details.name ? String(details.name) : details.code ? String(details.code) : '';
+    boQua = { name: 1, code: 1 };
   }
-  if (details.code) return details.name ? String(details.name) : String(details.code);
-  try {
-    return JSON.stringify(details);
-  } catch {
-    return '';
-  }
+  const phan = cacKhoa
+    .filter((khoa) => boQua[khoa] !== 1)
+    .map((khoa) => dichKhoa(khoa, details[khoa]))
+    .filter(Boolean);
+  if (dau) phan.unshift(dau);
+  return phan.join(' · ');
 }
 
 export default {

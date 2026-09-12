@@ -64,6 +64,9 @@ notificationsRouter.get('/unread-count', async (req, res, next) => {
 
 notificationsRouter.patch('/read', validate(readSchema), async (req, res, next) => {
   try {
+    // «Đã đọc» không phải một hành động nghiệp vụ: mỗi lần mở chuông là một lượt, ghi vào nhật ký
+    // thì panel «Hoạt động gần đây» chỉ còn thấy toàn dòng `PATCH /api/v1/notifications/read`.
+    res.locals.skipAudit = true;
     return ok(res, await service.danhDauDaDoc(req.user, req.body.ids ?? null));
   } catch (err) {
     return next(err);

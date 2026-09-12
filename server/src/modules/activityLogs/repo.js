@@ -33,8 +33,14 @@ export async function writeLog(entry, client = null) {
  * `res.locals.audit` qua subrequest (`locals` dùng chung). Máy chủ đã hết SINH những dòng này
  * (rpc/index.js + bỏ audit chết ở các route GET); dòng cũ còn trong CSDL thì ẨN khỏi hai màn
  * hình «hoạt động» thay vì xoá — nhật ký là dữ liệu điều tra. Không chứa tham số `$n`.
+ *
+ * Nhánh `NOT LIKE '% /api/%'` là lượt bổ sung 2026-09-12: route GHI nào chưa đặt tên nghiệp vụ thì
+ * middleware `audit` lấy `METHOD + đường dẫn` làm tên (`PATCH /api/v1/notifications/read`). Bốn route
+ * đã được đặt tên hoặc `skipAudit`, nhưng dòng CŨ vẫn nằm trong CSDL và hiện ra panel như một câu
+ * tiếng Anh vô nghĩa. Không một action nghiệp vụ nào chứa ' /api/' nên nhánh này không ẩn oan.
  */
 export const DIEU_KIEN_LOAI_DONG_RAC = `AND action NOT LIKE 'rpc.%'
+  AND action NOT LIKE '% /api/%'
   AND action NOT IN ('bootstrap.get', 'stats.summary', 'stats.charts', 'stats.activities', 'gantt.tree')`;
 
 /** Nhật ký gần nhất — dùng cho màn hình quản trị (nhóm J) và cho test. */
