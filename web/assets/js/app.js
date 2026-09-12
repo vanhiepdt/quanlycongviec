@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260912-02");
+console.info("[QLCV] app.js 20260912-03");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2086,7 +2086,7 @@ const NHAT_KY_HANH_DONG = {
   "works.copy": { nhan: "Nhân bản công việc", icon: "fa-copy", mau: "text-indigo-600" },
   "works.remove": { nhan: "Xoá công việc", icon: "fa-trash", mau: "text-red-600" },
   "works.reorder": { nhan: "Sắp xếp lại", icon: "fa-arrows-up-down", mau: "text-gray-500" },
-  "works.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-teal-600" },
+  "works.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-indigo-600" },
   "works.clearMonthName": { nhan: "Bỏ tên theo tháng", icon: "fa-calendar-xmark", mau: "text-gray-500" },
   "subworks.create": { nhan: "Thêm công việc con", icon: "fa-plus-circle", mau: "text-green-600" },
   "subworks.update": { nhan: "Sửa công việc con", icon: "fa-pen", mau: "text-blue-600" },
@@ -2096,7 +2096,7 @@ const NHAT_KY_HANH_DONG = {
   "tasks.copy": { nhan: "Nhân bản nhiệm vụ", icon: "fa-copy", mau: "text-indigo-600" },
   "workItems.remove": { nhan: "Xoá", icon: "fa-trash", mau: "text-red-600" },
   "workItems.reorder": { nhan: "Sắp xếp lại", icon: "fa-arrows-up-down", mau: "text-gray-500" },
-  "workItems.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-teal-600" },
+  "workItems.setMonthName": { nhan: "Đặt tên theo tháng", icon: "fa-calendar-day", mau: "text-indigo-600" },
   "workItems.clearMonthName": { nhan: "Bỏ tên theo tháng", icon: "fa-calendar-xmark", mau: "text-gray-500" },
   "reminders.create": { nhan: "Thêm nhắc việc", icon: "fa-bell", mau: "text-amber-600" },
   "reminders.update": { nhan: "Sửa nhắc việc", icon: "fa-bell", mau: "text-amber-600" },
@@ -2124,7 +2124,42 @@ const NHAT_KY_HANH_DONG = {
   "app.update": { nhan: "Sửa App", icon: "fa-pen", mau: "text-blue-600" },
   "app.remove": { nhan: "Xoá App", icon: "fa-trash", mau: "text-red-600" },
   "notification.create": { nhan: "Gửi thông báo", icon: "fa-bell", mau: "text-amber-600" },
-  "chat.send": { nhan: "Nhắn tin", icon: "fa-comment", mau: "text-blue-600" }
+  "chat.send": { nhan: "Nhắn tin", icon: "fa-comment", mau: "text-blue-600" },
+  // Đợt 12/09 (người dùng: «mấy cái ở Hoạt động gần đây vẫn chưa chuẩn hóa đúng tên»): mọi action
+  // máy chủ GHI mà bảng này còn thiếu — kể cả action DỰNG ĐỘNG (`taskFiles.${hanhDong}` của nút
+  // chốt, `approvals.${loai}.${action}` của đề nghị tỷ lệ / BLĐ kiểm soát). Thiếu nhãn thì panel hiện
+  // nguyên tên máy (`auth.changePassword`), người đọc không biết ai vừa làm gì.
+  "auth.changePassword": { nhan: "Đổi mật khẩu", icon: "fa-key", mau: "text-gray-600" },
+  "settings.update": { nhan: "Sửa thiết lập hệ thống", icon: "fa-gear", mau: "text-blue-600" },
+  "permissions.update": { nhan: "Sửa phân quyền", icon: "fa-user-shield", mau: "text-blue-600" },
+  "zalo.tao-ma": { nhan: "Lấy mã liên kết Zalo", icon: "fa-qrcode", mau: "text-blue-600" },
+  "zalo.lien-ket": { nhan: "Liên kết Zalo", icon: "fa-link", mau: "text-blue-600" },
+  "zalo.bo-lien-ket": { nhan: "Bỏ liên kết Zalo", icon: "fa-link-slash", mau: "text-gray-500" },
+  "approvals.return": { nhan: "Trả lại để sửa", icon: "fa-rotate-left", mau: "text-amber-600" },
+  "approvals.requestDelete": { nhan: "Đề nghị xoá", icon: "fa-trash-arrow-up", mau: "text-red-600" },
+  "approvals.approveDelete": { nhan: "Duyệt xoá", icon: "fa-trash-can", mau: "text-red-600" },
+  "approvals.rejectDelete": { nhan: "Từ chối xoá", icon: "fa-ban", mau: "text-gray-500" },
+  "approvals.ty-le.approve": { nhan: "Duyệt tỷ lệ mới", icon: "fa-percent", mau: "text-green-600" },
+  "approvals.ty-le.reject": { nhan: "Từ chối tỷ lệ mới", icon: "fa-percent", mau: "text-red-600" },
+  "approvals.gui-bld.approve": { nhan: "Duyệt đổi BLĐ kiểm soát", icon: "fa-user-shield", mau: "text-green-600" },
+  "approvals.gui-bld.reject": { nhan: "Từ chối đổi BLĐ kiểm soát", icon: "fa-user-shield", mau: "text-red-600" },
+  "taskFiles.khai": { nhan: "Khai kết quả", icon: "fa-file-circle-plus", mau: "text-green-600" },
+  "taskFiles.nop": { nhan: "Nộp file kết quả", icon: "fa-file-arrow-up", mau: "text-green-600" },
+  "taskFiles.nop-bao-cao": { nhan: "Nộp báo cáo", icon: "fa-file-arrow-up", mau: "text-green-600" },
+  "taskFiles.luu-tam": { nhan: "Lưu tạm kết quả", icon: "fa-floppy-disk", mau: "text-gray-500" },
+  "taskFiles.luu-ngay": { nhan: "Lưu kết quả", icon: "fa-floppy-disk", mau: "text-gray-500" },
+  "taskFiles.ty-le": { nhan: "Sửa tỷ lệ file", icon: "fa-percent", mau: "text-blue-600" },
+  "taskFiles.gui-di-duyet": { nhan: "Gửi kết quả đi duyệt", icon: "fa-paper-plane", mau: "text-blue-600" },
+  "taskFiles.gui-ban-moi": { nhan: "Gửi bản mới", icon: "fa-paper-plane", mau: "text-blue-600" },
+  "taskFiles.huy-lenh-sua": { nhan: "Huỷ lệnh sửa", icon: "fa-ban", mau: "text-gray-500" },
+  "taskFiles.sua-truc-tuyen": { nhan: "Sửa trực tuyến", icon: "fa-file-pen", mau: "text-blue-600" },
+  "taskFiles.gom-y": { nhan: "Góp ý kết quả", icon: "fa-comment-dots", mau: "text-blue-600" },
+  "taskFiles.xoa": { nhan: "Xoá file kết quả", icon: "fa-trash", mau: "text-red-600" },
+  "taskFiles.tp-phe-duyet": { nhan: "TP/PP phê duyệt", icon: "fa-clipboard-check", mau: "text-green-600" },
+  "taskFiles.tra-ve-cbo": { nhan: "Trả về cán bộ", icon: "fa-reply", mau: "text-amber-600" },
+  "taskFiles.hoan-thanh": { nhan: "Hoàn thành / Duyệt", icon: "fa-circle-check", mau: "text-green-600" },
+  "taskFiles.tra-ve-tp": { nhan: "Trả về TP/PP", icon: "fa-reply", mau: "text-amber-600" },
+  "taskFiles.duyet": { nhan: "Duyệt kết quả", icon: "fa-circle-check", mau: "text-green-600" }
 };
 // Khoá của `changes` là TÊN CỘT CSDL (máy chủ ghi thẳng cột), không phải tên trường của form.
 const NHAT_KY_COT = {
@@ -6997,6 +7032,9 @@ const THONG_BAO_LOAI = {
   approval_approved: { icon: "fa-circle-check", mau: "text-green-600" },
   approval_rejected: { icon: "fa-circle-xmark", mau: "text-red-600" },
   overdue: { icon: "fa-triangle-exclamation", mau: "text-orange-600" },
+  // `due_soon` do lượt quét `quetSapDenHan` sinh ra (docs/KE-HOACH-THONG-BAO.md): cùng họ với quá
+  // hạn nhưng NHẠT hơn một bậc — việc chưa trễ, chỉ sắp trễ mà tiến độ chưa xong.
+  due_soon: { icon: "fa-hourglass-half", mau: "text-amber-600" },
   warning: { icon: "fa-triangle-exclamation", mau: "text-amber-600" },
   error: { icon: "fa-circle-xmark", mau: "text-red-600" },
   success: { icon: "fa-circle-check", mau: "text-green-600" },
@@ -8159,14 +8197,77 @@ function hoatDongSangLegacy(rows) {
     [COL.A_DETAILS]: moTaChiTietHoatDong(row.details),
   }));
 }
+/** Khoá của `details` là TÊN MÁY — in thẳng ra panel thì người đọc chỉ thấy `revokedSessions`.
+ * Bảng này dịch từng khoá ĐÁNG HIỆN thành một cụm tiếng Việt ngắn. Trả "" nghĩa là khoá đó không
+ * đáng hiện: giá trị rỗng, cờ `false` vô nghĩa, hoặc khoá kỹ thuật (`fileId`, `versionId`,
+ * `changeId`, `reminderId`, `fromUserId`, `toUserId`, `departmentIds`, `viaDelegationId`, `fields`,
+ * `type`, `target`). Khoá LẠ cũng trả "" — thà bớt một chi tiết còn hơn in JSON thô kiểu
+ * `{"revokedSessions":0}` ra «Hoạt động gần đây» (người dùng phàn nàn đúng chuyện đó, 2026-09-12).
+ * SONG SONG với `moTaNhatKy` của máy chủ (server/src/rpc/legacyFields.js): cùng một panel đọc cả
+ * hai đường — REST thì tự dịch ở đây, RPC thì nhận chuỗi đã dịch — nên sửa một bên phải sửa bên kia. */
+function dichKhoaNhatKy(khoa, giaTri) {
+  if (giaTri == null || giaTri === "") return "";
+  const so = Number(giaTri);
+  switch (khoa) {
+    // Đổi mật khẩu: chỉ đáng nói khi CÓ phiên đăng nhập khác bị đá ra.
+    case "revokedSessions": return so > 0 ? "Đã đăng xuất " + so + " phiên khác" : "";
+    case "approvalStatus": return "Duyệt: " + giaTri;
+    case "notified": return so > 0 ? "Đã báo " + so + " người" : "";
+    case "soCon": return so > 0 ? so + " mục con" : "";
+    case "deletedChildren": return so > 0 ? "kèm " + so + " mục con" : "";
+    case "deletedCount": return so > 0 ? "Xoá " + so + " dòng" : "";
+    case "copiedCount": return so > 0 ? "Sao " + so + " dòng" : "";
+    case "skipped": return so > 0 ? "Bỏ qua " + so : "";
+    case "count": return so > 0 ? so + " mục" : "";
+    case "total": return so > 0 ? so + " người nhận" : "";
+    case "length": return so > 0 ? so + " ký tự" : "";
+    case "level": return NHAT_KY_CAP[so] || "";
+    case "tyLe": return "Tỷ lệ " + so + "%";
+    case "tyLeDeNghi": return "Tỷ lệ đề nghị " + so + "%";
+    case "versionNo": return "Bản " + so;
+    // `trang_thai` của nhóm file là SLUG (`can-sua`) — dùng đúng nhãn badge của lưới kết quả.
+    case "trangThai": return "Trạng thái file: " + (NHAN_TRANG_THAI_FILE[String(giaTri)] || giaTri);
+    case "dinhDang": return "Định dạng: " + giaTri;
+    case "role": return "Vai trò: " + giaTri;
+    case "allowedRoles": return "Vai trò được phép: " + (Array.isArray(giaTri) ? giaTri.join(", ") : giaTri);
+    case "loai": return "Loại: " + giaTri;
+    case "status": return typeof giaTri === "object"
+      ? "Trạng thái: " + (giaTri.from || "(trống)") + " → " + (giaTri.to || "(trống)")
+      : "Trạng thái: " + giaTri;
+    case "origin": return "Nguồn: " + giaTri;
+    case "createdByName": return "Người lập: " + giaTri;
+    case "assignedByName": return "Người giao: " + giaTri;
+    case "workName": return "Công việc: " + giaTri;
+    case "itemName": return "Nhiệm vụ: " + giaTri;
+    case "from": return "Từ " + giaTri;
+    case "remindDate": return "Ngày nhắc " + formatDateForDisplay(giaTri);
+    case "fromDate": return "Từ " + formatDateForDisplay(giaTri);
+    case "toDate": return "Đến " + formatDateForDisplay(giaTri);
+    // Cờ: chỉ in khi nó THẬT SỰ mang nghĩa. Riêng `guiBldPheDuyet` in CẢ HAI phía vì «tắt» là một
+    // quyết định nghiệp vụ (Q6: không tích thì TP/PP chốt luôn), không phải giá trị mặc định vô hồn.
+    case "toAll": return giaTri === true ? "Gửi toàn hệ thống" : "";
+    case "choDuyet": return giaTri === true ? "Chờ duyệt" : "";
+    case "tuDong": return giaTri === true ? "Tự động" : "";
+    case "daLuu": return giaTri === true ? "Đã lưu" : "";
+    case "boQua": return giaTri === true ? "Bỏ qua" : "";
+    case "cancelled": return giaTri === true ? "Đã hủy" : "";
+    case "guiBldPheDuyet": return giaTri === true ? "Gửi BLĐ phê duyệt" : "Không gửi BLĐ phê duyệt";
+    case "changed": return typeof giaTri === "number"
+      ? (so > 0 ? so + " thay đổi" : "")
+      : (giaTri === true ? "Có thay đổi" : "");
+    default: return "";
+  }
+}
 /** Mô tả NGẮN một dòng hoạt động cho trang Tổng quan — cùng luật moTaNhatKy phía máy chủ:
  * object rỗng ⇒ rỗng (hết "{}"), tên theo tháng hiện theo TÊN đầu việc + Tháng n/YYYY (bỏ mã,
- * người dùng 2026-08-29), bản sửa đếm số trường bằng nhãn cột của tab Nhật ký. */
+ * người dùng 2026-08-29), bản sửa đếm số trường bằng nhãn cột của tab Nhật ký, mọi khoá còn lại
+ * đi qua `dichKhoaNhatKy`. KHÔNG còn nhánh `JSON.stringify` — không bao giờ in JSON thô nữa. */
 function moTaChiTietHoatDong(details) {
   if (details == null || details === "") return "";
   if (typeof details === "string") return details;
   if (typeof details !== "object") return String(details);
-  if (Object.keys(details).length === 0) return "";
+  const cacKhoa = Object.keys(details);
+  if (cacKhoa.length === 0) return "";
   if (details.month) {
     const phan = [
       details.workName || details.itemName || details.code || "",
@@ -8176,19 +8277,25 @@ function moTaChiTietHoatDong(details) {
     if (details.previousName) phan.push("tên cũ: " + details.previousName);
     return phan.filter(Boolean).join(" · ");
   }
+  let dau, boQua;
   if (details.changes && typeof details.changes === "object") {
-    const cacCot = Object.keys(details.changes),
-      goiY = cacCot.slice(0, 3).map(nhanCotNhatKy).join(", ");
-    return cacCot.length === 0
-      ? ""
-      : "Cập nhật " + cacCot.length + " trường" + (goiY ? ": " + goiY : "");
+    const cacCot = Object.keys(details.changes);
+    if (cacCot.length === 0) return "";
+    const goiY = cacCot.slice(0, 3).map(nhanCotNhatKy).join(", ");
+    dau = "Cập nhật " + cacCot.length + " trường" + (goiY ? ": " + goiY : "");
+    // Mã/tên đầu việc không nhắc lại (nhãn hành động và tab Nhật ký đã có), nhưng khoá NGHIỆP VỤ đi
+    // kèm lần sửa thì phải hiện: `workItems.update` ghi `{ code, changes, tyLeDeNghi }`.
+    boQua = { changes: 1, name: 1, code: 1 };
+  } else {
+    dau = details.name ? String(details.name) : details.code ? String(details.code) : "";
+    boQua = { name: 1, code: 1 };
   }
-  if (details.code) return details.name ? String(details.name) : String(details.code);
-  try {
-    return JSON.stringify(details);
-  } catch (err) {
-    return "";
-  }
+  const phan = cacKhoa
+    .filter((khoa) => boQua[khoa] !== 1)
+    .map((khoa) => dichKhoaNhatKy(khoa, details[khoa]))
+    .filter(Boolean);
+  if (dau) phan.unshift(dau);
+  return phan.join(" · ");
 }
 /** Nạp một trang hoạt động; trang > 1 nối tiếp vào danh sách đang hiển thị. */
 async function napHoatDong(trang) {
