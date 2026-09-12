@@ -75,6 +75,13 @@ export default [
       // pho-giam-doc-ui.test.js: Phó Giám đốc thấy tab «Quản lý công việc» + helper
       // laQuanTriTrongPhamVi() mở nút thêm/sửa (2026-08-27) — chạy app.js thật trong jsdom.
       'tests/unit/pho-giam-doc-ui.test.js',
+      'tests/unit/phase8b-permissions-ui.test.js',
+      'tests/unit/phase8b-review-ui.test.js',
+      // V1–V8: chạy mã giao diện thật trong jsdom.
+      'tests/unit/phase8c-ui.test.js',
+      'tests/unit/result-completion-ui.test.js',
+      'tests/unit/tasks-results-design.test.js',
+      'tests/unit/ty-le-form.test.js',
       // uy-quyen-ui.test.js: modal «Ủy quyền của tôi» + nhãn «đang được ủy quyền» (TC-UQ-15) —
       // chạy app.js thật trong jsdom, đọc `document.cookie` để kiểm hàm lấy token CSRF.
       'tests/unit/uy-quyen-ui.test.js',

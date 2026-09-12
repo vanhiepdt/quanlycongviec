@@ -18,7 +18,7 @@ import { DIEU_KIEN_LOAI_DONG_RAC } from '../activityLogs/repo.js';
 export const QUERIES = Object.freeze({
   works: `SELECT w.id, w.code, w.name, w.department_id, w.manager_id, w.created_by,
                  w.status, w.start_date, w.end_date,
-                 w.supervisor_id, w.leader_ids
+                 w.supervisor_ids, w.leader_ids
             FROM v_countable_works w`,
   // Bug 2 (8b): thêm `ty_le` — tiến độ công việc là bình quân GIA QUYỀN theo tỷ lệ của các đầu
   // mục (tienDo.js). ORDER BY theo đúng thứ tự bootstrap (level, sort_order, code) để biểu đồ

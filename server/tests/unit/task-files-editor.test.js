@@ -6,7 +6,12 @@ let dongTrang;
 
 afterEach(() => dongTrang?.());
 
-function moTrang({ duocGui = true, traVe = () => ({}) } = {}) {
+function moTrang({
+  duocGui = true,
+  duyetMoi = null,
+  duocVerdict = false,
+  traVe = () => ({}),
+} = {}) {
   const config = {
     document: { title: 'Kết quả' },
     documentType: 'word',
@@ -21,6 +26,8 @@ function moTrang({ duocGui = true, traVe = () => ({}) } = {}) {
     nhom: { id: 7, lenh_sua_ghi_chu: '<em>Ghi chú</em>' },
     duocSua: true,
     duocGui,
+    duyetMoi,
+    duocVerdict,
   });
   const dom = new JSDOM(html, { url: 'http://localhost', runScripts: 'outside-only' });
   const { window } = dom;
@@ -169,5 +176,92 @@ describe('TC-OO-LS: lưu và gửi là hai thao tác độc lập', () => {
     ]);
     expect(nut('tinh').textContent).toBe('Đã lưu bản mới — chưa gửi đi');
     expect(window.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('TC-V6-UI: ý kiến trong luồng bố cục, lưu thật trước khi duyệt', () => {
+  const duyetMoi = { ma: 'duyet', nhan: 'Duyệt', canNoiDung: false };
+  it.each([true, false])(
+    'TC-V6-UI-01: khối ý kiến không absolute, đứng trước khung editor (gửi=%s)',
+    (duocGui) => {
+      const { window, nut } = moTrang({
+        duocGui,
+        duocVerdict: !duocGui,
+        duyetMoi: duocGui ? null : duyetMoi,
+      });
+      expect(window.getComputedStyle(nut('y-kien')).position).not.toBe('absolute');
+      expect(window.getComputedStyle(nut('thanh')).position).not.toBe('absolute');
+      expect(nut('y-kien').compareDocumentPosition(nut('placeholder')) & 4).toBe(4);
+      expect(nut('noi-dung').disabled).toBe(false);
+    }
+  );
+  it('TC-V6-UI-02: forcesave xong mới gửi verdict kèm đúng versionId và ý kiến, chống bấm đôi', async () => {
+    let xong;
+    const { window, nut, sua } = moTrang({
+      duocGui: false,
+      duocVerdict: true,
+      duyetMoi,
+      traVe: (url) =>
+        url.endsWith('/save')
+          ? new Promise((resolve) => {
+              xong = resolve;
+            })
+          : {},
+    });
+    expect(nut('duyet-moi')).not.toBeNull();
+    expect(nut('duyet-moi').textContent).toBe('Phê duyệt bản mới vừa chỉnh sửa');
+    nut('noi-dung').value = 'Đã kiểm tra nội dung';
+    sua();
+    nut('duyet-moi').click();
+    nut('duyet-moi').click();
+    await doiXuLy();
+    expect(window.fetch.mock.calls.map(([u]) => u)).toEqual(['/api/v1/task-file-versions/11/save']);
+    expect(window.close).not.toHaveBeenCalled();
+    xong({ daLuu: true, banId: 12, versionNo: 2 });
+    await doiXuLy();
+    expect(window.fetch.mock.calls.map(([u]) => u)).toEqual([
+      '/api/v1/task-file-versions/11/save',
+      '/api/v1/task-files/7/verdict',
+    ]);
+    expect(JSON.parse(window.fetch.mock.calls[1][1].body)).toEqual({
+      hanhDong: 'duyet',
+      noiDung: 'Đã kiểm tra nội dung',
+      versionId: 12,
+    });
+    expect(window.close).toHaveBeenCalledOnce();
+  });
+  it.each(['không đổi', 'lỗi'])('TC-V6-UI-03: save %s không được duyệt bản cũ', async (loai) => {
+    const { window, nut } = moTrang({
+      duocGui: false,
+      duocVerdict: true,
+      duyetMoi,
+      traVe: () => {
+        if (loai === 'lỗi') throw new Error('Không lưu được');
+        return { daLuu: false };
+      },
+    });
+    expect(nut('duyet-moi')).not.toBeNull();
+    nut('duyet-moi').click();
+    await doiXuLy();
+    expect(window.fetch).toHaveBeenCalledTimes(1);
+    expect(window.close).not.toHaveBeenCalled();
+    expect(nut('duyet-moi').disabled).toBe(false);
+    expect(nut('noi-dung').disabled).toBe(false);
+  });
+  it('TC-V6-UI-04: TP sửa thành bản của mình chỉ trình PGĐ, không tự Hoàn thành', async () => {
+    const { window, nut } = moTrang({
+      duocGui: false,
+      duocVerdict: true,
+      // ĐIỂM 7 (ĐỢT B): «Trình Phó giám đốc» nay là «TP/PP phê duyệt» — cùng một hành động nhưng
+      // máy chủ CÓ ghi mốc người ký và lúc ký. Ghi chú «không tự Hoàn thành» chỉ in cho mã mới.
+      duyetMoi: { ma: 'tp-phe-duyet', nhan: 'TP/PP phê duyệt', canNoiDung: true },
+      traVe: () => ({ daLuu: true, banId: 12, versionNo: 2 }),
+    });
+    expect(nut('duyet-moi')).not.toBeNull();
+    expect(window.document.body.textContent).toContain('không tự Hoàn thành');
+    nut('noi-dung').value = 'Đã sửa và trình lãnh đạo';
+    nut('duyet-moi').click();
+    await doiXuLy();
+    expect(JSON.parse(window.fetch.mock.calls[1][1].body).hanhDong).toBe('tp-phe-duyet');
   });
 });

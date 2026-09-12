@@ -13,7 +13,6 @@
 //     `/work-items` (§13.5). Bootstrap gọi `listForWorks` một câu, đúng lý do việc 5.10 tồn tại.
 //  3. **`name = full_name`.** `app.js` đọc `currentUser.name` (57 chỗ). Sửa ở cầu nối, không sửa
 //     57 chỗ của file 3653 dòng — `publicUser()` đã gán sẵn, gói này đi cùng đường đó.
-import { pool } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { banDoTenThang, ganTenThang } from '../../utils/monthNames.js';
 import * as logsRepo from '../activityLogs/repo.js';
@@ -30,93 +29,39 @@ import { demNhomFileTheoItem } from '../taskFiles/repo.js';
 import * as usersRepo from '../users/repo.js';
 import { publicStaff } from '../users/service.js';
 import * as itemsRepo from '../workItems/repo.js';
-import { ganTienDo } from '../workItems/tienDo.js';
+import { ganTienDo, ganTienDoWorks } from '../workItems/tienDo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
+import { taiDuLieuDem, summaryFrom as summaryStats } from '../stats/service.js';
 import * as worksService from '../works/service.js';
 
-/** Câu thống kê — xuất ra để test EXPLAIN đọc đúng hai view, không đọc bảng gốc. */
-export const STATS_QUERIES = Object.freeze({
-  works: `SELECT id, department_id, manager_id, created_by, status
-            FROM v_countable_works`,
-  items: `SELECT i.id, i.work_id, i.department_id, i.assignee_id, i.created_by,
-                 i.status, i.due_date, i.level,
-                 w.manager_id AS work_manager_id
-            FROM v_countable_items i
-            JOIN v_countable_works w ON w.id = i.work_id`,
-});
+// Giữ export để kiểm EXPLAIN dùng đúng chính các truy vấn thống kê đang chạy.
+import { QUERIES as STATS_QUERIES } from '../stats/repo.js';
+export { STATS_QUERIES };
 
 const entityOf = (level) => (Number(level) === itemsRepo.LEVEL_SUBWORK ? 'subwork' : 'task');
 
-/** "yyyy-MM-dd" theo giờ địa phương của tiến trình — cùng luật với `cron.js` (`ngaySo`). */
-function ngaySo(d = new Date()) {
-  const hai = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${hai(d.getMonth() + 1)}-${hai(d.getDate())}`;
-}
-
-function ngayCua(value) {
-  if (!value) return null;
-  if (typeof value === 'string') return value.slice(0, 10);
-  const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return ngaySo(d);
-}
-
-function laHoanThanh(status) {
-  return String(status ?? '')
-    .toLowerCase()
-    .includes('hoàn thành');
-}
-
-function laDangLam(status) {
-  return String(status ?? '')
-    .toLowerCase()
-    .includes('đang');
-}
-
 async function hangThongKe(user) {
-  const [worksRes, itemsRes] = await Promise.all([
-    pool.query(STATS_QUERIES.works),
-    pool.query(STATS_QUERIES.items),
-  ]);
-  const works = worksRes.rows.filter((row) => can(user, 'read', 'work', row).ok);
-  const items = itemsRes.rows.filter((row) => can(user, 'read', entityOf(row.level), row).ok);
-  return { works, items };
+  const { works, items } = await taiDuLieuDem(user);
+  return { works, items: items.filter((row) => Number(row.level) === 3) };
 }
-
 function summaryFrom(works, items) {
-  const homNay = ngaySo();
-  let completedTasks = 0;
-  let ongoingTasks = 0;
-  let overdueTasks = 0;
-  for (const row of items) {
-    if (laHoanThanh(row.status)) completedTasks += 1;
-    else if (laDangLam(row.status)) ongoingTasks += 1;
-    const due = ngayCua(row.due_date);
-    if (due && due < homNay && !laHoanThanh(row.status)) overdueTasks += 1;
-  }
-  return {
-    totalProjects: works.length,
-    totalTasks: items.length,
-    completedTasks,
-    ongoingTasks,
-    overdueTasks,
-  };
+  const { totalWorks, totalTasks, completedTasks, ongoingTasks, overdueTasks } = summaryStats(
+    works,
+    items
+  );
+  return { totalProjects: totalWorks, totalTasks, completedTasks, ongoingTasks, overdueTasks };
 }
-
 function chartFrom(items) {
-  if (items.length === 0) {
-    return {
-      labels: [],
-      data: [],
-      message: 'Không có dữ liệu nhiệm vụ để tạo biểu đồ.',
-    };
-  }
   const counts = new Map();
   for (const row of items) {
-    const label = String(row.status ?? '').trim() || 'Không xác định';
+    const label = row.hoan_thanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả';
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return { labels: [...counts.keys()], data: [...counts.values()] };
+  return {
+    labels: [...counts.keys()],
+    data: [...counts.values()],
+    ...(items.length ? {} : { message: 'Không có dữ liệu nhiệm vụ để tạo biểu đồ.' }),
+  };
 }
 
 async function attachReminders(rows) {
@@ -181,7 +126,7 @@ export async function getBundle(user) {
     apps,
     unread,
   ] = await Promise.all([
-    worksService.list(user),
+    worksService.list(user, {}, { withProgress: false }),
     usersRepo.listAll(),
     deptRepo.listAll(),
     deptRepo.listAllManagers(),
@@ -231,7 +176,7 @@ export async function getBundle(user) {
  * hiển thị chỉ có thể diễn ra ở MỘT chỗ.
  */
 export async function cayChoUser(user, works = null) {
-  const danhSach = works ?? (await worksService.list(user));
+  const danhSach = works ?? (await worksService.list(user, {}, { withProgress: false }));
   const rawItems = await itemsRepo.listForWorks(danhSach.map((w) => w.id));
   const workById = new Map(danhSach.map((w) => [w.id, w]));
   const visibleItems = rawItems.filter(
@@ -248,8 +193,15 @@ export async function cayChoUser(user, works = null) {
   );
   // Bug 2 (8b): tiến độ = mức hoàn thành các NHÓM FILE KẾT QUẢ, không còn là ô nhập tay.
   // Gắn `tien_do` ở đây — chỗ duy nhất cả gói bootstrap lẫn cầu RPC `getTasks` cùng đi qua —
-  // một câu đếm cho toàn cây, không N+1. Cấp 2 tự cộng cả nhóm file của con trực tiếp.
-  ganTienDo(visibleItems, await demNhomFileTheoItem());
+  // một câu đếm cho toàn cây, không N+1. Cấp 2 gộp tiến độ/hoàn thành của con trực tiếp.
+  ganTienDo(
+    visibleItems,
+    await demNhomFileTheoItem(
+      null,
+      visibleItems.map((row) => row.id)
+    )
+  );
+  ganTienDoWorks(danhSach, visibleItems);
   // Tên theo tháng của cấp 2/cấp 3 gắn Ở ĐÂY, không phải trong `attachReminders`: đây là chỗ duy
   // nhất cả gói bootstrap và cầu RPC `getTasks` cùng đi qua, nên gắn một lần là cả hai đường đọc có.
   // `works` đã được `worksService.list` gắn sẵn phần của cấp 1.

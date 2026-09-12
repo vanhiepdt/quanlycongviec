@@ -7,7 +7,7 @@
 //   POST   /work-items/:ref/reports         nộp «Báo cáo» — bản không có file, nội dung chữ (016)
 //   GET    /work-items/:ref/files           nhóm + bản + góp ý + bảng luồng của nhiệm vụ
 //   GET    /task-files/:id/download         stream; ?inline=1 để PDF mở trong iframe
-//   POST   /task-files/:id/verdict          Yêu cầu sửa / Trình / Đẩy về Cán bộ / Hoàn thành /
+//   POST   /task-files/:id/verdict          TP/PP phê duyệt / Đẩy về Cán bộ / Hoàn thành /
 //                                           Trả về TP/PP / Duyệt — quyền + trạng thái ở service
 //   POST   /task-file-versions/:id/comments góp ý theo bản
 //   DELETE /task-files/:id                  người tạo nhóm + admin, khi chưa da-duyet
@@ -51,15 +51,12 @@ function chuyenLoiMulter(err, req, res, next) {
 }
 
 const verdictSchema = z.object({
-  hanhDong: z.enum([
-    'yeu-cau-sua',
-    'trinh-lanh-dao',
-    'tra-ve-cbo',
-    'hoan-thanh',
-    'tra-ve-tp',
-    'duyet',
-  ]),
+  // ĐỢT B (điểm 7 + điểm 9): `yeu-cau-sua` đã gộp vào `tra-ve-cbo`, `trinh-lanh-dao` thành
+  // `tp-phe-duyet` («TP/PP phê duyệt», có lưu mốc ai ký và lúc nào). Hai mã cũ KHÔNG nhận nữa —
+  // migration 029 đã viết lại lịch sử và bỏ chúng khỏi CHECK của `task_file_flow`.
+  hanhDong: z.enum(['tp-phe-duyet', 'tra-ve-cbo', 'hoan-thanh', 'tra-ve-tp', 'duyet']),
   noiDung: text(2000).optional(),
+  versionId: idInput.optional(),
 });
 
 const gopYSchema = z.object({
@@ -80,6 +77,9 @@ const khaiKetQuaSchema = z.object({
   tenKetQua: z.string().trim().min(1, 'Vui lòng nhập tên kết quả làm được').max(500),
   dinhDang: z.enum(['Word', 'Excel', 'PPT', 'PDF', 'Ảnh', 'Báo cáo']).optional(),
   yKien: text(2000).optional(),
+  // Q1 (ĐỢT B): khai báo gồm BA thứ — tên kết quả · định dạng · TỶ LỆ. Ô tỷ lệ là tuỳ chọn; bỏ
+  // trống thì máy chia đều như cũ. Service mới là nơi kiểm 0..100 và quyết ghi thẳng hay lập đề nghị.
+  tyLe: z.coerce.number().int().min(0).max(100).nullish(),
 });
 
 /** NỘP «BÁO CÁO» — bản KHÔNG có file, nội dung là chữ. `fileId` có = thêm bản vào nhóm đã khai. */
@@ -90,6 +90,27 @@ const baoCaoSchema = z.object({
 });
 
 taskFilesRouter.use(requireAuth);
+taskFilesRouter.patch('/task-files/:id/ty-le', async (req, res, next) => {
+  try {
+    const result = await service.suaTyLe(req.user, req.params.id, req.body);
+    res.locals.audit = {
+      action: 'taskFiles.ty-le',
+      entityType: 'task',
+      entityId: result.nhom.item_id,
+      // ĐỢT B (R4''): cây đã duyệt thì `ty_le` trong `nhom` là giá trị CŨ (chưa đổi) và
+      // `choDuyet` = true. Ghi CẢ HAI để nhật ký nói đúng sự thật: ai xin bao nhiêu, và đã đổi chưa.
+      details: {
+        fileId: result.nhom.id,
+        tyLe: result.nhom.ty_le,
+        tyLeDeNghi: req.body?.tyLe ?? null,
+        choDuyet: result.tyLeChange?.pending === true,
+      },
+    };
+    return ok(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 taskFilesRouter.get('/task-files/lenh-sua', async (req, res, next) => {
   try {
@@ -100,6 +121,12 @@ taskFilesRouter.get('/task-files/lenh-sua', async (req, res, next) => {
 });
 
 for (const [method, duong, schema, xuLy] of [
+  [
+    'post',
+    'gui-di-duyet',
+    guiBanMoiSchema.extend({ versionId: idInput.optional() }),
+    service.guiDiDuyet,
+  ],
   ['post', 'gui-ban-moi', guiBanMoiSchema, service.guiBanMoi],
   ['post', 'huy-lenh-sua', z.object({}), service.huyLenhSua],
   ['patch', 'luu-tam', luuTamSchema, service.luuTam],
@@ -140,6 +167,7 @@ taskFilesRouter.post(
         buffer: req.file.buffer,
         tenGoc: req.file.originalname,
         loaiMime: req.file.mimetype,
+        dinhDang: req.body.dinhDang ?? null,
         fileId,
         moTa: typeof req.body.moTa === 'string' ? req.body.moTa.slice(0, 2000) : '',
       });
@@ -181,12 +209,18 @@ taskFilesRouter.post(
         tenKetQua: req.body.tenKetQua,
         dinhDang: req.body.dinhDang,
         yKien: req.body.yKien,
+        tyLe: req.body.tyLe ?? null,
       });
       res.locals.audit = {
         action: 'taskFiles.khai',
         entityType: 'task',
         entityId: ketQua.nhom.item_id,
-        details: { fileId: ketQua.nhom.id, dinhDang: ketQua.nhom.dinh_dang },
+        details: {
+          fileId: ketQua.nhom.id,
+          dinhDang: ketQua.nhom.dinh_dang,
+          tyLe: ketQua.nhom.ty_le,
+          choDuyet: ketQua.tyLeChange?.pending === true,
+        },
       };
       return ok(res, ketQua);
     } catch (err) {
@@ -337,6 +371,7 @@ taskFilesRouter.post('/task-files/:id/verdict', validate(verdictSchema), async (
     const ketQua = await service.verdict(req.user, req.params.id, {
       hanhDong: req.body.hanhDong,
       noiDung: req.body.noiDung,
+      versionId: req.body.versionId,
     });
     res.locals.audit = {
       action: `taskFiles.${ketQua.hanhDong}`,

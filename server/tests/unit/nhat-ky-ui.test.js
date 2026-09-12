@@ -63,7 +63,10 @@ describe('TC-NKUI-01..04 — nhãn tiếng Việt và định dạng giá trị'
     expect(window.nhanHanhDongNhatKy('tasks.update').nhan).toBe('Sửa nhiệm vụ');
     expect(window.nhanHanhDongNhatKy('reminders.create').nhan).toBe('Thêm nhắc việc');
     expect(window.nhanCotNhatKy('due_date')).toBe('Ngày hết hạn');
-    expect(window.nhanCotNhatKy('assignee_name')).toBe('Cán bộ trực tiếp');
+    // 2026-09-09: nhãn đổi theo ô của form nhiệm vụ — Trưởng/Phó phòng nay cũng nhận việc trực
+    // tiếp nên không gọi chung là «Cán bộ» nữa. Khoá `assignee_name` giữ nguyên.
+    expect(window.nhanCotNhatKy('assignee_name')).toBe('Người thực hiện trực tiếp');
+    expect(window.nhanCotNhatKy('assignee_id')).toBe('Người thực hiện trực tiếp');
     // Hành động/cột chưa có trong bảng nhãn vẫn hiện ra, không bị bỏ mất.
     expect(window.nhanHanhDongNhatKy('abc.xyz').nhan).toBe('abc.xyz');
     expect(window.nhanCotNhatKy('cot_la')).toBe('cot_la');

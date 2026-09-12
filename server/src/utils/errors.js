@@ -46,6 +46,19 @@ export const ERROR_STATUS = Object.freeze({
   // công việc con chứa nó và không thuộc nhóm Phó GĐ phụ trách phòng khi nằm dưới cha trực tiếp.
   LEADER_NOT_IN_SOURCE: 400,
 
+  // --- Ban lãnh đạo kiểm soát ba cấp (028_supervisor_ids.sql, đợt A) ------------------------
+  // Cùng khuôn LEADER_NOT_IN_SOURCE nhưng cho ô «Ban lãnh đạo kiểm soát»: cấp 2 chọn người ngoài
+  // danh sách của cấp 1, hoặc cấp 3 chọn người ngoài danh sách của cấp 2. Tách mã riêng để giao
+  // diện trỏ đúng ô cần sửa — hai ô này cạnh nhau trên form và nhãn gần giống nhau.
+  SUPERVISOR_NOT_IN_SOURCE: 400,
+  // R1(a): người gọi không có tên trong `supervisor_ids` của dòng nên không duyệt được, kể cả
+  // admin. 403 chứ không phải 400: dữ liệu gửi lên hoàn toàn hợp lệ, chỉ là sai người.
+  NOT_APPROVER: 403,
+  // R1(a): `submit` từ chối khi dòng chưa chọn Ban lãnh đạo kiểm soát nào — gửi đi mà không có ai
+  // để gửi tới là tạo một mục kẹt vĩnh viễn trong hàng chờ. 409 vì đây là xung đột TRẠNG THÁI của
+  // dòng (chưa phân công xong), không phải dữ liệu vào sai hình dạng.
+  NO_APPROVER_ASSIGNED: 409,
+
   // --- Ủy quyền có thời hạn (006_delegations.sql, `docs/KE-HOACH-UY-QUYEN.md`) ---------------
   // Mỗi mã là một cách người dùng có thể tạo một bản ủy quyền vô nghĩa hoặc nguy hiểm. Tách
   // riêng khỏi VALIDATION_ERROR/FORBIDDEN chung vì giao diện cần nói đúng chuyện gì sai để người

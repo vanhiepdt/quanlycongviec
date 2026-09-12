@@ -294,6 +294,11 @@ export const RPC_TABLE = Object.freeze({
         success: true,
         taskId: updated.item.code,
         moved: updated.moved ?? false,
+        guiBldChange: updated.guiBldChange,
+        // R4'' (ĐỢT B): ô tỷ lệ có thể thành MỘT ĐỀ NGHỊ chờ ký thay vì đổi ngay. Không đưa khoá
+        // này qua cầu thì giao diện báo «đã cập nhật thành công» trong khi tỷ lệ vẫn là giá trị CŨ —
+        // đúng cái bẫy mà `guiBldChange` ngay trên đang gỡ. Khoá mới, thêm vào chứ không đổi khoá cũ.
+        tyLeChange: updated.tyLeChange,
         warnings: updated.warnings ?? [],
       };
     },

@@ -10,6 +10,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let api;
 let dept;
 let admin;
@@ -26,7 +27,11 @@ const makeWork = (over = {}) =>
 
 /** Tạo một dòng cấp 2/cấp 3 qua API và trả thẳng dòng vừa tạo. */
 const add = async (body) => {
-  const res = await api.post('/api/v1/work-items', { workRef: work.code, ...body });
+  const res = await api.post('/api/v1/work-items', {
+    assigneeId: taskStaff.id,
+    workRef: work.code,
+    ...body,
+  });
   expect(res.status).toBe(200);
   return res.body.data.item;
 };
@@ -36,6 +41,12 @@ const getTree = (query = '') => api.get(`/api/v1/works/tree${query}`);
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   api = client(app);
   await api.login(admin.email);

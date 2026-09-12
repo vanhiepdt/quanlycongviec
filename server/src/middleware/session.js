@@ -71,7 +71,7 @@ export async function attachSession(req, res, next) {
 
     // Ghi đè «Bảng phân quyền hệ thống» của vai này (009/010): `can()` đọc `user.ghiDe` — vẫn thuần.
     // Mỗi giá trị là { gia_tri, pham_vi } (pham_vi: 'phong' | 'tat-ca' — Vòng 10). Hỏng bảng ghi đè
-    // không làm đổ request: mất phần tùy chỉnh, quyền gốc vẫn nguyên.
+    // phải chặn request: không được vô tình mở lại quyền đã bị quản trị thu hồi.
     req.user.ghiDe = {};
     try {
       req.user.ghiDe = await permissionsRepo
@@ -86,6 +86,7 @@ export async function attachSession(req, res, next) {
         );
     } catch (err) {
       logger.warn({ err: err.message }, 'Không đọc được bảng ghi đè phân quyền');
+      throw new AppError('INTERNAL', 'Chưa tải được phân quyền hiện tại. Vui lòng thử lại.');
     }
 
     // Gia hạn khi còn hoạt động. Lỗi ở bước này KHÔNG được làm đổ request — người dùng vẫn đang

@@ -75,7 +75,7 @@ describe('PUT /api/v1/permissions — ghi đè có hiệu lực NGAY', () => {
     await api.login(tp.email);
     const tao = await api.post('/api/v1/works', {
       name: 'Việc TP tạo ngay',
-      department_id: phong.id,
+      departmentId: phong.id,
       startDate: '2026-09-01',
       endDate: '2026-09-30',
     });

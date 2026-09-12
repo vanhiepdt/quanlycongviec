@@ -5,7 +5,8 @@
 // chỉ tên được một chỗ (`#add-notification-btn`); quét bằng máy ra thêm hai chỗ nữa.
 //
 // Test này canh cả LỚP lỗi đó, không chỉ ba id đã biết: mọi id mà `app.js` đọc phải sinh ra được từ
-// một trong ba nguồn — `index.html`, chuỗi HTML do chính `app.js` dựng, hoặc `phanTu.id = "..."`.
+// một trong BỐN nguồn — `index.html`, chuỗi HTML do chính `app.js` dựng, `phanTu.id = "..."`, hoặc
+// một hàm dựng HTML nối `id="` từ tham số (xem `idTuHam` dưới đây).
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,10 +18,43 @@ const INDEX = readFileSync(resolve(WEB, 'index.html'), 'utf8');
 /** Bỏ dấu `\` trước dấu ngoặc kép để một biểu thức bắt được cả chuỗi thường lẫn chuỗi mẫu. */
 const FLAT = APP.replace(/\\"/g, '"');
 
+/** Trả về thân hàm (trong cặp ngoặc nhọn) bắt đầu từ đúng dấu `{` mở. */
+function thanHam(src, mocMo) {
+  let sau = 1;
+  for (let i = mocMo + 1; i < src.length; i++) {
+    if (src[i] === '{') sau++;
+    else if (src[i] === '}') {
+      sau--;
+      if (sau === 0) return src.slice(mocMo, i + 1);
+    }
+  }
+  return '';
+}
+
+/**
+ * Nguồn thứ tư. ĐỢT B (Q1) thêm ô tỷ lệ vào khung khai qua hàm dùng chung `oNhapTyLeKhai(id, …)`:
+ * chuỗi ` id="` nằm TRONG hàm, còn tên id là chuỗi literal ở NƠI GỌI, nên ba nguồn literal trên
+ * không thấy id ấy dù nó có thật lúc chạy. Bắt đúng lớp đó: hàm nào nhận tham số ĐẦU tên `id` và
+ * thật sự nối ` id="` thì mọi chuỗi literal truyền TRỌN VẸN vào đối số đầu là id được sinh ra. Hai
+ * chỗ cố ý chặt: chỉ đối số ĐẦU, và phải là literal nguyên khối (kết bằng `,` hoặc `)`) chứ không
+ * nhận mảnh nối kiểu `"ban-" + id`. Helper sau này đặt id ở chỗ khác thì test đỏ chứ không âm thầm
+ * lọt, đúng hướng an toàn.
+ */
+const hamSinhId = [...FLAT.matchAll(/function\s+(\w+)\s*\(\s*id\b[^)]*\)\s*\{/g)]
+  .filter((m) => thanHam(FLAT, m.index + m[0].length - 1).includes(' id="'))
+  .map((m) => m[1]);
+
+const idTuHam = new Set();
+for (const ten of hamSinhId) {
+  const re = new RegExp(`\\b${ten}\\(\\s*"([^"]+)"\\s*[,)]`, 'g');
+  for (const m of FLAT.matchAll(re)) idTuHam.add(m[1]);
+}
+
 const bornIds = new Set([
   ...[...INDEX.matchAll(/id="([^"]+)"/g)].map((m) => m[1]),
   ...[...FLAT.matchAll(/id="([^"]+)"/g)].map((m) => m[1]),
   ...[...FLAT.matchAll(/\.id\s*=\s*"([^"]+)"/g)].map((m) => m[1]),
+  ...idTuHam,
 ]);
 
 const readIds = (pattern) => [...new Set([...APP.matchAll(pattern)].map((m) => m[1]))];
@@ -33,7 +67,7 @@ describe('4.7 — không còn listener treo vào id không tồn tại', () => {
   });
 
   /** Rộng hơn TC-DEAD-01: đọc để ẩn/hiện cũng vô nghĩa như gắn listener nếu id không có thật. */
-  it('TC-DEAD-02: cả 147 id mà app.js đọc bằng getElementById đều có nơi sinh ra', () => {
+  it('TC-DEAD-02: mọi id mà app.js đọc bằng getElementById đều có nơi sinh ra', () => {
     const ids = readIds(/getElementById\("([^"]+)"\)/g);
     expect(ids.length).toBeGreaterThanOrEqual(140);
     expect(ids.filter((id) => !bornIds.has(id))).toEqual([]);

@@ -333,7 +333,7 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
   it('TC-TKPQ-02: không ghi đè — TP Tạo Công việc hiện ⏳ (chờ Phó GĐ duyệt) theo luật gốc', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, false);
     expect(bang).toContain('⏳');
-    expect(bang).toContain('chờ Phó GĐ duyệt');
+    expect(bang).toContain('Chờ duyệt');
   });
 
   it('TC-TKPQ-03: ghi đè «cho-duyet» cho Phó GĐ ⇒ hiện ⏳ + «Ghi đè»', () => {
@@ -354,13 +354,14 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(bang).toContain('TẤT CẢ các phòng');
   });
 
-  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 17 hàng × 4 vai + phạm vi cho 3 vai', () => {
+  it('TC-TKPQ-06: admin thấy dropdown trên bảng — 21 hàng × 4 vai, phạm vi tạo của TP/PP khóa phòng mình', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     // Vòng 13 đợt 2: +1 hàng dropdown «Duyệt Nhiệm vụ (cấp 3)» (12 → 13); 014: +2 hàng «file»
     // (13 → 15); bug 2 (8b): +2 hàng «sửa tỷ lệ» subwork/task (15 → 17). Hàng «Duyệt yêu cầu
     // XOÁ» chỉ hiển thị nên KHÔNG cộng vào hai con số này.
-    expect((bang.match(/data-gd="1"/g) || []).length).toBe(17 * 4);
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(17 * 3);
+    // 8b thêm 2 hàng đọc (17 → 19); V4 submit + V7 gui-bld thêm 2 hàng (19 → 21).
+    expect((bang.match(/data-gd="1"/g) || []).length).toBe(21 * 4);
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(21 * 3 - 6);
     // Vòng 12b: dropdown Cán bộ mang vai CSDL «Nhân viên» — không phải nhãn «Cán bộ».
     expect(bang).toContain('data-vai="Nhân viên"');
     expect(bang).toContain('data-vai="Phó Giám đốc"');
@@ -457,16 +458,18 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
   it('TC-TKPQ-14: cột Cán bộ KHÔNG có select phạm vi (server chặn «tat-ca» cho Nhân viên)', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
     expect(oCanBo(bang, 'Xem Công việc')).not.toContain('data-pv="1"');
-    expect((bang.match(/data-pv="1"/g) || []).length).toBe(17 * 3); // 3 vai, không có Cán bộ
+    expect((bang.match(/data-pv="1"/g) || []).length).toBe(21 * 3 - 6); // 3 vai, không có Cán bộ
   });
 
-  it('TC-TKPQ-17: hai hàng «file» (014) — ⏳ đúng chỗ, PGD không có ⏳, nghĩa ✓ là «Phê duyệt luôn»', () => {
+  it('TC-TKPQ-17: ba hàng «file» (V4) — ⏳ đúng chỗ, PGD không có ⏳, nghĩa ✓ là «Phê duyệt luôn»', () => {
     const bang = window.buildBangPhanQuyenHtml(ghiDeRong, MAC_DINH, true);
-    // Hai hàng mới tồn tại và là dropdown.
-    expect(bang).toContain('Nộp kết quả (file nhiệm vụ)');
+    // V4 tách Lưu và Gửi đi duyệt; Duyệt vẫn độc lập.
+    expect(bang).toContain('Lưu kết quả (file nhiệm vụ)');
+    expect(bang).toContain('Gửi đi duyệt (file nhiệm vụ)');
+    expect(oCanBo(bang, 'Gửi đi duyệt (file nhiệm vụ)')).toContain('value="cho-duyet"');
     expect(bang).toContain('Duyệt kết quả (file nhiệm vụ)');
     // file:create × Cán bộ: option ⏳ có (mặc định của Cán bộ là về «Chờ TP/PP xem»).
-    expect(oCanBo(bang, 'Nộp kết quả (file nhiệm vụ)')).toContain('value="cho-duyet"');
+    expect(oCanBo(bang, 'Lưu kết quả (file nhiệm vụ)')).toContain('value="cho-duyet"');
     // file:approve × TP/PP: option ⏳ có (đặt ⏳ là mất nút «Hoàn thành / Duyệt»).
     const hangDuyet = bang.split('<tr').find((tr) => tr.includes('Duyệt kết quả (file nhiệm vụ)'));
     expect(hangDuyet, 'không thấy hàng «Duyệt kết quả (file nhiệm vụ)»').toBeTruthy();
@@ -479,7 +482,7 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
     expect(oTp).toContain('value="cho-duyet"');
     // file:create × Phó GĐ: KHÔNG có option ⏳ — PGD/GĐ là cấp chốt cuối, không có ai để «chờ»
     // (máy chủ 400, CHECK po_cho_duyet của 014 chặn cùng luật).
-    const hangNop = bang.split('<tr').find((tr) => tr.includes('Nộp kết quả (file nhiệm vụ)'));
+    const hangNop = bang.split('<tr').find((tr) => tr.includes('Lưu kết quả (file nhiệm vụ)'));
     const oPgd =
       '<td' +
       hangNop
@@ -488,7 +491,7 @@ describe('TC-TKPQ — bảng Phân quyền hệ thống (động, Vòng 10)', ()
         .join('<td');
     expect(oPgd).not.toContain('value="cho-duyet"');
     // Mặc định hiển thị (không ghi đè): Cán bộ nộp là ⏳, Phó GĐ nộp là ✓.
-    expect(oCanBo(bang, 'Nộp kết quả (file nhiệm vụ)')).toContain('⏳ Chờ duyệt');
+    expect(oCanBo(bang, 'Lưu kết quả (file nhiệm vụ)')).toContain('⏳ Chờ duyệt');
     expect(oPgd).toContain('✓ Cho phép');
   });
 

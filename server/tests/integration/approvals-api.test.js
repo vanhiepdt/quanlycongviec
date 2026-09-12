@@ -11,6 +11,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 
 let phongA;
 let phongB;
@@ -61,9 +62,20 @@ async function thongBaoCua(userId) {
   return rows;
 }
 
-/** Một công việc cấp 1 do Trưởng phòng A lập ⇒ luôn ở 'Chờ duyệt' (việc 5.1). */
+/**
+ * Một công việc cấp 1 do Trưởng phòng A lập ⇒ luôn ở 'Chờ duyệt' (việc 5.1).
+ *
+ * ĐỢT A (028_supervisor_ids.sql, R1a): fixture PHẢI chỉ định «Ban lãnh đạo kiểm soát», vì `submit`
+ * nay từ chối mục chưa chọn ai (409 NO_APPROVER_ASSIGNED) — gửi đi mà không có ai duyệt được là tạo
+ * một dòng kẹt vĩnh viễn. Trước đợt A bước này không cần: mọi Phó GĐ phụ trách phòng mặc nhiên
+ * duyệt được. Ở đây chọn `pgdA`, đúng người mà các ca bên dưới vẫn dùng để duyệt.
+ */
 async function taoViecChoDuyet() {
-  const res = await apiTp.post('/api/v1/works', { name: 'Việc phòng A', departmentId: phongA.id });
+  const res = await apiTp.post('/api/v1/works', {
+    name: 'Việc phòng A',
+    departmentId: phongA.id,
+    supervisorIds: [pgdA.id],
+  });
   expect(res.status).toBe(200);
   return res.body.data.work;
 }
@@ -71,6 +83,12 @@ async function taoViecChoDuyet() {
 beforeEach(async () => {
   await resetTables();
   phongA = await makeDepartment({ code: 'PH01', name: 'Phòng Kỹ thuật' });
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: phongA.id,
+  });
   phongB = await makeDepartment({ code: 'PH02', name: 'Phòng Kế hoạch', sort_order: 2 });
 
   tp = await makeLoginUser({
@@ -133,7 +151,7 @@ describe('Gửi duyệt (submit) — việc 5.2', () => {
     expect(res.body.error.code).toBe('CONFLICT');
   });
 
-  it('Gửi duyệt sinh thông báo cho Phó Giám đốc phụ trách phòng (việc 5.7)', async () => {
+  it('Gửi duyệt sinh thông báo cho Ban lãnh đạo kiểm soát của mục (việc 5.7, đợt A/D3)', async () => {
     const work = await taoViecChoDuyet();
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/return`, {
       reason: 'Thiếu mốc thời gian hoàn thành',
@@ -149,18 +167,22 @@ describe('Gửi duyệt (submit) — việc 5.2', () => {
     expect(tb[0].is_read).toBe(false);
   });
 
-  it('Nhiệm vụ cấp 3 «Đã duyệt» không qua bước duyệt ⇒ 409 (013 giữ luật gốc)', async () => {
-    // Cấp 3 mặc định là «Đã duyệt» (việc 5.1) ⇒ gửi duyệt vô nghĩa. Từ 013 điều kiện xét theo
-    // TRẠNG THÁI của dòng, không theo cấp — nhiệm vụ đã bị đưa vào luồng duyệt thì xử được
-    // (TC-APR-21). Ca này canh phần KHÔNG đổi: 99% nhiệm vụ vẫn nằm ngoài luồng duyệt.
+  it('Q3: nhiệm vụ cấp 3 nay «Chờ duyệt» nên CÓ qua bước duyệt; 409 chỉ còn cho dòng đã duyệt thật', async () => {
+    // Luật cũ (việc 5.1): cấp 3 LUÔN «Đã duyệt» ⇒ gửi duyệt vô nghĩa ⇒ 409, và 013 nới điều kiện
+    // theo TRẠNG THÁI của dòng thay vì theo cấp. Q3 (ĐỢT B) bỏ hẳn luật «cấp 3 Đã duyệt riêng lẻ»,
+    // nên nhiệm vụ mới vào luồng duyệt như mọi cấp khác; nhánh 409 của 013 vẫn còn đó cho dòng đã ký.
     const work = await taoViecChoDuyet();
     const item = await apiTp.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: work.code,
       level: 3,
       name: 'Nhiệm vụ',
     });
     const code = item.body.data.item.code;
-    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Đã duyệt');
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Chờ duyệt');
+    const duyet = await apiPgdA.post(`/api/v1/approvals/work-item/${code}/approve`);
+    expect(duyet.status, JSON.stringify(duyet.body)).toBe(200);
+
     const res = await apiTp.post(`/api/v1/approvals/work-item/${code}/submit`);
     expect(res.status).toBe(409);
     expect(res.body.error.message).toContain('không qua bước duyệt');
@@ -291,8 +313,16 @@ describe('TC-APR-10/11 — quyền duyệt (việc 5.3)', () => {
     expect(sau.approved_at).not.toBeNull();
   });
 
-  it('admin duyệt được mọi phòng, kể cả phòng mình không thuộc về', async () => {
-    const work = await taoViecChoDuyet();
+  // ĐỢT A (028_supervisor_ids.sql) LẬT quyết định cũ. Ca này tên «admin duyệt được mọi phòng, kể
+  // cả phòng mình không thuộc về» và khẳng định 200; R1(a) người dùng chốt nguyên văn: «chỉ người
+  // TRONG `supervisor_ids` mới duyệt được, KHÔNG chừa admin làm dự phòng». Nay admin bị 403 như mọi
+  // người khác khi không có tên trong danh sách.
+  //
+  // Kèm luôn LỐI THOÁT đã cam kết, vì nếu không ca này chỉ chứng minh hệ thống có thể tắc: admin
+  // vẫn có quyền `update` (không phải `approve`) nên đổi được danh sách kiểm soát, rồi người mới
+  // duyệt. Admin KHÔNG tự duyệt thay — đó đúng là điều R1(a) cấm.
+  it('R1(a): admin KHÔNG tự duyệt được khi không có tên trong Ban lãnh đạo kiểm soát — nhưng sửa được danh sách để gỡ tắc', async () => {
+    const work = await taoViecChoDuyet(); // danh sách kiểm soát = [pgdA.id]
     const admin = await makeLoginUser({
       code: 'NV001',
       email: 'admin@test.local',
@@ -300,8 +330,20 @@ describe('TC-APR-10/11 — quyền duyệt (việc 5.3)', () => {
       department_id: null,
     });
     const api = await dangNhap(admin);
+
     const res = await api.post(`/api/v1/approvals/work/${work.code}/approve`);
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.error.code).toBe('NOT_APPROVER');
+    // Bị chặn thì trạng thái KHÔNG đổi — đọc lại CSDL, không tin thân phản hồi.
+    expect((await khoaDuyet('works', work.code)).approval_status).toBe('Chờ duyệt');
+
+    // Thêm chính mình vào danh sách (quyền `update`), rồi duyệt.
+    const sua = await api.patch(`/api/v1/works/${work.code}`, {
+      supervisorIds: [pgdA.id, admin.id],
+    });
+    expect(sua.status, JSON.stringify(sua.body)).toBe(200);
+    const duyet = await api.post(`/api/v1/approvals/work/${work.code}/approve`);
+    expect(duyet.status, JSON.stringify(duyet.body)).toBe(200);
     expect((await khoaDuyet('works', work.code)).approval_status).toBe('Đã duyệt');
   });
 
@@ -378,18 +420,20 @@ describe('TC-APR-16 — duyệt cấp 1 LAN XUỐNG CẢ CÂY (012, người dù
     });
     const conCode = con.body.data.item.code;
     const chau = await apiTp.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: work.code,
       level: 3,
       parentRef: conCode,
       name: 'Nhiệm vụ trong công việc con',
     });
     const chauCode = chau.body.data.item.code;
-    // Cấp 2 do TP lập ⇒ 'Chờ duyệt'; cấp 3 luôn 'Đã duyệt' (việc 5.1) — không đổi ở 012.
+    // Q3 (ĐỢT B): cấp 2 do TP lập và cấp 3 đều 'Chờ duyệt' — cấp 3 không còn 'Đã duyệt' riêng lẻ.
     expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Chờ duyệt');
+    expect((await khoaDuyet('work_items', chauCode)).approval_status).toBe('Chờ duyệt');
 
     const res = await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
     expect(res.status).toBe(200);
-    expect(res.body.data.soCon).toBe(1); // chỉ dòng ĐANG chờ duyệt bị kéo theo
+    expect(res.body.data.soCon).toBe(2); // mọi dòng ĐANG chờ duyệt trong cây bị kéo theo
 
     expect((await khoaDuyet('works', work.code)).approval_status).toBe('Đã duyệt');
     expect((await khoaDuyet('work_items', conCode)).approval_status).toBe('Đã duyệt');
@@ -448,6 +492,9 @@ describe('TC-APR-17..19 — bản Nháp và gửi duyệt cả cây', () => {
       name: 'Việc soạn nháp',
       departmentId: phongA.id,
       saveAsDraft: true,
+      // Đợt A (R1a): nháp rồi cũng sẽ gửi duyệt, mà gửi thì phải có người duyệt — xem
+      // `taoViecChoDuyet`. Thiếu dòng này là ca TC-APR-18/19 nhận 409 thay vì 200.
+      supervisorIds: [pgdA.id],
     });
     expect(res.status).toBe(200);
     const work = res.body.data.work;
@@ -458,6 +505,7 @@ describe('TC-APR-17..19 — bản Nháp và gửi duyệt cả cây', () => {
     });
     const conCode = con.body.data.item.code;
     const nv = await apiTp.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: work.code,
       level: 3,
       parentRef: conCode,
@@ -592,7 +640,12 @@ describe('TC-APR-15 — badge chờ duyệt (việc 5.5)', () => {
 
   it('Nhiệm vụ cấp 3 không bao giờ vào số đếm chờ duyệt', async () => {
     const work = await taoViecChoDuyet();
-    await apiTp.post('/api/v1/work-items', { workRef: work.code, level: 3, name: 'Nhiệm vụ' });
+    await apiTp.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: work.code,
+      level: 3,
+      name: 'Nhiệm vụ',
+    });
     await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
     expect((await apiPgdA.get('/api/v1/approvals/pending-count')).body.data.total).toBe(0);
   });
@@ -776,7 +829,7 @@ describe('TC-APR-20..22 — duyệt nhiệm vụ cấp 3 khi admin đã bật �
     expect(await conTonTai('work_items', code)).toBe(false);
   });
 
-  it('TC-APR-22: TP/PP duyệt cấp 3 ⇒ 403; admin ghi đè task:approve ⇒ duyệt được', async () => {
+  it('TC-APR-22: TP/PP duyệt cấp 3 ⇒ 403; ghi đè task:approve KHÔNG vượt được danh sách kiểm soát (đợt A)', async () => {
     const { code } = await taoNhiemVuChoDuyet();
     // Ma trận §6 KHÔNG cho Trưởng phòng duyệt — 013 không đổi ma trận gốc.
     const truoc = await apiTp.post(`/api/v1/approvals/work-item/${code}/approve`);
@@ -785,8 +838,20 @@ describe('TC-APR-20..22 — duyệt nhiệm vụ cấp 3 khi admin đã bật �
     await apiAdmin.put('/api/v1/permissions', {
       thayDoi: [{ vai: 'Trưởng phòng', entityType: 'task', action: 'approve', giaTri: 'cho-phep' }],
     });
+    // ĐỢT A (R1a) ĐỔI KẾT QUẢ ca này: trước đây ghi đè `cho-phep` là đủ để TP duyệt được.
+    //
+    // Vì sao ghi đè không thắng: `permission_overrides` cấp HÀNH ĐỘNG («vai này có được duyệt
+    // nhiệm vụ không»), còn `supervisor_ids` là PHẠM VI («dòng này giao cho ai»). Hai lớp đó tách
+    // nhau từ §6, và ghi đè chưa bao giờ vượt được lớp phạm vi — ghi đè `work:update = cho-phep`
+    // cũng không giúp Trưởng phòng sửa việc của phòng khác. Đặt danh sách kiểm soát ở lớp phạm vi
+    // thì một ô ghi đè không thể âm thầm mở quyền duyệt trên mọi nhiệm vụ của hệ thống.
+    //
+    // Hệ quả phải nói rõ với người dùng: TP/PP KHÔNG BAO GIỜ duyệt được cây, kể cả khi admin bật
+    // ghi đè, vì `assertSupervisor` chỉ nhận admin/Phó GĐ phụ trách phòng vào danh sách. Muốn TP
+    // duyệt thì đó là chuyện đổi ma trận §6, không phải chuyện bật một ô ghi đè.
     const sau = await apiTp.post(`/api/v1/approvals/work-item/${code}/approve`);
-    expect(sau.status, JSON.stringify(sau.body)).toBe(200);
-    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Đã duyệt');
+    expect(sau.status, JSON.stringify(sau.body)).toBe(403);
+    expect(sau.body.error.code).toBe('NOT_APPROVER');
+    expect((await khoaDuyet('work_items', code)).approval_status).toBe('Chờ duyệt');
   });
 });

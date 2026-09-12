@@ -78,12 +78,21 @@ describe('GET /api/v1/gantt — nhóm theo Phòng', () => {
       role: 'Trưởng phòng',
       department_id: phongA.id,
     });
+    // ĐỢT A (028): «Ban lãnh đạo kiểm soát» nay là MẢNG, nên ca này phải có HAI người để ghim được
+    // chuyện tooltip nối tên bằng dấu phẩy. Chỉ một người thì «một tên» và «nối một tên» giống hệt
+    // nhau, ca sẽ xanh cả khi chỗ nối bị bỏ — đúng kiểu test không phân biệt được hai hành vi.
+    const pgd2 = await makeLoginUser({
+      code: 'NV008',
+      full_name: 'Phó GĐ Kiểm Soát Hai',
+      email: 'pgdks2@test.local',
+      role: 'Phó Giám đốc',
+      department_id: phongA.id,
+    });
     const work = await makeWork({ code: 'CV001', department_id: phongA.id });
-    await pool.query(`UPDATE works SET supervisor_id = $2, leader_ids = $3 WHERE id = $1`, [
-      work.id,
-      pgd.id,
-      [tpb.id],
-    ]);
+    await pool.query(
+      `UPDATE works SET supervisor_ids = ARRAY[$2,$3]::bigint[], leader_ids = $4 WHERE id = $1`,
+      [work.id, pgd.id, pgd2.id, [tpb.id]]
+    );
     await pool.query(
       `INSERT INTO work_items (code, work_id, level, name, assignee_name, leader_ids, output)
        VALUES ('CV001-001', $1, 3, 'Nhiệm vụ tooltip', 'Nguyễn Văn A', ARRAY[$2]::bigint[], 'Bản báo cáo PDF')`,
@@ -92,7 +101,9 @@ describe('GET /api/v1/gantt — nhóm theo Phòng', () => {
 
     const res = await apiAdmin.get('/api/v1/gantt');
     const w = res.body.data.groups[0].works[0];
-    expect(w.supervisorName).toBe('Phó GĐ Kiểm Soát');
+    // `supervisorName` vẫn là MỘT CHUỖI (hình dạng phản hồi không đổi) nhưng nay nối các tên,
+    // đúng khuôn `leaderNames` — thứ tự theo `supervisor_ids`, không sắp xếp lại theo tên.
+    expect(w.supervisorName).toBe('Phó GĐ Kiểm Soát, Phó GĐ Kiểm Soát Hai');
     expect(w.leaderNames).toEqual(['Trần Trưởng B']);
     const task = w.tasks.find((t) => t.code === 'CV001-001');
     expect(task.leaderNames).toEqual(['Trần Trưởng B']);
@@ -145,24 +156,27 @@ describe('GET /api/v1/gantt — nhóm theo Phó Giám đốc + cây 4 mức', ()
       name: 'Nhiệm vụ mồ côi',
     });
 
-    // Bug 2 (8b): tiến độ = bình quân gia quyền TỶ LỆ × mức hoàn thành FILE KẾT QUẢ.
-    // Đặt tỷ lệ 60/40 cho hai đầu mục; cấp 2 có 2 nhóm file (1 đã hoàn thành ⇒ 50%),
-    // nhiệm vụ mồ côi 1 nhóm đã duyệt ⇒ 100% ⇒ công việc = (60×50 + 40×100)/100 = 70.
+    // V2: phải có BẢN thật ở CSDL; nhóm chưa có bản luôn 0% dù mang trạng thái kết thúc.
+    // Hai file 50/50 có mốc 100/50 ⇒ nhiệm vụ trong con 75%; nhiệm vụ trực tiếp 100%.
+    // Hai đầu mục 60/40 ⇒ công việc = (60×75 + 40×100)/100 = 85%, thay 70% nhị phân cũ.
+    await pool.query(`UPDATE work_items SET ty_le = 60 WHERE code = 'CV001-001'`);
+    await pool.query(`UPDATE work_items SET ty_le = 40 WHERE code = 'CV001-009'`);
     await pool.query(
-      `UPDATE work_items SET ty_le = 60 WHERE code = 'CV001-001'`
-    );
-    await pool.query(
-      `UPDATE work_items SET ty_le = 40 WHERE code = 'CV001-009'`
-    );
-    await pool.query(
-      `INSERT INTO task_files (item_id, ten_goc, trang_thai)
-       SELECT i.id, 'ket-qua.docx', 'hoan-thanh' FROM work_items i WHERE i.code = 'CV001-002'
-       UNION ALL
-       SELECT i.id, 'ban-nhap.docx', 'cho-xem' FROM work_items i WHERE i.code = 'CV001-002'
-       UNION ALL
-       SELECT i.id, 'bao-cao.pdf', 'da-duyet' FROM work_items i WHERE i.code = 'CV001-009'`
+      `WITH nhom AS (
+         INSERT INTO task_files (item_id, ten_goc, trang_thai, ty_le)
+         SELECT i.id, 'ket-qua.docx', 'hoan-thanh', 50 FROM work_items i WHERE i.code = 'CV001-002'
+         UNION ALL
+         SELECT i.id, 'ban-nhap.docx', 'cho-xem', 50 FROM work_items i WHERE i.code = 'CV001-002'
+         UNION ALL
+         SELECT i.id, 'bao-cao.pdf', 'da-duyet', 100 FROM work_items i WHERE i.code = 'CV001-009'
+         RETURNING id, ten_goc
+       )
+       INSERT INTO task_file_versions(file_id,version_no,ten_luu,ten_goc,loai_mime,kich_thuoc,uploaded_by)
+       SELECT id,1,'fixture-' || id,ten_goc,'application/octet-stream',1,$1 FROM nhom`,
+      [admin.id]
     );
 
+    await pool.query("UPDATE work_items SET ty_le = 100 WHERE code = 'CV001-002'");
     const res = await apiAdmin.get('/api/v1/gantt');
     const workNode = res.body.data.groups[0].works[0];
     expect(workNode.subs).toHaveLength(1);
@@ -170,10 +184,10 @@ describe('GET /api/v1/gantt — nhóm theo Phó Giám đốc + cây 4 mức', ()
     expect(workNode.tasks.map((t) => t.name)).toEqual(['Nhiệm vụ mồ côi']);
     expect(workNode.taskCount).toBe(2);
     expect(workNode.completedCount).toBe(1); // vẫn đếm theo TRẠNG THÁI cấp 3
-    expect(workNode.progress).toBe(70);
+    expect(workNode.progress).toBe(85);
     // Thanh Gantt của từng dòng tô theo tiến độ file, không đọc `completion` cũ.
-    expect(workNode.subs[0].completion).toBe(50);
-    expect(workNode.subs[0].children[0].completion).toBe(50);
+    expect(workNode.subs[0].completion).toBe(75);
+    expect(workNode.subs[0].children[0].completion).toBe(75);
     expect(workNode.tasks[0].completion).toBe(100);
   });
 });
@@ -189,6 +203,44 @@ describe('GET /api/v1/gantt — nhóm theo Người thực hiện + lọc + kho�
     const res = await apiAdmin.get('/api/v1/gantt?groupBy=assignee');
     expect(res.body.data.groups.map((g) => g.name)).toEqual(['Trần Thị Lan']);
     expect(res.body.data.groups[0].works[0].code).toBe('CV001');
+  });
+
+  // 2026-09-09 — Trưởng/Phó phòng được nhận việc trực tiếp nên nhóm Gantt phải nói rõ ai là lãnh
+  // đạo: tên nhóm kèm vai trong NGOẶC và lãnh đạo xếp SAU Cán bộ. Vai tra theo `assignee_id`,
+  // không đoán từ tên (tên tự do nhập không dò ra ai thì giữ nguyên tên trơn — ca ngay trên đây).
+  it('assignee: nhiệm vụ giao cho Trưởng phòng ⇒ nhóm kèm vai và đứng SAU nhóm Cán bộ', async () => {
+    const tp = await makeLoginUser({
+      code: 'NV020',
+      full_name: 'An Trưởng Phòng',
+      email: 'tp-gantt@test.local',
+      role: 'Trưởng phòng',
+      department_id: phongA.id,
+    });
+    const canBo = await makeLoginUser({
+      code: 'NV021',
+      full_name: 'Nguyễn Văn Cán Bộ',
+      email: 'nv-gantt@test.local',
+      role: 'Nhân viên',
+      department_id: phongA.id,
+    });
+    const work = await makeWork({ code: 'CV001', department_id: phongA.id });
+    // «An» đứng trước «Nguyễn» theo chữ cái — nếu nó vẫn xuống cuối là nhờ luật tách vai.
+    await pool.query(
+      `INSERT INTO work_items (code, work_id, level, name, assignee_id, assignee_name)
+       VALUES ('CV001-001', $1, 3, 'Việc của Trưởng phòng', $2, $3),
+              ('CV001-002', $1, 3, 'Việc của Cán bộ', $4, $5)`,
+      [work.id, tp.id, tp.full_name, canBo.id, canBo.full_name]
+    );
+    const res = await apiAdmin.get('/api/v1/gantt?groupBy=assignee');
+    expect(res.status).toBe(200);
+    expect(res.body.data.groups.map((g) => g.name)).toEqual([
+      'Nguyễn Văn Cán Bộ',
+      'An Trưởng Phòng (Trưởng phòng)',
+    ]);
+    // Cả hai nhóm đều thấy đúng công việc đó (một công việc rơi vào nhóm của MỌI người trong nó).
+    expect(res.body.data.groups[1].works[0].code).toBe('CV001');
+    // `vai` chỉ là trường phụ để sắp xếp — không được lọt ra phản hồi.
+    expect(res.body.data.groups[1]).not.toHaveProperty('vai');
   });
 
   it('khoảng from/to: việc ngoài hẳn khoảng biến mất khỏi cây, việc vắt qua thì còn', async () => {

@@ -44,20 +44,24 @@ async function dungCayBaCap(api) {
       workRef: work.code,
       level: 2,
       name: 'Công việc con A',
+      priority: 'Thấp',
     })
   ).body.data.item;
   const task = (
     await api.post('/api/v1/work-items', {
+      assigneeId: staff.id,
       workRef: work.code,
       parentRef: subwork.code,
       level: 3,
       name: 'Nhiệm vụ B',
+      description: 'Nội dung ban đầu',
     })
   ).body.data.item;
 
   await api.patch(`/api/v1/works/${work.code}`, { name: 'Công việc gốc (đã đổi tên)' });
-  await api.patch(`/api/v1/work-items/${subwork.code}`, { status: 'Đang thực hiện' });
-  await api.patch(`/api/v1/work-items/${task.code}`, { completion: 40 });
+  // Trạng thái/hoàn thành tay đã ngừng ghi; kiểm nhật ký bằng các trường vẫn được sửa.
+  await api.patch(`/api/v1/work-items/${subwork.code}`, { priority: 'Cao' });
+  await api.patch(`/api/v1/work-items/${task.code}`, { description: 'Nội dung đã cập nhật' });
 
   return { work, subwork, task };
 }
@@ -123,8 +127,11 @@ describe('TC-NKCAY-01..08 — nhật ký cả cây', () => {
     const data = await nhatKy(api, `/api/v1/works/${work.code}/history?scope=tree`, 6);
     const doi = (action) => data.entries.find((e) => e.action === action).details.changes;
     expect(doi('works.update').name.to).toBe('Công việc gốc (đã đổi tên)');
-    expect(doi('subworks.update').status).toEqual({ from: 'Chưa bắt đầu', to: 'Đang thực hiện' });
-    expect(doi('tasks.update').completion.to).toBe(40);
+    expect(doi('subworks.update').priority).toEqual({ from: 'Thấp', to: 'Cao' });
+    expect(doi('tasks.update').description).toEqual({
+      from: 'Nội dung ban đầu',
+      to: 'Nội dung đã cập nhật',
+    });
   });
 
   it('TC-NKCAY-04: không có scope thì vẫn CHỈ nhật ký của chính công việc (không đổi API cũ)', async () => {

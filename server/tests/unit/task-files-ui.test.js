@@ -11,6 +11,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PERMISSIONS } from '../../src/middleware/rbac.js';
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, buildThanhTabNhatKy, buildKhungNhatKy, buildKhoiFile, buildYKienPanel, batTatKetQua,
@@ -27,9 +30,11 @@ const EXPORTS = `;Object.assign(window, {
   buildONhapBaoCao, dinhDangCuaNhom, laDongBaoCao, laBanBaoCaoKq, tenBanCuoiHangCho,
   buildKhungDanhSachKetQua, buildDongKhaiTam, themDongKhaiTam, thuThapDongKhaiTam,
   guiDongKhaiTam, coTheKhaiKetQua, doiDinhDangDongTam, xoaDongKhaiTam,
+  danhSachYKien, yKienCuaBan, buildMotYKien, COT_BANG_KET_QUA, buildColgroupKetQua,
+  buildONhapYKien, guiYKienTuPopup, moYKienKetQua, dongPopupYKien,
   __tf: (ten, giaTri) => {
     ({
-      currentUser: () => { currentUser = giaTri; },
+      currentUser: () => { currentUser = giaTri; isAuthenticated = !!giaTri; },
       allTasks: () => { allTasks = giaTri; },
       pendingTaskCreate: () => { pendingTaskCreate = giaTri; },
     })[ten]();
@@ -50,10 +55,10 @@ function khoiDong() {
   window.fetch = () => Promise.reject(new Error('KHONG DUOC GOI MAY CHU trong test UI nay'));
   window.confirm = () => true;
   window.prompt = () => 'nội dung đủ dài';
-  new Function(APP_SRC + EXPORTS)();
+  new Function(APP_SRC + QUYEN_UI + EXPORTS)();
   window.__tf('allTasks', []);
   window.__tf('currentUser', { name: 'Trần Thị Trưởng', role: 'Trưởng phòng', id: 2 });
-  window.__tfPq(null, {});
+  window.__tfPq(PERMISSIONS, {});
 }
 
 describe('TCKQ-LS: tab vàng dùng DOM an toàn và bốn nút', () => {
@@ -110,24 +115,23 @@ describe('TCKQ-LS: tab vàng dùng DOM an toàn và bốn nút', () => {
     );
   });
 
-  it('nhân viên mặc định tab vàng và ẩn hai tab cũ', () => {
+  it('V4: nhân viên có quyền gửi mở được nháp riêng và tab vàng, tab cây vẫn ẩn', () => {
     dungHangCho();
     window.__tf('currentUser', { role: 'Nhân viên', id: 4 });
     window.capNhatTabChoDuyet();
-    expect(document.getElementById('panel-cho-duyet-lenh-sua').classList.contains('hidden')).toBe(
-      false
-    );
     expect(
       document.querySelector('.tab-cho-duyet[data-tab="viec"]').classList.contains('hidden')
     ).toBe(true);
     expect(
       document.querySelector('.tab-cho-duyet[data-tab="ket-qua"]').classList.contains('hidden')
-    ).toBe(true);
-    window.__tf('currentUser', { role: 'admin', id: 1 });
-    window.capNhatTabChoDuyet();
+    ).toBe(false);
     expect(
       document.querySelector('.tab-cho-duyet[data-tab="lenh-sua"]').classList.contains('hidden')
-    ).toBe(true);
+    ).toBe(false);
+    window.moTabChoDuyet('lenh-sua');
+    expect(document.getElementById('panel-cho-duyet-lenh-sua').classList.contains('hidden')).toBe(
+      false
+    );
   });
 
   it('lưu tạm PATCH giữ dòng và ghi chú; hủy confirm Không không gọi mạng', async () => {
@@ -244,7 +248,7 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
     expect(daDuyet).toContain('Đã duyệt');
   });
 
-  it('TCKQ-03b: mỗi file MỘT DÒNG — data-file + CHỮ «Xem ý kiến» + nút Lịch sử; khung chi tiết ẩn', () => {
+  it('TCKQ-03b: mỗi file MỘT DÒNG — data-file + CHỮ «Xem ý kiến» mở POPUP + nút Lịch sử', () => {
     const dong = window.buildKhoiFile(
       NHOM({
         gopY: [
@@ -263,9 +267,13 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
     expect(dong).toContain('data-file="7"');
     expect(dong).toContain('>Xem ý kiến (1)</button>');
     expect(dong).toContain('>Lịch sử</button>');
-    expect(dong).toContain("batTatKetQua('7', 'yk')");
+    // ĐỢT 5 (2026-09-11): «Xem ý kiến» nay MỞ POPUP `moYKienKetQua(ma, fileId, banId)`; dòng cha
+    // truyền `banId` RỖNG để popup in TẤT CẢ ý kiến («còn bản đầu 1. đấy sẽ xem tất cả»).
+    expect(dong).toContain("moYKienKetQua('CV001-002', '7', '')");
     expect(dong).toContain("batTatKetQua('7', 'ls')");
-    expect(dong).toContain('id="task-kq-yk-7"');
+    // Khung Ý KIỆN ẩn dưới bảng ĐÃ BỎ — nội dung và ô nhập dời hết vào popup. Chỉ còn khung LỊCH SỬ.
+    expect(dong).not.toContain('id="task-kq-yk-7"');
+    expect(dong).not.toContain("batTatKetQua('7', 'yk')");
     expect(dong).toContain('id="task-kq-ls-7"');
     expect(dong).toContain('class="hidden mt-2 border-t border-gray-50 pt-2"');
   });
@@ -283,11 +291,16 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
 
   it('TCKQ-17: ✎ sửa trực tuyến (ONLYOFFICE) CHỈ hiện khi máy chủ đã cấu hình DS', () => {
     window.__tfDs(true);
-    const co = window.buildKhoiFile(NHOM(), 'CV001-002');
+    // V3: PDF chỉ xem. Ca kiểm DS bật/tắt phải dùng Word, không đổi luật PDF.
+    const word = NHOM({
+      dinh_dang: 'Word',
+      bans: [{ ...NHOM().bans[0], ten_goc: 'ket-qua.docx' }],
+    });
+    const co = window.buildKhoiFile(word, 'CV001-002');
     expect(co).toContain('/api/v1/task-file-versions/11/editor');
     expect(co).toContain('Sửa trực tuyến (ONLYOFFICE)');
     window.__tfDs(false);
-    const khong = window.buildKhoiFile(NHOM(), 'CV001-002');
+    const khong = window.buildKhoiFile(word, 'CV001-002');
     expect(khong).not.toContain('/editor');
   });
 
@@ -308,12 +321,15 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
     }
   });
 
-  it('TCKQ-18: panel ý kiến — label gắn bản mới nhất + data-ban-cuoi + Gửi ý kiến', () => {
+  it('TCKQ-18: panel ý kiến (nay nằm TRONG POPUP) — label gắn bản mới nhất + data-ban-cuoi + Gửi ý kiến', () => {
     const panel = window.buildYKienPanel(NHOM(), 'CV001-002');
     expect(panel).toContain('Ý kiến cho bản 1');
     expect(panel).toContain('id="task-y-kien-7"');
     expect(panel).toContain('data-ban-cuoi="11"');
-    expect(panel).toContain("guiYKien('7', 'CV001-002')");
+    // ĐỢT 5: nút «Gửi ý kiến» đi qua `guiYKienTuPopup` để ĐÓNG POPUP sau khi gửi thành công —
+    // `guiYKien` đã gọi `napKetQua(ma)` vẽ lại bảng, để popup mở là nó đang kể chuyện cũ.
+    expect(panel).toContain("guiYKienTuPopup('7', 'CV001-002')");
+    expect(panel).not.toContain('onclick="guiYKien(\'');
     expect(panel).toContain('Gửi ý kiến');
     expect(panel).toContain('Chưa có ý kiến nào.');
   });
@@ -321,12 +337,12 @@ describe('TCKQ — khối «Kết quả» nằm trong tab Thông tin (Vòng 14�
 
 // ============================================================================
 // TCKQ-23…30 — THIẾT KẾ LẠI khối «Kết quả» theo sheet «kq-modal» của người dùng (2026-09-03):
-// bảng 8 cột Thời gian · Kết quả làm được · Định dạng · File đã tải lên · Người thực hiện ·
+// bảng 10 cột Thời gian · Kết quả làm được · Định dạng · File đã tải lên · Người thực hiện ·
 // Ghi ý kiến · Tình trạng · Hành động. Dòng cha đánh số 1., 2., 3.; mỗi BẢN là một dòng con
 // 1.1, 1.2 … kèm chữ «Sửa lần N» và THU GỌN mặc định (người dùng chốt: «bấm ▸ mới bung»).
 // Mọi hành động gộp vào MỘT menu ⋯ («ấn vào đây hiển thị các Hành động để chọn»).
 // ============================================================================
-describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03)', () => {
+describe('TCKQ — bảng «Kết quả» 10 cột (thiết kế lại 2026-09-03)', () => {
   /** Bản thứ n của nhóm 7 — dùng để dựng các dòng con 1.1 / 1.2. */
   const BAN = (so, over = {}) => ({
     id: 10 + so,
@@ -342,13 +358,15 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
     ...over,
   });
 
-  it('TCKQ-23: bảng đủ 8 cột đúng thứ tự sheet; danh sách rỗng thì nói rõ là chưa có', () => {
+  it('TCKQ-23: bảng đủ 10 cột đúng thứ tự sheet; danh sách rỗng thì nói rõ là chưa có', () => {
     const html = window.buildBangKetQua([NHOM()], 'CV001-002');
     const cot = [
       'Thời gian',
       'Kết quả làm được',
       'Định dạng',
       'File đã tải lên',
+      'Tỷ lệ công việc (%)',
+      'Tiến độ',
       'Người thực hiện',
       'Ghi ý kiến',
       'Tình trạng',
@@ -362,12 +380,12 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
       expect(tai, t).toBeGreaterThan(truoc);
       truoc = tai;
     }
-    // SỬA + danh sách rỗng: vẫn là BẢNG 8 cột, hàng «Chưa có» nằm trong tbody — đợt 2 không còn
+    // SỬA + danh sách rỗng: vẫn là BẢNG 10 cột, hàng «Chưa có» nằm trong tbody — đợt 2 không còn
     // trả một dòng chữ xám ngoài bảng (người dùng 2026-09-04: «tạo mới không thấy bảng kết quả»).
     const rongSua = window.buildBangKetQua([], 'CV001-002');
     expect(rongSua).toContain('bang-ket-qua');
     expect(rongSua).toContain('Chưa có kết quả nào.');
-    expect(rongSua).toContain('colspan="8"');
+    expect(rongSua).toContain('colspan="10"');
     // TẠO MỚI (ma rỗng): một dòng khai tạm 1. với ô tên/định dạng/ý kiến, KHÔNG POST.
     const rongTao = window.buildBangKetQua([], '');
     expect(rongTao).toContain('bang-ket-qua');
@@ -456,28 +474,42 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
     expect(window.cauTinhTrangFile({ trang_thai: 'can-sua', luong: [] })).toBe(
       'đang đợi Cán bộ sửa và nộp bản mới'
     );
-    // Chưa qua «Trình lãnh đạo» thì không được nói là TP/PP đã duyệt.
+    // Chưa qua «TP/PP phê duyệt» thì không được nói là TP/PP đã duyệt.
     expect(window.cauTinhTrangFile({ trang_thai: 'cho-lanh-dao', luong: [] })).toBe(
       'đang đợi Phó Giám đốc/Giám đốc'
     );
     expect(
       window.cauTinhTrangFile({
         trang_thai: 'cho-lanh-dao',
-        luong: [{ hanh_dong: 'trinh-lanh-dao' }],
+        luong: [{ hanh_dong: 'tp-phe-duyet' }],
       })
     ).toBe('TP/PP đã duyệt, đang gửi lên Phó Giám đốc/Giám đốc');
-    // Đếm số lần trả lại: yeu-cau-sua + tra-ve-tp + tra-ve-cbo.
+    // ĐIỂM 7 (ĐỢT B): máy chủ trả tên + lúc ký thì câu kể phải KỂ ĐƯỢC AI, không chỉ «TP/PP đã
+    // duyệt» chung chung. Đây chính là chỗ `trinh-lanh-dao` cũ thua — nó chỉ đổi trạng thái nên
+    // không có gì để kể. Ba tên trường vì ba đường đọc trả ba dạng (GET …/files · tab Nhiệm vụ · RPC).
+    for (const khoaTen of ['ten_nguoi_tp_duyet', 'tp_duyet_ten', 'tenNguoiTpDuyet']) {
+      const cau = window.cauTinhTrangFile({
+        trang_thai: 'cho-lanh-dao',
+        luong: [],
+        [khoaTen]: 'Trần Thị Trưởng Phòng',
+        tp_duyet_luc: '2026-09-04T02:25:00Z',
+      });
+      expect(cau).toContain('đã được Trần Thị Trưởng Phòng (TP/PP) phê duyệt');
+      expect(cau).toContain('lúc ');
+      expect(cau).toContain('đang chờ Phó Giám đốc/Giám đốc');
+    }
+    // Đếm số lần trả lại: ĐIỂM 9 (ĐỢT B) gộp «Yêu cầu sửa» vào «Trả về Cán bộ» nên chỉ còn HAI mã.
     expect(
       window.cauTinhTrangFile({
         trang_thai: 'can-sua',
-        luong: [{ hanh_dong: 'yeu-cau-sua' }, { hanh_dong: 'nop' }],
+        luong: [{ hanh_dong: 'tra-ve-cbo' }, { hanh_dong: 'nop' }],
       })
     ).toBe('Bị trả lại lần 1 — đang đợi Cán bộ sửa và nộp bản mới');
     expect(
       window.cauTinhTrangFile({
         trang_thai: 'can-sua',
         luong: [
-          { hanh_dong: 'yeu-cau-sua' },
+          { hanh_dong: 'tra-ve-cbo' },
           { hanh_dong: 'tra-ve-tp' },
           { hanh_dong: 'tra-ve-cbo' },
         ],
@@ -508,8 +540,12 @@ describe('TCKQ — bảng «Kết quả» 8 cột (thiết kế lại 2026-09-03
     expect((html.match(/class="kq-menu hidden"/g) || []).length).toBe(2);
     // TP ở «cho-xem»: các hành động nằm TRONG menu dưới dạng mục, không phải nút btn-primary rời.
     expect(html).toContain('kq-menu-muc');
-    expect(html).toContain('Yêu cầu sửa');
-    expect(html).toContain('Trình Phó giám đốc');
+    // ĐIỂM 9 + ĐIỂM 7 (ĐỢT B): menu chỉ còn «Đẩy về Cán bộ» (đã gộp «Yêu cầu sửa») và
+    // «TP/PP phê duyệt» (thay «Trình Phó giám đốc») — hai nút cho một việc là điểm bất hợp lý số 9.
+    expect(html).toContain('Đẩy về Cán bộ');
+    expect(html).toContain('TP/PP phê duyệt');
+    expect(html).not.toContain('Yêu cầu sửa');
+    expect(html).not.toContain('Trình Phó giám đốc');
     expect(html).toContain('Hoàn thành / Duyệt');
     expect(html).toContain('kq-menu-muc-chot');
     // Menu rỗng thì in gạch ngang chứ không để ô trống không ai hiểu.
@@ -652,7 +688,7 @@ describe('TCKQ — bảng luồng và danh sách bản', () => {
 });
 
 describe('TCKQ — nút verdict theo VAI + GIÁ TRỊ HIỆU LỰC', () => {
-  it('TCKQ-06: TP có file:approve = ✓ (mặc định) ⇒ cả «Hoàn thành / Duyệt» lẫn «Trình Phó giám đốc»', () => {
+  it('TCKQ-06: TP có file:approve = ✓ (mặc định) ⇒ cả «Hoàn thành / Duyệt» lẫn «TP/PP phê duyệt»', () => {
     expect(
       window.buildNutVerdictFile(
         NHOM({ trang_thai: 'can-sua', lenh_sua_cho: 'lanh-dao' }),
@@ -660,20 +696,27 @@ describe('TCKQ — nút verdict theo VAI + GIÁ TRỊ HIỆU LỰC', () => {
       )
     ).toContain('Đẩy về Cán bộ');
     const nut = window.buildNutVerdictFile(NHOM(), 'CV001-002');
-    expect(nut).toContain('Yêu cầu sửa');
-    expect(nut).toContain('Trình Phó giám đốc');
+    // ĐIỂM 7 + ĐIỂM 9 (ĐỢT B): BỐN nút cũ nay còn BA. «Trình Phó giám đốc» thành «TP/PP phê duyệt»
+    // (có lưu mốc người ký + lúc ký), còn «Yêu cầu sửa» gộp hẳn vào «Đẩy về Cán bộ» — hai nút cho
+    // cùng một việc chính là điểm bất hợp lý số 9.
+    expect(nut).toContain('TP/PP phê duyệt');
     expect(nut).toContain('Hoàn thành / Duyệt');
     expect(nut).toContain('Đẩy về Cán bộ');
+    expect(nut).not.toContain('Yêu cầu sửa');
+    expect(nut).not.toContain('Trình Phó giám đốc');
+    expect((nut.match(/xuLyVerdictFile\(/g) || []).length).toBe(3);
   });
 
-  it('TCKQ-07: admin đặt ⏳ ở ô «Duyệt kết quả» của TP ⇒ MẤT nút «Hoàn thành / Duyệt», còn «Trình»', () => {
-    window.__tfPq(null, {
+  it('TCKQ-07: admin đặt ⏳ ở ô «Duyệt kết quả» của TP ⇒ MẤT nút «Hoàn thành / Duyệt», còn «TP/PP phê duyệt»', () => {
+    window.__tfPq(PERMISSIONS, {
       'file:approve': { 'Trưởng phòng': { gia_tri: 'cho-duyet', pham_vi: 'phong' } },
     });
     const nut = window.buildNutVerdictFile(NHOM(), 'CV001-002');
     expect(nut).not.toContain('Hoàn thành / Duyệt');
-    expect(nut).toContain('Trình Phó giám đốc');
-    expect(nut).toContain('Yêu cầu sửa');
+    expect(nut).toContain('TP/PP phê duyệt');
+    expect(nut).toContain('Đẩy về Cán bộ');
+    expect(nut).not.toContain('Yêu cầu sửa');
+    expect((nut.match(/xuLyVerdictFile\(/g) || []).length).toBe(2);
   });
 
   it('TCKQ-08: PGD ở «cho-lanh-dao» thấy «Trả về TP/PP» + «Duyệt»; trạng thái khác thì không', () => {
@@ -700,12 +743,14 @@ describe('TCKQ — nút verdict theo VAI + GIÁ TRỊ HIỆU LỰC', () => {
     expect(window.giaTriHieuLucFile('Nhân viên', 'create')).toBe('cho-duyet');
     expect(window.giaTriHieuLucFile('Phó Giám đốc', 'create')).toBe('cho-phep');
     expect(window.giaTriHieuLucFile('Phó Giám đốc', 'approve')).toBe('cho-phep');
-    window.__tfPq(null, {
+    window.__tfPq(PERMISSIONS, {
       'file:create': { 'Nhân viên': { gia_tri: 'cho-phep', pham_vi: 'phong' } },
     });
     expect(window.giaTriHieuLucFile('Nhân viên', 'create')).toBe('cho-phep');
     window.__tf('currentUser', { name: 'Admin', role: 'admin', id: 1 });
-    window.__tfPq(null, { 'file:create': { admin: { gia_tri: 'tu-choi', pham_vi: 'phong' } } });
+    window.__tfPq(PERMISSIONS, {
+      'file:create': { admin: { gia_tri: 'tu-choi', pham_vi: 'phong' } },
+    });
     expect(window.giaTriHieuLucFile('admin', 'create')).toBe('cho-phep');
   });
 });
@@ -809,18 +854,28 @@ describe('TCKQ — escape và chặn phía client', () => {
     expect(fetchDaGoi).toBeGreaterThan(0);
   });
 
-  it('TCKQ-14: ô «Ý kiến» trong khối file — gắn bản mới nhất (data-ban-cuoi) + nút Gửi ý kiến', () => {
+  it('TCKQ-14: ô «Ý kiến» DỜI VÀO POPUP — khối file chỉ còn chữ «Xem ý kiến», ô nhập vẫn gắn bản mới nhất', () => {
     window.__tf('allTasks', [
       { 'Mã nhiệm vụ': 'CV001-002', 'Người thực hiện': 'Nguyễn Văn Cán Bộ' },
     ]);
     const khoi = window.buildKhoiFile(NHOM(), 'CV001-002');
-    expect(khoi).toContain('Ý kiến');
-    expect(khoi).toContain('id="task-y-kien-7"');
-    expect(khoi).toContain('data-ban-cuoi="11"');
-    expect(khoi).toContain("guiYKien('7', 'CV001-002')");
-    expect(khoi).toContain('Gửi ý kiến');
-    // Nút ↩ góp ý theo bản đã gỡ — ô «Ý kiến» duy nhất ở khung trên.
+    // Nhãn «Ý kiến cho bản 1» của ô nhập KHÔNG còn trong bảng (nó dời vào popup) — chữ còn lại ở ô
+    // là «Xem ý kiến» của nút mở popup.
+    expect(khoi).toContain('Xem ý kiến');
+    expect(khoi).not.toContain('Ý kiến cho bản');
+    // ĐỢT 5 (2026-09-11): bảng KHÔNG còn giữ ô nhập — nó nằm trong popup `moYKienKetQua`, và popup
+    // dựng thân bằng `buildYKienPanel`. Kiểm CẢ HAI ĐẦU: bảng hết ô nhập, panel vẫn đủ dây nối.
+    expect(khoi).toContain("moYKienKetQua('CV001-002', '7', '')");
+    expect(khoi).not.toContain('id="task-y-kien-7"');
+    expect(khoi).not.toContain('data-ban-cuoi');
+    const panel = window.buildYKienPanel(NHOM(), 'CV001-002');
+    expect(panel).toContain('id="task-y-kien-7"');
+    expect(panel).toContain('data-ban-cuoi="11"');
+    expect(panel).toContain("guiYKienTuPopup('7', 'CV001-002')");
+    expect(panel).toContain('Gửi ý kiến');
+    // Nút ↩ góp ý theo bản đã gỡ — ô «Ý kiến» duy nhất là ô trong popup.
     expect(khoi).not.toContain('↩ góp ý');
+    expect(panel).not.toContain('↩ góp ý');
   });
 
   it('TCKQ-15: verdict đọc ô «Ý kiến» trước — đủ 10 ký tự thì KHÔNG hỏi lại bằng prompt', async () => {
@@ -832,7 +887,7 @@ describe('TCKQ — escape và chặn phía client', () => {
       return '';
     };
     window.fetch = () => Promise.reject(new Error('không được gọi'));
-    await window.xuLyVerdictFile(7, 'yeu-cau-sua', true, 'CV001-002');
+    await window.xuLyVerdictFile(7, 'tra-ve-cbo', true, 'CV001-002');
     expect(promptDaGoi).toBe(0);
   });
 });
@@ -855,7 +910,8 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     ban_cuoi_luc: '2026-09-02T08:00:00Z',
     ban_cuoi_nguoi: 'Nguyễn Văn Cán Bộ',
     hanhDong: [
-      { ma: 'yeu-cau-sua', nhan: 'Yêu cầu sửa', canNoiDung: true },
+      // ĐIỂM 9 (ĐỢT B): «Yêu cầu sửa» gộp vào «Đẩy về Cán bộ» — máy chủ chỉ còn trả HAI mã trả lại.
+      { ma: 'tra-ve-cbo', nhan: 'Đẩy về Cán bộ', canNoiDung: true },
       { ma: 'hoan-thanh', nhan: 'Hoàn thành', canNoiDung: false },
     ],
     ...over,
@@ -863,7 +919,7 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
 
   it('TCKQ-16: dòng hàng chờ có badge trạng thái, tên nhiệm vụ mở được, và ĐÚNG các nút máy chủ trả', () => {
     window.__tfDs(true);
-    // 2026-09-03 (thiết kế lại theo sheet «kq-hang-cho»): bảng PHẲNG 8 cột, ba cấp cây thành ba
+    // 2026-09-03 (thiết kế lại theo sheet «kq-hang-cho»): bảng PHẲNG 10 cột, ba cấp cây thành ba
     // CỘT của chính dòng file — không còn hàng tiêu đề gộp. Mọi hành động nằm trong MỘT menu ⋯.
     const html = window.buildBangChoDuyetKetQua([
       DONG({ ma_cong_viec: 'CV001', ten_cong_viec: 'Chuẩn bị hội nghị' }),
@@ -880,7 +936,7 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(html).toContain('bản 2');
     // Chỉ những nút MÁY CHỦ cho phép; `canNoiDung` đi kèm để client biết có hỏi nội dung hay không.
     // Menu ⋯ dựng onclick trong thuộc tính nên dấu ' đã thành &#39; — kiểm ĐÚNG chuỗi đã thoát.
-    expect(html).toContain('xuLyVerdictChoDuyet(&#39;7&#39;, &#39;yeu-cau-sua&#39;, true)');
+    expect(html).toContain('xuLyVerdictChoDuyet(&#39;7&#39;, &#39;tra-ve-cbo&#39;, true)');
     expect(html).toContain('xuLyVerdictChoDuyet(&#39;7&#39;, &#39;hoan-thanh&#39;, false)');
     expect(html).not.toContain('&#39;duyet&#39;');
     // ✎ sửa trực tuyến + ⬇ tải bản mới nhất, cùng đường với khối «Kết quả».
@@ -888,7 +944,7 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
     expect(html).toContain('taiFileKetQua(&#39;11&#39;)');
   });
 
-  it('TCKQ-20: bảng PHẲNG 8 cột theo sheet «kq-hang-cho» — ba cấp cây thành ba CỘT, mỗi file MỘT dòng', () => {
+  it('TCKQ-20: bảng PHẲNG 10 cột theo sheet «kq-hang-cho» — ba cấp cây thành ba CỘT, mỗi file MỘT dòng', () => {
     // Người dùng chốt 2026-09-03 (sheet «kq-hang-cho»): Tên kết quả · Nhiệm vụ · Công việc con ·
     // Công việc chính · Trạng thái · Bản mới nhất · Ý kiến · Nút chức năng. Hàng tiêu đề gộp cũ
     // (hang-cay-1/2/3) đã gỡ — mắt quét theo hàng, không phải nhớ đang ở dưới nhóm nào.
@@ -975,6 +1031,8 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
   });
 
   it('TCKQ-19: moTabChoDuyet đổi tab — chỉ MỘT panel hiện, nút đang mở mang lớp active', () => {
+    // Kiểm chuyển hai tab với người có quyền duyệt cây; TP mặc định không có quyền này.
+    window.__tf('currentUser', { role: 'admin', id: 1 });
     document.body.innerHTML = `
       <div id="cho-duyet-section">
         <button class="tab-cho-duyet active" data-tab="viec"></button>
@@ -1118,12 +1176,12 @@ describe('TCKQ — trang «Hàng chờ phê duyệt», tab «Phê duyệt kết 
 });
 
 // ============================================================================
-// TCKQ-34… — ĐỢT 2 (016): khai kết quả TRƯỚC khi có file + form TẠO hiện bảng 8 cột
+// TCKQ-34… — ĐỢT 2 (016): khai kết quả TRƯỚC khi có file + form TẠO hiện bảng 10 cột
 // (người dùng 2026-09-04: «khi tạo mới không thấy bảng kết quả»; «dòng đầu 1. 2. 3.
 // điền Kết quả làm được, Định dạng, Ghi ý kiến»; «Báo cáo» = bản không có file).
 // ============================================================================
 describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', () => {
-  it('TCKQ-34: form TẠO NHIỆM VỤ (cấp 3) nhúng bảng 8 cột + dòng khai tạm + nút ＋ ngay trong HTML', () => {
+  it('TCKQ-34: form TẠO NHIỆM VỤ (cấp 3) nhúng bảng 10 cột + dòng khai tạm + nút ＋ ngay trong HTML', () => {
     const form = window.createTaskModal(false);
     expect(form).toContain('Tạo nhiệm vụ mới');
     expect(form).toContain('task-ket-qua-danh-sach');
@@ -1136,6 +1194,8 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
       'Kết quả làm được',
       'Định dạng',
       'File đã tải lên',
+      'Tỷ lệ công việc (%)',
+      'Tiến độ',
       'Người thực hiện',
       'Ghi ý kiến',
       'Tình trạng',
@@ -1190,8 +1250,15 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
     // Dòng 2 để trống tên → bị bỏ.
     dong[1].querySelector('.kq-tam-ten').value = '   ';
     const ra = window.thuThapDongKhaiTam();
+    // `tyLe: null` là KHAI BÁO tỷ lệ của R4/R4'' — bỏ trống thì máy chủ tự chia, không phải là 0.
     expect(ra).toEqual([
-      { tenKetQua: 'Báo cáo quý 3', dinhDang: 'Word', yKien: 'Nộp trước 15/9', noiDung: '' },
+      {
+        tenKetQua: 'Báo cáo quý 3',
+        dinhDang: 'Word',
+        yKien: 'Nộp trước 15/9',
+        noiDung: '',
+        tyLe: null,
+      },
     ]);
     // Đổi dòng 1 sang «Báo cáo» → ô nội dung hiện.
     const sel = dong[0].querySelector('.kq-tam-dinh-dang');
@@ -1199,20 +1266,33 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
     window.doiDinhDangDongTam(sel);
     expect(dong[0].nextElementSibling.classList.contains('kq-tam-noi-dung-hang')).toBe(true);
     expect(dong[0].nextElementSibling.classList.contains('hidden')).toBe(false);
-    expect(dong[0].children).toHaveLength(8);
+    expect(dong[0].children).toHaveLength(10);
     expect(dong[0].lastElementChild.querySelector('textarea')).toBe(null);
     const noiDung = dong[0].nextElementSibling;
-    expect(noiDung.firstElementChild.colSpan).toBe(8);
+    expect(noiDung.firstElementChild.colSpan).toBe(10);
     noiDung.querySelector('textarea').value = 'Nội dung báo cáo tiếng Việt';
     expect(window.thuThapDongKhaiTam()[0]).toEqual({
       tenKetQua: 'Báo cáo quý 3',
       dinhDang: 'Báo cáo',
       yKien: 'Nộp trước 15/9',
       noiDung: 'Nội dung báo cáo tiếng Việt',
+      tyLe: null,
     });
     sel.value = 'Word';
     window.doiDinhDangDongTam(sel);
     expect(noiDung.classList.contains('hidden')).toBe(true);
+    // R4 (ĐỢT B): ô «Tỷ lệ (%)» nằm NGAY TRONG KHUNG KHAI — lần gửi đầu chỉ có khai báo đi theo cây.
+    // Sai kiểu hoặc ngoài 0–100 thì trả `null` để máy chủ tự chia, chứ không âm thầm gửi số bậy.
+    const oTyLe = dong[0].querySelector('.kq-tam-ty-le');
+    expect(oTyLe).not.toBeNull();
+    oTyLe.value = '40';
+    expect(window.thuThapDongKhaiTam()[0].tyLe).toBe(40);
+    oTyLe.value = '0';
+    expect(window.thuThapDongKhaiTam()[0].tyLe).toBe(0);
+    for (const sai of ['150', '-5', 'abc', '']) {
+      oTyLe.value = sai;
+      expect(window.thuThapDongKhaiTam()[0].tyLe).toBeNull();
+    }
   });
 
   it('TCKQ-37b: xoá dòng khai xoá cả hàng báo cáo và đánh lại số', () => {
@@ -1328,5 +1408,427 @@ describe('TCKQ — đợt 2: khai trước + form tạo hiện bảng (016)', ()
     expect(tam).toContain('>3.<');
     expect(tam).toContain('value="Word"');
     expect(tam).not.toContain('name=');
+  });
+});
+
+// ============================================================================
+// ĐỢT 4 (2026-09-10) — người dùng, nguyên văn: «Trang sửa nhiệm vụ chỉnh lại giao diện phần file
+// kết quả, Tỷ lệ công việc (%) Tiến độ, độ rộng bé đi.. sửa để cân đối hơn. sửa chức năng: Ghi ý
+// kiến là các ý kiến mỗi lần sửa hoặc từ chối hoặc ... có ghi ý kiến vào».
+//
+// Hai việc, hai bản chất KHÁC NHAU:
+//  · BỀ RỘNG CỘT là việc trình bày. Bảng `bang-ket-qua` trước đây KHÔNG có colgroup và không
+//    `table-layout:fixed` nên trình duyệt tự chia theo NỘI DUNG — hai cột chỉ chứa MỘT CON SỐ
+//    («Tỷ lệ», «Tiến độ») phình ra bằng cột chữ chỉ vì TIÊU ĐỀ của chúng dài.
+//  · «GHI Ý KIẾN» là THIẾU DỮ LIỆU HIỂN THỊ, không phải thiếu chỗ ghi. Lý do người duyệt gõ khi
+//    «Đẩy về Cán bộ» / «Trả về» / «Từ chối» được `taskFiles/service.js verdict()` ghi vào
+//    `task_file_flow` qua `repo.themLuong`, KHÔNG ghi vào `task_file_comments`. Cột «Ghi ý kiến»
+//    trước đợt 4 chỉ đọc `gopY` (= `task_file_comments`) nên đúng những câu đó biến mất khỏi cột,
+//    chỉ còn trong bảng «Lịch sử» phải bấm mới ra. Sửa bằng cách GỘP hai nguồn khi HIỂN THỊ
+//    (`danhSachYKien`) — ghi thêm một dòng vào bảng góp ý chỉ nhân đôi dữ liệu và làm lệch mọi
+//    phép đếm góp ý đang có.
+// ============================================================================
+describe('TCKQ — đợt 4: cân đối cột bảng «Kết quả» + gộp ý kiến mỗi lần sửa/trả về', () => {
+  const CSS = readFileSync(resolve(process.cwd(), '../web/assets/css/app.css'), 'utf8');
+  const beRong = (cot) =>
+    Number(CSS.match(new RegExp(`col\\.${cot}\\s*\\{\\s*width:\\s*(\\d+)%`))?.[1]);
+  /** Lý do verdict nằm ở `task_file_flow` — fixture phải đúng hình dạng `repo.listLuongByFile` trả. */
+  const LUONG = (id, hanh, noi, over = {}) => ({
+    id,
+    hanh_dong: hanh,
+    version_id: 11,
+    version_no: 1,
+    ten_nguoi: 'Trần Thị Trưởng',
+    vai: 'Trưởng phòng',
+    noi_dung: noi,
+    created_at: '2026-09-0' + id + 'T09:00:00Z',
+    ...over,
+  });
+
+  it('TCKQ-40: bảng có colgroup và `table-layout:fixed` — bề rộng là SỐ, không để trình duyệt tự chia', () => {
+    window.__tfDs(false);
+    const html = window.buildBangKetQua([NHOM()], 'CV001-002');
+    expect(html).toContain('<colgroup>');
+    expect(CSS).toMatch(/\.bang-ket-qua\s*\{[^}]*table-layout:\s*fixed/);
+    // colgroup phải nằm TRƯỚC thead, không thì trình duyệt bỏ qua.
+    expect(html.indexOf('<colgroup>')).toBeLessThan(html.indexOf('<thead'));
+  });
+
+  it('TCKQ-41: colgroup đúng 10 cột theo thứ tự, khớp mọi chỗ colspan="10"', () => {
+    window.__tfDs(false);
+    const html = window.buildBangKetQua([NHOM()], 'CV001-002');
+    const cols = [...html.matchAll(/<col class="([^"]+)"/g)].map((m) => m[1]);
+    expect(cols).toEqual([...window.COT_BANG_KET_QUA]);
+    expect(window.COT_BANG_KET_QUA).toHaveLength(10);
+    // Dòng panel (khung Ý kiến + Lịch sử) và dòng «Chưa có kết quả nào» đều tràn đúng 10 ô.
+    expect(html).toContain('colspan="10"');
+    expect(window.buildBangKetQua([], 'CV001-002')).toContain('colspan="10"');
+    expect(window.buildDongKhaiTam(1)).toContain('colspan="10"');
+  });
+
+  it('TCKQ-42: «Tỷ lệ công việc (%)» và «Tiến độ» HẸP hơn mọi cột chữ, cột tên ăn phần còn lại', () => {
+    expect(beRong('c-kq-ty-le')).toBeLessThanOrEqual(8);
+    expect(beRong('c-kq-tien-do')).toBeLessThanOrEqual(6);
+    for (const cot of ['c-kq-file', 'c-kq-y-kien', 'c-kq-trang-thai', 'c-kq-thoi-gian']) {
+      expect(beRong('c-kq-ty-le'), cot).toBeLessThan(beRong(cot));
+      expect(beRong('c-kq-tien-do'), cot).toBeLessThan(beRong(cot));
+    }
+    // `c-kq-ten` KHÔNG được khai bề rộng: nó là cột auto ăn phần còn lại. Khai % cho nó là cả bảng
+    // mất khả năng co giãn theo bề rộng modal.
+    expect(CSS).not.toMatch(/col\.c-kq-ten\s*\{/);
+    // Tổng chín cột số phải chừa chỗ cho cột tên: quá 85% là cột tên còn dưới 15%, không đọc được.
+    const tong = [
+      'c-kq-thoi-gian',
+      'c-kq-dinh-dang',
+      'c-kq-file',
+      'c-kq-ty-le',
+      'c-kq-tien-do',
+      'c-kq-nguoi',
+      'c-kq-y-kien',
+      'c-kq-trang-thai',
+      'c-kq-hanh-dong',
+    ].reduce((s, c) => s + beRong(c), 0);
+    expect(tong).toBeGreaterThan(60);
+    expect(tong).toBeLessThanOrEqual(85);
+    // Tiêu đề «Tỷ lệ công việc (%)» dài hơn cột 8%: phải cho XUỐNG DÒNG, không được đẩy cột phình ra.
+    expect(CSS).toMatch(/\.bang-ket-qua thead th\s*\{[^}]*white-space:\s*normal/);
+    // Ô tỷ lệ: input và nút «Lưu tỷ lệ» XẾP DỌC — cột 8% không đủ chỗ xếp ngang.
+    expect(CSS).toMatch(/\.kq-o-ty-le-trong\s*\{[^}]*flex-direction:\s*column/);
+    const o = window.buildKhoiFile(NHOM({ duocSuaTyLe: true }), 'CV001-002');
+    expect(o).toContain('kq-o-ty-le-trong');
+    expect(o).toContain('kq-nut-luu-ty-le');
+    expect(o).not.toContain('class="form-input w-20"');
+  });
+
+  it('TCKQ-43: danhSachYKien GỘP góp ý với lý do verdict, LOẠI trùng `gom-y`, sắp CŨ → MỚI', () => {
+    const n = NHOM({
+      gopY: [
+        {
+          id: 5,
+          version_id: 11,
+          ten_nguoi: 'Trần Thị Trưởng',
+          vai: 'Trưởng phòng',
+          noi_dung: 'Thiếu chữ ký',
+          created_at: '2026-09-03T11:00:00Z',
+        },
+      ],
+      luong: [
+        // `gomY()` ghi CẢ HAI bảng (themGopY rồi themLuong) — lấy cả là in cùng một câu hai lần.
+        LUONG(3, 'gom-y', 'Thiếu chữ ký', { created_at: '2026-09-03T11:00:00Z' }),
+        // ĐIỂM 9 (ĐỢT B): «Yêu cầu sửa» đã gộp vào «Trả về Cán bộ», 029 đổi tên toàn bộ dòng cũ nên
+        // bảng luồng chỉ còn HAI mã trả lại. Đổi sang `tra-ve-tp` cho dòng kia để ba nhãn vẫn phân
+        // biệt được nhau — nhãn trùng nhau thì câu assert dưới không còn bắt được lỗi.
+        LUONG(4, 'tra-ve-cbo', 'Làm lại trang 3'),
+        LUONG(5, 'tra-ve-tp', 'Số liệu lệch', { ten_nguoi: 'Ngô Văn Phó', vai: 'Phó Giám đốc' }),
+        // Không có nội dung thì chỉ là một MỐC TRẠNG THÁI, không phải ý kiến.
+        LUONG(2, 'nop', ''),
+        LUONG(6, 'gui-duyet', '   '),
+      ],
+    });
+    const ds = window.danhSachYKien(n);
+    expect(ds.map((y) => y.noi_dung)).toEqual(['Thiếu chữ ký', 'Làm lại trang 3', 'Số liệu lệch']);
+    // NHÃN hành động là thứ làm đọc ra ý kiến này của lần «Trả về Cán bộ» hay một câu góp ý thường.
+    expect(ds.map((y) => y.nhan)).toEqual(['Góp ý', 'Trả về Cán bộ', 'Trả về TP/PP']);
+    expect(ds.every((y) => Number(y.version_id) === 11)).toBe(true);
+    // Thiếu khoá vẫn phải trả mảng rỗng, không ném — bảng gọi hàm này cho MỌI nhóm kể cả nhóm mới khai.
+    expect(window.danhSachYKien({})).toEqual([]);
+    expect(window.danhSachYKien(null)).toEqual([]);
+    expect(window.yKienCuaBan({}, null)).toEqual([]);
+  });
+
+  it('TCKQ-44: cột «Ghi ý kiến» của dòng cha CHỈ CÒN chữ «Xem ý kiến» (N) mở popup in TẤT CẢ', () => {
+    window.__tfDs(false);
+    const dong = window.buildKhoiFile(
+      NHOM({ luong: [LUONG(4, 'tra-ve-cbo', 'Làm lại trang 3')] }),
+      'CV001-002'
+    );
+    // ĐỢT 5 (2026-09-11) — người dùng: «phần ghi ý kiến sẽ là hiển thị chữ "xem ý kiến", click vào
+    // đấy sẽ hiển thị popup … còn bản đầu 1. đấy sẽ xem tất cả». Vậy Ô TRONG BẢNG KHÔNG in nội dung
+    // nữa (đợt 4 in tại chỗ, đợt 5 dời hết ra popup cho bảng khỏi cao).
+    // SOI ĐÚNG Ô `.kq-o-y-kien`, KHÔNG soi cả dòng: khung «Lịch sử» (`buildBangLuongFile`) vẫn in
+    // `noi_dung` của luồng — đó là BẢNG LUỒNG, một tính năng khác, bắt nó im là phá khung Lịch sử.
+    const oY = (html) => {
+      document.body.innerHTML = '<table><tbody>' + html + '</tbody></table>';
+      return [...document.querySelectorAll('.kq-o-y-kien')];
+    };
+    const cacO = oY(dong);
+    expect(cacO.length).toBeGreaterThan(0);
+    for (const o of cacO) {
+      expect(o.textContent).not.toContain('Làm lại trang 3');
+      expect(o.innerHTML).not.toContain('y-kien-nhan');
+    }
+    // Nút mở popup, `banId` RỖNG ⇒ popup in tất cả ý kiến của nhóm.
+    expect(dong).toContain('>Xem ý kiến (1)</button>');
+    expect(dong).toContain("moYKienKetQua('CV001-002', '7', '')");
+    expect(dong).toContain('>Lịch sử</button>');
+    // Con số vẫn đếm theo danh sách GỘP (`danhSachYKien`), không chỉ `gopY` — bẫy đợt 4 giữ nguyên.
+    const gop = window.buildKhoiFile(
+      NHOM({
+        gopY: [
+          {
+            id: 5,
+            version_id: 11,
+            ten_nguoi: 'TP',
+            vai: 'Trưởng phòng',
+            noi_dung: 'Câu gõ tay',
+            created_at: '2026-09-01T10:05:00Z',
+          },
+        ],
+        luong: [LUONG(4, 'tra-ve-cbo', 'Làm lại trang 3')],
+      }),
+      'CV001-002'
+    );
+    expect(gop).toContain('>Xem ý kiến (2)</button>');
+    // Không có ý kiến nào thì chữ vẫn hiện (không đếm), không để ô trống không.
+    const rong = window.buildKhoiFile(NHOM(), 'CV001-002');
+    expect(rong).toContain('>Xem ý kiến</button>');
+    expect(rong).not.toContain('>Xem ý kiến (');
+  });
+
+  it('TCKQ-45: dòng bản 1.1/1.2 mở popup CỦA ĐÚNG BẢN ĐÓ, đếm đúng ý kiến của bản đó', () => {
+    window.__tfDs(false);
+    const n = NHOM({
+      bans: [
+        { ...NHOM().bans[0] },
+        { ...NHOM().bans[0], id: 12, version_no: 2, uploaded_at: '2026-09-05T10:00:00Z' },
+      ],
+      luong: [
+        LUONG(4, 'tra-ve-cbo', 'Làm lại trang 3'),
+        LUONG(6, 'duyet', 'Ổn rồi', {
+          version_id: 12,
+          version_no: 2,
+          ten_nguoi: 'Ngô Văn Phó',
+          vai: 'Phó Giám đốc',
+        }),
+      ],
+    });
+    const d1 = window.buildDongBanKetQua(n, n.bans[0], 0, 1, 'CV001-002');
+    const d2 = window.buildDongBanKetQua(n, n.bans[1], 1, 1, 'CV001-002');
+    // `banId` = id của ĐÚNG bản đó ⇒ popup chỉ in ý kiến của bản đó («popup xem ý kiến của bản đấy»).
+    expect(d1).toContain("moYKienKetQua('CV001-002', '7', '11')");
+    expect(d2).toContain("moYKienKetQua('CV001-002', '7', '12')");
+    // Nội dung KHÔNG in tại chỗ nữa — cách ly nằm ở `banId` truyền vào popup.
+    expect(d1).not.toContain('Làm lại trang 3');
+    expect(d2).not.toContain('Ổn rồi');
+    expect(d1).toContain('>Xem ý kiến (1)</button>');
+    expect(d2).toContain('>Xem ý kiến (1)</button>');
+    expect(d2).toContain('Sửa lần 1');
+    // Bản không có ý kiến nào vẫn hiện CHỮ «Xem ý kiến» (không đếm), không để ô rỗng không đọc được.
+    const d3 = window.buildDongBanKetQua(NHOM(), { ...NHOM().bans[0], id: 99 }, 0, 1, 'CV001-002');
+    expect(d3).toContain('>Xem ý kiến</button>');
+    expect(d3).toContain("moYKienKetQua('CV001-002', '7', '99')");
+    // Luật LỌC theo bản vẫn đúng ở tầng dữ liệu — popup chỉ là chỗ in ra, đừng để nó tự lọc lại.
+    expect(window.yKienCuaBan(n, n.bans[0]).map((y) => y.noi_dung)).toEqual(['Làm lại trang 3']);
+    expect(window.yKienCuaBan(n, n.bans[1]).map((y) => y.noi_dung)).toEqual(['Ổn rồi']);
+    // Thiếu `ma` (lời gọi cũ bốn tham số) thì KHÔNG được ném — popup chỉ không mở, bảng vẫn vẽ.
+    const khongMa = window.buildDongBanKetQua(n, n.bans[0], 0, 1);
+    expect(khongMa).toContain("moYKienKetQua('', '7', '11')");
+  });
+
+  it('TCKQ-46: ý kiến gộp từ luồng chứa HTML phải THOÁT — không dựng được thẻ', () => {
+    const y = window.buildMotYKien({
+      ten_nguoi: '<img src=x onerror=alert(1)>',
+      vai: '"><script>alert(2)</script>',
+      noi_dung: '<svg onload=alert(3)>',
+      nhan: 'Trả về Cán bộ',
+      created_at: '2026-09-04T09:00:00Z',
+      version_no: 1,
+    });
+    expect(y).not.toContain('<img src=x');
+    expect(y).toContain('&lt;img src=x');
+    expect(y).not.toContain('<script>');
+    expect(y).not.toContain('<svg onload');
+    expect(y).toContain('Trả về Cán bộ');
+    // Đường đi dài nhất SAU ĐỢT 5: luồng → `danhSachYKien` → `buildYKienPanel` (thân popup của dòng
+    // cha). Trước đợt 5 đường này kết thúc ở cột «Ghi ý kiến» của `buildKhoiFile` — nay ô đó không còn
+    // in nội dung nên phải kiểm ở panel, nếu không là bỏ lọt đúng chỗ popup sắp innerHTML.
+    window.__tfDs(false);
+    const panel = window.buildYKienPanel(
+      NHOM({ luong: [LUONG(4, 'tra-ve-cbo', '<img src=x onerror=alert(9)>')] }),
+      'CV001-002'
+    );
+    expect(panel).not.toContain('<img src=x');
+    expect(panel).toContain('&lt;img src=x');
+    // Bảng vẫn không được lọt THẺ THẬT vào ô «Ghi ý kiến» (ô nay chỉ có nút). SOI ĐÚNG Ô đó, không
+    // soi cả dòng: khung «Lịch sử» in `noi_dung` của luồng và nó ĐÃ THOÁT (`&lt;img…`) — đó là đúng,
+    // bắt nó «không chứa &lt;img» là bắt nó im luôn cả bảng luồng.
+    const dong = window.buildKhoiFile(
+      NHOM({ luong: [LUONG(4, 'tra-ve-cbo', '<img src=x onerror=alert(9)>')] }),
+      'CV001-002'
+    );
+    expect(dong).not.toContain('<img src=x');
+    document.body.innerHTML = '<table><tbody>' + dong + '</tbody></table>';
+    for (const o of document.querySelectorAll('.kq-o-y-kien')) {
+      expect(o.textContent).not.toContain('<img src=x');
+      expect(o.textContent).not.toContain('alert(9)');
+    }
+  });
+});
+
+// ============================================================================
+// TCKQ — ĐỢT 5 (2026-09-11): POPUP «XEM Ý KIẾN» + tiêu đề cột CĂN GIỮA +
+// «Người thực hiện» CĂN GIỮA. Người dùng: «phần ghi ý kiến sẽ là hiển thị chữ "xem ý kiến",
+// click vào đấy sẽ hiển thị popup xem ý kiến của bản đấy, còn bản đầu 1. đấy sẽ xem tất cả,
+// tiêu đề cột căn giữa, Người thực hiện cũng sẽ căn giữa».
+// ============================================================================
+describe('TCKQ — đợt 5: popup «Xem ý kiến» + căn giữa tiêu đề cột và người thực hiện', () => {
+  const CSS = readFileSync(resolve(process.cwd(), '../web/assets/css/app.css'), 'utf8');
+  const LUONG = (id, hanh, noi, over = {}) => ({
+    id,
+    hanh_dong: hanh,
+    version_id: 11,
+    version_no: 1,
+    ten_nguoi: 'Trần Thị Trưởng',
+    vai: 'Trưởng phòng',
+    noi_dung: noi,
+    created_at: '2026-09-0' + id + 'T09:00:00Z',
+    ...over,
+  });
+  const HAI_BAN = () =>
+    NHOM({
+      bans: [
+        { ...NHOM().bans[0] },
+        { ...NHOM().bans[0], id: 12, version_no: 2, uploaded_at: '2026-09-05T10:00:00Z' },
+      ],
+      luong: [
+        LUONG(4, 'tra-ve-cbo', 'Làm lại trang 3'),
+        LUONG(6, 'duyet', 'Ổn rồi', {
+          version_id: 12,
+          version_no: 2,
+          ten_nguoi: 'Ngô Văn Phó',
+          vai: 'Phó Giám đốc',
+        }),
+      ],
+    });
+  /**
+   * Máy chủ trả `bans` chứ KHÔNG phải `ban` — bẫy đợt 4, fixture phải chép đúng tên khoá của
+   * `taskFiles/service.js doc()`, không đặt theo trí nhớ.
+   *
+   * Một mock cho CẢ BA đường mà popup đi qua: GET danh sách file, GET `/api/csrf` (POST nào cũng
+   * hỏi token trước), và POST góp ý. Trả lẫn nhau là popup mở ra rỗng mà test vẫn tưởng xanh.
+   */
+  const mockFiles = (nhom) => {
+    // KHÔNG dùng `async` ở đây: mock chỉ trả giá trị có sẵn, gắn `async` vào là eslint bắt lỗi
+    // `require-await` (hàm async không có await nào). `Promise.resolve` là đủ và đúng nghĩa hơn.
+    window.fetch = (path, opts) => {
+      const method = (opts && opts.method) || 'GET';
+      const tra = (data) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data }),
+        });
+      if (method === 'POST') return tra({ id: 1 });
+      if (String(path).indexOf('/api/csrf') === 0) return tra({ csrfToken: 'tk' });
+      return tra({ nhom: [nhom] });
+    };
+  };
+  const popup = () => document.getElementById('y-kien-dialog');
+
+  it('TCKQ-47: popup của DÒNG CHA (banId rỗng) in TẤT CẢ ý kiến và CÓ ô nhập để ghi tiếp', async () => {
+    mockFiles(HAI_BAN());
+    await window.moYKienKetQua('CV001-002', 7, '');
+    const p = popup();
+    expect(p).toBeTruthy();
+    expect(p.getAttribute('role')).toBe('dialog');
+    expect(p.getAttribute('aria-modal')).toBe('true');
+    // «còn bản đầu 1. đấy sẽ xem tất cả» — cả hai ý kiến của hai bản đều phải có mặt.
+    expect(p.querySelector('h3').textContent).toContain('Toàn bộ ý kiến');
+    expect(p.textContent).toContain('Làm lại trang 3');
+    expect(p.textContent).toContain('Ổn rồi');
+    // Nhãn hành động phải đọc ra ý kiến này của lần «Trả về Cán bộ» hay «Duyệt» (giữ từ đợt 4).
+    expect(p.querySelectorAll('.y-kien-nhan')).toHaveLength(2);
+    // Ô NHẬP dời theo popup: cột tên «Ghi ý kiến» nên đọc và viết phải ở cùng một chỗ, bỏ ô nhập đi
+    // là mất luôn chức năng ghi.
+    expect(p.querySelector('#task-y-kien-7')).toBeTruthy();
+    expect(p.querySelector('#task-y-kien-7').dataset.banCuoi).toBe('12');
+    expect(p.textContent).toContain('Gửi ý kiến');
+    expect(p.querySelector('footer button')).toBeTruthy();
+  });
+
+  it('TCKQ-48: popup của DÒNG BẢN chỉ in ý kiến CỦA BẢN ĐÓ và CHỈ ĐỌC', async () => {
+    mockFiles(HAI_BAN());
+    await window.moYKienKetQua('CV001-002', 7, 12);
+    const p = popup();
+    expect(p.querySelector('h3').textContent).toContain('Ý kiến của bản 2');
+    expect(p.textContent).toContain('Ổn rồi');
+    // «popup xem ý kiến của bản đấy» — ý kiến của bản 1 KHÔNG được lẫn sang.
+    expect(p.textContent).not.toContain('Làm lại trang 3');
+    // CHỈ ĐỌC: máy chủ chỉ cho ghi góp ý vào BẢN MỚI NHẤT (`guiYKien` POST theo `data-ban-cuoi`),
+    // để ô nhập ở popup của bản cũ là mời người dùng viết vào một chỗ rồi chữ chạy sang bản khác.
+    expect(p.querySelector('#task-y-kien-7')).toBeNull();
+    expect(p.querySelector('.yk-chu-thich')).toBeTruthy();
+    expect(p.textContent).toContain('chỉ để ĐỌC');
+  });
+
+  it('TCKQ-49: đóng popup bằng nút Đóng, bằng Escape, bằng bấm nền — và KHÔNG chồng hai lớp phủ', async () => {
+    mockFiles(HAI_BAN());
+    await window.moYKienKetQua('CV001-002', 7, '');
+    popup().querySelector('footer button').click();
+    expect(popup()).toBeNull();
+
+    await window.moYKienKetQua('CV001-002', 7, '');
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(popup()).toBeNull();
+
+    await window.moYKienKetQua('CV001-002', 7, '');
+    popup().dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(popup()).toBeNull();
+
+    // Mở LIÊN TIẾP hai dòng mà không gỡ cái cũ là chồng hai lớp phủ và Escape phải bấm hai lần.
+    await window.moYKienKetQua('CV001-002', 7, '');
+    await window.moYKienKetQua('CV001-002', 7, 12);
+    expect(document.querySelectorAll('#y-kien-dialog')).toHaveLength(1);
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelectorAll('#y-kien-dialog')).toHaveLength(0);
+  });
+
+  it('TCKQ-50: tiêu đề cột CĂN GIỮA, «Người thực hiện» CĂN GIỮA ở cả dòng cha lẫn dòng bản', () => {
+    window.__tfDs(false);
+    const bang = window.buildBangKetQua([HAI_BAN()], 'CV001-002');
+    // Đếm BẰNG DOM, không đếm bằng regex: chuỗi trả về còn chứa bảng luồng của khung «Lịch sử»
+    // (`<th>` riêng) và cả thẻ `<thead>` — `/<th[^>]*>/` bắt nhầm `<thead>` nên ra 17 chứ không 10.
+    document.body.innerHTML = bang;
+    const th = [...document.querySelectorAll('.bang-ket-qua > thead > tr > th')];
+    // «tiêu đề cột căn giữa» — MỌI <th> của bảng chính, kể cả «Hành động» (đợt 4 còn để text-right).
+    expect(th).toHaveLength(10);
+    for (const o of th) {
+      expect(o.className).toContain('text-center');
+      expect(o.className).not.toContain('text-left');
+      expect(o.className).not.toContain('text-right');
+    }
+    // Bảng luồng trong khung «Lịch sử» cũng căn giữa cho nhất quán cùng trang.
+    const thLuong = [...document.querySelectorAll('.dong-kq-panel th')];
+    expect(thLuong.length).toBeGreaterThan(0);
+    for (const o of thLuong) expect(o.className).toContain('text-center');
+    // Không dựa một mình vào class Tailwind: `app.css` cũng phải ép, đúng bẫy đợt 4 về bản vendor
+    // biên dịch sẵn (class arbitrary như `text-[11px]` không hề tồn tại trong đó).
+    expect(CSS).toMatch(/\.bang-ket-qua thead th\s*\{[^}]*text-align:\s*center/);
+    // «Người thực hiện cũng sẽ căn giữa» — cả dòng cha lẫn dòng bản 1.1/1.2, cùng MỘT cột.
+    const dongCha = window.buildKhoiFile(HAI_BAN(), 'CV001-002');
+    expect(dongCha).toContain('kq-o-nguoi');
+    const dongBan = window.buildDongBanKetQua(HAI_BAN(), HAI_BAN().bans[1], 1, 1, 'CV001-002');
+    expect(dongBan).toContain('kq-o-nguoi');
+    expect(CSS).toMatch(/\.kq-o-nguoi\s*\{\s*text-align:\s*center/);
+  });
+
+  it('TCKQ-51: gửi ý kiến từ popup — THÀNH CÔNG thì đóng, ô còn chữ (thất bại) thì GIỮ popup', async () => {
+    mockFiles(HAI_BAN());
+    await window.moYKienKetQua('CV001-002', 7, '');
+    const o = popup().querySelector('#task-y-kien-7');
+    o.value = 'Ý kiến đủ dài để gửi được';
+    // POST thành công ⇒ `guiYKien` xoá ô nhập ⇒ lấy đúng dấu hiệu đó làm điều kiện đóng.
+    await window.guiYKienTuPopup(7, 'CV001-002');
+    expect(popup()).toBeNull();
+
+    // Thất bại: `guiYKien` GIỮ nguyên chữ trong ô và chỉ toast — đóng popup lúc đó là mất chữ người
+    // dùng vừa gõ. (`data-ban-cuoi` rỗng ⇒ không POST ⇒ ô còn nguyên chữ.)
+    await window.moYKienKetQua('CV001-002', 7, '');
+    const o2 = popup().querySelector('#task-y-kien-7');
+    o2.value = 'Còn nguyên đây';
+    o2.dataset.banCuoi = '';
+    await window.guiYKienTuPopup(7, 'CV001-002');
+    expect(popup()).toBeTruthy();
+    expect(popup().querySelector('#task-y-kien-7').value).toBe('Còn nguyên đây');
   });
 });

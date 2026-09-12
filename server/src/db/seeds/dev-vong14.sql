@@ -252,27 +252,27 @@ SELECT tf.id, v.id, u.id, u.role, g.hanh_dong, g.noi_dung, g.created_at::timesta
 FROM (VALUES
   -- NV-02: mới nộp, chờ TP/PP xem.
   ('CV001-003', 1, 'NV005', 'nop', 'Nộp biên bản họp lần 1', '2026-09-02 02:10+00'),
-  -- NV-03: nộp → góp ý → yêu cầu sửa → nộp lại bản 2.
+  -- NV-03: nộp → góp ý → đẩy về cán bộ → nộp lại bản 2.
   ('CV001-004', 1, 'NV005', 'nop', 'Nộp kế hoạch bản đầu', '2026-09-02 03:00+00'),
   ('CV001-004', 1, 'NV003', 'gom-y',
    'Mục 2 thiếu số liệu học viên năm 2026, bổ sung bảng đối chiếu rồi nộp lại.',
    '2026-09-02 07:30+00'),
-  ('CV001-004', 1, 'NV003', 'yeu-cau-sua',
+  ('CV001-004', 1, 'NV003', 'tra-ve-cbo',
    'Bổ sung bảng số liệu học viên 2026 vào mục 2 rồi nộp lại bản mới.',
    '2026-09-02 07:35+00'),
   ('CV001-004', 2, 'NV005', 'nop', 'Đã bổ sung bảng số liệu theo yêu cầu', '2026-09-03 01:30+00'),
-  -- NV-04: nộp → TP tự sửa bản 2 → trình Phó Giám đốc.
+  -- NV-04: nộp → TP tự sửa bản 2 → TP/PP phê duyệt rồi trình Ban lãnh đạo kiểm soát.
   ('CV001-005', 1, 'NV005', 'nop', 'Nộp đề án bản đầu', '2026-09-02 04:00+00'),
   ('CV001-005', 1, 'NV003', 'gom-y',
    'Phần kinh phí cần ghi rõ nguồn; tôi đã chỉnh trực tiếp ở bản 2 trước khi trình.',
    '2026-09-04 02:00+00'),
   ('CV001-005', 2, 'NV003', 'nop', 'Bản Trưởng phòng chỉnh sửa', '2026-09-04 02:20+00'),
-  ('CV001-005', 2, 'NV003', 'trinh-lanh-dao',
+  ('CV001-005', 2, 'NV003', 'tp-phe-duyet',
    'Kính trình Phó Giám đốc xem và cho ý kiến về đề án nâng cao chất lượng.',
    '2026-09-04 02:25+00'),
-  -- NV-05: nộp → trình → PGD duyệt (chốt, khóa).
+  -- NV-05: nộp → TP/PP phê duyệt → PGĐ duyệt (chốt, khóa).
   ('CV001-006', 1, 'NV005', 'nop', 'Nộp quy chế bản cuối', '2026-09-05 01:00+00'),
-  ('CV001-006', 1, 'NV003', 'trinh-lanh-dao',
+  ('CV001-006', 1, 'NV003', 'tp-phe-duyet',
    'Trình Phó Giám đốc phê duyệt quy chế thi sát hạch nội bộ.',
    '2026-09-05 02:00+00'),
   ('CV001-006', 1, 'NV002', 'duyet', '', '2026-09-05 03:45+00')
@@ -281,6 +281,19 @@ JOIN work_items i         ON i.code = g.item_code
 JOIN task_files tf        ON tf.item_id = i.id
 JOIN task_file_versions v ON v.file_id = tf.id AND v.version_no = g.version_no
 JOIN users u              ON u.code = g.nguoi;
+
+-- MỐC «TP/PP PHÊ DUYỆT» (029, điểm 7) — suy ra từ chính bảng luồng vừa nạp, cùng một câu với
+-- migration: bản seed nào có dòng `tp-phe-duyet`/`hoan-thanh` thì nhóm file đó có người ký và lúc ký.
+-- Không liệt kê tay ở đây để seed và migration không bao giờ lệch nhau.
+WITH moc AS (
+  SELECT DISTINCT ON (file_id) file_id, nguoi_id, created_at
+    FROM task_file_flow
+   WHERE hanh_dong IN ('tp-phe-duyet','hoan-thanh')
+   ORDER BY file_id, id DESC
+)
+UPDATE task_files tf
+   SET tp_duyet_boi = moc.nguoi_id, tp_duyet_luc = moc.created_at
+  FROM moc WHERE moc.file_id = tf.id;
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────
 -- 6. THÔNG BÁO — đúng những gì người dùng báo THIẾU: TP/PP nhận thông báo khi Cán bộ tạo mới

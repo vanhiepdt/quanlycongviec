@@ -16,6 +16,7 @@ let phongA;
 let phongB;
 let apiTp; // Trưởng phòng A — người lập
 let apiPp; // Phó phòng A — cùng phòng, KHÔNG phải người lập
+let nv;
 let apiNv; // Nhân viên phòng A
 let apiPgdA; // Phó Giám đốc phụ trách phòng A
 let apiTpB; // Trưởng phòng B — phòng khác
@@ -60,7 +61,7 @@ beforeEach(async () => {
     role: 'Phó phòng',
     department_id: phongA.id,
   });
-  const nv = await makeLoginUser({
+  nv = await makeLoginUser({
     code: 'NV012',
     email: 'nv-a@test.local',
     role: 'Nhân viên',
@@ -216,17 +217,25 @@ describe('Việc 5.6 — cùng luật đó áp cho công việc con cấp 2', ()
     expect(res.body.error.message).toContain('chờ duyệt');
   });
 
-  it('Nhiệm vụ cấp 3 luôn Đã duyệt nên không bao giờ bị khoá bởi luật này', async () => {
+  it('Q3: nhiệm vụ cấp 3 nay cũng «Chờ duyệt» nên BỊ khoá y như cấp 2', async () => {
     const work = await vietChoDuyet();
     const nv3 = await apiTp.post('/api/v1/work-items', {
       workRef: work.code,
       level: 3,
       name: 'Nhiệm vụ',
-      assigneeId: null,
+      assigneeId: nv.id,
     });
     const code = nv3.body.data.item.code;
 
-    const res = await apiPp.patch(`/api/v1/work-items/${code}`, { name: 'Sửa nhiệm vụ' });
-    expect(res.status).toBe(200);
+    // Luật cũ: cấp 3 LUÔN «Đã duyệt» nên chưa bao giờ chạm tới khoá này — đồng nghiệp cùng phòng
+    // sửa được nhiệm vụ của người khác. Q3 bỏ luật «Đã duyệt riêng lẻ» ở cấp 3, nên nhiệm vụ mới
+    // cũng là bản thảo đang chờ ký và khoá đúng như cấp 2.
+    const nguoiKhac = await apiPp.patch(`/api/v1/work-items/${code}`, { name: 'Sửa nhiệm vụ' });
+    expect(nguoiKhac.status).toBe(403);
+    expect(nguoiKhac.body.error.message).toContain('chờ duyệt');
+
+    // Người lập vẫn sửa được bản đang chờ của chính mình.
+    const nguoiLap = await apiTp.patch(`/api/v1/work-items/${code}`, { name: 'Người lập sửa' });
+    expect(nguoiLap.status, JSON.stringify(nguoiLap.body)).toBe(200);
   });
 });

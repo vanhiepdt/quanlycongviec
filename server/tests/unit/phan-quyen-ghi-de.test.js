@@ -68,10 +68,16 @@ describe('TC-PQ-12: ghi đè «cho-duyet» chỉ đổi trạng thái khi TẠO'
     expect(trangThaiDuyetKhiTao(tp, 1)).toBe('Chờ duyệt');
   });
 
-  it('không ghi đè ⇒ luật gốc: TP «Chờ duyệt», Phó GĐ «Đã duyệt», nhiệm vụ luôn «Đã duyệt»', () => {
+  it('Q3 + R6: không ghi đè ⇒ MỌI vai, MỌI cấp đều «Chờ duyệt»', () => {
+    // Luật cũ: Phó GĐ / admin tự duyệt việc mình lập, và nhiệm vụ cấp 3 LUÔN «Đã duyệt» bất kể ai
+    // tạo (điểm bất hợp lý số 2). ĐỢT B bỏ cả hai — người duyệt và người lập phải là hai người
+    // khác nhau. Cửa «Đã duyệt ngay» còn lại là ghi đè ✓ mà admin đặt cho một VAI, như ca trên.
     expect(trangThaiDuyetKhiTao(principal('Trưởng phòng'), 1)).toBe('Chờ duyệt');
-    expect(trangThaiDuyetKhiTao(principal('Phó Giám đốc'), 1)).toBe('Đã duyệt');
-    expect(trangThaiDuyetKhiTao(principal('Trưởng phòng'), 3)).toBe('Đã duyệt');
+    expect(trangThaiDuyetKhiTao(principal('Phó Giám đốc'), 1)).toBe('Chờ duyệt');
+    expect(trangThaiDuyetKhiTao(principal('admin'), 1)).toBe('Chờ duyệt');
+    expect(trangThaiDuyetKhiTao(principal('Trưởng phòng'), 2)).toBe('Chờ duyệt');
+    expect(trangThaiDuyetKhiTao(principal('Trưởng phòng'), 3)).toBe('Chờ duyệt');
+    expect(trangThaiDuyetKhiTao(principal('admin'), 3)).toBe('Chờ duyệt');
   });
 
   it('Phó GĐ bị ghi đè cho-duyet ⇒ công việc mình tạo cũng phải chờ duyệt', () => {

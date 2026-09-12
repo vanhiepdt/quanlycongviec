@@ -19,6 +19,7 @@ import { makeDepartment, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser, TEST_PASSWORD } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let api;
 let dept;
 let admin;
@@ -51,6 +52,12 @@ async function waitForLogs(minRows, tries = 40) {
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   api = client(app);
   await api.login(admin.email);
@@ -282,7 +289,7 @@ describe('công việc cấp 1 — đúng hình dạng "dự án" của giao di�
     expect(row['Tên dự án']).toBe('Việc có phòng');
     expect(row['Phòng']).toBe(dept.name); // tên phòng bằng chữ, không phải department_id
     expect(row['Ngày bắt đầu']).toBe('2026-09-01');
-    expect(row['Trạng thái dự án']).toBe('Đang thực hiện');
+    expect(row['Trạng thái dự án']).toBe('Chưa bắt đầu'); // status cũ không còn ghi được
     // Không có khoá nào là undefined: giao diện cũ đọc thẳng nên undefined hiện ra chữ "undefined".
     for (const [key, value] of Object.entries(row)) {
       expect(value, key).not.toBeUndefined();
@@ -298,14 +305,16 @@ describe('công việc cấp 1 — đúng hình dạng "dự án" của giao di�
     expect(data.projectId).toBe(code);
     const { rows } = await pool.query('SELECT name, status, manager_name FROM works');
     expect(rows[0].name).toBe('Tên đã sửa');
-    expect(rows[0].status).toBe('Hoàn thành');
+    expect(rows[0].status).toBe('Chưa bắt đầu'); // không chốt bằng payload cũ
     // Trường không gửi thì không được ghi rỗng — `dropUndefined` giữ đúng điều này.
     expect(rows[0].manager_name).toBe('Trần Thị B');
   });
 
   it('TC-RPC-19: copyProjectWithAuth trả mã bản sao và số dòng con', async () => {
     const code = (await call('addProjectWithAuth', [form])).projectId;
-    await call('addTaskWithAuth', [{ projectId: code, name: 'Nhiệm vụ con' }]);
+    await call('addTaskWithAuth', [
+      { assignee: taskStaff.full_name, projectId: code, name: 'Nhiệm vụ con' },
+    ]);
     const data = await call('copyProjectWithAuth', [code, 'Bản sao 2026']);
     expect(data.projectId).toMatch(/^CV\d{3,}$/);
     expect(data.projectId).not.toBe(code);
@@ -314,8 +323,11 @@ describe('công việc cấp 1 — đúng hình dạng "dự án" của giao di�
 
   it('TC-RPC-20: deleteProjectWithAuth nói rõ đã xoá kèm những mã nào', async () => {
     const code = (await call('addProjectWithAuth', [form])).projectId;
-    const taskId = (await call('addTaskWithAuth', [{ projectId: code, name: 'Nhiệm vụ con' }]))
-      .taskId;
+    const taskId = (
+      await call('addTaskWithAuth', [
+        { assignee: taskStaff.full_name, projectId: code, name: 'Nhiệm vụ con' },
+      ])
+    ).taskId;
     const data = await call('deleteProjectWithAuth', [code]);
     expect(data.deletedProject).toBe(code);
     expect(data.deletedItems).toContain(taskId);
@@ -381,7 +393,7 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     projectId: projectCode,
     name: 'Viết tài liệu',
     description: 'Mô tả',
-    assignee: 'Lê Văn C',
+    assignee: taskStaff.full_name,
     status: 'Đang thực hiện',
     priority: 'Cao',
     startDate: '2026-09-01',
@@ -446,8 +458,8 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     const { rows } = await pool.query('SELECT * FROM work_items');
     expect(rows).toHaveLength(1);
     expect(rows[0].level).toBe(3); // form cũ chỉ tạo nhiệm vụ cấp 3
-    expect(rows[0].assignee_name).toBe('Lê Văn C');
-    expect(rows[0].completion).toBe(40); // form gửi chuỗi '40'
+    expect(rows[0].assignee_name).toBe(taskStaff.full_name);
+    expect(rows[0].completion).toBe(0); // chuỗi '40' hợp lệ nhưng trường nhập tay đã bỏ
     // Tách theo dấu phẩy sẽ cắt đôi `https://a.vn/x?a=1,2` — đây là chỗ canh việc đó.
     expect(rows[0].result_links).toEqual([
       '[Bản nháp] https://a.vn/x?a=1,2',
@@ -456,7 +468,9 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
   });
 
   it('TC-RPC-25: thiếu projectId ⇒ 400 «Thuộc dự án», không tạo dòng mồ côi', async () => {
-    const res = await rpc('addTaskWithAuth', [{ name: 'Không thuộc việc nào' }]);
+    const res = await rpc('addTaskWithAuth', [
+      { assignee: taskStaff.full_name, name: 'Không thuộc việc nào' },
+    ]);
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('Thuộc dự án');
     const { rows } = await pool.query('SELECT count(*)::int AS n FROM work_items');
@@ -465,19 +479,38 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
 
   it('TC-RPC-26: getTasks trả mảng khoá tiếng Việt, «Mã dự án» đọc từ công việc cha', async () => {
     const taskId = (await call('addTaskWithAuth', [form()])).taskId;
-    // Bug 2 (8b): «Tiến độ (%)» không còn đọc ô nhập tay `completion` (vẫn ghi 40 ở TC-RPC-24)
-    // mà tính từ mức hoàn thành các NHÓM FILE KẾT QUẢ — 2/5 nhóm ở trạng thái kết ⇒ 40%.
+    // V2: không đọc completion=40 cũ; năm nhóm đều có bản của Nhân viên và tỷ lệ 20%.
+    // Các mốc 100+100+50+20+80 cho bình quân 70%, thay 2/5=40% nhị phân trước V2.
+    // Nhóm chờ BLĐ có sự kiện TP trình duyệt, không phải TP tự làm (mốc 50%).
+    const nhom = await pool.query(
+      `WITH nhom AS (
+         INSERT INTO task_files (item_id, ten_goc, trang_thai, ty_le)
+         SELECT i.id, v.ten, v.tt, 20
+           FROM work_items i
+           JOIN (VALUES ('bao-cao-1.docx', 'hoan-thanh'),
+                        ('bao-cao-2.pdf',   'da-duyet'),
+                        ('ban-nhap-1.docx', 'cho-xem'),
+                        ('ban-nhap-2.docx', 'can-sua'),
+                        ('ban-nhap-3.docx', 'cho-lanh-dao')) v(ten, tt) ON TRUE
+          WHERE i.code = $1 RETURNING id,ten_goc,trang_thai
+       ), ban AS (
+         INSERT INTO task_file_versions(file_id,version_no,ten_luu,ten_goc,loai_mime,kich_thuoc,uploaded_by)
+         SELECT id,1,'fixture-' || id,ten_goc,'application/octet-stream',1,$2 FROM nhom
+         RETURNING id,file_id
+       ) SELECT nhom.id,nhom.trang_thai,ban.id AS version_id FROM nhom JOIN ban ON ban.file_id=nhom.id`,
+      [taskId, taskStaff.id]
+    );
+    const choBld = nhom.rows.find((r) => r.trang_thai === 'cho-lanh-dao');
+    const reviewer = await makeLoginUser({
+      code: 'NV098',
+      email: 'fixture-reviewer@test.local',
+      role: 'Trưởng phòng',
+      department_id: dept.id,
+    });
     await pool.query(
-      `INSERT INTO task_files (item_id, ten_goc, trang_thai)
-       SELECT i.id, v.ten, v.tt
-         FROM work_items i
-         JOIN (VALUES ('bao-cao-1.docx', 'hoan-thanh'),
-                      ('bao-cao-2.pdf',   'da-duyet'),
-                      ('ban-nhap-1.docx', 'cho-xem'),
-                      ('ban-nhap-2.docx', 'can-sua'),
-                      ('ban-nhap-3.docx', 'cho-lanh-dao')) v(ten, tt) ON TRUE
-        WHERE i.code = $1`,
-      [taskId]
+      `INSERT INTO task_file_flow(file_id,version_id,nguoi_id,vai,hanh_dong,noi_dung)
+       VALUES($1,$2,$3,'Trưởng phòng','tp-phe-duyet','Đã kiểm tra và trình lãnh đạo')`,
+      [choBld.id, choBld.version_id, reviewer.id]
     );
     const list = await call('getTasks');
     expect(Array.isArray(list)).toBe(true);
@@ -486,8 +519,8 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     expect(row['Mã nhiệm vụ']).toBe(taskId);
     expect(row['Mã dự án']).toBe(projectCode);
     expect(row['Tên nhiệm vụ']).toBe('Viết tài liệu');
-    expect(row['Người thực hiện']).toBe('Lê Văn C');
-    expect(row['Tiến độ (%)']).toBe(40);
+    expect(row['Người thực hiện']).toBe(taskStaff.full_name);
+    expect(row['Tiến độ (%)']).toBe(70);
     // Nhiệm vụ duy nhất của công việc ⇒ đầu mục duy nhất, tỷ lệ mặc định trọn 100.
     expect(row['Tỷ lệ công việc (%)']).toBe(100);
     expect(row['Hạn chót']).toBe('2026-09-10');
@@ -502,7 +535,9 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
 
   it('TC-RPC-27: getTasks gộp nhiệm vụ của NHIỀU công việc và giữ đúng cha cho cấp 2/3', async () => {
     const second = (await call('addProjectWithAuth', [{ name: 'Việc thứ hai' }])).projectId;
-    await call('addTaskWithAuth', [{ projectId: projectCode, name: 'A' }]);
+    await call('addTaskWithAuth', [
+      { assignee: taskStaff.full_name, projectId: projectCode, name: 'A' },
+    ]);
     // Cấp 2 + cấp 3 con của nó: tạo qua REST vì form cũ không có ô cấp/cha.
     const sub = await api.post('/api/v1/work-items', {
       workRef: second,
@@ -511,6 +546,7 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     });
     expect(sub.status).toBe(200);
     const child = await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: second,
       level: 3,
       parentRef: sub.body.data.item.code,
@@ -535,8 +571,8 @@ describe('nhiệm vụ — đúng hình dạng "task" của giao diện cũ', ()
     ]);
     expect(data.taskId).toBe(taskId);
     const { rows } = await pool.query('SELECT status, completion, notes FROM work_items');
-    expect(rows[0].status).toBe('Hoàn thành');
-    expect(rows[0].completion).toBe(100);
+    expect(rows[0].status).toBe('Chưa bắt đầu'); // không chốt bằng payload cũ
+    expect(rows[0].completion).toBe(0); // không chốt bằng payload cũ
     expect(rows[0].notes).toBe('Ghi chú');
   });
 
@@ -565,7 +601,11 @@ describe('nhắc việc — đổi SỐ THỨ TỰ của bản cũ thành remind
 
   beforeEach(async () => {
     const projectCode = (await call('addProjectWithAuth', [{ name: 'Việc có nhắc' }])).projectId;
-    taskId = (await call('addTaskWithAuth', [{ projectId: projectCode, name: 'Nhiệm vụ' }])).taskId;
+    taskId = (
+      await call('addTaskWithAuth', [
+        { assignee: taskStaff.full_name, projectId: projectCode, name: 'Nhiệm vụ' },
+      ])
+    ).taskId;
   });
 
   it('TC-RPC-31: addTaskReminder trả cả danh sách {date, content} đã xếp theo ngày', async () => {

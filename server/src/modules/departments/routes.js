@@ -76,6 +76,10 @@ departmentsRouter.get('/', async (req, res, next) => {
  * supervisors = mọi Phó GĐ + admin, leaders = []. Có phòng ⇒ supervisors = Phó GĐ phụ trách
  * phòng đó ∪ admin, leaders = Trưởng/Phó phòng của phòng. Nguồn đọc thẳng
  * department_managers + users, KHÔNG tin danh sách nào gửi lên.
+ *
+ * ĐỢT A (028_supervisor_ids.sql): kèm `?parentRef=<mã công việc con>` thì `supervisors` KHÔNG còn
+ * theo phòng nữa mà là ĐÚNG tập `supervisor_ids` của công việc con đó — nhiệm vụ cấp 3 chỉ được chọn
+ * một người trong danh sách của cấp 2 (D2). Xem `assignments.listTaskCandidates`.
  */
 departmentsRouter.get('/assignment-options', async (req, res, next) => {
   try {

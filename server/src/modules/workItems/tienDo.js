@@ -3,18 +3,15 @@
 // Luật người dùng chốt: tiến độ KHÔNG còn là con số nhập tay; một mục hoàn thành bao nhiêu phần
 // trăm là do các FILE KẾT QUẢ của nó đã nộp và được duyệt đến đâu.
 //
-// Đơn vị đếm là NHÓM file (bảng task_files), KHÔNG phải bản (task_file_versions): mỗi nhóm là một
-// kết quả đã khai, đi riêng một luồng nộp → góp ý → duyệt. Nhóm ở trạng thái kết thúc
-// ('hoan-thanh' hoặc 'da-duyet') là XONG; mọi trạng thái khác — kể cả nhóm «Chưa có» 0 bản của
-// 016 — là CHƯA XONG. Khai kết quả ra mà chưa nộp cũng là chưa hoàn thành kết quả đó, nên nhóm
-// 0 bản vẫn đếm vào MẪU (và nhờ vậy câu đếm không cần JOIN bản nào).
+// V2: mỗi NHÓM có ty_le và tiến độ theo mốc cấu hình. Chưa có bản = 0%;
+// Cần sửa/đang duyệt = 20/40/50/80% mặc định. Nhóm 0 bản vẫn có trọng số ở mẫu số.
+// tong/xong vẫn đếm nhị phân để không đổi hợp đồng cũ; tính tiến độ ưu tiên tổng trọng số.
 //
 // Mục KHÔNG có nhóm kết quả nào ⇒ tiến độ 0% (người dùng chốt «tính 0%» — không phải «bỏ qua»).
 //
-// Ghép tầng: nhiệm vụ cấp 3 tính trên file của chính nó; việc con cấp 2 tính gộp file của chính
-// nó + của các nhiệm vụ cấp 3 nằm trong nó — tiến độ của việc con vì thế phản ánh cả đội hình bên
-// trong. Tiến độ công việc cấp 1 là bình quân GIA QUYỀN theo tỷ lệ công việc (tyLe.js) của các
-// mục thuộc diện; file của nhiệm vụ nằm trong việc con đã được việc con gánh, không đếm hai lần.
+// Nhiệm vụ cấp 3 tính từ nhóm kết quả của nó. Công việc con cấp 2 lấy bình quân gia quyền
+// tiến độ nhiệm vụ con theo ty_le nội bộ; tổng khác 100 thì chia cho tổng tỷ lệ thực tế.
+// Công việc cấp 1 tiếp tục lấy bình quân gia quyền các đầu mục trực thuộc (tyLe.js).
 import { laDauMuc } from './tyLe.js';
 
 /** Trạng thái KẾT THÚC của một nhóm file — hết lượt nộp/sửa, kết quả được chốt. */
@@ -26,7 +23,7 @@ export const TRANG_THAI_XONG = ['hoan-thanh', 'da-duyet'];
  * @param {object[]} items các dòng work_items — phải ĐỦ họ của một công việc (cha lẫn con) để
  *   việc con cấp 2 gộp đúng con mình; lẫn dòng của công việc khác cũng không sao vì chỉ ghép
  *   theo parent_id trong chính danh sách.
- * @param {Map} demTheoItem itemId → { tong, xong } — số nhóm file và số nhóm đã kết thúc
+ * @param {Map} demTheoItem itemId → { tong, xong, tongTyLe, tienDoCoTrongSo }
  *   (repo.taskFiles.demNhomFileTheoItem). Khoá được String() hoá: pg trả bigint dạng chuỗi, còn
  *   đồ thị test có thể xây bằng số.
  */
@@ -45,19 +42,39 @@ export function ganTienDo(items, demTheoItem) {
   }
 
   for (const row of danhSach) {
-    let tong = 0;
-    let xong = 0;
-    const cuaMinh = demCua(row.id);
-    tong += cuaMinh.tong;
-    xong += cuaMinh.xong;
-    if (Number(row.level) === 2) {
-      for (const con of conTheoCha.get(String(row.id)) ?? []) {
-        const cuaCon = demCua(con.id);
-        tong += cuaCon.tong;
-        xong += cuaCon.xong;
-      }
-    }
-    row.tien_do = tong > 0 ? Math.round((xong * 100) / tong) : 0;
+    const {
+      tong,
+      xong,
+      daDuyetCoBan = 0,
+      tongTyLe,
+      tienDoCoTrongSo,
+      files = [],
+      duyetLuc = null,
+    } = demCua(row.id);
+    // Không suy từ %: nhóm trọng số 0 hoặc làm tròn 100 vẫn phải được duyệt đủ.
+    row.hoan_thanh = tong > 0 && daDuyetCoBan === tong;
+    row.hoan_thanh_luc = row.hoan_thanh ? duyetLuc : null;
+    row.ket_qua_files = files;
+    // Dữ liệu repo mới có tổng trọng số; hợp đồng tong/xong cũ vẫn đọc được bởi hàm thuần.
+    row.tien_do =
+      tongTyLe !== undefined
+        ? tongTyLe > 0
+          ? Math.round(tienDoCoTrongSo / tongTyLe)
+          : 0
+        : tong > 0
+          ? Math.round((xong * 100) / tong)
+          : 0;
+  }
+  for (const row of danhSach) {
+    if (Number(row.level) !== 2) continue;
+    const children = conTheoCha.get(String(row.id)) ?? [];
+    const total = children.reduce((sum, child) => sum + Math.max(0, Number(child.ty_le ?? 1)), 0);
+    const done = children.reduce(
+      (sum, child) => sum + Math.max(0, Number(child.ty_le ?? 1)) * child.tien_do,
+      0
+    );
+    row.tien_do = total > 0 ? Math.round(done / total) : 0;
+    row.hoan_thanh = children.length > 0 && children.every((child) => child.hoan_thanh === true);
   }
   return danhSach;
 }
@@ -74,7 +91,30 @@ export function tienDoWork(items) {
     const tyLe = Math.max(0, Number(row.ty_le) || 0);
     if (tyLe <= 0) continue;
     mau += tyLe;
-    tu += tyLe * (Math.max(0, Number(row.tien_do) || 0));
+    tu += tyLe * Math.max(0, Number(row.tien_do) || 0);
   }
   return mau > 0 ? Math.round(tu / mau) : 0;
+}
+
+/** Hoàn thành cấp 1: có đầu mục và tất cả đầu mục hoàn thành, kể cả trọng số 0. */
+export function hoanThanhWork(items) {
+  const heads = (items ?? []).filter(laDauMuc);
+  return heads.length > 0 && heads.every((row) => row.hoan_thanh === true);
+}
+export function ganTienDoWorks(works, items) {
+  const byWork = new Map();
+  for (const item of items) {
+    const key = String(item.work_id);
+    if (!byWork.has(key)) byWork.set(key, []);
+    byWork.get(key).push(item);
+  }
+  for (const work of works) {
+    const children = byWork.get(String(work.id)) ?? [];
+    work.tien_do = tienDoWork(children);
+    work.hoan_thanh = hoanThanhWork(children);
+  }
+  return works;
+}
+export function nhanKetQua(row) {
+  return row.hoan_thanh === true ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả';
 }

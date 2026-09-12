@@ -6,13 +6,24 @@
 // 'tu-choi' tắt cả khi ma trận cho phép. Admin và user/department không chịu ghi đè.
 import { AppError } from '../../utils/errors.js';
 import { PERMISSIONS } from '../../middleware/rbac.js';
+import { withTransaction } from '../../db/pool.js';
 import * as repo from './repo.js';
+import * as settings from '../systemSettings/service.js';
 
 const THUC_THE_DUOC_SUA = ['work', 'subwork', 'task', 'file'];
 // 'ty-le' (8b lỗi 2): ô «Sửa tỷ lệ công việc» trên subwork/task chỉnh được như các ô khác.
 // 'cho-duyet' cho nó đã bị chặn hai lớp: CHECK `po_cho_duyet` hiện hành không kể tên 'ty-le',
 // và cửa `choDuyetHopLe` bên dưới cũng loại nó (chỉ create/update/delete được chờ duyệt).
-const HANH_DONG_DUOC_SUA = ['read', 'create', 'update', 'delete', 'approve', 'ty-le'];
+const HANH_DONG_DUOC_SUA = [
+  'read',
+  'create',
+  'update',
+  'delete',
+  'approve',
+  'ty-le',
+  'submit',
+  'gui-bld',
+];
 const GIA_TRI_HOP_LE = ['cho-phep', 'tu-choi', 'cho-duyet'];
 
 /** Vai được chỉnh trong bảng: mọi vai nghiệp vụ TRỪ admin (chính người sửa bảng). */
@@ -22,14 +33,19 @@ export function vaiSuaDuoc(vai) {
 
 /** Ma trận gốc + mọi ghi đè đang có — cho dropdown của admin. */
 export async function bangHienTai() {
-  return { macDinh: PERMISSIONS, ghiDe: await repo.listAll() };
+  return {
+    macDinh: PERMISSIONS,
+    ghiDe: await repo.listAll(),
+    settings: await settings.read(),
+    fileProgressLabels: settings.FILE_PROGRESS_LABELS,
+  };
 }
 
 /**
  * Lưu một loạt ghi đè. `giaTri: 'mac-dinh'` ⇒ XOÁ dòng (về mặc định); giá trị khác ⇒ upsert.
  * Kiểm từng mục trước khi ghi một cái nào — lỗi giữa chừng không được để nửa vời.
  */
-export async function luuGhiDe(user, thayDoi) {
+export function luuGhiDe(user, thayDoi) {
   const VAI_CO_PHAM_VI_RONG = ['Phó Giám đốc', 'Trưởng phòng', 'Phó phòng'];
   for (const g of thayDoi) {
     if (!g || !vaiSuaDuoc(g.vai)) {
@@ -46,7 +62,11 @@ export async function luuGhiDe(user, thayDoi) {
         field: 'entityType',
       });
     }
-    if (!HANH_DONG_DUOC_SUA.includes(g.action)) {
+    if (
+      !HANH_DONG_DUOC_SUA.includes(g.action) ||
+      (g.action === 'submit' && g.entityType !== 'file') ||
+      (g.action === 'gui-bld' && g.entityType !== 'task')
+    ) {
       throw new AppError('VALIDATION_ERROR', `Hành động "${g.action}" không cho chỉnh`, {
         field: 'action',
       });
@@ -61,7 +81,11 @@ export async function luuGhiDe(user, thayDoi) {
     // bắt buộc trình Phó GĐ/GĐ. Phó GĐ đặt ⏳ ở 2 hàng file là 400: PGD/GĐ là cấp chốt cuối,
     // không có ai để «chờ» (service của luồng file cũng chặn theo cùng luật).
     const choDuyetHopLe =
+      (g.entityType === 'task' && g.action === 'gui-bld') ||
       ['create', 'update', 'delete'].includes(g.action) ||
+      (g.entityType === 'file' &&
+        g.action === 'submit' &&
+        ['Trưởng phòng', 'Phó phòng', 'Nhân viên'].includes(g.vai)) ||
       (g.entityType === 'file' &&
         g.action === 'approve' &&
         ['Trưởng phòng', 'Phó phòng'].includes(g.vai));
@@ -100,16 +124,21 @@ export async function luuGhiDe(user, thayDoi) {
       );
     }
   }
-  for (const g of thayDoi) {
-    if (g.giaTri === 'mac-dinh') {
-      await repo.xoa(g);
-    } else {
-      await repo.upsert({
-        ...g,
-        phamVi: g.phamVi === 'tat-ca' ? 'tat-ca' : 'phong',
-        updatedBy: user.id,
-      });
+  return withTransaction(async (client) => {
+    for (const g of thayDoi) {
+      if (g.giaTri === 'mac-dinh') {
+        await repo.xoa(g, client);
+      } else {
+        await repo.upsert(
+          {
+            ...g,
+            phamVi: g.phamVi === 'tat-ca' ? 'tat-ca' : 'phong',
+            updatedBy: user.id,
+          },
+          client
+        );
+      }
     }
-  }
-  return repo.listAll();
+    return repo.listAll(client);
+  });
 }

@@ -9,15 +9,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
-const EXPORTS = `;Object.assign(window, {
+const EXPORTS = `;currentUser={role:"admin"};Object.assign(window, {
   COL, buildDeptIdOptions, buildStaffEmailDatalist,
   datPhong: (v) => { allDepartments = v; },
   datCanBo: (v) => { allStaff = v; },
 });`;
 
 function khoiDong() {
-  new Function(APP_SRC + EXPORTS)();
+  new Function(APP_SRC + QUYEN_UI + EXPORTS)();
 }
 
 const C = {};

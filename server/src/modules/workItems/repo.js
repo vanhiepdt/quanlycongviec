@@ -12,10 +12,10 @@ export const LEVEL_SUBWORK = 2;
 export const LEVEL_TASK = 3;
 
 const COLUMNS = `id, code, work_id, parent_id, level, department_id,
-                 supervisor_id, leader_ids,
+                 supervisor_ids, leader_ids, gui_bld_phe_duyet,
                  name, description,
                  assignee_id, assignee_name, status, priority,
-                 start_date, due_date, report_date, completion, ty_le,
+                 start_date, due_date, report_date, completion, ty_le, ty_le_tu_dong,
                  target, output, notes, result_links,
                  approval_status, approver_id, approved_at, reject_reason,
                  xoa_yeu_cau_boi, xoa_yeu_cau_luc, xoa_ly_do,
@@ -51,11 +51,13 @@ export const WRITABLE = Object.freeze([
   'description',
   'assignee_id',
   'assignee_name',
-  // Phân công ba lớp (005_phan_cong.sql): Ban lãnh đạo kiểm soát chỉ ở cấp 2; "Lãnh đạo phòng
-  // phụ trách" ở cấp 2 là mảng nhiều người, cấp 3 tối đa một người (CHECK `task_leader_single`).
-  // Nguồn hợp lệ kiểm ở service — cấp 3 gửi supervisor khác rỗng sẽ bị chặn ngay tại đó.
-  'supervisor_id',
+  // Phân công ba lớp (005_phan_cong.sql, đổi thành MẢNG ở 028_supervisor_ids.sql): "Ban lãnh đạo
+  // kiểm soát" cấp 1/cấp 2 là mảng nhiều người, cấp 3 tối đa một người (CHECK
+  // `task_supervisor_single`) và phải nằm trong tập của cấp 2. "Lãnh đạo phòng phụ trách" giữ
+  // khuôn cũ. Nguồn hợp lệ kiểm ở service — cấp 3 gửi supervisor ngoài tập của cha bị chặn ở đó.
+  'supervisor_ids',
   'leader_ids',
+  'gui_bld_phe_duyet',
   'status',
   'priority',
   'start_date',
@@ -79,6 +81,54 @@ export const WRITABLE = Object.freeze([
 
 /** Cột cấu trúc — chỉ service cây được truyền, và luôn kèm kiểm tra trước đó. */
 const STRUCTURAL = Object.freeze(['work_id', 'parent_id']);
+
+/**
+ * Công thức SQL của `supervisor_hieu_luc` — «MỘT người quyết định kết quả của dòng này».
+ *
+ * ĐỢT A (028_supervisor_ids.sql) đổi `supervisor_id` thành MẢNG `supervisor_ids`, nhưng luồng FILE
+ * vẫn cần đúng một người. Luật: lấy phần tử ĐẦU của chính dòng; dòng chưa chọn (mảng rỗng) thì lấy
+ * phần tử đầu của CẤP 2 chứa nó — đúng Q12 «nhiệm vụ cấp 3 chưa có BLĐKS riêng thì lấy 1 người đầu
+ * tiên của cấp 2». Cấp 2/cấp 1 không có cha nên nhánh dự phòng tự trả NULL.
+ *
+ * Viết MỘT lần ở đây vì công thức này từng bị chép lặp ở BỐN nơi (`workItems/repo.js` ×2,
+ * `taskFiles/repo.js`, `approvals/changes.js`) — điểm bất hợp lý số 4 của bản rà soát 10/09/2026.
+ * Bốn bản chép là bốn chỗ lệch nhau được khi luật đổi, và lệch ở đây không nổ lỗi: file chỉ lặng
+ * lẽ chạy tới sai người duyệt.
+ *
+ * @param {string} alias tiền tố bảng của dòng `work_items` ngoài cùng (`''` hoặc `'i.'`)
+ * @returns {string} một biểu thức SQL trả về `bigint`
+ */
+export const sqlSupervisorHieuLuc = (alias = '') =>
+  `COALESCE(${alias}supervisor_ids[1], (SELECT pc.supervisor_ids[1] FROM work_items pc WHERE pc.id = ${alias}parent_id))`;
+
+/**
+ * CÂY CỦA MỘT NHIỆM VỤ ĐÃ DUYỆT CHƯA (Q1 + Q2, ĐỢT B 11/09/2026).
+ *
+ * «Cây» ở đây là BA dòng mà một nhiệm vụ cấp 3 thuộc về: chính nó, công việc con chứa nó (nếu có)
+ * và công việc cha. Cả ba phải `Đã duyệt` thì mới được nộp file kết quả — đúng ba điều kiện của
+ * `v_countable_items` (004, viết lại ở 026/028), chỉ khác là view kia loại `Nháp`/`Chờ duyệt` bằng
+ * `NOT IN` còn hàm này đòi đúng giá trị `Đã duyệt`: một cây bị `Từ chối` thì không thể coi là đã duyệt.
+ *
+ * Đặt ở module `work_items` chứ không phải `taskFiles` vì câu trả lời thuộc về TRỤC DUYỆT CÂY; bên
+ * file chỉ là người hỏi. Đây là một trong hai chỗ khiến hai trục duyệt thôi «hoàn toàn không biết
+ * nhau» (điểm bất hợp lý số 1).
+ *
+ * @param {number|string} itemId id nhiệm vụ cấp 3
+ * @returns {Promise<boolean>} `false` khi không tìm thấy dòng (coi như chưa duyệt — thà chặn còn hơn mở)
+ */
+export async function cayDaDuyet(itemId, client = null) {
+  const { rows } = await db(client).query(
+    `SELECT (i.approval_status = 'Đã duyệt'
+             AND w.approval_status = 'Đã duyệt'
+             AND (p.id IS NULL OR p.approval_status = 'Đã duyệt')) AS ok
+       FROM work_items i
+       JOIN works w ON w.id = i.work_id
+       LEFT JOIN work_items p ON p.id = i.parent_id
+      WHERE i.id = $1`,
+    [itemId]
+  );
+  return rows[0]?.ok === true;
+}
 
 /**
  * Nguồn gốc việc (003_work_origin_and_history.sql): ai lập dòng này, tự đăng ký hay được giao, và
@@ -108,7 +158,10 @@ export async function nextItemCode(workCode, client = null) {
 }
 
 export async function findById(id, client = null) {
-  const { rows } = await db(client).query(`SELECT ${COLUMNS} FROM work_items WHERE id = $1`, [id]);
+  const { rows } = await db(client).query(
+    `SELECT ${COLUMNS}, ${sqlSupervisorHieuLuc()} AS supervisor_hieu_luc FROM work_items WHERE id = $1`,
+    [id]
+  );
   return rows[0] ?? null;
 }
 
@@ -149,8 +202,10 @@ export async function findByRefWithWork(ref, client = null) {
     `SELECT ${COLUMNS.split(',')
       .map((c) => `i.${c.trim()}`)
       .join(', ')},
+            ${sqlSupervisorHieuLuc('i.')} AS supervisor_hieu_luc,
             w.code AS work_code, w.department_id AS work_department_id,
             w.manager_id AS work_manager_id,
+            w.supervisor_ids AS work_supervisor_ids,
             w.start_date AS work_start_date, w.end_date AS work_end_date
        FROM work_items i JOIN works w ON w.id = i.work_id
       WHERE i.${column} = $1`,

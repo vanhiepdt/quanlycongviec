@@ -50,6 +50,27 @@ export const idInput = z
     'Mã tham chiếu không hợp lệ'
   );
 
+/**
+ * Mảng id người — dùng cho các ô phân công chọn NHIỀU người: «Ban lãnh đạo kiểm soát»
+ * (`supervisor_ids`, đợt A / 028_supervisor_ids.sql) và «Lãnh đạo phòng phụ trách» (`leader_ids`).
+ *
+ * Mỗi phần tử đi qua `idInput`, rồi chặn thêm phần tử không phải số nguyên hợp lệ (`NaN` do
+ * `idInput` sinh khi dữ liệu vào sai). `nhan` là tên ô để câu lỗi trỏ đúng chỗ: hai ô đó nằm cạnh
+ * nhau trên form và nhãn gần giống nhau, báo chung một câu «mã không hợp lệ» thì người dùng không
+ * biết phải sửa ô nào.
+ *
+ * `.max(50)` là trần kỹ thuật cho cột mảng, KHÔNG phải luật nghiệp vụ — «cấp 3 đúng một người» và
+ * «cấp dưới ⊆ cấp trên» kiểm ở `assignments/service.js`, là nơi đọc được cả cây.
+ */
+export const idsInput = (nhan) =>
+  z
+    .array(idInput)
+    .max(50)
+    .refine((ids) => ids.every((id) => id == null || Number.isInteger(id)), {
+      message: `Danh sách ${nhan} có mã không hợp lệ`,
+    })
+    .optional();
+
 /** Chuỗi có cắt trắng hai đầu, giới hạn độ dài để không ai nhét 1MB vào một cột text. */
 export const text = (max = 500) => z.string().trim().max(max);
 

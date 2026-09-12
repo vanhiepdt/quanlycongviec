@@ -118,9 +118,10 @@ describe('Nhãn vàng xuất hiện đúng chỗ trên giao diện', () => {
     }
   });
 
-  it('nhãn nằm CẠNH nhãn trạng thái chứ không thay thế nó', () => {
+  it('nhãn duyệt công việc nằm cạnh chỉ báo duyệt kết quả, không khôi phục trạng thái tay', () => {
     const hop = dung(window.createTaskTableRowSimple(nhiemVu('Chờ duyệt')));
-    expect(hop.textContent).toContain('Đang thực hiện');
+    expect(hop.textContent).toContain('Chưa duyệt đủ kết quả');
+    expect(hop.textContent).not.toContain('Đang thực hiện');
     expect(hop.textContent).toContain('Chờ duyệt');
   });
 });

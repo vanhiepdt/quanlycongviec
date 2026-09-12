@@ -6,21 +6,24 @@ import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
-import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
+import {
+  approvalInput,
+  dateInput,
+  idInput,
+  idsInput,
+  requiredText,
+  text,
+} from '../../utils/zodTypes.js';
 import * as itemsService from '../workItems/service.js';
 import { thangTuDuongDan } from '../workMonthNames/service.js';
 import * as service from './service.js';
 import { getTree } from './tree.js';
 
-// Mảng id người (Lãnh đạo phòng phụ trách): mỗi phần tử đi qua `idInput`, rồi chặn thêm phần tử
-// không phải số nguyên hợp lệ (`NaN` do `idInput` sinh khi dữ liệu vào sai).
-const leaderIdsInput = z
-  .array(idInput)
-  .max(50)
-  .refine((ids) => ids.every((id) => id == null || Number.isInteger(id)), {
-    message: 'Danh sách lãnh đạo phòng phụ trách có mã không hợp lệ',
-  })
-  .optional();
+// Đợt A (028_supervisor_ids.sql): «Ban lãnh đạo kiểm soát» nay là MẢNG ở cả ba cấp, cùng hình dạng
+// với «Lãnh đạo phòng phụ trách» — cấp 1 chọn nhiều, cấp 2 nhiều nhưng ⊆ cấp 1, cấp 3 đúng một và
+// ⊆ cấp 2. Ràng buộc ⊆ là NGHIỆP VỤ, kiểm ở `assignments/service.js`; schema chỉ chặn hình dạng.
+const supervisorIdsInput = idsInput('ban lãnh đạo kiểm soát');
+const leaderIdsInput = idsInput('lãnh đạo phòng phụ trách');
 
 const createSchema = z.object({
   name: requiredText('Vui lòng nhập tên công việc', 500),
@@ -28,9 +31,10 @@ const createSchema = z.object({
   managerId: idInput,
   managerName: text(200).optional(),
   departmentId: idInput,
-  // Phân công ba lớp (005_phan_cong.sql): Ban lãnh đạo kiểm soát (1 người) + Lãnh đạo phòng
-  // phụ trách (mảng id). Nguồn hợp lệ kiểm ở service — schema chỉ chặn hình dạng dữ liệu.
-  supervisorId: idInput,
+  // Phân công ba lớp (005_phan_cong.sql, MẢNG từ 028_supervisor_ids.sql): Ban lãnh đạo kiểm soát
+  // (nhiều người) + Lãnh đạo phòng phụ trách (mảng id). Nguồn hợp lệ kiểm ở service — schema chỉ
+  // chặn hình dạng dữ liệu.
+  supervisorIds: supervisorIdsInput,
   leaderIds: leaderIdsInput,
   startDate: dateInput,
   endDate: dateInput,
@@ -45,7 +49,7 @@ const createSchema = z.object({
 });
 
 // PATCH: mọi trường đều tuỳ chọn, kể cả tên — không truyền thì không ghi (§5.2).
-const updateSchema = createSchema.partial();
+export const updateSchema = createSchema.partial();
 
 const querySchema = z.object({
   month: z
@@ -78,14 +82,14 @@ const historySchema = z.object({
 });
 
 /** camelCase của giao diện → tên cột CSDL. Chỉ những khoá người dùng thực sự gửi được ghi. */
-function toRow(body) {
+export function toRow(body) {
   const map = {
     name: 'name',
     description: 'description',
     managerId: 'manager_id',
     managerName: 'manager_name',
     departmentId: 'department_id',
-    supervisorId: 'supervisor_id',
+    supervisorIds: 'supervisor_ids',
     leaderIds: 'leader_ids',
     startDate: 'start_date',
     endDate: 'end_date',

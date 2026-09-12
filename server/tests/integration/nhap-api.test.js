@@ -16,6 +16,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 
 let phongA;
 let tp; // Trưởng phòng A — người LẬP bản nháp
@@ -23,6 +24,7 @@ let apiTp;
 let apiPp; // Phó phòng A — cùng phòng, không phải người lập
 let apiAdmin;
 let apiPgdA; // Phó Giám đốc phụ trách phòng A — người duyệt, vẫn KHÔNG thấy nháp của người khác
+let pgdA; // đợt A (028): phải nằm trong supervisor_ids thì submit mới cho gửi
 
 async function dangNhap(user) {
   const api = client(app);
@@ -38,6 +40,7 @@ async function taoCayNhap() {
     startDate: '2026-09-01',
     endDate: '2026-09-30',
     saveAsDraft: true,
+    supervisorIds: [pgdA.id],
   });
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   const work = res.body.data.work;
@@ -48,6 +51,7 @@ async function taoCayNhap() {
   });
   const conCode = con.body.data.item.code;
   const nv = await apiTp.post('/api/v1/work-items', {
+    assigneeId: taskStaff.id,
     workRef: work.code,
     level: 3,
     parentRef: conCode,
@@ -61,6 +65,12 @@ const maCongViec = (res) => (res.body.data.works ?? []).map((w) => w.code);
 beforeEach(async () => {
   await resetTables();
   phongA = await makeDepartment({ code: 'PH01', name: 'Phòng Kỹ thuật' });
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: phongA.id,
+  });
 
   tp = await makeLoginUser({
     code: 'NV010',
@@ -75,7 +85,7 @@ beforeEach(async () => {
     role: 'Phó phòng',
     department_id: phongA.id,
   });
-  const pgdA = await makeLoginUser({
+  pgdA = await makeLoginUser({
     code: 'NV002',
     email: 'pgd-a@test.local',
     role: 'Phó Giám đốc',

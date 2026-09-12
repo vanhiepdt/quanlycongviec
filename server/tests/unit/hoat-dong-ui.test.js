@@ -94,7 +94,7 @@ describe('TC-HD — «Hoạt động gần đây» đọc được bằng tiến
       code: 'CV003',
       changes: { status: { from: 'a', to: 'b' }, completion: { from: '10', to: '90' } },
     });
-    expect(moTa).toBe('Cập nhật 2 trường: Trạng thái, Hoàn thành (%)');
+    expect(moTa).toBe('Cập nhật 2 trường: Trạng thái cũ (lịch sử), Hoàn thành (%)');
   });
 
   it('TC-HD-06: có code + name ⇒ chỉ hiện TÊN (bỏ mã); chỉ có code ⇒ fallback mã', () => {

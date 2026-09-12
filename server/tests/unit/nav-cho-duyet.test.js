@@ -8,11 +8,13 @@
 //
 // Test này chạy app.js THẬT trong jsdom, gọi thẳng `capNhatNavChoDuyet()` cho 5 vai và canh:
 //   • admin + Phó Giám đốc + TP/PP  ⇒ mục MỞ (bỏ class hidden);
-//   • Nhân viên                     ⇒ mục vẫn ẩn (họ không có cửa duyệt nào);
+//   • Nhân viên có quyền gửi         ⇒ thấy nháp của mình + lệnh sửa (V4);
 //   • badge = số dòng REST trả về, và 0 thì badge ẩn.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
@@ -41,7 +43,7 @@ function khoiDong(traVe = {}) {
       json: () => Promise.resolve({ ok: true, data: than }),
     });
   };
-  new Function(APP_SRC + EXPORTS)();
+  new Function(APP_SRC + QUYEN_UI + EXPORTS)();
   return goi;
 }
 
@@ -82,13 +84,14 @@ describe('TC-NAV — mục «Hàng chờ phê duyệt» mở cho MỌI vai có c
     }
   });
 
-  it('TC-NAV-04: Nhân viên luôn thấy hàng chờ, badge chỉ đếm lệnh sửa', async () => {
+  it('TC-NAV-04: Nhân viên có quyền gửi thấy nháp riêng và lệnh sửa, không có hàng chờ cây', async () => {
     const goi = khoiDong({ ketQua: [{ id: 1 }], lenhSua: [{ id: 2 }, { id: 3 }] });
     window.__nav({ id: 4, name: 'Cán bộ', role: 'Nhân viên' });
     await window.capNhatNavChoDuyet();
     expect(NAV().classList.contains('hidden')).toBe(false);
-    expect(BADGE().textContent).toBe('2');
-    expect(goi).toEqual(['/api/v1/task-files/lenh-sua']);
+    // V4 có chủ ý: nháp do chính mình tạo cũng vào tab kết quả, không chỉ lệnh sửa.
+    expect(BADGE().textContent).toBe('3');
+    expect(goi).toEqual(['/api/v1/task-files/lenh-sua', '/api/v1/task-files/cho-duyet']);
   });
 
   it('TC-NAV-08: TP cộng lệnh của mình; nhân viên không có lệnh vẫn thấy nav', async () => {

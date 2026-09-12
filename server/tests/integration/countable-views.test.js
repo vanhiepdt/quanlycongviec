@@ -49,7 +49,24 @@ describe('019 sửa view cũ thiếu ty_le', () => {
       });
       const before = await snapshot();
       const base = await db.query('SELECT * FROM work_items LIMIT 0');
-      const columns = base.fields.filter((f) => f.name !== 'ty_le').map((f) => `i."${f.name}"`);
+      // View trước 019 không được chứa các cột thêm sau đó (018, 022/023, 026, 028).
+      //
+      // Cắt lấy PHẦN ĐẦU của danh sách cột vật lý, dừng ngay TRƯỚC cột thêm sau đầu tiên — chứ không
+      // lọc bỏ từng tên rải rác. Lý do: `CREATE OR REPLACE VIEW` chỉ chấp nhận khi các cột CŨ là một
+      // PHẦN ĐẦU của định nghĩa mới và cột mới được THÊM VÀO CUỐI. Một view "thiếu vài cột ở giữa"
+      // bị Postgres chặn bằng «cannot change name of view column …». Trước 028 danh sách loại trừ tình
+      // cờ nằm gọn ở đuôi bảng nên lọc theo tên vẫn chạy; 028 thêm `supervisor_ids` vào CUỐI, biến
+      // bốn cột kia thành "ở giữa", và ca này nổ đúng chỗ đó.
+      const MUON_SAU_019 = [
+        'ty_le',
+        'ty_le_tu_dong',
+        'submitted_by',
+        'gui_bld_phe_duyet',
+        'supervisor_ids',
+      ];
+      const tenCot = base.fields.map((f) => f.name);
+      const catTai = tenCot.findIndex((n) => MUON_SAU_019.includes(n));
+      const columns = (catTai < 0 ? tenCot : tenCot.slice(0, catTai)).map((n) => `i."${n}"`);
       await db.query('DROP VIEW v_countable_items');
       await db.query(`CREATE VIEW v_countable_items AS SELECT ${columns.join(', ')}
         FROM work_items i JOIN works w ON w.id = i.work_id

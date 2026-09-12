@@ -10,6 +10,7 @@ import { makeDepartment, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 
 // Một công việc trải THÁNG 8 → THÁNG 11: tháng 8 là tháng gốc, ba tháng 9/10/11 đặt tên được.
 const DAU = '2026-08-10';
@@ -46,6 +47,7 @@ async function dungCay(api) {
   ).body.data.item;
   const task = (
     await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: work.code,
       parentRef: subwork.code,
       level: 3,
@@ -54,6 +56,11 @@ async function dungCay(api) {
       dueDate: CUOI,
     })
   ).body.data.item;
+  // ĐỢT B (R6 + Q3): admin lập việc không còn tự ra «Đã duyệt», mà cấp 3 thêm vào cây cũng là
+  // «Chờ duyệt» một mình nó. Bộ test này khảo sát TÊN THEO THÁNG trên một cây đang sống (Sơ đồ
+  // Gantt chỉ vẽ phần đã duyệt), nên ký cả cây ở đây — một lời gọi vì `duyetCaCay` kéo theo con cháu.
+  const ky = await api.post('/api/v1/approvals/work/' + work.code + '/approve');
+  expect(ky.status, JSON.stringify(ky.body)).toBe(200);
   return { work, subwork, task };
 }
 
@@ -76,6 +83,12 @@ async function choNhatKy(api, url, hanhDong, soDong = 1, tries = 40) {
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   nguoiNgoai = await makeLoginUser({
     code: 'NV009',

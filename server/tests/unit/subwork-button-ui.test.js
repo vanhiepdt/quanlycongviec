@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   COL, canUserCreateSubwork, canUserCreateTask, createSubworkFromWorkButtonHtml,
@@ -23,8 +25,8 @@ const EXPORTS = `;Object.assign(window, {
 });`;
 
 beforeEach(() => {
-  new Function(APP_SRC + EXPORTS)();
-  window.__dat('allProjects', []);
+  new Function(APP_SRC + QUYEN_UI + EXPORTS)();
+  window.__dat('allProjects', [{ [window.COL.P_ID]: 'CV001', [window.COL.P_DEPT_ID]: 1 }]);
   window.__dat('allTasks', []);
   window.__dat('allStaff', []);
   window.__dat('isDeputyDirectorUser', false);
@@ -33,21 +35,21 @@ beforeEach(() => {
 });
 
 describe('canUserCreateSubwork — khớp §6 (Nhân viên không tạo cấp 2)', () => {
-  it('admin / Quản lý / Trưởng phòng / Phó phòng / Phó Giám đốc được', () => {
+  it('vai hợp lệ đúng phòng tạo được; vai Quản lý đã bỏ không tạo được', () => {
     window.__dat('currentUser', { name: 'A', role: 'admin' });
     expect(window.canUserCreateSubwork()).toBe(true);
     window.__dat('currentUser', { name: 'B', role: 'Quản lý công việc' });
+    expect(window.canUserCreateSubwork()).toBe(false);
+    window.__dat('currentUser', { name: 'C', role: 'Trưởng phòng', department_id: 1 });
     expect(window.canUserCreateSubwork()).toBe(true);
-    window.__dat('currentUser', { name: 'C', role: 'Trưởng phòng' });
+    window.__dat('currentUser', { name: 'D', role: 'Phó phòng', department_id: 1 });
     expect(window.canUserCreateSubwork()).toBe(true);
-    window.__dat('currentUser', { name: 'D', role: 'Phó phòng' });
-    expect(window.canUserCreateSubwork()).toBe(true);
-    window.__dat('currentUser', { name: 'E', role: 'Phó Giám đốc' });
+    window.__dat('currentUser', { name: 'E', role: 'Phó Giám đốc', managedDepartmentIds: [1] });
     expect(window.canUserCreateSubwork()).toBe(true);
   });
 
   it('Nhân viên không được, kể cả khi đang có nhiệm vụ được giao (canUserCreateTask = true)', () => {
-    window.__dat('currentUser', { name: 'NV', role: 'Nhân viên' });
+    window.__dat('currentUser', { name: 'NV', role: 'Nhân viên', department_id: 1 });
     window.__dat('allTasks', [{ [window.COL.T_ASSIGNEE]: 'NV' }]);
     expect(window.canUserCreateTask()).toBe(true);
     expect(window.canUserCreateSubwork()).toBe(false);

@@ -79,7 +79,17 @@ describe('GET /api/v1/bootstrap', () => {
     expect(data.people.some((p) => p.email === admin.email)).toBe(true);
     // `deletes` thêm ở 013 (yêu cầu xoá đang treo) và cộng vào `total` — badge trả lời «còn bao
     // nhiêu việc phải xử», mà một yêu cầu xoá đang chờ đúng là một việc phải xử.
-    expect(data.pendingCount).toEqual({ works: 0, items: 0, deletes: 0, total: 0 });
+    // V7 chỉ thêm bộ đếm đề nghị đổi tích, giữ nguyên các trường và giá trị cũ.
+    // ĐỢT B thêm `tyLeChanges` (R4'': đề nghị đổi tỷ lệ) và cộng nó vào `total` — cùng một câu hỏi
+    // «còn bao nhiêu việc phải xử».
+    expect(data.pendingCount).toEqual({
+      works: 0,
+      items: 0,
+      deletes: 0,
+      guiBldChanges: 0,
+      tyLeChanges: 0,
+      total: 0,
+    });
     expect(data.summaryStats).toEqual({
       totalProjects: 0,
       totalTasks: 0,
@@ -209,20 +219,31 @@ describe('thống kê đọc view — việc 5.4 nửa ứng dụng', () => {
   });
 
   it('TC-APR-06: thêm 1 mục Chờ duyệt ⇒ summaryStats và chartData không đổi một đơn vị', async () => {
-    // Tạo qua API admin (tự 'Đã duyệt') chứ không `makeWork({code:'CV001'})`: sequence
-    // sau reset bắt đầu lại từ 1, trùng mã với lần tạo kế của Trưởng phòng.
+    // Tạo qua API admin rồi KÝ, chứ không `makeWork({code:'CV001'})`: sequence sau reset bắt đầu
+    // lại từ 1, trùng mã với lần tạo kế của Trưởng phòng. ĐỢT B (R6): admin lập việc không còn tự
+    // ra «Đã duyệt», nên phải có một lượt ký thật cho cả công việc lẫn nhiệm vụ bên trong.
     const taoDuyet = await apiAdmin.post('/api/v1/works', {
       name: 'Việc đã duyệt',
       departmentId: phong.id,
     });
     expect(taoDuyet.status).toBe(200);
+    const kyViec = await apiAdmin.post(
+      '/api/v1/approvals/work/' + taoDuyet.body.data.work.code + '/approve'
+    );
+    expect(kyViec.status, JSON.stringify(kyViec.body)).toBe(200);
     const nhiemVu = await apiAdmin.post('/api/v1/work-items', {
       workRef: taoDuyet.body.data.work.code,
       name: 'Nhiệm vụ đếm được',
+      assigneeId: admin.id,
       level: 3,
       status: 'Đang thực hiện',
     });
     expect(nhiemVu.status).toBe(200);
+    // R5: nhiệm vụ thêm SAU vào cây đã duyệt thì «Chờ duyệt» MỘT MÌNH NÓ — ký riêng dòng đó.
+    const kyNhiemVu = await apiAdmin.post(
+      '/api/v1/approvals/work-item/' + nhiemVu.body.data.item.code + '/approve'
+    );
+    expect(kyNhiemVu.status, JSON.stringify(kyNhiemVu.body)).toBe(200);
 
     const truoc = (await apiAdmin.get('/api/v1/bootstrap')).body.data;
     expect(truoc.summaryStats).toEqual({
@@ -232,7 +253,7 @@ describe('thống kê đọc view — việc 5.4 nửa ứng dụng', () => {
       ongoingTasks: 1,
       overdueTasks: 0,
     });
-    expect(truoc.chartData.labels).toEqual(['Đang thực hiện']);
+    expect(truoc.chartData.labels).toEqual(['Chưa duyệt đủ kết quả']); // chưa có file
     expect(truoc.chartData.data).toEqual([1]);
 
     const tp = await makeLoginUser({

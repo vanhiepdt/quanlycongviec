@@ -46,6 +46,9 @@ export const ACTION_APPROVE = 'approve';
 // `approve` vì KHÔNG được chui vào ACTIONS (test TC-RBAC-01 đóng đinh 4 hành động gốc) và vì chỉ
 // có ở subwork/task, không phải hành động chung của mọi thực thể.
 export const ACTION_TY_LE = 'ty-le';
+// V4: gửi bản đã lưu, độc lập với quyền tải lên; không đổi bốn ACTIONS gốc.
+export const ACTION_FILE_SUBMIT = 'submit';
+export const ACTION_GUI_BLD = 'gui-bld';
 
 // ============================================================================
 // BẢNG KHAI BÁO DUY NHẤT — nguồn sự thật của phân quyền.
@@ -62,9 +65,9 @@ export const PERMISSIONS = Object.freeze({
   admin: {
     work: ['read', 'create', 'update', 'delete', 'approve'],
     subwork: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
-    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le', 'gui-bld'],
     // Kết quả file của nhiệm vụ (014): Giám đốc nộp/duyệt — giá trị hiệu lực mặc định ✓.
-    file: ['read', 'create', 'approve'],
+    file: ['read', 'create', 'approve', 'submit'],
     user: ['read', 'create', 'update', 'delete'],
     department: ['read', 'create', 'update', 'delete'],
   },
@@ -73,9 +76,9 @@ export const PERMISSIONS = Object.freeze({
   'Phó Giám đốc': {
     work: ['read', 'create', 'update', 'delete', 'approve'],
     subwork: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
-    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'approve', 'ty-le', 'gui-bld'],
     // Phó GĐ là cấp chốt cuối của luồng file ⇒ nộp là chốt luôn, duyệt được (giaTriHieuLuc).
-    file: ['read', 'create', 'approve'],
+    file: ['read', 'create', 'approve', 'submit'],
     user: ['read'],
     department: ['read'],
   },
@@ -84,10 +87,10 @@ export const PERMISSIONS = Object.freeze({
   'Trưởng phòng': {
     work: ['read', 'create', 'update', 'delete'],
     subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
-    task: ['read', 'create', 'update', 'delete', 'ty-le'],
+    task: ['read', 'create', 'update', 'delete', 'ty-le', 'gui-bld'],
     // 014: TP/PP là NGƯỜI DUYỆT đầu tiên của file kết quả — nút «Hoàn thành / Duyệt» (chốt
     // 'hoan-thanh') và nút «Trình Phó giám đốc». admin bật ⏳ ô «Duyệt kết quả» ⇒ mất nút chốt.
-    file: ['read', 'create', 'approve'],
+    file: ['read', 'create', 'approve', 'submit'],
     user: ['read'],
     department: ['read'],
   },
@@ -96,8 +99,8 @@ export const PERMISSIONS = Object.freeze({
   'Phó phòng': {
     work: ['read', 'create', 'update', 'delete'],
     subwork: ['read', 'create', 'update', 'delete', 'ty-le'],
-    task: ['read', 'create', 'update', 'delete', 'ty-le'],
-    file: ['read', 'create', 'approve'],
+    task: ['read', 'create', 'update', 'delete', 'ty-le', 'gui-bld'],
+    file: ['read', 'create', 'approve', 'submit'],
     user: ['read'],
     department: ['read'],
   },
@@ -109,7 +112,7 @@ export const PERMISSIONS = Object.freeze({
     task: ['read', 'create', 'update', 'delete'],
     // 014: Cán bộ NỘP được kết quả của nhiệm vụ mình được giao (⏳ mặc định ⇒ về 'cho-xem'),
     // nhưng KHÔNG duyệt được — approve không có trong danh sách này.
-    file: ['read', 'create'],
+    file: ['read', 'create', 'submit'],
     user: ['read'],
     department: ['read'],
   },
@@ -147,6 +150,12 @@ export function normalizeRow(row) {
     assignee_id: row.assignee_id ?? null,
     created_by: row.created_by ?? null,
     assigned_in_work: row.assigned_in_work === true,
+    // Đợt A (028_supervisor_ids.sql): «Ban lãnh đạo kiểm soát» của chính dòng — `can()` cần nó để
+    // xét quyền DUYỆT (R1a). Luôn là mảng số, rỗng khi dòng chưa phân công hoặc khi người gọi hỏi
+    // quyền chung (không có dòng). Chuẩn hoá về số ở đây để chỗ xét không phải lo `'7' !== 7`.
+    supervisor_ids: (Array.isArray(row.supervisor_ids) ? row.supervisor_ids : [])
+      .map(Number)
+      .filter(Number.isFinite),
   };
 }
 
@@ -187,7 +196,12 @@ function inScope(user, action, entityType, row) {
     case 'Nhân viên':
       if (action === 'read') return sameId(dept, mine) || sameId(row.assignee_id, user.id);
       // Tạo nhiệm vụ mới: phải đã có việc trong công việc đó, hoặc tự nhận việc cho mình.
-      if (action === 'create') return row.assigned_in_work || sameId(row.assignee_id, user.id);
+      if (action === 'create') {
+        return (
+          sameId(dept, mine) &&
+          (entityType !== 'task' || row.assigned_in_work || sameId(row.assignee_id, user.id))
+        );
+      }
       return sameId(row.assignee_id, user.id);
 
     default:
@@ -293,6 +307,8 @@ const ACTION_LABEL = Object.freeze({
   delete: 'xoá',
   approve: 'duyệt',
   'ty-le': 'sửa tỷ lệ',
+  submit: 'gửi đi duyệt',
+  'gui-bld': 'đổi tích Gửi BLĐ phê duyệt',
 });
 
 const deny = (code, message) => ({ ok: false, code, message });
@@ -315,7 +331,9 @@ export function can(user, action, entityType, row = null) {
   if (!ENTITIES.includes(entityType)) {
     return deny('FORBIDDEN', `Không rõ loại dữ liệu "${entityType}"`);
   }
-  if (![...ACTIONS, ACTION_APPROVE, ACTION_TY_LE].includes(action)) {
+  if (
+    ![...ACTIONS, ACTION_APPROVE, ACTION_TY_LE, ACTION_FILE_SUBMIT, ACTION_GUI_BLD].includes(action)
+  ) {
     return deny('FORBIDDEN', `Không rõ hành động "${action}"`);
   }
 
@@ -360,6 +378,56 @@ export function can(user, action, entityType, row = null) {
   // Không có dòng cụ thể: chỉ trả lời câu hỏi quyền chung (dùng để ẩn/hiện nút).
   const normalized = normalizeRow(row);
   if (!normalized) return { ok: true };
+
+  // Tạo cả ba cấp luôn bó theo phòng của TP/PP/Cán bộ, kể cả ô có phạm vi «tất cả».
+  // Giữ nguyên ngoại lệ ủy quyền đã chốt; không thay luật quyền mượn trong đợt sửa này.
+  if (
+    action === 'create' &&
+    MUON_DUOC.includes(entityType) &&
+    ['Trưởng phòng', 'Phó phòng', 'Nhân viên'].includes(user.role) &&
+    !sameId(normalized.department_id, user.department_id)
+  ) {
+    const muon = tryDelegations(user, action, entityType, normalized);
+    if (muon) return muon;
+    return deny(
+      'FORBIDDEN',
+      user.department_id == null
+        ? 'Tài khoản chưa có phòng. Vui lòng liên hệ quản trị để phân phòng trước khi tạo công việc.'
+        : 'Chỉ được tạo công việc, công việc con và nhiệm vụ trong phòng của mình'
+    );
+  }
+
+  // ĐỢT A (028_supervisor_ids.sql) — R1(a): quyền DUYỆT CÂY bó vào đúng danh sách «Ban lãnh đạo
+  // kiểm soát» của chính dòng, và **admin KHÔNG được duyệt thay**. Người dùng chốt nguyên văn:
+  // «chỉ người TRONG `supervisor_ids` mới duyệt được, KHÔNG chừa admin làm dự phòng».
+  //
+  // Đặt ở ĐÂY chứ không phải ở `inScope()`: `inScope()` rẽ nhánh theo `user.role` nên muốn chặn cả
+  // admin thì phải thêm điều kiện vào đúng nhánh `case 'admin': return true` — mà nhánh đó còn phục
+  // vụ read/create/update/delete. Tách thành một cổng riêng đặt TRƯỚC `inScope()` thì luật mới áp
+  // cho mọi vai như nhau, và `inScope()` giữ nguyên nghĩa cũ của nó («dòng có thuộc phạm vi phòng
+  // / công việc của người này không»).
+  //
+  // Đặt SAU lớp ghi đè và SAU `tryDelegations` ở nhánh từ chối bên trên: ghi đè `tu-choi` vẫn thắng
+  // (đúng luật 009), còn ủy quyền có thời hạn vẫn dùng được — Phó GĐ có tên trong danh sách mà đi
+  // công tác thì người được ủy quyền duyệt thay, đó chính là lý do tồn tại của lớp 3.
+  //
+  // DANH SÁCH RỖNG ⇒ KHÔNG chặn. Cố ý: `submit` đã từ chối gửi duyệt một dòng chưa chọn ai
+  // (NO_APPROVER_ASSIGNED), nên từ đợt A trở đi không tạo thêm được dòng rỗng nào vào hàng chờ;
+  // còn dòng rỗng ĐANG chờ từ dữ liệu cũ mà khoá nốt thì nó kẹt vĩnh viễn, không ai gỡ được.
+  // Đây là van an toàn một chiều cho dữ liệu cũ, không phải đường vòng cho dữ liệu mới.
+  if (
+    action === ACTION_APPROVE &&
+    MUON_DUOC.includes(entityType) &&
+    normalized.supervisor_ids.length > 0 &&
+    !normalized.supervisor_ids.some((id) => sameId(id, user.id))
+  ) {
+    const muon = tryDelegations(user, action, entityType, normalized);
+    if (muon) return muon;
+    return deny(
+      'NOT_APPROVER',
+      `Bạn không có tên trong «Ban lãnh đạo kiểm soát» của ${ENTITY_LABEL[entityType]} này — chỉ người được chọn ở ô đó mới duyệt được. Nếu chọn sai người, hãy sửa lại ô «Ban lãnh đạo kiểm soát» rồi duyệt lại.`
+    );
+  }
 
   if (!inScope(user, action, entityType, normalized)) {
     // Ghi đè «TẤT CẢ các phòng» (010): nới phạm vi dữ liệu của ô này cho vai — vẫn là quyền của

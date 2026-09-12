@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8') + QUYEN_UI;
 const DETAILS_SRC = readFileSync(
   resolve(process.cwd(), '../web/assets/js/project-details.js'),
   'utf8'
@@ -27,7 +28,8 @@ const EXPORTS = `;Object.assign(window, {
   datDuLieu: (cv, tasks) => { allProjects = cv; allTasks = tasks; },
   dangNhapTen: (ten, vai) => {
     isAuthenticated = true;
-    currentUser = { name: ten, role: vai };
+    currentUser = { name: ten, role: vai, department_id: 1, managedDepartmentIds: [1] };
+    allDepartments = [{ [COL.D_DB_ID]: 1, [COL.D_NAME]: "Phòng A" }];
   },
   moChiTiet: (id, ten) => {
     showProjectDetailsModal(id, ten);
@@ -96,6 +98,7 @@ function duLieu(C) {
       [C.P_SUP]: 'Phó GĐ Một',
       [C.P_LEADERS]: 'Trưởng phòng A',
       [C.P_DEPT]: 'Phòng A',
+      [C.P_DEPT_ID]: 1,
       [C.P_STATUS]: 'Đang thực hiện',
       [C.P_COMPLETION]: 10,
     },
@@ -188,8 +191,10 @@ describe('modal chi tiết — hàng phân công MỘT hàng + khung tên công 
   it('khối «Phân công» của công việc là MỘT container flex với đúng 3 nhóm + 2 dấu chấm ngăn', () => {
     // 2026-09-02 (người dùng chốt «thu gọn đoạn phân công ... bé đi»): khối phân công của CÔNG VIỆC
     // CHA đổi sang dạng CHIP một dòng (`.khoi-phan-cong-gon`), phần «Phòng / Thời gian / Số công
-    // việc con / Tiến độ» ẩn sau nút «Chi tiết». Ba nhóm + thứ tự nhãn + nguồn «Cán bộ thực hiện»
+    // việc con / Tiến độ» ẩn sau nút «Chi tiết». Ba nhóm + thứ tự nhãn + nguồn «Người thực hiện»
     // giữ nguyên — đó mới là hợp đồng cần canh; `.phan-cong-hang` giờ chỉ còn ở CÔNG VIỆC CON.
+    // 2026-09-09: nhãn nhóm thứ ba đổi từ «Cán bộ thực hiện» sang «Người thực hiện» vì Trưởng/Phó
+    // phòng nay cũng nhận việc trực tiếp được.
     const goc = vaiMoChiTiet('Quản trị Hệ thống', 'admin');
     const khoi = goc.querySelector('.khoi-phan-cong-gon');
     expect(khoi).not.toBeNull();
@@ -198,9 +203,9 @@ describe('modal chi tiết — hàng phân công MỘT hàng + khung tên công 
     expect(baChip.map((n) => n.textContent)).toEqual([
       expect.stringContaining('Ban lãnh đạo kiểm soát'),
       expect.stringContaining('Lãnh đạo phòng phụ trách'),
-      expect.stringContaining('Cán bộ thực hiện'),
+      expect.stringContaining('Người thực hiện'),
     ]);
-    // Cán bộ thực hiện gom từ nhiệm vụ ở các công việc con.
+    // Người thực hiện gom từ nhiệm vụ ở các công việc con.
     expect(baChip[2].textContent).toContain('Nguyễn Văn An');
     expect(baChip[2].textContent).toContain('Trần Thị Bình');
     // Thông tin phụ vẫn còn nhưng ĐÓNG sẵn — bấm «Chi tiết» mới xoè (đỡ chiếm chỗ của cây).
@@ -262,7 +267,7 @@ describe('chi tiết authoritative và thông tin công việc cha', () => {
     khoiDong();
   });
 
-  it('thiếu công việc trong bộ nhớ: nạp bootstrap rồi mở đúng cây chỉ đọc', async () => {
+  it('thiếu công việc trong bộ nhớ: nạp bootstrap rồi mở đúng cây được sửa theo quyền', async () => {
     const { cv, tasks } = duLieu(window.COL);
     cv[0][window.COL.P_DESC] = 'Mô tả từ máy chủ <img src=x onerror=alert(1)>';
     cv[0][window.COL.P_APPROVAL] = 'Chờ duyệt';
@@ -285,7 +290,7 @@ describe('chi tiết authoritative và thông tin công việc cha', () => {
     expect(modal.querySelector('.project-metadata').textContent).toContain('Ngày bắt đầu');
     expect(modal.querySelector('.project-metadata').textContent).toContain('Chờ duyệt');
     expect(modal.querySelector('img')).toBeNull();
-    expect(modal.querySelector('.edit-subwork-btn')).toBeNull();
+    expect(modal.querySelector('.edit-subwork-btn')).not.toBeNull();
   });
 
   it('nạp thất bại không dựng cây rỗng như thể không có dữ liệu', async () => {
@@ -350,7 +355,7 @@ describe('icon bút chì sửa công việc con — hiển thị và hành độ
 // cấp 1 và cấp 2, công việc cấp 2 được tạo gửi đi duyệt ấy sẽ hiển thị mầu khác và ghi đang chờ
 // duyệt … tại các màn hình này ko cho sửa công việc và nhiệm vụ».
 // ---------------------------------------------------------------------------------------------
-describe('TC-DUYET-UI — modal chi tiết ở chế độ duyệt (chỉ đọc)', () => {
+describe('TC-DUYET-UI — modal chi tiết ở chế độ duyệt, cho sửa theo quyền', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="modals-container"></div><div id="toast-container"></div>';
     khoiDong();
@@ -368,18 +373,18 @@ describe('TC-DUYET-UI — modal chi tiết ở chế độ duyệt (chỉ đọc
     return document.getElementById('modals-container');
   }
 
-  it('TC-DUYET-UI-01: admin mở ở chế độ duyệt ⇒ KHÔNG có nút sửa/thêm nào', () => {
+  it('TC-DUYET-UI-01: admin mở ở chế độ duyệt ⇒ sửa và thêm theo quyền hiện tại', () => {
     const goc = moCheDoDuyet('Quản trị Hệ thống', 'admin');
-    // admin bình thường thấy 2 icon bút chì (test ở nhóm trên) — ở chế độ duyệt phải là 0.
-    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(0);
-    expect(goc.querySelectorAll('.add-task-from-project-btn').length).toBe(0);
-    expect(goc.querySelectorAll('.add-subwork-from-work-btn').length).toBe(0);
+    // Yêu cầu mới 09/09: người duyệt sửa được nội dung ngay trên màn duyệt.
+    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(2);
+    expect(goc.querySelectorAll('.add-task-from-project-btn').length).toBe(1);
+    expect(goc.querySelectorAll('.add-subwork-from-work-btn').length).toBe(1);
   });
 
-  it('TC-DUYET-UI-02: có dải nhắc «Đang xem để DUYỆT — chỉ đọc»', () => {
+  it('TC-DUYET-UI-02: có dải nhắc «Đang xem để DUYỆT, được sửa và xử lý»', () => {
     const goc = moCheDoDuyet('Phó GĐ Một', 'Phó Giám đốc');
     expect(goc.textContent).toContain('Đang xem để DUYỆT');
-    expect(goc.textContent).toContain('Trả lại để sửa');
+    expect(goc.textContent).toContain('trả để sửa lại');
   });
 
   it('TC-DUYET-UI-03: CV con đang chờ duyệt tô MÀU KHÁC + ghi «đang chờ duyệt»', () => {
@@ -402,7 +407,7 @@ describe('TC-DUYET-UI — modal chi tiết ở chế độ duyệt (chỉ đọc
 
   it('TC-DUYET-UI-05: đóng modal thì tắt cờ — lần mở sau bằng đường thường lại có nút sửa', () => {
     const goc = moCheDoDuyet('Quản trị Hệ thống', 'admin');
-    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(0);
+    expect(goc.querySelectorAll('.edit-subwork-btn').length).toBe(2);
     document.querySelector('#project-details-modal .close-modal').click();
     // Không tắt cờ thì người dùng mất nút sửa ở mọi lần mở sau mà không hiểu vì sao.
     const lai = window.moChiTiet('CV001', 'Chuẩn bị hội nghị');

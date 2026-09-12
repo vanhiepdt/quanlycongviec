@@ -7,7 +7,14 @@ import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
 import { originOf } from '../../utils/origin.js';
-import { approvalInput, dateInput, idInput, requiredText, text } from '../../utils/zodTypes.js';
+import {
+  approvalInput,
+  dateInput,
+  idInput,
+  idsInput,
+  requiredText,
+  text,
+} from '../../utils/zodTypes.js';
 import { remindersRouter } from '../reminders/routes.js';
 import { thangTuDuongDan } from '../workMonthNames/service.js';
 import * as service from './service.js';
@@ -22,16 +29,12 @@ const createSchema = z.object({
   description: text(5000).optional(),
   assigneeId: idInput,
   assigneeName: text(200).optional(),
-  // Phân công ba lớp (005_phan_cong.sql): Ban kiểm soát chỉ hợp lệ ở cấp 2; leader của nhiệm vụ
-  // tối đa 1 người — nguồn hợp lệ kiểm ở service, CHECK `task_leader_single` là hàng rào cuối.
-  supervisorId: idInput,
-  leaderIds: z
-    .array(idInput)
-    .max(50)
-    .refine((ids) => ids.every((id) => id == null || Number.isInteger(id)), {
-      message: 'Danh sách lãnh đạo phòng phụ trách có mã không hợp lệ',
-    })
-    .optional(),
+  // Phân công ba lớp (005_phan_cong.sql, MẢNG từ 028_supervisor_ids.sql): Ban lãnh đạo kiểm soát ở
+  // CẢ cấp 2 lẫn cấp 3 (cấp 3 đúng một người và ⊆ cấp 2 — trước đợt A cấp 3 bị cấm có ô này);
+  // leader của nhiệm vụ tối đa 1 người. Nguồn hợp lệ kiểm ở service; CHECK `task_supervisor_single`
+  // và `task_leader_single` là hàng rào cuối.
+  supervisorIds: idsInput('ban lãnh đạo kiểm soát'),
+  leaderIds: idsInput('lãnh đạo phòng phụ trách'),
   status: text(50).optional(),
   priority: text(50).optional(),
   startDate: dateInput,
@@ -39,7 +42,7 @@ const createSchema = z.object({
   reportDate: dateInput,
   completion: z.coerce.number().int().min(0).max(100).optional(),
   // Tỷ lệ công việc (8b lỗi 2): phần trăm đóng góp của mục thuộc diện vào tiến độ công việc.
-  // Quyền sửa kiểm ở service bằng ACTION_TY_LE; với nhiệm vụ nằm trong việc con thì 400.
+  // Quyền sửa kiểm ở service bằng ACTION_TY_LE; nhiệm vụ con có tỷ lệ nội bộ riêng.
   tyLe: z.coerce.number().int().min(0).max(100).optional(),
   target: text(2000).optional(),
   output: text(2000).optional(),
@@ -51,10 +54,11 @@ const createSchema = z.object({
   // «Lưu nháp» (012): cờ ý định, xem chú thích ở `works/routes.js`. Dòng tạo BÊN TRONG một cây
   // đang là nháp tự khắc thành nháp — service đọc trạng thái cha, không cần client gửi cờ.
   saveAsDraft: z.boolean().optional(),
+  guiBldPheDuyet: z.boolean().optional(),
 });
 
 // PATCH: mọi trường tuỳ chọn. `workRef` ở đây mang nghĩa "chuyển sang công việc này" (§7 việc 3.4).
-const updateSchema = createSchema.partial();
+export const updateSchema = createSchema.partial();
 
 const listSchema = z.object({
   workRef: z.union([z.string().min(1), z.number().int()]),
@@ -73,13 +77,13 @@ const historySchema = z.object({
 });
 
 /** camelCase của giao diện → tên cột CSDL. Chỉ khoá người dùng thực sự gửi mới được ghi. */
-function toRow(body) {
+export function toRow(body) {
   const map = {
     name: 'name',
     description: 'description',
     assigneeId: 'assignee_id',
     assigneeName: 'assignee_name',
-    supervisorId: 'supervisor_id',
+    supervisorIds: 'supervisor_ids',
     leaderIds: 'leader_ids',
     status: 'status',
     priority: 'priority',
@@ -96,6 +100,7 @@ function toRow(body) {
     rejectReason: 'reject_reason',
     sortOrder: 'sort_order',
     saveAsDraft: 'luuNhap',
+    guiBldPheDuyet: 'gui_bld_phe_duyet',
   };
   const row = {};
   for (const [key, column] of Object.entries(map)) {
@@ -179,13 +184,14 @@ workItemsRouter.post('/', validate(createSchema), async (req, res, next) => {
 
 workItemsRouter.patch('/:id', validate(updateSchema), async (req, res, next) => {
   try {
-    const { item, moved, parentCleared, changes, warnings } = await service.update(
-      req.user,
-      req.params.id,
-      toRow(req.body),
-      // Không gửi `workRef` ⇒ `undefined` ⇒ không chuyển công việc (khác hẳn gửi chuỗi rỗng).
-      { targetWorkRef: Object.hasOwn(req.body, 'workRef') ? req.body.workRef : undefined }
-    );
+    const { item, moved, parentCleared, changes, warnings, guiBldChange, tyLeChange } =
+      await service.update(
+        req.user,
+        req.params.id,
+        toRow(req.body),
+        // Không gửi `workRef` ⇒ `undefined` ⇒ không chuyển công việc (khác hẳn gửi chuỗi rỗng).
+        { targetWorkRef: Object.hasOwn(req.body, 'workRef') ? req.body.workRef : undefined }
+      );
     res.locals.audit = {
       action: `${entityOf(item.level)}s.update`,
       entityType: entityOf(item.level),
@@ -193,9 +199,13 @@ workItemsRouter.patch('/:id', validate(updateSchema), async (req, res, next) => 
       workId: item.work_id,
       // `changes` do service tính giữa dòng TRƯỚC và SAU khi ghi — đây là thứ làm nên mục "các lần
       // chỉnh sửa" của nhật ký. Không đổi gì thì không ghi khoá nào.
-      details: changes ? { code: item.code, changes } : { code: item.code },
+      // `tyLeDeNghi` (R4'', ĐỢT B): ô tỷ lệ có thành đề nghị chờ ký hay không. Ghi rõ để nhật ký
+      // phân biệt được «đổi tỷ lệ» với «xin đổi tỷ lệ» — hai việc khác nhau, giá trị CŨ vẫn còn đó.
+      details: changes
+        ? { code: item.code, changes, tyLeDeNghi: tyLeChange?.pending === true }
+        : { code: item.code, tyLeDeNghi: tyLeChange?.pending === true },
     };
-    return ok(res, { item, moved, parentCleared, warnings });
+    return ok(res, { item, moved, parentCleared, warnings, guiBldChange, tyLeChange });
   } catch (err) {
     return next(err);
   }

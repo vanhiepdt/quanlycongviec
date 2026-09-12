@@ -1,3 +1,4 @@
+import { makeApprovedResult } from '../helpers/results.js';
 // Xuất Excel — TC-MISC-10/11/12/13 (§7 việc 7.5 + 7.6, §8.4 nhóm MISC).
 //
 // Test đọc LẠI file .xlsx trả về bằng `workbook.xlsx.load` chứ không soi chuỗi byte: câu hỏi cần
@@ -96,6 +97,7 @@ async function themItem(over = {}) {
       i.sort_order,
     ]
   );
+  if (i.resultApproved) await makeApprovedResult(rows[0].id);
   return rows[0];
 }
 
@@ -193,6 +195,7 @@ async function duLieuHaiPhong() {
     assignee_id: nhanVien1.id,
     assignee_name: nhanVien1.full_name,
     status: 'Hoàn thành',
+    resultApproved: true,
     completion: 100,
   });
   await themItem({
@@ -237,6 +240,7 @@ async function duLieuHaiPhong() {
     name: 'Nhiệm vụ KeT 1',
     assignee_name: 'Phạm Kế Toán',
     status: 'Hoàn thành',
+    resultApproved: true,
   });
   await themItem({
     code: 'CV002-01-02',
@@ -309,7 +313,7 @@ describe('TC-MISC-10 — mẫu (a) Công việc 3 tầng: mở được, số d�
       'Cấp',
       'Phòng',
       'Người thực hiện',
-      'Trạng thái',
+      'Duyệt kết quả',
       'Ưu tiên',
       'Bắt đầu',
       'Kết thúc',
@@ -450,7 +454,8 @@ describe('Mẫu (b) — Nhiệm vụ theo người thực hiện', () => {
 
     // 5 nhiệm vụ cấp 3 của cả hai phòng; KHÔNG có công việc cấp 1 và công việc con cấp 2 (§0.1).
     expect(sheet.rowCount - SO_DONG_DAU).toBe(5);
-    const ma = cotDuLieu(sheet, 2);
+    // 2026-09-09: mẫu (b) thêm cột «Vai» ở vị trí 2 ⇒ «Mã nhiệm vụ» dời sang cột 3.
+    const ma = cotDuLieu(sheet, 3);
     expect(ma).not.toContain('CV001');
     expect(ma).not.toContain('CV001-01');
     expect(new Set(ma)).toEqual(
@@ -471,23 +476,77 @@ describe('Mẫu (b) — Nhiệm vụ theo người thực hiện', () => {
     const sheet = (await mo((await tai(api, '/api/v1/export/tasks.xlsx')).body)).getWorksheet(1);
     expect(sheet.getRow(2).values.slice(1)).toEqual([
       'Người thực hiện',
+      'Vai',
       'Mã nhiệm vụ',
       'Tên nhiệm vụ',
       'Thuộc công việc',
       'Phòng',
-      'Trạng thái',
+      'Duyệt kết quả',
       'Ưu tiên',
       'Bắt đầu',
       'Hạn chót',
       '% Hoàn thành',
     ]);
     const theoMa = new Map(
-      cotDuLieu(sheet, 2).map((v, i) => [String(v), sheet.getRow(SO_DONG_DAU + 1 + i)])
+      cotDuLieu(sheet, 3).map((v, i) => [String(v), sheet.getRow(SO_DONG_DAU + 1 + i)])
     );
     const dong = theoMa.get('CV002-01-01');
-    expect(dong.getCell(4).value).toBe('Công việc Kế toán');
-    expect(dong.getCell(5).value).toBe('Phòng Kế toán');
-    expect(theoMa.get('CV001-01-01').getCell(10).value).toBe(100);
+    expect(dong.getCell(5).value).toBe('Công việc Kế toán');
+    expect(dong.getCell(6).value).toBe('Phòng Kế toán');
+    expect(theoMa.get('CV001-01-01').getCell(11).value).toBe(100);
+  });
+
+  // 2026-09-09 — Trưởng/Phó phòng được nhận việc trực tiếp, nên bảng phải nói rõ ai là lãnh đạo:
+  // tên kèm vai trong NGOẶC + cột «Vai» riêng để lọc/xếp trong Excel, và lãnh đạo đứng SAU Cán bộ.
+  it('nhiệm vụ giao cho Trưởng phòng: tên kèm vai, cột «Vai» đúng, đứng SAU Cán bộ', async () => {
+    const { w1 } = await duLieuHaiPhong();
+    // Đặt tên bắt đầu bằng «An» để NẾU chỉ xếp theo chữ cái thì dòng này phải lên ĐẦU — nó xuống
+    // cuối nhóm đã giao là nhờ luật tách vai, không phải nhờ trùng hợp thứ tự alphabet.
+    const tp = await makeLoginUser({
+      code: 'NV050',
+      email: 'tp-xuat@test.local',
+      full_name: 'An Trưởng Phòng',
+      role: 'Trưởng phòng',
+      department_id: ph1.id,
+    });
+    await themItem({
+      code: 'CV001-98',
+      work_id: w1.id,
+      parent_id: null,
+      level: 3,
+      name: 'Nhiệm vụ của Trưởng phòng',
+      assignee_id: tp.id,
+      assignee_name: tp.full_name,
+    });
+    const api = await dangNhap(adminUser);
+    const sheet = (await mo((await tai(api, '/api/v1/export/tasks.xlsx')).body)).getWorksheet(1);
+
+    expect(cotDuLieu(sheet, 1)).toEqual([
+      'Nguyễn Văn A',
+      'Nguyễn Văn A',
+      'Phạm Kế Toán',
+      'Phạm Kế Toán',
+      'An Trưởng Phòng (Trưởng phòng)',
+      '(chưa giao)',
+    ]);
+    expect(cotDuLieu(sheet, 2)).toEqual([
+      'Nhân viên',
+      'Nhân viên',
+      // Tên tự do không dò ra `assignee_id` ⇒ không có vai để dán nhãn, để trống chứ không đoán.
+      '',
+      '',
+      'Trưởng phòng',
+      '',
+    ]);
+    // Vai tra theo `assignee_id`, KHÔNG suy từ tên — và thứ tự dòng khớp đúng hai cột trên.
+    expect(cotDuLieu(sheet, 3)).toEqual([
+      'CV001-01-01',
+      'CV001-99',
+      'CV002-01-01',
+      'CV002-01-02',
+      'CV001-98',
+      'CV001-01-02',
+    ]);
   });
 });
 
@@ -526,7 +585,7 @@ describe('TC-MISC-11 — Nhân viên xuất Excel chỉ ra dữ liệu phòng m�
     await duLieuHaiPhong();
     const api = await dangNhap(nhanVien1);
     const sheet = (await mo((await tai(api, '/api/v1/export/tasks.xlsx')).body)).getWorksheet(1);
-    expect(new Set(cotDuLieu(sheet, 2))).toEqual(
+    expect(new Set(cotDuLieu(sheet, 3))).toEqual(
       new Set(['CV001-01-01', 'CV001-01-02', 'CV001-99'])
     );
     expect(chuTrongSheet(sheet)).not.toContain('Phạm Kế Toán');
@@ -602,6 +661,7 @@ describe('Mẫu (c) — Thống kê theo phòng', () => {
       level: 3,
       name: 'NV đã duyệt',
       status: 'Hoàn thành',
+      resultApproved: true,
     });
     await themItem({
       code: 'CV001-01-02',

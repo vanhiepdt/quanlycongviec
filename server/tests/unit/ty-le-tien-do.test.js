@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
   TONG,
   chiaDeu,
-  chiaDeuTheoTong,
   chiaKhiSua,
   chiaKhiThem,
   chiaKhiXoa,
@@ -37,7 +36,12 @@ describe('8b lỗi 2 — chia tỷ lệ công việc (tyLe.js)', () => {
     expect(coGiuTyLe([0, 0, 0], 100)).toEqual([34, 33, 33]);
     expect(coGiuTyLe([40, 60], 0)).toEqual([0, 0]);
     expect(coGiuTyLe([], 100)).toEqual([]);
-    for (const cu of [[10, 20, 30, 40], [1, 1, 1, 1, 1, 1, 1], [99, 1], [0, 100]]) {
+    for (const cu of [
+      [10, 20, 30, 40],
+      [1, 1, 1, 1, 1, 1, 1],
+      [99, 1],
+      [0, 100],
+    ]) {
       expect(tongLa(coGiuTyLe(cu, 100))).toBe(TONG);
     }
   });
@@ -122,11 +126,11 @@ describe('8b lỗi 2 — tiến độ tính từ file kết quả (tienDo.js)', 
     expect(items[2].tien_do).toBe(0);
   });
 
-  it('TC-TIENDO-02: việc con cấp 2 gộp file của nó + của các nhiệm vụ bên trong', () => {
+  it('TC-TIENDO-02: việc con cấp 2 lấy tỷ lệ nhiệm vụ, độc lập số nhóm kết quả của mỗi nhiệm vụ', () => {
     const items = [
       muc(10, { level: 2 }),
-      muc(11, { parentId: 10 }),
-      muc(12, { parentId: 10 }),
+      muc(11, { parentId: 10, tyLe: 70 }),
+      muc(12, { parentId: 10, tyLe: 30 }),
       muc(13), // nhiệm vụ độc lập, không nằm trong việc con
     ];
     const dem = new Map([
@@ -136,8 +140,16 @@ describe('8b lỗi 2 — tiến độ tính từ file kết quả (tienDo.js)', 
       ['13', { tong: 4, xong: 1 }],
     ]);
     ganTienDo(items, dem);
-    // Cấp 2: (1+2+1) mẫu, (1+0+1) xong ⇒ 50.
+    // Cấp 2: 70% × 0 + 30% × 100 = 30; không gộp nhóm của cấp 2.
+    expect(items[0].tien_do).toBe(30);
+    items[1].ty_le = 60;
+    items[2].ty_le = 60;
+    ganTienDo(items, dem);
     expect(items[0].tien_do).toBe(50);
+    items[1].ty_le = 0;
+    items[2].ty_le = 0;
+    ganTienDo(items, dem);
+    expect(items[0].tien_do).toBe(0);
     expect(items[1].tien_do).toBe(0);
     expect(items[2].tien_do).toBe(100);
     expect(items[3].tien_do).toBe(25);
@@ -158,7 +170,9 @@ describe('8b lỗi 2 — tiến độ tính từ file kết quả (tienDo.js)', 
     expect(tienDoWork([muc(3, { parentId: 1, tienDo: 80 })])).toBe(0);
     expect(tienDoWork([])).toBe(0);
     // Làm tròn: 33/67 với 100/0 ⇒ 33.
-    expect(tienDoWork([muc(1, { tyLe: 33, tienDo: 100 }), muc(2, { tyLe: 67, tienDo: 0 })])).toBe(33);
+    expect(tienDoWork([muc(1, { tyLe: 33, tienDo: 100 }), muc(2, { tyLe: 67, tienDo: 0 })])).toBe(
+      33
+    );
   });
 
   it('TC-TIENDO-04: ganTienDo chịu danh sách rỗng / bản đồ rỗng, không ném lỗi', () => {

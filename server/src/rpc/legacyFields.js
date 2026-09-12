@@ -151,16 +151,40 @@ function idOrNullOrUndefined(value) {
 }
 
 /**
- * Ô "Lãnh đạo phòng phụ trách" của form là MỘT `<input type="hidden">` chứa các id phân tách
- * dấu phẩy (checkbox cập nhật), vì `FormData` vòng lặp của `handleAdd` chỉ giữ giá trị cuối.
+ * Ô phân công NHIỀU người của form là MỘT `<input type="hidden">` chứa các id phân tách dấu phẩy
+ * (checkbox cập nhật), vì `FormData` vòng lặp của `handleAdd` chỉ giữ giá trị cuối.
  * `""` ⇒ `[]`: form luôn gửi trường này khi người dùng được sửa phân công — rỗng là chủ ý xoá hết.
+ *
+ * Nhận cả MẢNG (client mới gửi thẳng mảng số) lẫn CHUỖI: `String([1,2])` đã là `"1,2"` nên một
+ * đường phân tích đủ cho cả hai, không cần rẽ nhánh theo kiểu dữ liệu.
+ *
+ * Dùng chung cho «Lãnh đạo phòng phụ trách» và — từ đợt A (028_supervisor_ids.sql) — «Ban lãnh đạo
+ * kiểm soát»: hai ô cùng một khuôn nhập liệu thì không có lý do gì có hai cách phân tích.
  */
-function leaderIdsFromForm(value) {
+function idsFromForm(value) {
   if (value === '' || value == null) return [];
   return String(value)
     .split(',')
     .map((part) => Number(part.trim()))
     .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+const leaderIdsFromForm = idsFromForm;
+const supervisorIdsFromForm = idsFromForm;
+
+/**
+ * Ô «Ban lãnh đạo kiểm soát» gửi lên → mảng id.
+ *
+ * Đợt A (028) đổi ô này từ MỘT người thành NHIỀU, nên nhận cả hai khoá: `supervisorIds` của client
+ * mới, và `supervisorId` đơn của client cũ (trang đang mở từ trước khi tải bản mới). Vẫn nhận khoá
+ * cũ là CHỐNG MẤT DỮ LIỆU chứ không phải chiều client: bỏ nó thì một lượt bấm Lưu từ trang cũ —
+ * không có khoá `supervisorIds` — sẽ được hiểu là «không đổi» hoặc tệ hơn là xoá sạch danh sách,
+ * và R1(a) khoá luôn cây đó vì không còn ai duyệt được.
+ */
+function supervisorIdsFromLegacy(data) {
+  if (Object.hasOwn(data, 'supervisorIds')) return supervisorIdsFromForm(data.supervisorIds);
+  if (Object.hasOwn(data, 'supervisorId')) return supervisorIdsFromForm(data.supervisorId);
+  return undefined;
 }
 
 /**
@@ -180,9 +204,8 @@ export function projectFromLegacy(data = {}) {
     departmentId: Object.hasOwn(data, 'departmentId')
       ? idOrNullOrUndefined(data.departmentId)
       : undefined,
-    supervisorId: Object.hasOwn(data, 'supervisorId')
-      ? idOrNullOrUndefined(data.supervisorId)
-      : undefined,
+    // Đợt A (028): MẢNG. Nhận cả khoá đơn `supervisorId` của client cũ — xem `supervisorIdsFromLegacy`.
+    supervisorIds: supervisorIdsFromLegacy(data),
     leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     startDate: Object.hasOwn(data, 'startDate') ? dateOrNull(data.startDate) : undefined,
     endDate: Object.hasOwn(data, 'endDate') ? dateOrNull(data.endDate) : undefined,
@@ -207,11 +230,12 @@ export function projectFromLegacy(data = {}) {
 export function taskFromLegacy(data = {}) {
   const out = dropUndefined({
     name: pick(data, 'name'),
+    guiBldPheDuyet: Object.hasOwn(data, 'guiBldPheDuyet') ? data.guiBldPheDuyet : undefined,
     description: pick(data, 'description'),
     assigneeName: pick(data, 'assignee'),
-    // Phân công ba lớp (005_phan_cong.sql): cấp 2 có cả hai ô; nhiệm vụ chỉ có leader — máy chủ
-    // chặn supervisor khác rỗng ở service nên cứ truyền nguyên những gì form gửi.
-    supervisorId: numberOrUndefined(pick(data, 'supervisorId')),
+    // Phân công ba lớp: đợt A (028) đổi ô này thành MẢNG ở cả ba cấp. Nhận cả khoá đơn
+    // `supervisorId` của client cũ — xem `supervisorIdsFromLegacy`.
+    supervisorIds: supervisorIdsFromLegacy(data),
     leaderIds: Object.hasOwn(data, 'leaderIds') ? leaderIdsFromForm(data.leaderIds) : undefined,
     status: pick(data, 'status'),
     priority: pick(data, 'priority'),
@@ -456,11 +480,20 @@ export function projectToLegacy(row, ctx = {}) {
     [COL.P_START]: row.start_date ?? '',
     [COL.P_END]: row.end_date ?? '',
     [COL.P_STATUS]: row.status ?? '',
+    hoanThanh: row.hoan_thanh === true,
+    tienDo: row.tien_do ?? 0,
     [COL.P_DEPT]: deptNameById.get(row.department_id) ?? '',
     // Phân công ba lớp: id để form điền sẵn select, tên để modal chi tiết hiển thị.
     [COL.P_DEPT_ID]: row.department_id ?? '',
-    [COL.P_SUP]: nameById.get(row.supervisor_id) ?? '',
-    supervisorId: row.supervisor_id ?? '',
+    // Đợt A (028_supervisor_ids.sql): `supervisor_id` đơn thành MẢNG. HÌNH DẠNG phản hồi RPC giữ
+    // nguyên: `COL.P_SUP` vẫn là MỘT CHUỖI (nay nối các tên bằng dấu phẩy — đúng khuôn
+    // `COL.P_LEADERS` ngay bên dưới, và `project-details.js` vốn đã tách chuỗi này theo dấu phẩy để
+    // xét quyền), `supervisorId` vẫn là MỘT id (người ĐẦU, cho ô chọn một người ở cấp 3 và cho
+    // client cũ). `supervisorIds` là khoá MỚI thêm vào, cùng lối `leaderIds` đã có — form cần nó để
+    // vẽ đa lựa chọn, thiếu thì giao diện phải tự tách chuỗi tên ra, mà tên thì trùng nhau được.
+    [COL.P_SUP]: (row.supervisor_ids ?? []).map((id) => nameById.get(id) ?? `#${id}`).join(', '),
+    supervisorId: row.supervisor_ids?.[0] ?? '',
+    supervisorIds: [...(row.supervisor_ids ?? [])],
     [COL.P_LEADERS]: (row.leader_ids ?? []).map((id) => nameById.get(id) ?? `#${id}`).join(', '),
     leaderIds: [...(row.leader_ids ?? [])],
     [COL.P_MANAGER_EMAIL]: ctx.emailById?.get(row.manager_id) ?? '',
@@ -500,9 +533,17 @@ export function taskToLegacy(row, ctx = {}) {
     [COL.T_NAME]: row.name ?? '',
     [COL.T_DESC]: row.description ?? '',
     [COL.T_ASSIGNEE]: row.assignee_name ?? '',
-    // Phân công ba lớp: nhiệm vụ chỉ có "Lãnh đạo phòng phụ trách" (một người); cấp 2 có cả hai.
-    [COL.T_SUP]: ctx.nameById?.get(row.supervisor_id) ?? '',
-    supervisorId: row.supervisor_id ?? '',
+    // Phân công ba lớp: đợt A (028) cho NHIỆM VỤ có Ban lãnh đạo kiểm soát RIÊNG (đúng một người,
+    // ⊆ cấp 2) thay vì bị cấm như trước. Cùng khuôn với `projectToLegacy` ở trên.
+    [COL.T_SUP]: (row.supervisor_ids ?? [])
+      .map((id) => ctx.nameById?.get(id) ?? `#${id}`)
+      .join(', '),
+    supervisorId: row.supervisor_ids?.[0] ?? '',
+    supervisorIds: [...(row.supervisor_ids ?? [])],
+    guiBldPheDuyet: row.gui_bld_phe_duyet === true,
+    hoanThanh: row.hoan_thanh === true,
+    hoanThanhLuc: row.hoan_thanh_luc ?? null,
+    ketQuaFiles: row.ket_qua_files ?? [],
     [COL.T_LEADERS]: (row.leader_ids ?? [])
       .map((id) => ctx.nameById?.get(id) ?? `#${id}`)
       .join(', '),

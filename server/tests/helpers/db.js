@@ -26,6 +26,8 @@ const BUSINESS_TABLES = [
   'task_files',
   // Ghi đè Bảng phân quyền (009) trỏ updated_by → users: xoá trước users.
   'permission_overrides',
+  'system_settings',
+  'approval_changes',
   // Mã liên kết Zalo (017) trỏ user_id → users: xoá trước users, cùng cách của delegations.
   'zalo_link_codes',
   'work_items',
@@ -39,6 +41,11 @@ export { BUSINESS_TABLES, pool };
 
 /** Xoá sạch dữ liệu, giữ nguyên lược đồ. Sequence sinh mã cũng về 1 để mã trong test đoán được. */
 export async function resetTables() {
+  // Không phụ thuộc globalSetup: chạy nhầm cwd/config cũng phải dừng trước TRUNCATE.
+  const target = new URL(pool.options.connectionString);
+  if (process.env.NODE_ENV !== 'test' || !decodeURIComponent(target.pathname).endsWith('_test')) {
+    throw new Error('Từ chối dọn bảng: chỉ cho phép NODE_ENV=test và CSDL có hậu tố _test');
+  }
   // `middleware/audit.js` ghi nhật ký ở `res.on('finish')`, tức SAU khi supertest đã trả về. Không
   // chờ ở đây thì lượt ghi của test TRƯỚC rơi vào sau `TRUNCATE` này và hiện ra trong test SAU như
   // dòng lạ — đúng kiểu đỏ giả đổi chỗ mỗi lượt chạy, mất công đi tìm ở chỗ không có lỗi.

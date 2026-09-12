@@ -15,6 +15,7 @@
 //
 // Dữ liệu đếm/hiện ĐỌC QUA `v_countable_*` nhờ tái dùng `taiDuLieuDem` của thống kê — mục Chờ
 // duyệt không bao giờ xuất hiện trên Gantt.
+import { laLanhDaoLamTrucTiep, nhanKemVai } from '../assignments/service.js';
 import * as deptRepo from '../departments/repo.js';
 import * as userRepo from '../users/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
@@ -34,7 +35,8 @@ function nutItem(row) {
     level: Number(row.level),
     parentId: row.parent_id ?? null,
     name: row.name,
-    status: row.status,
+    status: row.status, // Dữ liệu lịch sử; không dùng để tính/hiển thị hoàn thành.
+    hoanThanh: row.hoan_thanh === true,
     priority: row.priority,
     startDate: row.start_date,
     dueDate: row.due_date,
@@ -55,7 +57,7 @@ function nutItem(row) {
  * Gắn cây con vào một công việc: cấp 2 làm nhánh, cấp 3 là lá — nhiệm vụ MỒ CÔI (không cha)
  * nằm thẳng trong `work.tasks` chứ không biến mất (TC-TREE-24 giữ nguyên tinh thần ở đây).
  *
- * Số nhiệm vụ hoàn thành đếm theo TRẠNG THÁI cấp 3 như cũ (chuẩn §0.1 · TC-TREE). RIÊNG
+ * Số nhiệm vụ hoàn thành đếm theo nhóm file đã duyệt đủ, không trạng thái tay.
  * `progress` (bug 2 · 8b) là bình quân gia quyền tỷ lệ × mức hoàn thành file kết quả của các
  * đầu mục — cùng phép tính với thống kê E4 và cầu `getTasks`.
  */
@@ -73,11 +75,7 @@ function ganCayCon(work, items) {
   }
   work.subs = subs;
   const tong = tasks.length;
-  const xong = tasks.filter((t) =>
-    String(t.status ?? '')
-      .toLowerCase()
-      .includes('hoàn thành')
-  ).length;
+  const xong = tasks.filter((t) => t.hoanThanh === true).length;
   work.taskCount = tong;
   work.completedCount = xong;
   work.progress = tienDoWork(items);
@@ -90,6 +88,7 @@ function nutWork(work) {
     code: work.code,
     name: work.name,
     status: work.status,
+    hoanThanh: work.hoan_thanh === true,
     departmentId: work.department_id ?? null,
     startDate: work.start_date,
     endDate: work.end_date,
@@ -172,16 +171,35 @@ async function nhomTheoDeputy(works, itemsTheoWork) {
 /**
  * Nhóm kiểu `assignee` — khoá nhóm là NGƯỜI THỰC HIỆN của nhiệm vụ cấp 3. Một công việc rơi
  * vào nhóm của MỌI người có ít nhất một nhiệm vụ trong đó, và hiện ra TOÀN BỘ cây con (giữ đủ
- * 4 mức). Nhiệm vụ chưa gán ai ⇒ công việc vào nhóm «(chưa phân)». Thứ tự theo tên.
+ * 4 mức). Nhiệm vụ chưa gán ai ⇒ công việc vào nhóm «(chưa phân)».
+ *
+ * Thứ tự: Cán bộ theo tên, RỒI mới tới Trưởng/Phó phòng theo tên — hai vai lãnh đạo nay nhận việc
+ * trực tiếp được (2026-09-09) nên phải tách ra cho đọc được, và tên nhóm kèm vai trong NGOẶC.
+ *
+ * Vai tra theo `assignee_id`, KHÔNG đoán từ tên: tên trùng là có thật (phép 15
+ * `legacy-gd2-parity`), còn id thì không. Một lần truy vấn cho cả cây, không N+1.
  */
-function nhomTheoAssignee(works, itemsTheoWork) {
+async function nhomTheoAssignee(works, itemsTheoWork) {
+  const ids = new Set();
+  for (const list of itemsTheoWork.values()) {
+    for (const row of list) if (row.assignee_id != null) ids.add(Number(row.assignee_id));
+  }
+  const vaiTheoId = new Map(
+    (await userRepo.listByIds([...ids])).map((p) => [Number(p.id), p.role])
+  );
+
   const groups = new Map();
+  const vaiTheoTen = new Map();
   const nhomCua = (ten) => {
     const key = `assignee:${ten ?? 'none'}`;
     if (!groups.has(key)) {
+      const vai = ten == null ? null : (vaiTheoTen.get(ten) ?? null);
       groups.set(key, {
         key,
-        name: ten ?? CHUA_CO,
+        name: ten == null ? CHUA_CO : nhanKemVai(ten, vai),
+        // Vai giữ LẠI trên nhóm để sắp xếp (tên nhóm đã kèm nhãn nên không tra ngược được nữa);
+        // xoá trước khi trả về, giống `marks` của các kiểu nhóm kia.
+        vai,
         sortOrder: Number.MAX_SAFE_INTEGER - 1,
         works: [],
       });
@@ -191,18 +209,32 @@ function nhomTheoAssignee(works, itemsTheoWork) {
 
   for (const work of works) {
     const items = itemsTheoWork.get(work.id) ?? [];
-    const nguoi = new Set(
-      items
-        .filter((row) => Number(row.level) === 3)
-        .map((row) => (String(row.assignee_name ?? '').trim() ? row.assignee_name : null))
-    );
+    // Map tên → vai, giữ thứ tự gặp; tên rỗng coi như chưa gán.
+    const nguoi = new Map();
+    for (const row of items) {
+      if (Number(row.level) !== 3) continue;
+      const ten = String(row.assignee_name ?? '').trim();
+      if (!ten) continue;
+      nguoi.set(ten, row.assignee_id == null ? null : vaiTheoId.get(Number(row.assignee_id)));
+    }
     if (nguoi.size === 0) {
       nhomCua(null).works.push(ganCayCon(nutWork(work), items));
     } else {
-      for (const ten of nguoi) nhomCua(ten).works.push(ganCayCon(nutWork(work), items));
+      for (const [ten, vai] of nguoi) {
+        vaiTheoTen.set(ten, vai);
+        nhomCua(ten).works.push(ganCayCon(nutWork(work), items));
+      }
     }
   }
-  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const list = [...groups.values()].sort(
+    (a, b) =>
+      Number(laLanhDaoLamTrucTiep(a.vai)) - Number(laLanhDaoLamTrucTiep(b.vai)) ||
+      a.name.localeCompare(b.name)
+  );
+  list.forEach((g) => {
+    delete g.vai;
+  });
+  return list;
 }
 
 /**
@@ -228,12 +260,12 @@ export async function ganttTree(
   }
 
   // Tên phân công cho tooltip Gantt: đổi MỘT lượt id→full_name cho mọi id được nhắc trong các
-  // công việc/mục sắp hiển thị (supervisor + leader_ids). leader_names gắn thẳng lên dòng để
+  // công việc/mục sắp hiển thị (supervisor_ids + leader_ids). *_names gắn thẳng lên dòng để
   // nutItem/nutWork đọc như cột thường.
   const ids = new Set();
   const themId = (v) => v != null && ids.add(Number(v));
   for (const w of works) {
-    themId(w.supervisor_id);
+    (w.supervisor_ids ?? []).forEach(themId);
     (w.leader_ids ?? []).forEach(themId);
   }
   for (const list of itemsTheoWork.values())
@@ -243,8 +275,13 @@ export async function ganttTree(
   );
   const ghiTen = (row) => {
     if ('leader_names' in row) return;
-    row.supervisor_name =
-      row.supervisor_id != null ? (banDoTen.get(String(row.supervisor_id)) ?? null) : null;
+    // Đợt A (028): `supervisor_id` đơn thành MẢNG `supervisor_ids`. `supervisor_name` vẫn là MỘT
+    // CHUỖI để hình dạng tooltip và khoá `supervisorName` của `nutWork` không đổi, nay là các tên
+    // nối dấu phẩy — đúng cách `COL.P_LEADERS` vẫn nối `leader_ids`.
+    row.supervisor_names = (row.supervisor_ids ?? [])
+      .map((id) => banDoTen.get(String(id)))
+      .filter(Boolean);
+    row.supervisor_name = row.supervisor_names.length ? row.supervisor_names.join(', ') : null;
     row.leader_names = (row.leader_ids ?? []).map((id) => banDoTen.get(String(id))).filter(Boolean);
   };
   works.forEach(ghiTen);
@@ -270,7 +307,7 @@ export async function ganttTree(
     groupBy === 'deputy'
       ? await nhomTheoDeputy(works, itemsTheoWork)
       : groupBy === 'assignee'
-        ? nhomTheoAssignee(works, itemsTheoWork)
+        ? await nhomTheoAssignee(works, itemsTheoWork)
         : await nhomTheoPhong(works, itemsTheoWork);
 
   return { from, to, groupBy, groups };

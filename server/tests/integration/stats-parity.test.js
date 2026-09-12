@@ -1,3 +1,4 @@
+// 10/09/2026: chuẩn UI mới đọc hoanThanh/hoanThanhLuc từ file, không status nhập tay.
 // Việc 6.9 — ĐỐI CHIẾU số liệu bản Apps Script ↔ bản VPS trên CÙNG dữ liệu (TC-STAT-16).
 //
 // Không chạy được Google Apps Script thật trong vitest, nên các thuật toán được PORT 1:1 và chạy
@@ -75,26 +76,8 @@ function getFilteredTasksCu(projects, tasks) {
 function renderStatsCu(projects, tasks) {
   const homNay = new Date();
   homNay.setHours(0, 0, 0, 0);
-  const laHT = (t) =>
-    String(t[COL.T_STATUS] || '')
-      .toLowerCase()
-      .includes('hoàn thành');
+  const laHT = (t) => t.hoanThanh === true;
   const completedTasks = tasks.filter(laHT).length;
-  const pendingTasks = tasks.filter((t) =>
-    String(t[COL.T_STATUS] || '')
-      .toLowerCase()
-      .includes('chưa')
-  ).length;
-  const pausedTasks = tasks.filter((t) =>
-    String(t[COL.T_STATUS] || '')
-      .toLowerCase()
-      .includes('tạm dừng')
-  ).length;
-  const ongoingRaw = tasks.filter((t) =>
-    String(t[COL.T_STATUS] || '')
-      .toLowerCase()
-      .includes('đang')
-  ).length;
   const overdueTasks = tasks.filter(
     (t) => t[COL.T_DUE] && new Date(t[COL.T_DUE]) < homNay && !laHT(t)
   ).length;
@@ -103,7 +86,7 @@ function renderStatsCu(projects, tasks) {
     totalProjects: projects.length,
     totalTasks: tong,
     completedTasks,
-    ongoingTasks: ongoingRaw + pendingTasks + pausedTasks, // thẻ "đang làm" của UI gộp 3 trạng thái
+    ongoingTasks: tasks.length - completedTasks, // chưa duyệt đủ kết quả
     overdueTasks,
     taskCompletionRate: tong > 0 ? Math.round((completedTasks / tong) * 100) : 0,
     overdueRate: tong > 0 ? Math.round((overdueTasks / tong) * 100) : 0,
@@ -114,7 +97,7 @@ function renderStatsCu(projects, tasks) {
 function bieuDoStatusCu(tasks) {
   const dem = new Map();
   for (const t of tasks) {
-    const k = t[COL.T_STATUS] || 'Chưa xác định';
+    const k = t.hoanThanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả';
     dem.set(k, (dem.get(k) || 0) + 1);
   }
   return { labels: [...dem.keys()], data: [...dem.values()] };
@@ -177,13 +160,11 @@ function bieuDoTimelineCu(tasks) {
   let co = false;
   for (const t of tasks) {
     if (
-      !String(t[COL.T_STATUS] || '')
-        .toLowerCase()
-        .includes('hoàn thành') ||
-      !t[COL.T_REPORT_DATE]
+      !(t.hoanThanh === true) ||
+      !t.hoanThanhLuc
     )
       continue;
-    const d = new Date(t[COL.T_REPORT_DATE]);
+    const d = new Date(t.hoanThanhLuc);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (dem.has(key)) {
       dem.set(key, dem.get(key) + 1);
@@ -201,9 +182,7 @@ function bieuDoStaffCu(tenTheoThuTu, tasks) {
     const cua = tasks.filter((t) => t[COL.T_ASSIGNEE] === ten);
     if (cua.length === 0) continue;
     const xong = cua.filter((t) =>
-      String(t[COL.T_STATUS] || '')
-        .toLowerCase()
-        .includes('hoàn thành')
+      (t.hoanThanh === true)
     ).length;
     labels.push(ten);
     data.push(cua.length);

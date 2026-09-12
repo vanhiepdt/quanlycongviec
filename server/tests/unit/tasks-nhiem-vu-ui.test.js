@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
   taskMatchesDateFilter, taskMatchesStaffFilter, taskMatchesDeptFilter, taskMatchesTasksFilters,
@@ -38,7 +40,7 @@ const EXPORTS = `;Object.assign(window, {
 });`;
 
 function khoiDong() {
-  new Function(APP_SRC + EXPORTS)();
+  new Function(APP_SRC + QUYEN_UI + EXPORTS)();
 }
 
 const C = {
@@ -66,6 +68,9 @@ const nhiemVu = (ma, thuoc, cha, tuNgay, denNgay, trangThai, nguoi) => ({
   [C.T_PARENT]: cha,
   [C.T_ASSIGNEE]: nguoi || 'Cán bộ A',
   [C.T_STATUS]: trangThai || 'Đang thực hiện',
+  // Fixture mô phỏng dữ liệu đọc từ máy chủ mới. TC-KQ-UI-03 kiểm chống tin status cũ.
+  hoanThanh: trangThai === 'Hoàn thành',
+  'Tiến độ (%)': trangThai === 'Hoàn thành' ? 100 : 0,
   [C.T_START]: tuNgay,
   [C.T_DUE]: denNgay,
 });
@@ -92,7 +97,7 @@ beforeEach(() => {
 
 it('TC-QLCV-MONTH: việc tháng 10 bị lọc có hướng dẫn, Tất cả tháng hiện mà không đổi ngày', () => {
   document.body.innerHTML = '<div id="tasks-grid"></div>';
-  window.__tasks('user', { name: 'QL', role: 'Quản lý công việc', department_id: 3 });
+  window.__tasks('user', { name: 'PP', role: 'Phó phòng', department_id: 3 });
   window.__tasks('projects', [
     { [C.P_ID]: 'CV1', [C.P_NAME]: 'Việc tháng 10', [window.COL.P_DEPT_ID]: 3 },
   ]);
@@ -233,7 +238,7 @@ describe('TC-TASKUI-07..10 — gom theo CÔNG VIỆC CON, tổng hợp đúng lu
     expect(window.xepNhiemVuTheoCongViecCon(CAY, 'CV1').khoi).toEqual([]);
   });
 
-  it('TC-TASKUI-09: tiến độ = % nhiệm vụ hoàn thành; nhãn theo luật ganCayCon', () => {
+  it('TC-TASKUI-09: tiến độ từ dữ liệu file; nhãn hoàn thành từ kết quả duyệt', () => {
     const xong = (ma) => nhiemVu(ma, 'CV1', 'CVC1', '2026-08-01', '2026-08-05', 'Hoàn thành');
     // Hạn ở tương lai xa để «đang thực hiện» không tự thành quá hạn khi ngày máy chạy đổi.
     const dang = (ma) => nhiemVu(ma, 'CV1', 'CVC1', '2026-08-01', '2099-12-31', 'Đang thực hiện');
@@ -242,22 +247,22 @@ describe('TC-TASKUI-07..10 — gom theo CÔNG VIỆC CON, tổng hợp đúng lu
       tong: 2,
       xong: 1,
       tienDo: 50,
-      trangThai: 'Đang thực hiện',
-      lop: 'status-active',
+      trangThai: 'Chưa duyệt đủ kết quả',
+      lop: 'status-pending',
     });
     expect(window.tinhTongHopNhiemVu([xong('A'), xong('B')])).toMatchObject({
       tienDo: 100,
-      trangThai: 'Hoàn thành',
+      trangThai: 'Đã duyệt đủ kết quả',
       lop: 'status-completed',
     });
     expect(window.tinhTongHopNhiemVu([xong('A'), tre('B'), dang('C')])).toMatchObject({
       tienDo: 33,
-      trangThai: 'Trễ hạn',
+      trangThai: 'Quá hạn · Chưa duyệt đủ kết quả',
       lop: 'status-overdue',
     });
     // Nhiệm vụ quá hạn nhưng ĐÃ hoàn thành thì không kéo khối thành «Trễ hạn».
     const treXong = nhiemVu('D', 'CV1', 'CVC1', '2026-01-01', '2026-01-05', 'Hoàn thành');
-    expect(window.tinhTongHopNhiemVu([treXong]).trangThai).toBe('Hoàn thành');
+    expect(window.tinhTongHopNhiemVu([treXong]).trangThai).toBe('Đã duyệt đủ kết quả');
   });
 
   it('TC-TASKUI-10: đầu khối có thư mục ĐỎ, mã công việc con, số nhiệm vụ và tiến độ', () => {
@@ -418,17 +423,17 @@ describe('TC-TASKUI-14..18 — Phó Giám đốc thấy hết nhiệm vụ của
     expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV2']);
   });
 
-  it('TC-TASKUI-15: công việc chung (không phòng) vẫn ẩn, trừ khi chính mình được giao', () => {
+  it('TC-TASKUI-15: công việc chung (không phòng) vẫn ngoài phạm vi dù chính mình được giao', () => {
     dangNhapPgd(['Phòng Kỹ thuật']);
     expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']);
     window.__tasks('tasks', [
       ...NHIEM_VU,
       nhiemVu('NV5', 'CV4', '', '2026-08-21', '2026-08-25', 'Đang thực hiện', 'PGĐ một'),
     ]);
-    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1', 'NV5']);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']);
   });
 
-  it('TC-TASKUI-16: chưa nạp ngữ cảnh phòng (rỗng) thì KHÔNG nới — chỉ việc của mình', () => {
+  it('TC-TASKUI-16: chưa nạp ngữ cảnh phòng (rỗng) thì KHÔNG nới theo tên quản lý', () => {
     dangNhapPgd([]);
     expect(window.dsPhongToiPhuTrach()).toEqual([]);
     expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
@@ -437,7 +442,7 @@ describe('TC-TASKUI-14..18 — Phó Giám đốc thấy hết nhiệm vụ của
       congViec('CV1', 'Phòng Kỹ thuật', 'PGĐ một'),
       ...CONG_VIEC.slice(1),
     ]);
-    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual(['NV1']);
+    expect(ma(window.dsNhiemVuToiDuocThay())).toEqual([]);
   });
 
   it('TC-TASKUI-17: vai khác không được nới theo visibleDepartments; admin thấy tất cả', () => {

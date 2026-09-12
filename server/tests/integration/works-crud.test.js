@@ -9,6 +9,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let api;
 let dept;
 let admin;
@@ -16,6 +17,12 @@ let admin;
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   api = client(app);
   await api.login(admin.email);
@@ -117,7 +124,7 @@ describe('GET/PATCH/DELETE /api/v1/works', () => {
   it('PATCH chỉ ghi trường được gửi, các trường khác giữ nguyên', async () => {
     const res = await api.patch('/api/v1/works/CV001', { status: 'Đang thực hiện' });
     expect(res.status).toBe(200);
-    expect(res.body.data.work.status).toBe('Đang thực hiện');
+    expect(res.body.data.work.status).toBe('Chưa bắt đầu'); // status thủ công đã ngừng ghi
     expect(res.body.data.work.name).toBe('Việc một'); // không gửi ⇒ không đổi
     expect(res.body.data.work.department_id).toBe(dept.id);
   });
@@ -170,6 +177,7 @@ describe('POST /api/v1/works/:id/copy — TC-TREE-27 nhân bản cả cây', () 
       sort_order: 2,
     });
     await itemsRepo.insert({
+      assignee_id: taskStaff.id,
       code: 'CV001-003',
       work_id: work.id,
       parent_id: subA.id,
@@ -181,6 +189,7 @@ describe('POST /api/v1/works/:id/copy — TC-TREE-27 nhân bản cả cây', () 
       report_date: '2026-09-10',
     });
     await itemsRepo.insert({
+      assignee_id: taskStaff.id,
       code: 'CV001-004',
       work_id: work.id,
       parent_id: subB.id,
@@ -189,6 +198,7 @@ describe('POST /api/v1/works/:id/copy — TC-TREE-27 nhân bản cả cây', () 
       sort_order: 4,
     });
     await itemsRepo.insert({
+      assignee_id: taskStaff.id,
       code: 'CV001-005',
       work_id: work.id,
       level: 3,
@@ -239,7 +249,9 @@ describe('POST /api/v1/works/:id/copy — TC-TREE-27 nhân bản cả cây', () 
       expect(row.completion).toBe(0);
       expect(row.status).toBe('Chưa bắt đầu');
       expect(row.report_date).toBeNull();
-      expect(row.approval_status).toBe('Đã duyệt');
+      // ĐỢT B (Q3 + R6): bản sao cũng là việc CHƯA được ký — cấp 3 không còn «Đã duyệt» riêng lẻ
+      // và người lập (kể cả admin) không còn tự duyệt. Cả cây sao đi qua một cửa duyệt như cây mới.
+      expect(row.approval_status).toBe('Chờ duyệt');
     }
   });
 

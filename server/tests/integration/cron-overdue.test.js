@@ -1,3 +1,4 @@
+import { makeApprovedResult } from '../helpers/results.js';
 // Việc 5.8 — lịch quét nhiệm vụ quá hạn (§7, J2, thay `setupDailyTrigger` của Apps Script).
 //
 // Test gọi THẲNG `quetQuaHan({ now })` với đồng hồ giả thay vì chờ 07:00 hoặc giả lập `node-cron`.
@@ -103,6 +104,7 @@ describe('quetQuaHan — chọn đúng nhiệm vụ để nhắc', () => {
       assignee_id: nguoiLam.id,
     });
 
+    await makeApprovedResult(nv.id); // file đã duyệt thật, không chỉ status tay
     expect(await quetQuaHan({ now: HOM_NAY })).toEqual({ quaHan: 0, daBao: 0, boQua: 0 });
     expect(await thongBaoCua(nguoiLam.id)).toHaveLength(0);
   });

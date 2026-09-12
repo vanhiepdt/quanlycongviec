@@ -9,6 +9,7 @@
 // Ranh giới với `workbook.js`: ở đây chỉ dựng MÔ HÌNH BẢNG thuần (mảng cột + mảng dòng, ngày là
 // `Date` hoặc null), không biết exceljs là gì. Nhờ vậy phần đếm dòng / lọc phạm vi test được mà
 // không cần mở lại file .xlsx.
+import { laLanhDaoLamTrucTiep, nhanKemVai } from '../assignments/service.js';
 import * as deptRepo from '../departments/repo.js';
 import {
   boLocPhong,
@@ -18,6 +19,7 @@ import {
   summaryFrom,
   taiDuLieuDem,
 } from '../stats/service.js';
+import * as usersRepo from '../users/repo.js';
 import * as itemsRepo from '../workItems/repo.js';
 import { getTree } from '../works/tree.js';
 
@@ -56,7 +58,7 @@ const COT_CONG_VIEC = Object.freeze([
   { key: 'level_name', header: 'Cấp', width: 14 },
   { key: 'department_name', header: 'Phòng', width: 22 },
   { key: 'assignee_name', header: 'Người thực hiện', width: 22 },
-  { key: 'status', header: 'Trạng thái', width: 16 },
+  { key: 'status', header: 'Duyệt kết quả', width: 16 },
   { key: 'priority', header: 'Ưu tiên', width: 12 },
   { key: 'start_date', header: 'Bắt đầu', width: 12, type: 'date' },
   { key: 'due_date', header: 'Kết thúc', width: 12, type: 'date' },
@@ -92,12 +94,12 @@ export function traiCay(tree, phongTheoId = new Map()) {
       level_name: TEN_CAP[1],
       department_name: themPhong(work),
       assignee_name: chu(work.manager_name),
-      status: chu(work.status),
+      status: work.hoan_thanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả',
       priority: '',
       start_date: oNgay(work.start_date),
       // Công việc cấp 1 dùng `end_date`; cấp 2/3 dùng `due_date` — cùng một cột "Kết thúc".
       due_date: oNgay(work.end_date),
-      completion: null,
+      completion: soPhanTram(work.tien_do),
       approval_status: chu(work.approval_status),
     });
     for (const sub of work.subWorks ?? []) {
@@ -108,11 +110,11 @@ export function traiCay(tree, phongTheoId = new Map()) {
         level_name: TEN_CAP[2],
         department_name: themPhong(sub),
         assignee_name: chu(sub.assignee_name),
-        status: chu(sub.status),
+        status: sub.virtual ? '' : sub.hoan_thanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả',
         priority: chu(sub.priority),
         start_date: oNgay(sub.start_date),
         due_date: oNgay(sub.due_date),
-        completion: sub.virtual ? null : soPhanTram(sub.completion),
+        completion: sub.virtual ? null : soPhanTram(sub.tien_do),
         approval_status: chu(sub.approval_status),
       });
       for (const task of sub.tasks ?? []) {
@@ -123,11 +125,11 @@ export function traiCay(tree, phongTheoId = new Map()) {
           level_name: TEN_CAP[3],
           department_name: themPhong(task),
           assignee_name: chu(task.assignee_name),
-          status: chu(task.status),
+          status: task.hoan_thanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả',
           priority: chu(task.priority),
           start_date: oNgay(task.start_date),
           due_date: oNgay(task.due_date),
-          completion: soPhanTram(task.completion),
+          completion: soPhanTram(task.tien_do),
           approval_status: chu(task.approval_status),
         });
       }
@@ -154,11 +156,15 @@ export async function mauCongViec(user, filter = {}) {
 
 const COT_NHIEM_VU = Object.freeze([
   { key: 'assignee_name', header: 'Người thực hiện', width: 24 },
+  // 2026-09-09 — Trưởng/Phó phòng nay nhận việc trực tiếp được, nên bảng phải nói rõ ai là lãnh
+  // đạo. Tên ở cột trước đã kèm vai trong NGOẶC (quyết định «nhãn kèm vai»), thêm cột Vai riêng để
+  // lọc/xếp trong Excel được — hai chỗ cùng một nguồn, không tự suy ra từ tên.
+  { key: 'vai', header: 'Vai', width: 16 },
   { key: 'code', header: 'Mã nhiệm vụ', width: 14 },
   { key: 'name', header: 'Tên nhiệm vụ', width: 46 },
   { key: 'work_name', header: 'Thuộc công việc', width: 34 },
   { key: 'department_name', header: 'Phòng', width: 22 },
-  { key: 'status', header: 'Trạng thái', width: 16 },
+  { key: 'status', header: 'Duyệt kết quả', width: 16 },
   { key: 'priority', header: 'Ưu tiên', width: 12 },
   { key: 'start_date', header: 'Bắt đầu', width: 12, type: 'date' },
   { key: 'due_date', header: 'Hạn chót', width: 12, type: 'date' },
@@ -174,25 +180,38 @@ export const CHUA_GIAO = '(chưa giao)';
  *
  * Dùng lại `getTree` (không phải một truy vấn `work_items` riêng) để phạm vi khớp từng dòng với
  * mẫu (a) và với cây trên giao diện — cùng một hàm lọc, cùng một kết quả (7.6).
+ *
+ * Từ 2026-09-09 Trưởng/Phó phòng nhận việc trực tiếp được, nên mỗi dòng thêm cột «Vai» và tên
+ * người kèm vai trong NGOẶC; `(chưa giao)` vẫn đứng CUỐI, còn lãnh đạo đứng sau Cán bộ.
  */
 export async function mauNhiemVu(user, filter = {}) {
   const [tree, phongTheoId] = await Promise.all([getTree(user, filter), tenPhong()]);
   const tenWork = new Map(tree.works.map((w) => [w.id, w.name || w.code]));
+  const nhiemVu = traiCayThoDe(tree).filter((row) => Number(row.level) === itemsRepo.LEVEL_TASK);
+
+  // Vai tra theo `assignee_id` (tên trùng là có thật — phép 15 `legacy-gd2-parity`), bằng MỘT truy
+  // vấn cho cả bảng chứ không tra từng dòng. Đây là chỗ DUY NHẤT module này chạm bảng `users`, và nó
+  // không phá luật 7.6: chỉ DÁN NHÃN cho những người đã nằm trong phạm vi `getTree` trả về — không
+  // thêm dòng nào, không nới phạm vi nào, không mở đường đọc thứ hai qua mặt `can()`.
+  const ids = [...new Set(nhiemVu.map((row) => row.assignee_id).filter((v) => v != null))];
+  const vaiTheoId = new Map((await usersRepo.listByIds(ids)).map((p) => [Number(p.id), p.role]));
 
   const dong = [];
-  for (const row of traiCayThoDe(tree)) {
-    if (Number(row.level) !== itemsRepo.LEVEL_TASK) continue;
+  for (const row of nhiemVu) {
+    const ten = chu(row.assignee_name).trim();
+    const vai = row.assignee_id == null ? null : (vaiTheoId.get(Number(row.assignee_id)) ?? null);
     dong.push({
-      assignee_name: chu(row.assignee_name).trim() || CHUA_GIAO,
+      assignee_name: ten ? nhanKemVai(ten, vai) : CHUA_GIAO,
+      vai: ten ? chu(vai) : '',
       code: chu(row.code),
       name: chu(row.name),
       work_name: chu(tenWork.get(row.work_id)),
       department_name: phongTheoId.get(String(row.department_id)) ?? '',
-      status: chu(row.status),
+      status: row.hoan_thanh ? 'Đã duyệt đủ kết quả' : 'Chưa duyệt đủ kết quả',
       priority: chu(row.priority),
       start_date: oNgay(row.start_date),
       due_date: oNgay(row.due_date),
-      completion: soPhanTram(row.completion),
+      completion: soPhanTram(row.tien_do),
     });
   }
 
@@ -200,6 +219,10 @@ export async function mauNhiemVu(user, filter = {}) {
     const aTrong = a.assignee_name === CHUA_GIAO;
     const bTrong = b.assignee_name === CHUA_GIAO;
     if (aTrong !== bTrong) return aTrong ? 1 : -1;
+    // Lãnh đạo phòng đứng SAU Cán bộ để hai nhóm đọc tách được (quyết định 2026-09-09).
+    const aLanh = laLanhDaoLamTrucTiep(a.vai) ? 1 : 0;
+    const bLanh = laLanhDaoLamTrucTiep(b.vai) ? 1 : 0;
+    if (aLanh !== bLanh) return aLanh - bLanh;
     return a.assignee_name.localeCompare(b.assignee_name, 'vi') || a.code.localeCompare(b.code);
   };
   dong.sort(chuaGiaoCuoi);

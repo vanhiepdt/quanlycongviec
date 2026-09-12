@@ -14,6 +14,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTIONS,
   ACTION_APPROVE,
+  ACTION_GUI_BLD,
+  ACTION_FILE_SUBMIT,
   can,
   ENTITIES,
   PERMISSIONS,
@@ -88,13 +90,27 @@ describe('bảng khai báo khớp §6', () => {
     expect(PERMISSIONS['Phó phòng']).toEqual(PERMISSIONS['Trưởng phòng']);
   });
 
-  it('014 — ma trận file: read mọi vai · nộp admin/PGD/TP/PP/Cán bộ · duyệt KHÔNG có Cán bộ', () => {
-    expect(PERMISSIONS['admin'].file).toEqual(['read', 'create', 'approve']);
-    expect(PERMISSIONS['Phó Giám đốc'].file).toEqual(['read', 'create', 'approve']);
-    expect(PERMISSIONS['Trưởng phòng'].file).toEqual(['read', 'create', 'approve']);
-    expect(PERMISSIONS['Phó phòng'].file).toEqual(['read', 'create', 'approve']);
+  it('V4 — ma trận file: tách lưu/gửi cho mọi vai · duyệt KHÔNG có Cán bộ', () => {
+    expect(PERMISSIONS['admin'].file).toEqual(['read', 'create', 'approve', 'submit']);
+    expect(PERMISSIONS['Phó Giám đốc'].file).toEqual(['read', 'create', 'approve', 'submit']);
+    expect(PERMISSIONS['Trưởng phòng'].file).toEqual(['read', 'create', 'approve', 'submit']);
+    expect(PERMISSIONS['Phó phòng'].file).toEqual(['read', 'create', 'approve', 'submit']);
     expect(PERMISSIONS).not.toHaveProperty('Quản lý công việc');
-    expect(PERMISSIONS['Nhân viên'].file).toEqual(['read', 'create']);
+    expect(PERMISSIONS['Nhân viên'].file).toEqual(['read', 'create', 'submit']);
+  });
+
+  it('TC-V7-RBAC: gui-bld/submit nằm ngoài bốn ACTIONS, mặc định NV không sửa tích', () => {
+    expect(ACTIONS).toEqual(['read', 'create', 'update', 'delete']);
+    expect(ACTIONS).not.toContain(ACTION_GUI_BLD);
+    expect(ACTIONS).not.toContain(ACTION_FILE_SUBMIT);
+    for (const role of ROLES) {
+      expect(PERMISSIONS[role].task.includes(ACTION_GUI_BLD)).toBe(role !== 'Nhân viên');
+      expect(PERMISSIONS[role].file).toContain(ACTION_FILE_SUBMIT);
+      const user = principal(role);
+      expect(can(user, ACTION_GUI_BLD, 'task', rowInScope(role, 'task', user)).ok).toBe(
+        role !== 'Nhân viên'
+      );
+    }
   });
 
   it('§6: Nhân viên không tạo công việc và không tạo công việc con, nhưng tạo được nhiệm vụ', () => {

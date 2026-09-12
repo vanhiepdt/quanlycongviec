@@ -18,6 +18,7 @@ import { makeDepartment, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let api;
 let dept;
 let admin;
@@ -34,7 +35,7 @@ const makeWork = (over) =>
 
 /** Tạo một dòng cấp 2/cấp 3 qua API; mặc định thuộc `work1`. */
 const add = async (body, workRef = work1.code) => {
-  const res = await api.post('/api/v1/work-items', { workRef, ...body });
+  const res = await api.post('/api/v1/work-items', { assigneeId: taskStaff.id, workRef, ...body });
   expect(res.status).toBe(200);
   return res.body.data.item;
 };
@@ -58,6 +59,12 @@ const rowByCode = async (code) => {
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   api = client(app);
   await api.login(admin.email);
@@ -175,14 +182,12 @@ describe('[2] updateTask — 20 phép kiểm cũ', () => {
     expect((await rowByCode(t1.code)).assignee_id).toBe(binh.id);
   });
 
-  it('phép 15: tên TRÙNG nhiều người ⇒ để trống người thực hiện, không giữ người cũ', async () => {
+  it('phép 15: tên trùng không xác định Cán bộ trực tiếp ⇒ giữ nguyên dữ liệu', async () => {
+    const before = await rowByCode(t1.code);
     const res = await patch(t1.code, { assigneeName: 'Trùng' });
-    expect(res.status).toBe(200);
-    const row = await rowByCode(t1.code);
-    expect(row.assignee_id).toBeNull();
-    expect(row.assignee_name).toBe('Trùng');
-    // Khác bản cũ ở chỗ có nói cho người dùng biết vì sao, thay vì im lặng xoá.
-    expect(res.body.data.warnings.map((w) => w.code)).toContain('ASSIGNEE_NAME_DUPLICATED');
+    expect(res.status).toBe(400);
+    expect(res.body.error.field).toBe('assigneeId');
+    expect(await rowByCode(t1.code)).toEqual(before);
   });
   it('phép 16–19 + 21: bốn nhánh chặn, và dữ liệu nguồn không hề sứt', async () => {
     const blocked = [
@@ -377,6 +382,7 @@ describe('[4] addTask — 3 phép kiểm cũ', () => {
   it('phép 40: chọn một NHIỆM VỤ cấp 3 làm cha ⇒ chặn, không tạo dòng nào', async () => {
     const task = await add({ name: 'Việc lẻ' });
     const res = await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: work1.code,
       level: 3,
       name: 'Con của nhiệm vụ',

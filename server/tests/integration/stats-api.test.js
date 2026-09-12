@@ -1,3 +1,4 @@
+import { makeApprovedResult } from '../helpers/results.js';
 // API thống kê — Phase 6 (§7 việc 6.1–6.3, §8.4 nhóm F).
 //
 // RỦI RO LỚN NHẤT CỦA PHASE 6 LÀ ĐẾM SAI, không phải vẽ được biểu đồ:
@@ -62,6 +63,7 @@ async function nhiemVu(over = {}) {
       t.report_date,
     ]
   );
+  if (t.resultApproved) await makeApprovedResult(rows[0].id);
   return rows[0];
 }
 
@@ -125,6 +127,7 @@ describe('GET /api/v1/stats/summary — 4 thẻ + tỷ lệ', () => {
       code: 'CV001-003',
       work_id: work.id,
       status: 'Hoàn thành',
+      resultApproved: true,
       due_date: ngayLech(-30),
       report_date: ngayLech(-1),
     });
@@ -318,11 +321,14 @@ describe('GET /api/v1/stats/charts?type= — đủ 6 loại', () => {
       code: 'CV001-002',
       work_id: work.id,
       status: 'Hoàn thành',
+      resultApproved: true,
       report_date: ngayLech(-1),
     });
 
     const status = await apiAdmin.get('/api/v1/stats/charts?type=status');
-    expect(status.body.data.labels.sort()).toEqual(['Đang thực hiện', 'Hoàn thành'].sort());
+    expect(status.body.data.labels.sort()).toEqual(
+      ['Chưa duyệt đủ kết quả', 'Đã duyệt đủ kết quả'].sort()
+    );
     expect(status.body.data.data.sort()).toEqual([1, 1]);
 
     const uuTien = await apiAdmin.get('/api/v1/stats/charts?type=task-priority');
@@ -457,4 +463,46 @@ describe('Mọi truy vấn thống kê đọc qua view v_countable_* (việc 5.4
 
 afterAll(async () => {
   await closePool();
+});
+
+// 2026-09-09 — Trưởng/Phó phòng được nhận việc trực tiếp, nên E5 (hiệu suất nhân sự) phải tách họ
+// ra khỏi nhóm Cán bộ: nhãn kèm vai trong NGOẶC và lãnh đạo đứng SAU. Vai đọc từ `users.role` của
+// chính người đó, không đoán từ tên (tên trùng là có thật — phép 15 `legacy-gd2-parity`).
+describe('GET /api/v1/stats/charts?type=staff-performance — nhãn kèm vai lãnh đạo', () => {
+  it('TC-STAT-17: nhiệm vụ giao cho Trưởng phòng ⇒ nhãn «Tên (Trưởng phòng)», xếp sau Cán bộ', async () => {
+    const tp = await makeLoginUser({
+      code: 'NV040',
+      full_name: 'An Trưởng Phòng',
+      email: 'tp-stats@test.local',
+      role: 'Trưởng phòng',
+      department_id: phongA.id,
+    });
+    const canBo = await makeLoginUser({
+      code: 'NV041',
+      full_name: 'Nguyễn Văn Cán Bộ',
+      email: 'nv-stats@test.local',
+      role: 'Nhân viên',
+      department_id: phongA.id,
+    });
+    const work = await makeWork({ code: 'CV001', department_id: phongA.id });
+    // «An» trước «Nguyễn» theo chữ cái — nó vẫn xuống cuối là nhờ luật tách vai, không phải trùng hợp.
+    await pool.query(
+      `INSERT INTO work_items (code, work_id, level, name, department_id, status,
+                               assignee_id, assignee_name)
+       VALUES ('CV001-901', $1, 3, 'Việc của Trưởng phòng', $2, 'Đang thực hiện', $3, $4),
+              ('CV001-902', $1, 3, 'Việc của Cán bộ', $2, 'Hoàn thành', $5, $6)`,
+      [work.id, phongA.id, tp.id, tp.full_name, canBo.id, canBo.full_name]
+    );
+
+    const completedItem = (await pool.query("SELECT id FROM work_items WHERE code='CV001-902'"))
+      .rows[0];
+    await makeApprovedResult(completedItem.id);
+    const res = await apiAdmin.get('/api/v1/stats/charts?type=staff-performance');
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.labels).toEqual(['Nguyễn Văn Cán Bộ', 'An Trưởng Phòng (Trưởng phòng)']);
+    expect(res.body.data.data).toEqual([1, 1]);
+    // Số liệu vẫn tính cho lãnh đạo như mọi người khác — chỉ KHÁC cái nhãn và chỗ đứng.
+    expect(res.body.data.completed).toEqual([1, 0]);
+    expect(res.body.data.rates).toEqual([100, 0]);
+  });
 });

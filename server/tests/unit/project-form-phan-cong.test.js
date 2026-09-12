@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 //
 // Simulation form «Tạo công việc mới» với dữ liệu THẬT của UAT (fetch giả trả đúng phản hồi
-// đã xác minh bằng tools/_kiem-tra-phong.mjs): mở modal → đổi phòng → supervisor phải tự chọn
+// đã xác minh bằng tools/_kiem-tra-phong.mjs): mở modal → đổi phòng → supervisor phải tự tick
 // Phó GĐ phụ trách, leaders phải hiện checkbox (và tick mặc định Trưởng phòng).
+//
+// ĐỢT A (028/D2): cấp 1 chọn NHIỀU Ban lãnh đạo kiểm soát, nên ô này đổi từ `<select>` một người
+// (`#project-supervisor-select`) sang nhóm checkbox `#project-supervisors-box` + hidden input
+// `#project-supervisors-input` — đúng khuôn ô «Lãnh đạo phòng phụ trách» cạnh bên.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -96,7 +100,9 @@ function khoiDong() {
 }
 
 const mo = () => document.getElementById('project-modal');
-const supChon = () => document.getElementById('project-supervisor-select');
+const supBox = () => document.getElementById('project-supervisors-box');
+const supOpts = () => Array.from(supBox().querySelectorAll('.supervisor-opt'));
+const supInput = () => document.getElementById('project-supervisors-input');
 const leadersBox = () => document.getElementById('project-leaders-box');
 
 async function moVaChonPhong(id) {
@@ -131,37 +137,53 @@ describe('Simulation form tạo công việc — dữ liệu thật UAT', () => 
     expect(opts[1].value).toBe('1');
   });
 
-  it('chọn PH01: supervisor tự chọn «Phó GĐ Một», leaders tick sẵn «Trưởng phòng Đào tạo»', async () => {
+  it('chọn PH01: supervisor tự tick «Phó GĐ Một», leaders tick sẵn «Trưởng phòng Đào tạo»', async () => {
     await moVaChonPhong(1);
-    const sup = supChon();
-    const chon = sup.options[sup.selectedIndex];
-    expect(chon.textContent).toBe('Phó GĐ Một');
-    expect(chon.value).toBe('2');
-    const boxes = Array.from(leadersBox().querySelectorAll('.leader-opt'));
+    const boxes = supOpts();
     expect(boxes.map((b) => b.nextSibling.textContent)).toEqual([
+      'Phó GĐ Một',
+      'Quản trị Hệ thống',
+    ]);
+    // `defaultSupervisorId` của máy chủ chỉ tick khi form CHƯA có lựa chọn gốc — mở mới là chưa.
+    expect(boxes.filter((b) => b.checked).map((b) => b.value)).toEqual(['2']);
+    expect(supInput().value).toBe('2');
+    const lBoxes = Array.from(leadersBox().querySelectorAll('.leader-opt'));
+    expect(lBoxes.map((b) => b.nextSibling.textContent)).toEqual([
       'Trưởng phòng Đào tạo',
       'Phó phòng Đào tạo',
     ]);
-    const tick = boxes.filter((b) => b.checked).map((b) => b.value);
+    const tick = lBoxes.filter((b) => b.checked).map((b) => b.value);
     expect(tick).toEqual(['4']);
     expect(document.getElementById('project-leaders-input').value).toBe('4');
   });
 
-  it('chọn PH03: supervisor tự chọn «Phó GĐ Hai», leaders tick «Trưởng phòng Kế toán»', async () => {
+  it('chọn PH03: supervisor tự tick «Phó GĐ Hai», leaders tick «Trưởng phòng Kế toán»', async () => {
     await moVaChonPhong(3);
-    const sup = supChon();
-    expect(sup.options[sup.selectedIndex].textContent).toBe('Phó GĐ Hai');
+    expect(
+      supOpts()
+        .filter((b) => b.checked)
+        .map((b) => b.value)
+    ).toEqual(['3']);
+    expect(supInput().value).toBe('3');
     const tick = Array.from(leadersBox().querySelectorAll('.leader-opt:checked')).map(
       (b) => b.value
     );
     expect(tick).toEqual(['6']);
   });
 
+  it('tick THÊM người thứ hai: hidden input gộp cả hai, đúng nghĩa «cấp 1 chọn NHIỀU»', async () => {
+    await moVaChonPhong(1);
+    const boxes = supOpts();
+    const them = boxes.find((b) => b.value === '1');
+    them.checked = true;
+    them.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(supInput().value.split(',').sort()).toEqual(['1', '2']);
+  });
+
   it('quay lại «Công việc chung»: supervisors = admin + 2 Phó GĐ, không tick leader nào', async () => {
     await moVaChonPhong(1);
     await moVaChonPhong('');
-    const sup = supChon();
-    const opts = Array.from(sup.options).map((o) => o.textContent);
+    const opts = supOpts().map((b) => b.nextSibling.textContent);
     expect(opts).toContain('Quản trị Hệ thống');
     expect(opts).toContain('Phó GĐ Một');
     expect(Array.from(leadersBox().querySelectorAll('.leader-opt:checked'))).toHaveLength(0);
@@ -176,6 +198,6 @@ describe('Simulation form tạo công việc — dữ liệu thật UAT', () => 
     expect(opts.filter((o) => o.textContent.includes('Công việc chung'))).toHaveLength(1);
     expect(opts.map((o) => o.textContent)).toContain('Quản lý Đào tạo');
     // phân công vẫn được nạp cho lựa chọn mặc định («Công việc chung»)
-    expect(supChon().options.length).toBeGreaterThan(1);
+    expect(supOpts().length).toBeGreaterThan(1);
   });
 });

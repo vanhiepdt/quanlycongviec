@@ -56,6 +56,21 @@ beforeEach(async () => {
     role: 'Nhân viên',
     department_id: dept.id,
   });
+  // 2026-09-09 — hai ca TC-ORIGIN-08 và «tự đăng ký rồi bị giao lại» chuyền tay nhiệm vụ SANG
+  // Trưởng phòng. Từ ngày đó việc giao cho Trưởng/Phó phòng đòi phòng phải có Phó Giám đốc phụ
+  // trách (`ASSIGNEE_LEADER_NO_DEPUTY`), nếu không kết quả của họ không ai duyệt được. Bộ test này
+  // đo NGUỒN GỐC chứ không đo luật phân công, nên đăng ký Phó GĐ cho phòng để đo tiếp được.
+  const pgd = await makeLoginUser({
+    code: 'NV004',
+    email: 'pgd@congty.vn',
+    full_name: 'Lê Văn Phó',
+    role: 'Phó Giám đốc',
+    department_id: dept.id,
+  });
+  await pool.query(
+    `INSERT INTO department_managers (department_id, user_id, role) VALUES ($1, $2, 'deputy_director')`,
+    [dept.id, pgd.id]
+  );
 });
 
 afterAll(async () => {
@@ -119,6 +134,11 @@ describe('nguồn gốc công việc cấp 1', () => {
       managerName: leader.full_name,
     });
     const code = created.body.data.work.code;
+    // ĐỢT B (R6): admin lập việc KHÔNG còn tự ra «Đã duyệt», mà mục đang chờ duyệt thì chỉ người
+    // lập (hoặc admin / Phó GĐ) sửa được. Ký nó trước để ca này khảo sát đúng chuyện nguồn gốc
+    // người giao, không dính khoá của việc 5.6.
+    const ky = await adminApi.post(`/api/v1/approvals/work/${code}/approve`);
+    expect(ky.status, JSON.stringify(ky.body)).toBe(200);
 
     // Trưởng phòng giao lại việc cho nhân viên. Người nhận đổi, người giao ĐẦU TIÊN thì không.
     const leaderApi = await loginAs(leader);
@@ -304,12 +324,13 @@ describe('nhật ký từ đầu', () => {
       departmentId: dept.id,
       managerId: leader.id,
       managerName: leader.full_name,
-      status: 'Chưa bắt đầu',
+      description: 'Nội dung ban đầu',
     });
     const code = created.body.data.work.code;
 
     await api.patch(`/api/v1/works/${code}`, { name: 'Việc có nhật ký (đã đổi tên)' });
-    await api.patch(`/api/v1/works/${code}`, { status: 'Đang thực hiện' });
+    // Không dùng status tay làm fixture: trường đó nay chỉ giữ để đọc lịch sử.
+    await api.patch(`/api/v1/works/${code}`, { description: 'Nội dung đã cập nhật' });
     await waitForLogs(3);
 
     const res = await api.get(`/api/v1/works/${code}/history`);
@@ -325,12 +346,12 @@ describe('nhật ký từ đầu', () => {
       from: 'Việc có nhật ký',
       to: 'Việc có nhật ký (đã đổi tên)',
     });
-    expect(entries[2].details.changes.status).toEqual({
-      from: 'Chưa bắt đầu',
-      to: 'Đang thực hiện',
+    expect(entries[2].details.changes.description).toEqual({
+      from: 'Nội dung ban đầu',
+      to: 'Nội dung đã cập nhật',
     });
     // Cột nào không gửi thì không được xuất hiện trong nhật ký.
-    expect(Object.keys(entries[2].details.changes)).toEqual(['status']);
+    expect(Object.keys(entries[2].details.changes)).toEqual(['description']);
     expect(originInfo.assignedByName).toBe(admin.full_name);
   });
 
@@ -426,6 +447,7 @@ describe('nhật ký từ đầu', () => {
       workRef: a.code,
       level: 3,
       name: 'Nhiệm vụ sẽ chuyển',
+      assignee_id: staff.id,
     });
     const moved = await itemsService.update(admin, item.code, {}, { targetWorkRef: b.code });
 

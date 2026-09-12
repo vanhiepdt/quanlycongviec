@@ -7,12 +7,13 @@
 //
 // Bốn điểm đáng nói:
 //
-//  1. **Quyền duyệt không viết lại ở đây.** `can(user, 'approve', ...)` của §6 đã cho đúng hai vai
-//     `admin` và `Phó Giám đốc`, và `inScope()` đã bó Phó Giám đốc theo `managedDepartmentIds`
-//     (tức các dòng `department_managers.role = 'deputy_director'`). Nhờ vậy TC-APR-10 (Phó GĐ
-//     duyệt phòng không phụ trách ⇒ 403) và TC-APR-11 (Nhân viên gọi thẳng API ⇒ 403) không cần
-//     thêm một dòng điều kiện nào. Thêm điều kiện phòng lần thứ hai ở đây là tạo nguồn sự thật thứ
-//     hai cho phạm vi — đúng cái §6 cấm.
+//  1. **Quyền duyệt không viết lại ở đây.** `can(user, 'approve', ...)` của §6 quyết định. Từ ĐỢT A
+//     (028_supervisor_ids.sql) nó gồm HAI lớp: ma trận vai (`admin`, `Phó Giám đốc`) VÀ danh sách
+//     `supervisor_ids` của chính dòng — R1(a) chốt «chỉ người TRONG danh sách mới duyệt được, KHÔNG
+//     chừa admin làm dự phòng». `inScope()` vẫn bó Phó Giám đốc theo `managedDepartmentIds`. Nhờ vậy
+//     TC-APR-10 (Phó GĐ duyệt phòng không phụ trách ⇒ 403) và TC-APR-11 (Nhân viên gọi thẳng API ⇒
+//     403) không cần thêm một dòng điều kiện nào ở đây. Thêm điều kiện danh sách lần thứ hai ở đây
+//     là tạo nguồn sự thật thứ hai cho quyền duyệt — đúng cái §6 cấm.
 //
 //  2. **Duyệt LAN XUỐNG CẢ CÂY** (012, Vòng 13 — người dùng chốt 2026-08-31). Trước đó luật là
 //     «không lan» (TC-APR-16 bản đầu) với lý lẽ người duyệt cấp 1 chưa chắc đã đọc từng mục con.
@@ -31,11 +32,15 @@ import { withTransaction } from '../../db/pool.js';
 import { can } from '../../middleware/rbac.js';
 import { AppError, conflict, notFound } from '../../utils/errors.js';
 import { withPgErrors } from '../../utils/pgError.js';
-import * as deptRepo from '../departments/repo.js';
 import * as notificationsRepo from '../notifications/repo.js';
+import * as usersRepo from '../users/repo.js';
 import * as worksRepo from '../works/repo.js';
 import * as itemsRepo from '../workItems/repo.js';
+import * as worksService from '../works/service.js';
+import * as itemsService from '../workItems/service.js';
 import * as repo from './repo.js';
+import { startSubmission, clearPending, publishChanges, pendingGuiBld } from './changes.js';
+import { pendingTyLe } from './tyLe.js';
 import { CHO_DUYET, DA_DUYET, NHAP, TU_CHOI } from './rules.js';
 
 /** Độ dài tối thiểu của lý do từ chối (§7 việc 5.2). "Không đạt" là 8 ký tự — cố ý chưa đủ. */
@@ -67,13 +72,19 @@ async function mustFind(entity, ref, client) {
     });
   }
   if (kind === 'work') {
-    const row = await worksRepo.findByRef(ref, client);
+    let row = await worksRepo.findByRef(ref, client);
     if (!row) throw notFound(`Không tìm thấy công việc "${ref}"`);
+    await client.query('SELECT id FROM works WHERE id = $1 FOR UPDATE', [row.id]);
+    row = await worksRepo.findByRef(ref, client);
+    if (!row) throw notFound();
     return { kind, row, entityType: 'work', label: 'Công việc' };
   }
   // `findByRefWithWork` để có `work_department_id` — `can()` cần phòng để xét phạm vi (§6).
-  const row = await itemsRepo.findByRefWithWork(ref, client);
+  let row = await itemsRepo.findByRefWithWork(ref, client);
   if (!row) throw notFound(`Không tìm thấy công việc con/nhiệm vụ "${ref}"`);
+  await client.query('SELECT id FROM works WHERE id = $1 FOR UPDATE', [row.work_id]);
+  row = await itemsRepo.findByRefWithWork(ref, client);
+  if (!row) throw notFound();
   return {
     kind,
     row,
@@ -149,29 +160,39 @@ function assertCan(user, action, target) {
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
 }
 
-/** Phòng của mục: `work_items` có cột riêng, dự phòng lấy theo công việc cha. */
-const phongCua = (row) => row.department_id ?? row.work_department_id ?? null;
-
 /**
- * Các Phó Giám đốc phụ trách phòng của mục — người nhận thông báo "có mục mới chờ duyệt"
- * (việc 5.7).
+ * Người nhận thông báo duyệt của một mục — ĐỢT A (028_supervisor_ids.sql, D3 + R1a).
  *
- * Phòng chưa gán Phó Giám đốc ⇒ danh sách rỗng ⇒ không ai được báo. Đó KHÔNG phải lỗi chặn thao
- * tác: mục vẫn vào 'Chờ duyệt' và vẫn hiện trong hộp chờ duyệt của admin (admin thấy mọi phòng),
- * chỉ là không có thông báo đẩy. Ném lỗi ở đây thì một phòng thiếu cấu hình là cả phòng không gửi
- * duyệt được việc nào.
+ * Bản cũ trả «mọi Phó Giám đốc phụ trách phòng» (`department_managers.role = 'deputy_director'`).
+ * Đó là điểm bất hợp lý số 3 của bản rà soát 10/09/2026: người duyệt CÂY không trùng người duyệt
+ * FILE, và phòng có ba Phó GĐ thì cả ba cùng nhận chuông cho một việc chỉ một người được giao.
+ * Nay người nhận đúng bằng `supervisor_ids` của chính dòng — CÙNG danh sách mà `can()` dùng để xét
+ * quyền duyệt, nên chuông và quyền không thể lệch nhau: ai nhận thông báo thì người đó duyệt được.
+ *
+ * Trả RỖNG khi dòng chưa phân công. `submit` đã chặn trường hợp đó (NO_APPROVER_ASSIGNED), còn
+ * `xinXoa` thì cố ý KHÔNG chặn — yêu cầu xoá vẫn phải gửi được, chỉ là không có chuông. Ném lỗi ở
+ * đây thì một dòng cũ thiếu phân công là không ai xin xoá được nó.
+ *
+ * Lọc `is_active`: người trong danh sách đã nghỉ mà vẫn nhận chuông là một dòng không ai xử được.
+ * Không tự loại họ khỏi `supervisor_ids` — sửa phân công là việc của người có quyền `update`, và
+ * R1(a) giữ đúng đường đó làm lối thoát khi cả danh sách nghỉ việc.
+ *
+ * `actor` (người vừa bấm nút) bị loại khỏi danh sách nhận: tự gửi việc cho chính mình duyệt thì
+ * không cần chuông báo, cùng lý do `baoNguoiTao` không báo người tự xử việc mình gửi.
  */
-async function phoGiamDocPhuTrach(departmentId, client) {
-  if (departmentId == null) return [];
-  const managers = await deptRepo.listManagers(departmentId, client);
-  return managers.filter((m) => m.role === 'deputy_director');
+async function banKiemSoatCua(row, client, actor = null) {
+  const ids = [...new Set((row?.supervisor_ids ?? []).map(Number).filter(Number.isFinite))];
+  if (ids.length === 0) return [];
+  const nguoi = await usersRepo.listByIds(ids, client);
+  return nguoi.filter((u) => u.is_active && (actor == null || String(u.id) !== String(actor.id)));
 }
 
 /** Một dòng mô tả mục, dùng trong nội dung thông báo. Chữ thuần, không HTML. */
 const moTa = (target) => `${target.label} ${target.row.code} — ${target.row.name ?? ''}`.trim();
 
 /**
- * Gửi duyệt: đưa một mục **và cả cây bên dưới nó** vào hàng chờ, báo cho Phó Giám đốc phụ trách.
+ * Gửi duyệt: đưa một mục **và cả cây bên dưới nó** vào hàng chờ, báo cho Ban lãnh đạo kiểm soát
+ * của chính mục đó (ĐỢT A — trước đây báo mọi Phó Giám đốc của phòng, xem `banKiemSoatCua`).
  *
  * Ai gửi được: người **sửa được** mục đó (§6). Cố ý không giới hạn đúng người tạo — Trưởng phòng
  * phải gửi lại được việc của cấp dưới sau khi sửa theo lý do từ chối.
@@ -191,6 +212,24 @@ export function submit(user, entity, ref) {
       throw conflict(`${moTa(target)} đang chờ duyệt rồi`);
     }
 
+    // R1(a) — ĐỢT A: chưa chọn «Ban lãnh đạo kiểm soát» thì KHÔNG gửi duyệt được.
+    //
+    // Không phải một phép kiểm dư: `can()` nay bó quyền duyệt vào đúng danh sách này và bỏ luôn
+    // đường dự phòng của admin, nên gửi một mục có danh sách rỗng là tạo ra một dòng **kẹt vĩnh
+    // viễn** trong hàng chờ — không một ai trên hệ thống duyệt nổi, kể cả Giám đốc. Chặn ở cửa gửi
+    // thì người lập sửa được ngay lúc đó; để lọt thì chỉ phát hiện ra khi việc đã trễ.
+    //
+    // Kiểm ở ĐÂY chứ không phải lúc lưu: lúc lưu mà bắt buộc thì không ai sửa nổi một công việc cũ
+    // chưa phân công để mà thêm người vào (xem chú thích của `assertSupervisors`).
+    if ((target.row.supervisor_ids ?? []).length === 0) {
+      throw new AppError(
+        'NO_APPROVER_ASSIGNED',
+        `${moTa(target)} chưa có «Ban lãnh đạo kiểm soát» — hãy chọn người duyệt cho mục này rồi gửi lại`,
+        { field: 'supervisorIds' }
+      );
+    }
+
+    await startSubmission(user, target, client);
     const { row, soCon } = await ghiKhoaDuyetCaCay(
       target,
       // Gửi lại thì xoá sạch dấu vết lần xử trước: giữ `reject_reason` cũ là mục đang chờ duyệt
@@ -207,11 +246,11 @@ export function submit(user, entity, ref) {
       client
     );
 
-    const nguoiNhan = await phoGiamDocPhuTrach(phongCua(target.row), client);
+    const nguoiNhan = await banKiemSoatCua(target.row, client, user);
     const keMuc = soCon > 0 ? ` (kèm ${soCon} mục bên trong)` : '';
     const notifications = await notificationsRepo.insertMany(
       nguoiNhan.map((m) => ({
-        userId: m.user_id,
+        userId: m.id,
         content: `${moTa(target)}${keMuc} đang chờ bạn duyệt (người gửi: ${user.full_name ?? user.code ?? ''}).`,
         type: notificationsRepo.LOAI.CHO_DUYET,
         refType: target.kind === 'work' ? 'work' : 'work_item',
@@ -235,11 +274,12 @@ export function submit(user, entity, ref) {
  * Chỉ kéo theo dòng đang «Chờ duyệt»: mục đã duyệt từ trước giữ nguyên `approver_id`/`approved_at`
  * của lần ký cũ, không bị ghi lại tên người duyệt mới.
  */
-function duyetCaCay({ user, entity, ref }) {
+function duyetCaCay({ user, entity, ref, edit }) {
   return withTransaction(async (client) => {
-    const target = await mustFind(entity, ref, client);
+    let target = await mustFind(entity, ref, client);
     assertCoBuocDuyet(target);
-    // Cổng quyền DUY NHẤT của việc 5.3 — chỉ admin và Phó Giám đốc phụ trách phòng đi qua được.
+    // Cổng quyền DUY NHẤT của việc 5.3. Từ ĐỢT A (R1a): admin và Phó Giám đốc phụ trách phòng,
+    // nhưng CHỈ khi có tên trong `supervisor_ids` của chính dòng — không còn ai được duyệt thay.
     assertCan(user, 'approve', target);
 
     // TC-APR-14: duyệt hai lần thì lần hai là 409 và KHÔNG sinh thông báo trùng.
@@ -250,6 +290,24 @@ function duyetCaCay({ user, entity, ref }) {
       );
     }
 
+    let saved;
+    if (edit) {
+      if (target.row.approval_status !== CHO_DUYET)
+        throw conflict(
+          'Chỉ sửa và phê duyệt cùng lúc khi đầu việc đang Chờ duyệt',
+          'approvalStatus'
+        );
+      saved =
+        target.kind === 'work'
+          ? await worksService.update(user, ref, edit.patch, { client })
+          : await itemsService.update(user, ref, edit.patch, {
+              targetWorkRef: edit.targetWorkRef,
+              client,
+            });
+      target = await mustFind(entity, ref, client);
+      assertCan(user, 'approve', target);
+    }
+    await publishChanges(target, client);
     const { row, soCon } = await ghiKhoaDuyetCaCay(
       target,
       {
@@ -270,7 +328,13 @@ function duyetCaCay({ user, entity, ref }) {
       client
     );
 
-    return { kind: target.kind, row, soCon, notified: notifications.length };
+    return {
+      kind: target.kind,
+      row,
+      soCon,
+      notified: notifications.length,
+      changes: saved?.changes,
+    };
   });
 }
 
@@ -404,11 +468,11 @@ export function xinXoa(user, entity, ref, lyDo) {
       client
     );
 
-    const nguoiNhan = await phoGiamDocPhuTrach(phongCua(target.row), client);
+    const nguoiNhan = await banKiemSoatCua(target.row, client, user);
     const keMuc = con.length > 0 ? ` (xoá sẽ mất kèm ${con.length} mục bên trong)` : '';
     const notifications = await notificationsRepo.insertMany(
       nguoiNhan.map((m) => ({
-        userId: m.user_id,
+        userId: m.id,
         content: `${moTa(target)}${keMuc} đang xin XOÁ, chờ bạn duyệt (người xin: ${user.full_name ?? user.code ?? ''}). Lý do: ${noiDung}`,
         type: notificationsRepo.LOAI.CHO_DUYET,
         refType: target.kind === 'work' ? 'work' : 'work_item',
@@ -534,6 +598,7 @@ export function traLaiDeSua(user, entity, ref, ghiChu) {
       throw conflict(`${moTa(target)} đang là bản nháp rồi`, 'approvalStatus');
     }
 
+    await clearPending(target, client);
     const { row, soCon } = await ghiKhoaDuyetCaCay(
       target,
       {
@@ -560,8 +625,8 @@ export function traLaiDeSua(user, entity, ref, ghiChu) {
   });
 }
 
-export function approve(user, entity, ref) {
-  return duyetCaCay({ user, entity, ref });
+export function approve(user, entity, ref, edit) {
+  return duyetCaCay({ user, entity, ref, edit });
 }
 
 /**
@@ -607,13 +672,27 @@ export function phamViBadge(user) {
 }
 
 /** Số mục chờ duyệt cho badge — `GET /approvals/pending-count` (việc 5.5). */
-export function pendingCount(user) {
-  return repo.countPending(phamViBadge(user));
+export async function pendingCount(user) {
+  const count = await repo.countPending(phamViBadge(user));
+  // ĐỢT B (R4''): đề nghị đổi TỶ LỆ cũng nằm trong `approval_changes` và cũng đếm vào badge — một
+  // đầu việc đang chờ người này ký thì phải hiện lên con số, bất kể nó là cây, là cái tích hay là %.
+  const [guiBld, tyLeChanges] = await Promise.all([pendingGuiBld(user), pendingTyLe(user)]);
+  const guiBldChanges = guiBld.length;
+  return {
+    ...count,
+    guiBldChanges,
+    tyLeChanges: tyLeChanges.length,
+    total: count.total + guiBldChanges + tyLeChanges.length,
+  };
 }
 
 /** Danh sách mục chờ duyệt trong phạm vi người đang xem. */
-export function pendingList(user, { limit = 50 } = {}) {
-  return repo.listPending(phamViBadge(user), { limit });
+export async function pendingList(user, { limit = 50 } = {}) {
+  const [guiBld, tyLeRows] = await Promise.all([pendingGuiBld(user), pendingTyLe(user)]);
+  return [...guiBld, ...tyLeRows, ...(await repo.listPending(phamViBadge(user), { limit }))].slice(
+    0,
+    limit
+  );
 }
 
 /** Danh sách YÊU CẦU XOÁ đang chờ duyệt trong phạm vi người đang xem (013). */

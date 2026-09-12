@@ -26,9 +26,6 @@ import * as notiRepo from '../modules/notifications/repo.js';
 import * as zaloRepo from '../modules/zalo/repo.js';
 import * as zaloApi from './zalo.js';
 
-/** Nhiệm vụ đã xong thì không quá hạn nữa, dù hạn chót đã lùi lại bao lâu. */
-const TRANG_THAI_XONG = 'Hoàn thành';
-
 /**
  * Nhiệm vụ quá hạn CHƯA xong, kèm người thực hiện.
  *
@@ -42,10 +39,14 @@ async function timNhiemVuQuaHan(ngay, client) {
        FROM v_countable_items i
       WHERE i.due_date IS NOT NULL
         AND i.due_date < $1::date
-        AND i.status <> $2
+        AND i.level = 3
+        AND (NOT EXISTS (SELECT 1 FROM task_files f WHERE f.item_id=i.id)
+          OR EXISTS (SELECT 1 FROM task_files f WHERE f.item_id=i.id
+            AND (f.trang_thai NOT IN ('hoan-thanh','da-duyet')
+              OR NOT EXISTS (SELECT 1 FROM task_file_versions v WHERE v.file_id=f.id))))
         AND i.assignee_id IS NOT NULL
       ORDER BY i.due_date, i.id`,
-    [ngay, TRANG_THAI_XONG]
+    [ngay]
   );
   return rows;
 }

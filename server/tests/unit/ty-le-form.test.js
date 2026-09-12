@@ -117,12 +117,12 @@ describe('8b lỗi 2 (web) — form bỏ «Tiến độ (%)», thêm «Tỷ lệ
     expect(o.disabled).toBe(false);
   });
 
-  it('TC-TYLE-04: tạo nhiệm vụ TRONG công việc con — ô tyLe KHÔNG xuất hiện', () => {
+  it('TC-TYLE-04: tạo nhiệm vụ TRONG công việc con — có ô tỷ lệ nội bộ chia đều', () => {
     const tai = moForm('Quản trị Hệ thống', 'admin', {
       nham: { level: 3, parentId: 'CV001-001', projectId: 'CV001' },
     });
-    expect(tai.querySelector('input[name="tyLe"]')).toBeNull();
-    expect(tai.body.textContent).not.toContain('Tỷ lệ công việc (%)');
+    expect(tai.querySelector('input[name="tyLe"]').placeholder).toBe('Chia đều');
+    expect(tai.body.textContent).toContain('Tỷ lệ công việc (%)');
   });
 
   it('TC-TYLE-05: Nhân viên tạo đầu mục — ô tyLe hiện nhưng KHÓA và KHÔNG name (né 403 cả bản ghi)', () => {
@@ -153,12 +153,10 @@ describe('8b lỗi 2 (web) — form bỏ «Tiến độ (%)», thêm «Tỷ lệ
     expect(oKhoa.value).toBe('40');
   });
 
-  it('TC-TYLE-08: SỬA nhiệm vụ nằm trong công việc con — không vẽ ô tyLe', () => {
+  it('TC-TYLE-08: SỬA nhiệm vụ nằm trong công việc con — có ô tỷ lệ nội bộ', () => {
     const C = window.COL;
     const tai = moForm('Quản trị Hệ thống', 'admin', { task: NHIEM_VU_TRONG_CON(C) });
-    expect(tai.querySelector('input[name="tyLe"]')).toBeNull();
-    const oKhoa = tai.querySelector('.form-group input[type="number"][min="0"][max="100"]');
-    expect(oKhoa).toBeNull();
+    expect(tai.querySelector('input[name="tyLe"]').disabled).toBe(false);
   });
 });
 

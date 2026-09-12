@@ -9,7 +9,13 @@ import { z } from 'zod';
 import { ok } from '../../middleware/errorHandler.js';
 import { requireAuth } from '../../middleware/session.js';
 import { validate } from '../../middleware/validate.js';
+import { AppError } from '../../utils/errors.js';
+import { projectFromLegacy, taskFromLegacy } from '../../rpc/legacyFields.js';
+import { updateSchema as workUpdateSchema, toRow as workToRow } from '../works/routes.js';
+import { updateSchema as itemUpdateSchema, toRow as itemToRow } from '../workItems/routes.js';
 import * as service from './service.js';
+import * as changes from './changes.js';
+import * as tyLe from './tyLe.js';
 
 // Lý do từ chối: chặn trên 2000 ký tự cho khớp cột `reject_reason`. Chặn dưới do service lo
 // (`DO_DAI_LY_DO_TOI_THIEU`) để cầu RPC cũng chịu cùng một luật, không chỉ đường REST này.
@@ -21,9 +27,76 @@ const listSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
+const approveSchema = z.object({
+  // Khi có edit, đây là dữ liệu form legacy; route sẽ đổi sang schema REST trước khi gọi service.
+  // Các khoá khác của request approve cũ được bỏ qua để giữ tương thích.
+  edit: z.record(z.unknown()).optional(),
+});
+
+function parseApproveEdit(entity, rawEdit) {
+  if (rawEdit === undefined) return undefined;
+  const name = String(entity ?? '').toLowerCase();
+  const isWork = name === 'work' || name === 'works';
+  const isItem = name === 'item' || name === 'work-item' || name === 'work-items';
+  if (!isWork && !isItem) return undefined;
+  const converted = isWork ? projectFromLegacy(rawEdit) : taskFromLegacy(rawEdit);
+  const checked = (isWork ? workUpdateSchema : itemUpdateSchema).safeParse(converted);
+  if (!checked.success) {
+    const issue = checked.error.issues[0];
+    throw new AppError('VALIDATION_ERROR', issue.message, {
+      field: issue.path.join('.') || undefined,
+    });
+  }
+  return {
+    patch: (isWork ? workToRow : itemToRow)(checked.data),
+    targetWorkRef: isItem ? checked.data.workRef : undefined,
+  };
+}
+
 export const approvalsRouter = Router();
 
 approvalsRouter.use(requireAuth);
+// Q2: đề nghị dùng cùng approval_changes và cùng danh sách /pending, không tạo hàng chờ mới.
+// ĐỢT B (R4''): bảng đó nay có THÊM loại `ty-le` — cùng một đường URL, rẽ nhánh theo `change_kind`.
+for (const action of ['approve', 'reject']) {
+  approvalsRouter.post('/changes/:id/' + action, async (req, res, next) => {
+    try {
+      if (!/^\d+$/.test(req.params.id))
+        throw new AppError('VALIDATION_ERROR', 'Mã đề nghị không hợp lệ');
+      const parsed = action === 'reject' ? rejectSchema.safeParse(req.body) : null;
+      if (parsed && !parsed.success)
+        throw new AppError('VALIDATION_ERROR', 'Vui lòng nhập lý do từ chối, tối đa 2000 ký tự', {
+          field: 'reason',
+        });
+      const reason = parsed?.data.reason ?? '';
+      const loai = await changes.kindOfChange(req.params.id);
+      if (loai == null) throw new AppError('NOT_FOUND', 'Không tìm thấy đề nghị');
+      if (loai === 'reviewer')
+        throw new AppError(
+          'VALIDATION_ERROR',
+          'Dòng này là thay đổi của người duyệt, không phải đề nghị'
+        );
+      const duyet = action === 'approve';
+      const result =
+        loai === 'ty-le'
+          ? await tyLe.decideTyLe(req.user, req.params.id, duyet, reason)
+          : await changes.decideGuiBld(req.user, req.params.id, duyet, reason);
+      res.locals.audit = {
+        action: `approvals.${loai}.${action}`,
+        entityType: 'task',
+        entityId: result.item.id,
+        workId: result.item.work_id,
+        details:
+          loai === 'ty-le'
+            ? { changeId: result.id, target: result.target, tyLe: result.tyLe }
+            : { changeId: result.id, guiBldPheDuyet: result.item.gui_bld_phe_duyet },
+      };
+      return ok(res, result);
+    } catch (error) {
+      return next(error);
+    }
+  });
+}
 
 /** Con số của badge (việc 5.5). Giao diện gọi lại đường này sau MỖI lần duyệt. */
 approvalsRouter.get('/pending-count', async (req, res, next) => {
@@ -90,11 +163,20 @@ approvalsRouter.post('/:entity/:id/submit', async (req, res, next) => {
   }
 });
 
-approvalsRouter.post('/:entity/:id/approve', async (req, res, next) => {
+approvalsRouter.post('/:entity/:id/approve', validate(approveSchema), async (req, res, next) => {
   try {
-    const result = await service.approve(req.user, req.params.entity, req.params.id);
-    res.locals.audit = auditFor('approvals.approve', result, { soCon: result.soCon ?? 0 });
-    return ok(res, { row: result.row, soCon: result.soCon ?? 0, notified: result.notified });
+    const edit = parseApproveEdit(req.params.entity, req.body?.edit);
+    const result = await service.approve(req.user, req.params.entity, req.params.id, edit);
+    res.locals.audit = auditFor('approvals.approve', result, {
+      soCon: result.soCon ?? 0,
+      ...(result.changes ? { changes: result.changes } : {}),
+    });
+    return ok(res, {
+      row: result.row,
+      soCon: result.soCon ?? 0,
+      notified: result.notified,
+      ...(result.changes ? { changes: result.changes } : {}),
+    });
   } catch (err) {
     return next(err);
   }
@@ -219,4 +301,24 @@ approvalsRouter.post(
   }
 );
 
+approvalsRouter.get('/:entity/:id/changes', async (req, res, next) => {
+  try {
+    return ok(res, {
+      items: await changes.unreadChanges(req.user, req.params.entity, req.params.id),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+approvalsRouter.post(
+  '/changes/:id/acknowledge',
+  validate(z.object({ id: z.coerce.number().int().positive() }), 'params'),
+  async (req, res, next) => {
+    try {
+      return ok(res, await changes.acknowledge(req.user, req.params.id));
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 export default approvalsRouter;

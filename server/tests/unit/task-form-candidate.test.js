@@ -1,16 +1,22 @@
 // @vitest-environment jsdom
 //
-// Vòng giao diện phân công lần 3 (yêu cầu 2026-08-26):
-//   • nhãn ô gán người trong form nhiệm vụ hiển thị «Cán bộ trực tiếp»;
-//   • danh sách ứng viên CHỈ lấy role «Nhân viên» — ẩn Trưởng/Phó phòng/Phó GĐ/admin;
+// Vòng giao diện phân công lần 3 (yêu cầu 2026-08-26), cập nhật 2026-09-09:
+//   • nhãn ô gán người trong form nhiệm vụ hiển thị «Người thực hiện trực tiếp»;
+//   • danh sách ứng viên lấy role «Nhân viên» + «Trưởng phòng» + «Phó phòng» — ẩn Phó GĐ/admin,
+//     vì hai vai đó thuộc lớp «Ban lãnh đạo phụ trách» riêng (§0.1);
+//   • Trưởng/Phó phòng CHỈ hiện khi phòng của công việc đang chọn CÓ Phó Giám đốc phụ trách —
+//     không có thì kết quả họ nộp lên không ai duyệt được (máy chủ chặn bằng
+//     `ASSIGNEE_LEADER_NO_DEPUTY`, giao diện đừng đưa ra lựa chọn chắc chắn bị từ chối);
+//   • option của hai vai lãnh đạo kèm vai trong NGOẶC, của Cán bộ thì không;
 //   • option hiển thị CHỈ họ tên, KHÔNG ghép email;
 //   • tên trường dữ liệu GIỮ NGUYÊN: <select name="assignee">, value = tên người.
 // Test chạy app.js THẬT trong jsdom (mẫu dept-select.test.js / project-form-phan-cong.test.js).
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8') + QUYEN_UI;
 const EXPORTS = `;Object.assign(window, {
   COL,
   createTaskModal,
@@ -22,9 +28,23 @@ const EXPORTS = `;Object.assign(window, {
   datCongViec: (ds) => { allProjects = ds; },
   dangNhap: (ten, vai) => {
     isAuthenticated = true;
-    currentUser = { name: ten, role: vai };
+    currentUser = { name: ten, role: vai, department_id: 1 };
+    allDepartments = [{ [COL.D_DB_ID]: 1, [COL.D_NAME]: "Phòng A" }];
   },
 });`;
+
+// Mọi createTaskModal đều lập timer, kể cả ca chỉ phân tích HTML bằng DOMParser.
+// Không để timer thật của ca trước mở khoá ô của ca sau khi full suite chạy chậm.
+beforeEach(() => {
+  vi.useFakeTimers();
+  document.body.innerHTML = '';
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  document.body.innerHTML = '';
+});
 
 function khoiDong() {
   new Function(APP_SRC + EXPORTS)();
@@ -68,17 +88,19 @@ function nhansu(C) {
       [C.S_EMAIL]: 'hoangpgd@test.local',
       [C.S_OBJECT_TYPE]: 'Người dùng',
     },
-  ];
+  ].map((u) => ({ ...u, [C.S_DEPT]: 'Phòng A' }));
 }
 
 const CONG_VIEC_MAU = (C) => [
   {
     [C.P_ID]: 'CV001',
     [C.P_NAME]: 'Ra mắt cổng thông tin',
+    [C.P_DEPT]: 'Phòng A',
+    [C.P_DEPT_ID]: 1,
     [C.P_START]: '2026-01-05',
     [C.P_END]: '2026-12-31',
     // Người mở form ở case «lãnh đạo phòng» chính là quản lý công việc này — đủ điều kiện thấy
-    // toàn bộ danh sách ứng viên của phòng trước khi lọc chỉ còn role Nhân viên.
+    // toàn bộ danh sách ứng viên của phòng trước khi lọc theo ba vai được làm trực tiếp.
     [C.P_MANAGER]: 'Lê Trưởng Phòng',
   },
 ];
@@ -99,16 +121,38 @@ function moOForm(ten, vai) {
   return { tai, oGan };
 }
 
-function moOFormTrongDom(ten, vai, task = null) {
+function moOFormTrongDom(ten, vai, task = null, coPhoGiamDoc = true) {
   const C = window.COL;
   window.datNhanSu(nhansu(C));
   window.datCongViec(CONG_VIEC_MAU(C));
   window.dangNhap(ten, vai);
+  giapUngVien(coPhoGiamDoc);
   const html = task ? window.createTaskModal(true, task) : window.taoFormThemNhiemVu();
   document.body.innerHTML = html;
   const oGan = document.querySelector('select[name="assignee"]');
   if (!oGan) throw new Error('form trong DOM thiếu select[name="assignee"]');
   return oGan;
+}
+
+/**
+ * Giả lập `GET /api/v1/departments/assignment-options`.
+ *
+ * Ô người thực hiện đọc MỘT cờ trong phản hồi đó — `coPhoGiamDocPhuTrach` — để quyết có hiện
+ * Trưởng/Phó phòng hay không. `restGet` lấy `json.data`, nên bọc đúng hình dạng đó.
+ */
+function giapUngVien(coPhoGiamDoc) {
+  const duLieu = {
+    data: {
+      supervisors: [],
+      leaders: [],
+      lanhDaoLamTrucTiep: [],
+      coPhoGiamDocPhuTrach: coPhoGiamDoc === true,
+    },
+  };
+  // Không dùng `async` — không có gì để await, và eslint `require-await` bắt đúng điều đó.
+  window.fetch = vi.fn(() =>
+    Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve(duLieu) })
+  );
 }
 
 const NHIEM_VU_MAU = (C, assignee) => ({
@@ -121,28 +165,42 @@ const NHIEM_VU_MAU = (C, assignee) => ({
   [C.T_DUE]: '2026-12-31',
 });
 
-describe('form nhiệm vụ — nhãn «Cán bộ trực tiếp» và danh sách ứng viên chỉ Nhân viên', () => {
+describe('form nhiệm vụ — nhãn «Người thực hiện trực tiếp» và danh sách ứng viên', () => {
   beforeEach(() => {
     khoiDong();
   });
 
-  it('nhãn hiển thị là «Cán bộ trực tiếp», trường dữ liệu vẫn name="assignee"', () => {
+  it('nhãn hiển thị là «Người thực hiện trực tiếp», trường dữ liệu vẫn name="assignee"', () => {
     const { tai, oGan } = moOForm('Quản trị Hệ thống', 'admin');
     const nhan = oGan.closest('.form-group')?.querySelector('label');
-    expect(nhan && nhan.textContent).toBe('Cán bộ trực tiếp');
-    // Ô gán người KHÔNG còn nhãn cũ nào.
-    expect(oGan.closest('.form-group').textContent).not.toContain('Người thực hiện');
+    expect(nhan && nhan.textContent).toBe('Người thực hiện trực tiếp');
+    // Ô bắt buộc chọn (2026-09-09, mục 3 của đợt 8b): nhãn phải mang dấu sao như các ô required.
+    expect(nhan.classList.contains('required')).toBe(true);
+    // Nhãn cũ không được sót lại ở bất kỳ đâu trong form.
+    expect(tai.querySelector('#task-modal').textContent).not.toContain('Cán bộ trực tiếp');
     expect(tai.querySelector('#task-modal')).toBeTruthy();
   });
 
-  it('admin: chỉ thấy cán bộ role Nhân viên — Trưởng/Phó phòng/Phó GĐ bị ẩn', () => {
+  it('admin: thấy Cán bộ + Trưởng/Phó phòng — Phó GĐ vẫn bị ẩn', () => {
     const { oGan } = moOForm('Quản trị Hệ thống', 'admin');
     const giaTri = Array.from(oGan.options).map((o) => o.value);
     expect(giaTri).toContain('Nguyễn Văn An');
     expect(giaTri).toContain('Trần Thị Bình');
-    expect(giaTri).not.toContain('Lê Trưởng Phòng');
-    expect(giaTri).not.toContain('Phạm Phó Phòng');
+    // 2026-09-09: hai vai lãnh đạo phòng nay nhận việc trực tiếp được.
+    expect(giaTri).toContain('Lê Trưởng Phòng');
+    expect(giaTri).toContain('Phạm Phó Phòng');
+    // Phó GĐ thuộc ô «Ban lãnh đạo phụ trách», không lẫn xuống đây.
     expect(giaTri).not.toContain('Hoàng Phó GĐ');
+  });
+
+  it('option của Trưởng/Phó phòng kèm vai trong NGOẶC, của Cán bộ thì không', () => {
+    const { oGan } = moOForm('Quản trị Hệ thống', 'admin');
+    const nhan = (ten) => Array.from(oGan.options).find((o) => o.value === ten)?.textContent;
+    expect(nhan('Lê Trưởng Phòng')).toBe('Lê Trưởng Phòng (Trưởng phòng)');
+    expect(nhan('Phạm Phó Phòng')).toBe('Phạm Phó Phòng (Phó phòng)');
+    expect(nhan('Nguyễn Văn An')).toBe('Nguyễn Văn An');
+    // value vẫn là TÊN trơn — luồng lưu/sửa đối chiếu theo tên, có nhãn trong value là vỡ.
+    expect(Array.from(oGan.options).every((o) => !o.value.includes('('))).toBe(true);
   });
 
   it('option chỉ hiện HỌ TÊN — không có ký tự "@" (đã bỏ phần email)', () => {
@@ -155,32 +213,94 @@ describe('form nhiệm vụ — nhãn «Cán bộ trực tiếp» và danh sách
     }
   });
 
-  it('lãnh đạo phòng mở form: bản thân là Trưởng phòng cũng KHÔNG vào danh sách ứng viên', () => {
+  it('lãnh đạo phòng mở form: thấy cán bộ cùng phòng VÀ Phó phòng cùng phòng, không thấy Phó GĐ', () => {
     const { oGan } = moOForm('Lê Trưởng Phòng', 'Trưởng phòng');
     const giaTri = Array.from(oGan.options).map((o) => o.value);
     expect(giaTri).toEqual(expect.arrayContaining(['Nguyễn Văn An']));
-    expect(giaTri).not.toContain('Lê Trưởng Phòng');
+    // Quyết định 2026-09-09: TP/PP CÙNG PHÒNG gán được cho nhau (và cho chính mình).
+    expect(giaTri).toContain('Lê Trưởng Phòng');
+    expect(giaTri).toContain('Phạm Phó Phòng');
     expect(giaTri).not.toContain('Hoàng Phó GĐ');
+  });
+
+  it('phòng CHƯA có Phó GĐ phụ trách: Trưởng/Phó phòng bị cắt, Cán bộ giữ nguyên', async () => {
+    try {
+      const oGan = moOFormTrongDom('Quản trị Hệ thống', 'admin', null, false);
+      // HTML dựng lần đầu chưa biết phòng có Phó GĐ hay không (phải hỏi máy chủ) ⇒ vẫn còn đủ;
+      // sau khi `assignment-options` về thì vẽ lại.
+      await vi.advanceTimersByTimeAsync(300);
+      const giaTri = Array.from(oGan.options).map((o) => o.value);
+      expect(giaTri).toContain('Nguyễn Văn An');
+      expect(giaTri).toContain('Trần Thị Bình');
+      expect(giaTri).not.toContain('Lê Trưởng Phòng');
+      expect(giaTri).not.toContain('Phạm Phó Phòng');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('phòng CÓ Phó GĐ phụ trách: giữ Trưởng/Phó phòng trong danh sách', async () => {
+    try {
+      const oGan = moOFormTrongDom('Quản trị Hệ thống', 'admin');
+      await vi.advanceTimersByTimeAsync(300);
+      const giaTri = Array.from(oGan.options).map((o) => o.value);
+      expect(giaTri).toContain('Lê Trưởng Phòng');
+      expect(giaTri).toContain('Phạm Phó Phòng');
+      expect(giaTri).not.toContain('Hoàng Phó GĐ');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('vẽ lại danh sách KHÔNG làm mất người đang chọn nếu người đó vẫn hợp lệ', async () => {
+    try {
+      const C = window.COL;
+      const oGan = moOFormTrongDom(
+        'Quản trị Hệ thống',
+        'admin',
+        NHIEM_VU_MAU(C, 'Lê Trưởng Phòng')
+      );
+      await vi.advanceTimersByTimeAsync(300);
+      expect(oGan.value).toBe('Lê Trưởng Phòng');
+    } finally {
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('người đang chọn là Trưởng phòng mà phòng mất Phó GĐ ⇒ trả về rỗng, không âm thầm đổi người', async () => {
+    try {
+      const C = window.COL;
+      const oGan = moOFormTrongDom(
+        'Quản trị Hệ thống',
+        'admin',
+        NHIEM_VU_MAU(C, 'Lê Trưởng Phòng'),
+        false
+      );
+      await vi.advanceTimersByTimeAsync(300);
+      expect(oGan.value).toBe('');
+    } finally {
+      document.body.innerHTML = '';
+    }
   });
 
   it.each([
     ['Trưởng phòng', 'Lê Trưởng Phòng'],
     ['Phó phòng', 'Phạm Phó Phòng'],
-  ])('tạo mới: %s được chọn Cán bộ trực tiếp sau khi timer phân quyền chạy', async (_vai, ten) => {
-    vi.useFakeTimers();
-    try {
-      const oGan = moOFormTrongDom(ten, _vai);
-      await vi.advanceTimersByTimeAsync(100);
-      expect(oGan.disabled).toBe(false);
-      expect(oGan.value).toBe('');
-    } finally {
-      vi.useRealTimers();
-      document.body.innerHTML = '';
+  ])(
+    'tạo mới: %s được chọn Người thực hiện trực tiếp sau khi timer phân quyền chạy',
+    async (_vai, ten) => {
+      try {
+        const oGan = moOFormTrongDom(ten, _vai);
+        await vi.advanceTimersByTimeAsync(300);
+        expect(oGan.disabled).toBe(false);
+        expect(oGan.value).toBe('');
+      } finally {
+        document.body.innerHTML = '';
+      }
     }
-  });
+  );
 
-  it('Trưởng phòng chỉnh sửa nhiệm vụ của người khác vẫn đổi được Cán bộ trực tiếp', async () => {
-    vi.useFakeTimers();
+  it('Trưởng phòng chỉnh sửa nhiệm vụ của người khác vẫn đổi được Người thực hiện', async () => {
     try {
       const C = window.COL;
       const oGan = moOFormTrongDom(
@@ -188,38 +308,33 @@ describe('form nhiệm vụ — nhãn «Cán bộ trực tiếp» và danh sách
         'Trưởng phòng',
         NHIEM_VU_MAU(C, 'Nguyễn Văn An')
       );
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(300);
       expect(oGan.disabled).toBe(false);
       expect(oGan.value).toBe('Nguyễn Văn An');
     } finally {
-      vi.useRealTimers();
       document.body.innerHTML = '';
     }
   });
 
-  it('admin vẫn đổi được Cán bộ trực tiếp sau timer', async () => {
-    vi.useFakeTimers();
+  it('admin vẫn đổi được Người thực hiện sau timer', async () => {
     try {
       const C = window.COL;
       const oGan = moOFormTrongDom('Quản trị Hệ thống', 'admin', NHIEM_VU_MAU(C, 'Nguyễn Văn An'));
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(300);
       expect(oGan.disabled).toBe(false);
     } finally {
-      vi.useRealTimers();
       document.body.innerHTML = '';
     }
   });
 
-  it('cán bộ tự sửa nhiệm vụ của mình vẫn bị khóa Cán bộ trực tiếp', async () => {
-    vi.useFakeTimers();
+  it('cán bộ tự sửa nhiệm vụ của mình vẫn bị khóa ô Người thực hiện', async () => {
     try {
       const C = window.COL;
       const oGan = moOFormTrongDom('Nguyễn Văn An', 'Nhân viên', NHIEM_VU_MAU(C, 'Nguyễn Văn An'));
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(300);
       expect(oGan.disabled).toBe(true);
       expect(oGan.value).toBe('Nguyễn Văn An');
     } finally {
-      vi.useRealTimers();
       document.body.innerHTML = '';
     }
   });

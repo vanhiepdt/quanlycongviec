@@ -12,13 +12,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
+import { QUYEN_UI } from '../helpers/uiPermissions.js';
+const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8') + QUYEN_UI;
 const EXPORTS = `;Object.assign(window, {
   COL, isAdmin, isManager, laQuanTriTrongPhamVi, laLanhDaoPhong, updateUIForUser, canUserCreateTask,
   canUserEditResource, canUserDeleteResource, getUserAllowedProjects, dsNhiemVuToiDuocThay,
   __pq: (ten, giaTri) => { ({
     currentUser: () => { currentUser = giaTri; },
     allProjects: () => { allProjects = giaTri; },
+    allDepartments: () => { allDepartments = giaTri; },
     allTasks: () => { allTasks = giaTri; },
     visibleDepartments: () => { visibleDepartments = giaTri; },
     isDeputyDirectorUser: () => { isDeputyDirectorUser = giaTri; },
@@ -52,6 +54,7 @@ beforeEach(() => {
   document.body.innerHTML = KHUNG;
   new Function(APP_SRC + EXPORTS)();
   window.__pq('allProjects', []);
+  window.__pq('allDepartments', [{ [window.COL.D_DB_ID]: 1, [window.COL.D_NAME]: 'Phòng A' }]);
   window.__pq('allTasks', []);
   window.__pq('visibleDepartments', []);
   window.__pq('isDeputyDirectorUser', false);
@@ -91,8 +94,8 @@ describe('TC-QLCV-READ: cùng phòng ngay lần vẽ đầu', () => {
       );
       window.__pq('allProjects', projects);
       window.__pq('allTasks', tasks);
-      expect(window.getUserAllowedProjects()).toEqual([projects[0]]);
-      expect(window.dsNhiemVuToiDuocThay()).toEqual(tasks.slice(0, 2));
+      expect(window.getUserAllowedProjects()).toEqual([]); // Vai đã bỏ không lấy lại quyền qua giao diện
+      expect(window.dsNhiemVuToiDuocThay()).toEqual([]);
       window.__pq('currentUser', { name: 'Quản lý', role: 'Quản lý công việc' });
       expect(window.getUserAllowedProjects()).toEqual([]);
       expect(window.dsNhiemVuToiDuocThay()).toEqual([]);
@@ -123,9 +126,9 @@ describe('TC-PGD-UI-01: tab «Quản lý công việc» của Phó Giám đốc'
     expect({ cv: nav('projects-nav'), cb: nav('staff-nav') }).toEqual({ cv: 'flex', cb: 'flex' });
   });
 
-  it('Nhân viên không quản lý công việc nào thì vẫn KHÔNG thấy tab — luật cũ giữ nguyên', () => {
+  it('Nhân viên có work:read thấy tab, không được tạo công việc', () => {
     dangNhap({ name: 'Nhân viên', role: 'Nhân viên' });
-    expect({ cv: nav('projects-nav'), cb: nav('staff-nav') }).toEqual({ cv: 'none', cb: 'none' });
+    expect({ cv: nav('projects-nav'), cb: nav('staff-nav') }).toEqual({ cv: 'flex', cb: 'none' });
   });
 
   it('Nhân viên đứng tên quản lý một công việc thì thấy tab (nhánh hasMatch cũ)', () => {
@@ -167,10 +170,10 @@ describe('TC-PGD-UI-02: laQuanTriTrongPhamVi() — đúng hai nguồn, không n�
     expect(window.laQuanTriTrongPhamVi()).toBe(false);
   });
 
-  it('cờ isDeputyDirectorUser từ getDepartmentContext() cũng đủ để mở nút', () => {
+  it('cờ phòng cũ không được nâng Nhân viên thành Phó Giám đốc', () => {
     window.__pq('currentUser', { name: 'X', role: 'Nhân viên' });
     window.__pq('isDeputyDirectorUser', true);
-    expect(window.laQuanTriTrongPhamVi()).toBe(true);
+    expect(window.laQuanTriTrongPhamVi()).toBe(false);
   });
 
   it('chưa đăng nhập thì false, không ném lỗi', () => {
@@ -180,9 +183,10 @@ describe('TC-PGD-UI-02: laQuanTriTrongPhamVi() — đúng hai nguồn, không n�
 });
 
 describe('TC-PGD-UI-03: nút thêm/sửa/xoá của Phó Giám đốc', () => {
-  const PGD = { name: 'Chị Phó GĐ', role: 'Phó Giám đốc' };
+  const PGD = { name: 'Chị Phó GĐ', role: 'Phó Giám đốc', managedDepartmentIds: [1] };
 
   it('nút «+ công việc» và «+ nhiệm vụ» hiện ra sau hideAdminButtons()', () => {
+    window.__pq('allProjects', [{ [window.COL.P_ID]: 'CV001', [window.COL.P_DEPT_ID]: 1 }]);
     dangNhap(PGD);
     expect(document.getElementById('add-project-standalone').style.display).toBe('');
     expect(document.getElementById('add-task-standalone').style.display).toBe('');
@@ -192,7 +196,9 @@ describe('TC-PGD-UI-03: nút thêm/sửa/xoá của Phó Giám đốc', () => {
   it('sửa/xoá được công việc do NGƯỜI KHÁC phụ trách (phạm vi do máy chủ kiểm)', () => {
     const COL = window.COL;
     window.__pq('currentUser', PGD);
-    window.__pq('allProjects', [{ [COL.P_ID]: 'CV001', [COL.P_MANAGER]: 'Người khác' }]);
+    window.__pq('allProjects', [
+      { [COL.P_ID]: 'CV001', [COL.P_DEPT_ID]: 1, [COL.P_MANAGER]: 'Người khác' },
+    ]);
     expect(window.canUserEditResource('project', 'CV001')).toBe(true);
     expect(window.canUserDeleteResource('project', 'CV001')).toBe(true);
   });
@@ -289,7 +295,7 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
     window.__pq('allProjects', BON_CONG_VIEC());
     window.__pq('isDepartmentHeadUser', true);
     window.__pq('myDepartment', '');
-    expect(maCV()).toEqual(['CV008']); // chỉ việc mình đứng tên quản lý
+    expect(maCV()).toEqual([]); // Chưa có phòng thì không đoán quyền từ tên người quản lý
   });
 
   it('TC-TP-CV-04: KHÔNG dùng visibleDepartments (kênh của Phó GĐ) và không nới cho Cán bộ', () => {
@@ -303,16 +309,16 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
     // Cán bộ cùng phòng vẫn chỉ thấy việc của mình (ma trận §6: work chỉ read, không nới nút).
     window.__pq('currentUser', { name: 'Nhân viên Đào tạo', role: 'Nhân viên' });
     window.__pq('isDepartmentHeadUser', false);
-    expect(maCV()).toEqual([]);
+    expect(maCV()).toEqual(['CV001', 'CV002', 'CV006', 'CV008']); // work:read theo phòng
   });
 
   it('Trưởng phòng thấy nút «Công việc mới» (add-project-standalone)', () => {
-    dangNhap({ name: 'Anh TP', role: 'Trưởng phòng' });
+    dangNhap({ name: 'Anh TP', role: 'Trưởng phòng', department_id: 1 });
     expect(document.getElementById('add-project-standalone').style.display).toBe('');
   });
 
   it('Phó phòng cũng thấy; Nhân viên vẫn không thấy', () => {
-    dangNhap({ name: 'Anh PP', role: 'Phó phòng' });
+    dangNhap({ name: 'Anh PP', role: 'Phó phòng', department_id: 1 });
     expect(document.getElementById('add-project-standalone').style.display).toBe('');
     dangNhap({ name: 'Bạn NV', role: 'Nhân viên' });
     expect(document.getElementById('add-project-standalone').style.display).toBe('none');
@@ -343,17 +349,31 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
     // + inScope case 'Trưởng phòng'/'Phó phòng'); client từng hẹp hơn — chỉ mở nút Sửa cho
     // project/subwork, còn canUserDeleteResource không có nhánh TP/PP nào (Vòng 12e).
     const COL = window.COL;
-    window.__pq('allProjects', [{ [COL.P_ID]: 'CV001', [COL.P_MANAGER]: 'Người khác' }]);
+    window.__pq('allProjects', [
+      { [COL.P_ID]: 'CV001', [COL.P_DEPT_ID]: 1, [COL.P_MANAGER]: 'Người khác' },
+    ]);
     window.__pq('allTasks', [
-      { [COL.T_ID]: 'CV001-002', [COL.T_PID]: 'CV001', [COL.T_ASSIGNEE]: 'Người khác' },
+      { [COL.T_ID]: 'CV001-001', [COL.T_PID]: 'CV001', [COL.T_LEVEL]: 2 },
+      {
+        [COL.T_ID]: 'CV001-002',
+        [COL.T_PID]: 'CV001',
+        [COL.T_LEVEL]: 3,
+        [COL.T_ASSIGNEE]: 'Người khác',
+      },
     ]);
     for (const vai of ['Trưởng phòng', 'Phó phòng']) {
-      window.__pq('currentUser', { name: 'Lãnh đạo phòng', role: vai });
+      window.__pq('currentUser', { name: 'Lãnh đạo phòng', role: vai, department_id: 1 });
       for (const loai of ['project', 'subwork', 'task']) {
-        expect(window.canUserDeleteResource(loai, 'CV001'), `xoá ${loai} với ${vai}`).toBe(true);
+        expect(
+          window.canUserDeleteResource(
+            loai,
+            loai === 'project' ? 'CV001' : loai === 'subwork' ? 'CV001-001' : 'CV001-002'
+          ),
+          `xoá ${loai} với ${vai}`
+        ).toBe(true);
       }
       expect(window.canUserEditResource('project', 'CV001')).toBe(true);
-      expect(window.canUserEditResource('subwork', 'CV001')).toBe(true);
+      expect(window.canUserEditResource('subwork', 'CV001-001')).toBe(true);
       // 2026-09-01 (Vòng 14): thêm 'task'. Người dùng báo «Trưởng phòng đang không sửa được
       // nhiệm vụ» — máy chủ vẫn cho (PERMISSIONS['Trưởng phòng'].task có 'update', inScope bó
       // theo phòng), lỗi nằm ở client: canUserEditResource chỉ mở project/subwork nên nhiệm vụ

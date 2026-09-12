@@ -2,7 +2,8 @@
 // đọc giá trị hiệu lực từ Bảng phân quyền động (giaTriHieuLuc: ma trận + ghi đè 009/010/011/014).
 //
 // Bốn điều then chốt, mỗi điều là một quyết định người dùng đã chốt:
-//  1. **Cán bộ nộp ⇒ nhóm rơi «Chờ TP/PP xem»** (⏳ mặc định); TP/PP nộp ⇒ «Chờ lãnh đạo».
+// V4: «nộp» trong các ca workflow dưới đây = lưu bằng multipart/reports RỒI gửi qua REST riêng.
+//  1. **Cán bộ gửi ⇒ nhóm rơi «Chờ TP/PP xem»** (⏳ mặc định); TP/PP nộp ⇒ «Chờ lãnh đạo».
 //  2. **admin đổi `file:create` Cán bộ = ✓ qua PUT ⇒ lần nộp sau TỰ ĐỘNG «Đã duyệt»** kèm dòng
 //     luồng «Tự động — phân quyền không yêu cầu duyệt»; đổi lại ⏳ ⇒ luồng thường — HIỆU LỰC NGAY.
 //  3. **TP/PP chốt = 'hoan-thanh'** (người dùng chốt 2026-09-01); 'da-duyet' chỉ do PGD/GĐ bấm
@@ -70,7 +71,7 @@ async function dangNhap(user) {
 }
 
 /** Nộp file bằng FormData thật (multer + CSRF) — cùng đường với trình duyệt. */
-async function nopFile(api, ref, file, { fileId = null, moTa = '' } = {}) {
+async function luuFile(api, ref, file, { fileId = null, moTa = '' } = {}) {
   const token = await api.csrfToken();
   let req = api.agent.post(`/api/v1/work-items/${encodeURIComponent(ref)}/files`);
   if (token !== null) req = req.set('x-csrf-token', token);
@@ -80,6 +81,18 @@ async function nopFile(api, ref, file, { fileId = null, moTa = '' } = {}) {
     filename: file.ten,
     contentType: file.mime,
   });
+}
+
+/** V4: fixture workflow thực hiện HAI HTTP request thật; không giả/chỉnh response upload.
+ * Lệnh sửa là ngoại lệ Q5: response đã gửi thì không gửi lặp.
+ */
+function guiSauKhiLuu(api, saved) {
+  if (saved.status !== 200 || saved.body.data.nhom.trang_thai !== 'luu-tam') return saved;
+  const { nhom, ban } = saved.body.data;
+  return api.post(`/api/v1/task-files/${nhom.id}/gui-di-duyet`, { versionId: ban.id });
+}
+async function luuVaGuiFile(api, ref, file, options) {
+  return guiSauKhiLuu(api, await luuFile(api, ref, file, options));
 }
 
 async function docFiles(api, ref) {
@@ -120,8 +133,26 @@ async function datGhiDe(vai, entityType, action, giaTri) {
   expect(res.status, JSON.stringify(res.body)).toBe(200);
 }
 
-/** Một công việc đã duyệt + công việc con + nhiệm vụ gán cho Cán bộ (khuôn taoCayDaDuyet 013). */
-async function taoNhiemVuCho(name, { leaderIdsNv = null, leaderIdsCon = null } = {}) {
+/**
+ * Ký cấp 3 (ĐỢT B — Q3 + Q2, 11/09/2026).
+ *
+ * Hai luật mới buộc mọi fixture muốn nộp file phải thêm bước này:
+ *   • Q3 — nhiệm vụ cấp 3 KHÔNG còn tự sinh ra ở «Đã duyệt» (bỏ `rules.js` dòng «level 3 ⇒ Đã
+ *     duyệt» và bỏ luôn `VAI_TU_DUYET` theo R6). Dòng mới tạo nay là «Chờ duyệt».
+ *   • Q2 — CẤM HẲN nộp file khi cây chưa `Đã duyệt`; lúc đó chỉ được KHAI BÁO kết quả.
+ * Cây ở đây đã ký cấp 1 và cấp 2 rồi, nên chỉ còn thiếu cấp 3.
+ */
+async function duyetNhiemVu(code) {
+  const res = await apiPgdA.post(`/api/v1/approvals/work-item/${code}/approve`);
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+  return code;
+}
+
+/** MỘT CÂY ĐÃ DUYỆT CẢ BA CẤP + nhiệm vụ gán cho Cán bộ (khuôn taoCayDaDuyet 013, thêm cấp 3 từ ĐỢT B). */
+async function taoNhiemVuCho(
+  name,
+  { leaderIdsNv = null, leaderIdsCon = null, assigneeId = null, guiBld = false } = {}
+) {
   const cv = await apiTp.post('/api/v1/works', {
     name: `Việc phòng A — ${name}`,
     departmentId: phongA.id,
@@ -145,15 +176,26 @@ async function taoNhiemVuCho(name, { leaderIdsNv = null, leaderIdsCon = null } =
     level: 3,
     parentRef: conCode,
     name: `Nhiệm vụ — ${name}`,
-    assigneeId: nv.id,
+    // Mặc định vẫn gán cho Cán bộ như mọi ca cũ; `assigneeId` cho phép gán Trưởng phòng để thử
+    // nhóm ca 2026-09-09 (lãnh đạo phòng nhận việc trực tiếp).
+    assigneeId: assigneeId ?? nv.id,
     // 2026-09-02 — luật SIẾT `leader_ids`: chỉ người được nêu ở ô «Lãnh đạo phòng phụ trách» mới
     // xem/sửa/duyệt được file của nhiệm vụ. Bộ test này để Trưởng phòng đóng vai đó, nên phải gán
     // tường minh — nếu bỏ trống thì mọi lời gọi của `apiTp` rơi 403 «không phải lãnh đạo phụ trách».
     // `leaderIdsNv: []` để CỐ Ý bỏ trống (ca nhiệm vụ chưa gán lãnh đạo).
     leaderIds: leaderIdsNv ?? [tp.id],
+    // Q6 (ĐỢT B, 11/09/2026): nút «TP/PP phê duyệt» chỉ tồn tại khi nhiệm vụ PHẢI trình Ban lãnh đạo
+    // kiểm soát. Đặt ngay lúc TẠO chứ không `PATCH` về sau, vì sửa nhiệm vụ trên cây đã duyệt thì
+    // `phaiChoDuyetKhiSua` (Q9) hạ cây về «Chờ duyệt» và Q2 khoá luôn cửa nộp file.
+    guiBldPheDuyet: guiBld,
+    // `assertGuiBld` không cho bật tích khi nhiệm vụ (và cả công việc con chứa nó) chưa có Ban lãnh
+    // đạo kiểm soát — cây của bộ test này để trống ô đó, nên phải khai cùng lúc. `pgdA` là Phó GĐ phụ
+    // trách phòng A (`department_managers` role 'deputy_director') nên qua được `assertSupervisor`.
+    ...(guiBld ? { supervisorIds: [pgdA.id] } : {}),
   });
   expect(nvItem.status, JSON.stringify(nvItem.body)).toBe(200);
-  return nvItem.body.data.item.code;
+  // ĐỢT B (Q3): cấp 3 không còn tự «Đã duyệt» — phải ký thì mới nộp được file (Q2).
+  return duyetNhiemVu(nvItem.body.data.item.code);
 }
 
 beforeEach(async () => {
@@ -217,9 +259,9 @@ afterAll(async () => {
 });
 
 describe('TC-TF — luồng file kết quả + phân quyền động (014)', () => {
-  it('TC-TF-01: Cán bộ nộp PDF ⇒ nhóm «cho-xem», bản v1, dòng luồng «nop»; TỬ TẾ: TP NHẬN THÔNG BÁO', async () => {
+  it('TC-TF-01: Cán bộ nộp PDF ⇒ nhóm «cho-xem», bản v1, luồng «luu-tam → gui-duyet»; TỬ TẾ: TP NHẬN THÔNG BÁO', async () => {
     const ma = await taoNhiemVuCho('TF-01');
-    const res = await nopFile(apiNv, ma, PDF, { moTa: 'Bản đầu tiên' });
+    const res = await luuVaGuiFile(apiNv, ma, PDF, { moTa: 'Bản đầu tiên' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const { nhom, ban, tuDong } = res.body.data;
     expect(tuDong).toBe(false);
@@ -229,7 +271,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(ban.ten_luu).toMatch(/^v1-[0-9a-f-]+\.pdf$/);
     expect(ban.ten_luu).not.toContain(PDF.ten); // CẤM dùng tên gốc làm tên vật lý
     const luong = await luongCuaNhom(nhom.id);
-    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop']);
+    expect(luong.map((g) => g.hanh_dong)).toEqual(['luu-tam', 'gui-duyet']);
     expect(luong[0].noi_dung).toBe('Bản đầu tiên');
     // Phản hồi GET mang cờ ONLYOFFICE để client hiện/ẩn nút ✎ sửa trực tuyến.
     const doc = await apiNv.get(`/api/v1/work-items/${encodeURIComponent(ma)}/files`);
@@ -260,7 +302,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
   it('TC-TF-02: TP/PP góp ý theo bản ⇒ ghi task_file_comments + dòng luồng «gom-y»', async () => {
     const ma = await taoNhiemVuCho('TF-02');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     const cacBan = (await docFiles(apiTp, ma))[0].bans;
     const res = await apiTp.post(`/api/v1/task-file-versions/${cacBan[0].id}/comments`, {
       noiDung: 'Trang 2 thiếu chữ ký',
@@ -270,24 +312,29 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(sau[0].gopY).toHaveLength(1);
     expect(sau[0].gopY[0].ten_nguoi).toBe(tp.full_name);
     expect(sau[0].gopY[0].noi_dung).toBe('Trang 2 thiếu chữ ký');
-    expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).toEqual(['nop', 'gom-y']);
+    expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+      'gom-y',
+    ]);
     expect(await trangThaiNhom(nhom.id)).toBe('cho-xem'); // góp ý KHÔNG đổi trạng thái
   });
 
-  it('TC-TF-03: TP «Yêu cầu sửa» (nội dung ≥ 10 ký tự) ⇒ «can-sua» + thông báo cho Cán bộ', async () => {
+  it('TC-TF-03: TP «Đẩy về Cán bộ» (nội dung ≥ 10 ký tự) ⇒ «can-sua» + thông báo cho Cán bộ', async () => {
     const ma = await taoNhiemVuCho('TF-03');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
+    // ĐIỂM 9 (ĐỢT B): `yeu-cau-sua` đã gộp vào `tra-ve-cbo` — một nút cho một việc.
     const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Bổ sung bảng số liệu tháng 8 rồi nộp lại',
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
     const bao = await thongBaoCua(nv.id);
-    expect(bao.some((x) => x.content.includes('yêu cầu sửa lại'))).toBe(true);
+    expect(bao.some((x) => x.content.includes('trả về để sửa'))).toBe(true);
     // Nội dung < 10 ký tự bị chặn ngay ở service.
     const ngan = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'chưa đạt',
     });
     expect(ngan.status).toBe(400);
@@ -295,65 +342,75 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
   it('TC-TF-04: Cán bộ nộp v2 sau yêu cầu sửa ⇒ version_no tăng, nhóm về «cho-xem»', async () => {
     const ma = await taoNhiemVuCho('TF-04');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Bổ sung bảng số liệu tháng 8 rồi nộp lại',
     });
-    const res = await nopFile(apiNv, ma, DOCX, { fileId: nhom.id, moTa: 'Đã bổ sung bảng' });
+    const res = await luuVaGuiFile(apiNv, ma, PDF, { fileId: nhom.id, moTa: 'Đã bổ sung bảng' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.ban.version_no).toBe(2);
     expect(await trangThaiNhom(nhom.id)).toBe('cho-xem');
     const luong = await luongCuaNhom(nhom.id);
-    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop', 'yeu-cau-sua', 'nop']);
+    expect(luong.map((g) => g.hanh_dong)).toEqual(['luu-tam', 'gui-duyet', 'tra-ve-cbo', 'nop']);
   });
 
-  it('TC-TF-05: admin đổi «file:create» Cán bộ = ✓ qua PUT ⇒ lần nộp sau TỰ ĐỘNG «da-duyet» + dòng «Tự động»', async () => {
+  it('TC-TF-05: R6 — «file:create» Cán bộ = ✓ KHÔNG còn tự duyệt: nộp vẫn vào «cho-xem», không dòng «duyet-tu-dong»', async () => {
     const ma = await taoNhiemVuCho('TF-05');
     await datGhiDe('Nhân viên', 'file', 'create', 'cho-phep');
-    const res = await nopFile(apiNv, ma, PDF);
+    const res = await luuVaGuiFile(apiNv, ma, PDF);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const { nhom, tuDong } = res.body.data;
-    expect(tuDong).toBe(true);
-    expect(nhom.trang_thai).toBe('da-duyet');
+    // Luật cũ: ✓ ở ô «Tạo file kết quả» nghĩa là «không yêu cầu duyệt» ⇒ lần nộp TỰ chốt «da-duyet».
+    // R6 bỏ hẳn: ✓ chỉ còn nghĩa «được phép khai/nộp», quyền duyệt luôn nằm ở một người khác.
+    expect(tuDong).toBe(false);
+    expect(nhom.trang_thai).toBe('cho-xem');
     const luong = await luongCuaNhom(nhom.id);
-    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop', 'duyet-tu-dong']);
-    expect(luong[1].noi_dung).toBe('Tự động — phân quyền không yêu cầu duyệt');
-    // Nhóm đã «Đã duyệt» = trạng thái kết: không nộp thêm được (khóa upload).
-    const nopTiep = await nopFile(apiNv, ma, DOCX, { fileId: nhom.id });
-    expect(nopTiep.status).toBe(409);
+    expect(luong.map((g) => g.hanh_dong)).toEqual(['luu-tam', 'gui-duyet']);
+    expect(luong.map((g) => g.hanh_dong)).not.toContain('duyet-tu-dong');
+    // Nhóm «cho-xem» không phải trạng thái kết nên nộp bản mới vẫn được (bản cũ đã khoá là «da-duyet»).
+    const nopTiep = await luuVaGuiFile(apiNv, ma, PDF, { fileId: nhom.id });
+    expect(nopTiep.status, JSON.stringify(nopTiep.body)).toBe(200);
+    expect(nopTiep.body.data.ban.version_no).toBe(2);
   });
 
   it('TC-TF-06: admin đổi lại ⏳ (mặc định) ⇒ luồng thường NGAY cho lần nộp sau', async () => {
     const ma = await taoNhiemVuCho('TF-06');
     await datGhiDe('Nhân viên', 'file', 'create', 'cho-phep');
-    await nopFile(apiNv, ma, PDF);
+    await luuVaGuiFile(apiNv, ma, PDF);
     await datGhiDe('Nhân viên', 'file', 'create', 'mac-dinh'); // xoá ghi đè = về mặc định
-    const res = await nopFile(apiNv, ma, DOCX);
+    const res = await luuVaGuiFile(apiNv, ma, DOCX);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.tuDong).toBe(false);
     expect(res.body.data.nhom.trang_thai).toBe('cho-xem');
-    expect((await luongCuaNhom(res.body.data.nhom.id)).map((g) => g.hanh_dong)).toEqual(['nop']);
+    expect((await luongCuaNhom(res.body.data.nhom.id)).map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+    ]);
   });
 
-  it('TC-TF-07: TP «Trình Phó giám đốc» ⇒ «cho-lanh-dao» + thông báo cho PGD PHỤ TRÁCH phòng', async () => {
-    const ma = await taoNhiemVuCho('TF-07');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+  it('TC-TF-07: TP «TP/PP phê duyệt» ⇒ «cho-lanh-dao» + thông báo cho Ban lãnh đạo kiểm soát', async () => {
+    // Q6 (ĐỢT B, 11/09/2026): nút «TP/PP phê duyệt» CHỈ tồn tại khi nhiệm vụ bật tích «Gửi BLĐ phê
+    // duyệt»; tích TẮT thì TP/PP là chặng cuối và chỉ còn nút chốt «Hoàn thành / Duyệt».
+    const ma = await taoNhiemVuCho('TF-07', { guiBld: true });
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
+    // ĐIỂM 7 (ĐỢT B): mã `trinh-lanh-dao` đổi thành `tp-phe-duyet` vì hành động này là một LẦN KÝ
+    // của TP/PP chứ không chỉ «đổi trạng thái» — phải lưu được ai ký và lúc nào.
     const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem kết quả quý này',
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(await trangThaiNhom(nhom.id)).toBe('cho-lanh-dao');
     const bao = await thongBaoCua(pgdA.id);
-    expect(bao.some((x) => x.content.includes('được trình Phó GĐ phụ trách xem'))).toBe(true);
+    expect(bao.some((x) => x.content.includes('đã được TP/PP phê duyệt'))).toBe(true);
   });
 
   it('TC-TF-08: PGD «Trả về TP/PP» kèm ý kiến ⇒ lệnh sửa lãnh đạo + thông báo TP/PP', async () => {
-    const ma = await taoNhiemVuCho('TF-08');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const ma = await taoNhiemVuCho('TF-08', { guiBld: true }); // Q6: cần nút «TP/PP phê duyệt»
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem kết quả quý này',
     });
     const res = await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
@@ -374,18 +431,23 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   });
 
   it('TC-TF-09: TP nộp bản của chính mình sau khi PGD trả về (file:create TP = ⏳) ⇒ về «cho-lanh-dao»', async () => {
-    const ma = await taoNhiemVuCho('TF-09');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
-    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+    const ma = await taoNhiemVuCho('TF-09', { guiBld: true }); // Q6: cần nút «TP/PP phê duyệt»
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
+    const trinh = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem kết quả quý này',
     });
-    await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+    expect(trinh.status, JSON.stringify(trinh.body)).toBe(200);
+    const traTp = await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
       hanhDong: 'tra-ve-tp',
       noiDung: 'Cần bổ sung số liệu đối chiếu giữa hai bảng trước khi trình lại',
     });
+    expect(traTp.status, JSON.stringify(traTp.body)).toBe(200);
     // TP tự nộp bản của mình (không đẩy về Cán bộ) — file:create của TP mặc định ⏳.
-    const res = await nopFile(apiTp, ma, DOCX, { fileId: nhom.id, moTa: 'Bản của Trưởng phòng' });
+    const res = await luuVaGuiFile(apiTp, ma, PDF, {
+      fileId: nhom.id,
+      moTa: 'Bản của Trưởng phòng',
+    });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.ban.version_no).toBe(2);
     expect(res.body.data.tuDong).toBe(false);
@@ -393,16 +455,18 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   });
 
   it('TC-TF-10: TP «Đẩy về Cán bộ» sau khi PGD trả về ⇒ «can-sua» + thông báo người phải sửa', async () => {
-    const ma = await taoNhiemVuCho('TF-10');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
-    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+    const ma = await taoNhiemVuCho('TF-10', { guiBld: true }); // Q6: cần nút «TP/PP phê duyệt»
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
+    const trinh = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem kết quả quý này',
     });
-    await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+    expect(trinh.status, JSON.stringify(trinh.body)).toBe(200);
+    const traTp = await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
       hanhDong: 'tra-ve-tp',
       noiDung: 'Cần bổ sung số liệu đối chiếu giữa hai bảng trước khi trình lại',
     });
+    expect(traTp.status, JSON.stringify(traTp.body)).toBe(200);
     const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
       hanhDong: 'tra-ve-cbo',
       noiDung: 'Phòng yêu cầu bổ sung số liệu rồi nộp lại',
@@ -416,13 +480,17 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   it('TC-TF-11: TP «Hoàn thành / Duyệt» chốt «hoan-thanh» khi file:approve = ✓; đặt ⏳ ⇒ 403', async () => {
     // (a) Mặc định của TP là ✓ ⇒ chốt được: trạng thái «hoan-thanh» + dòng luồng «hoan-thanh».
     const ma = await taoNhiemVuCho('TF-11a');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     const chot = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
       hanhDong: 'hoan-thanh',
     });
     expect(chot.status, JSON.stringify(chot.body)).toBe(200);
     expect(await trangThaiNhom(nhom.id)).toBe('hoan-thanh');
-    expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).toEqual(['nop', 'hoan-thanh']);
+    expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+      'hoan-thanh',
+    ]);
     // Trạng thái kết: verdict tiếp cũng 409.
     const sau = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, { hanhDong: 'duyet' });
     expect(sau.status).toBe(409);
@@ -430,7 +498,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // (b) admin đặt ⏳ ở ô «Duyệt kết quả» của Trưởng phòng ⇒ TP mất nút chốt (403), chỉ còn Trình.
     const ma2 = await taoNhiemVuCho('TF-11b');
     await datGhiDe('Trưởng phòng', 'file', 'approve', 'cho-duyet');
-    const nhom2 = (await nopFile(apiNv, ma2, PDF)).body.data.nhom;
+    const nhom2 = (await luuVaGuiFile(apiNv, ma2, PDF)).body.data.nhom;
     const biChan = await apiTp.post(`/api/v1/task-files/${nhom2.id}/verdict`, {
       hanhDong: 'hoan-thanh',
     });
@@ -438,7 +506,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(biChan.body.error.message).toContain('Duyệt kết quả (file nhiệm vụ)');
     // …nhưng «Yêu cầu sửa» vẫn làm được (⏳ chỉ mất nút CHỐT, không mất quyền góp ý/trình).
     const sua = await apiTp.post(`/api/v1/task-files/${nhom2.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Bổ sung mục kết luận rồi gửi lại',
     });
     expect(sua.status, JSON.stringify(sua.body)).toBe(200);
@@ -446,22 +514,27 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   });
 
   it('TC-TF-12: PGD «Duyệt» ⇒ «da-duyet» KHÓA — nộp tiếp 409, verdict tiếp 409, file vật lý còn nguyên', async () => {
-    const ma = await taoNhiemVuCho('TF-12');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const ma = await taoNhiemVuCho('TF-12', { guiBld: true }); // Q6: cần nút «TP/PP phê duyệt»
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem kết quả quý này',
     });
     const res = await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, { hanhDong: 'duyet' });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(await trangThaiNhom(nhom.id)).toBe('da-duyet');
     const luong = await luongCuaNhom(nhom.id);
-    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop', 'trinh-lanh-dao', 'duyet']);
+    expect(luong.map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+      'tp-phe-duyet',
+      'duyet',
+    ]);
     // Thông báo tới người nộp + người được giao nhiệm vụ + TP/PP phòng (nv là cả hai).
     const bao = await thongBaoCua(nv.id);
     expect(bao.some((x) => x.content.includes('đã được duyệt — kết quả chốt'))).toBe(true);
     // Khóa upload: 409 dù vẫn đúng vai + đúng phòng.
-    const nopTiep = await nopFile(apiNv, ma, DOCX, { fileId: nhom.id });
+    const nopTiep = await luuVaGuiFile(apiNv, ma, PDF, { fileId: nhom.id });
     expect(nopTiep.status).toBe(409);
     // Cán bộ không xoá được nhóm đã duyệt (409 trước 403 — trạng thái kết chắn trước).
     const xoa = await apiNv.del(`/api/v1/task-files/${nhom.id}`);
@@ -470,17 +543,17 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
   it('TC-TF-13: vai không đúng 403 — Cán bộ không verdict; cán bộ phòng khác không nộp/không đọc', async () => {
     const ma = await taoNhiemVuCho('TF-13');
-    const nhom = (await nopFile(apiNv, ma, PDF)).body.data.nhom;
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
     // Cán bộ gọi verdict ⇒ 403 (vai không nằm trong bảng verdict).
     const nvVerdict = await apiNv.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Tự ý yêu cầu sửa của chính mình',
     });
     expect(nvVerdict.status).toBe(403);
     // Cán bộ phòng B (ngoài phạm vi): không đọc được, không nộp được, không tải được.
     const doc = await apiNvNgoai.get(`/api/v1/work-items/${encodeURIComponent(ma)}/files`);
     expect(doc.status).toBe(403);
-    const nop = await nopFile(apiNvNgoai, ma, PDF);
+    const nop = await luuVaGuiFile(apiNvNgoai, ma, PDF);
     expect(nop.status).toBe(403);
     const ban = (await docFiles(apiNv, ma))[0].bans[0];
     const tai = await apiNvNgoai.agent.get(`/api/v1/task-files/${ban.id}/download`);
@@ -495,7 +568,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   it('TC-TF-14: sai loại file / sai mimeType / quá 50 MB ⇒ 400 với câu rõ', async () => {
     const ma = await taoNhiemVuCho('TF-14');
     // .exe bị chặn theo đuôi.
-    const exe = await nopFile(apiNv, ma, {
+    const exe = await luuVaGuiFile(apiNv, ma, {
       ten: 'virus.exe',
       mime: 'application/octet-stream',
       noiDung: 'MZ',
@@ -504,28 +577,28 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(exe.body.error.message).toContain('Chỉ nhận file');
     // .svg bị chặn CÓ Ý: SVG là XML chạy được <script>, mở inline là lỗ XSS lưu trữ. Nằm cùng
     // «họ ảnh» với png/jpg nên rất dễ bị thêm vào whitelist khi mở rộng — chốt lại bằng test.
-    const svg = await nopFile(apiNv, ma, {
+    const svg = await luuVaGuiFile(apiNv, ma, {
       ten: 'hinh.svg',
       mime: 'image/svg+xml',
       noiDung: '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
     });
     expect(svg.status).toBe(400);
     // Đuôi .pdf nhưng mimeType lạ bị chặn theo mime.
-    const mimeLai = await nopFile(apiNv, ma, {
+    const mimeLai = await luuVaGuiFile(apiNv, ma, {
       ten: 'tulieumao.pdf',
       mime: 'application/msword',
       noiDung: '%PDF',
     });
     expect(mimeLai.status).toBe(400);
     // Đuôi ảnh nhưng mime của Excel — cặp đuôi/mime phải khớp, kể cả ở các đuôi mới.
-    const anhLai = await nopFile(apiNv, ma, {
+    const anhLai = await luuVaGuiFile(apiNv, ma, {
       ten: 'khong-phai-anh.png',
       mime: 'application/vnd.ms-excel',
       noiDung: '\x89PNG',
     });
     expect(anhLai.status).toBe(400);
     // Quá 50 MB.
-    const to = await nopFile(apiNv, ma, {
+    const to = await luuVaGuiFile(apiNv, ma, {
       ten: 'to.pdf',
       mime: 'application/pdf',
       noiDung: 'A'.repeat(50 * 1024 * 1024 + 1),
@@ -544,7 +617,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
   it('TC-TF-14b: nộp được PowerPoint / Excel / ảnh (cả đuôi Office 2003) — người dùng chốt 2026-09-03', async () => {
     for (const file of [XLSX, PPTX, XLS, PPT, PNG, JPG]) {
       const ma = await taoNhiemVuCho(`TF-14b-${file.ten}`);
-      const res = await nopFile(apiNv, ma, file);
+      const res = await luuVaGuiFile(apiNv, ma, file);
       expect(res.status, `${file.ten}: ${JSON.stringify(res.body)}`).toBe(200);
       const nhom = await docFiles(apiNv, ma);
       expect(nhom).toHaveLength(1);
@@ -556,7 +629,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
   it('TC-TF-14c: ẢNH mở được inline (?inline=1); Excel/PowerPoint luôn tải về dạng attachment', async () => {
     const ma = await taoNhiemVuCho('TF-14c');
-    await nopFile(apiNv, ma, PNG);
+    await luuVaGuiFile(apiNv, ma, PNG);
     const banAnh = (await docFiles(apiNv, ma))[0].bans[0].id;
     const anhInline = await apiNv.get(`/api/v1/task-files/${banAnh}/download?inline=1`);
     expect(anhInline.status).toBe(200);
@@ -569,14 +642,14 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // Excel/PowerPoint KHÔNG nằm trong `MIME_XEM_INLINE` ⇒ dù xin `?inline=1` vẫn phải attachment,
     // không để trình duyệt tự quyết định làm gì với một file Office.
     const maX = await taoNhiemVuCho('TF-14c-x');
-    await nopFile(apiNv, maX, XLSX);
+    await luuVaGuiFile(apiNv, maX, XLSX);
     const banX = (await docFiles(apiNv, maX))[0].bans[0].id;
     const xin = await apiNv.get(`/api/v1/task-files/${banX}/download?inline=1`);
     expect(xin.headers['content-disposition']).toContain('attachment');
   });
 
   it('TC-TF-15: TRƯỞNG PHÒNG sửa được nhiệm vụ do Cán bộ tạo (phân quyền §6) + editor mode', async () => {
-    // NV tạo nhiệm vụ trong công việc của phòng A — nhiệm vụ auto «Đã duyệt».
+    // NV tạo nhiệm vụ trong công việc của phòng A. ĐỢT B (Q3): cấp 3 KHÔNG còn auto «Đã duyệt».
     const cv = await apiTp.post('/api/v1/works', {
       name: 'Việc phòng A — TF-15',
       departmentId: phongA.id,
@@ -603,6 +676,11 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     });
     expect(tao.status, JSON.stringify(tao.body)).toBe(200);
     const ma = tao.body.data.item.code;
+    // Ký cấp 3 TRƯỚC khi TP sửa: luật có từ trước ĐỢT B là «mục đang `Chờ duyệt` thì chỉ NGƯỜI LẬP
+    // (hoặc admin / Phó GĐ) sửa được» (`coSuaDuocKhiChoDuyet`). Trước đây luật đó không bao giờ chạm
+    // tới nhiệm vụ vì cấp 3 luôn sinh ra ở «Đã duyệt»; nay Q3 bỏ cái luôn đó nên phải ký rồi mới sửa.
+    // Ca này kiểm «TP có quyền sửa nhiệm vụ do người khác lập» chứ không kiểm ổ khoá chờ duyệt.
+    await duyetNhiemVu(ma);
     // ⭐ TP (không phải người lập) SỬA được nhiệm vụ trong phòng mình — lỗi người dùng báo 2026-09-01.
     // Nhân đó gán luôn ô «Lãnh đạo phòng phụ trách» = chính TP: nhiệm vụ do Cán bộ tạo mặc định
     // KHÔNG có `leader_ids`, mà luật siết 2026-09-02 đòi có tên mới cho TP xem/sửa file.
@@ -615,7 +693,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(sua.body.data.item.name).toContain('đã sửa bởi TP');
     // Editor: Cán bộ (người được giao) + TP = mode edit; NGOÀI PHÒNG bị 403 ngay ở can(read,'task');
     // nhóm đã chốt (da-duyet) thì mọi người chỉ XEM.
-    await nopFile(apiNv, ma, PDF);
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiNv, ma))[0];
     const banDau = nhom.bans[0].id;
     const nvTrang = await apiNv.get(`/api/v1/task-file-versions/${banDau}/editor`);
@@ -640,7 +718,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // DS ⇒ trình duyệt chặn thẻ script ⇒ `DocsAPI` không tồn tại ⇒ trang TRẮNG, không một dòng lỗi
     // nào trên giao diện (chỉ hiện ở tab Console). Test này canh đúng cái header đó.
     const ma = await taoNhiemVuCho('TF-16');
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiNv, ma))[0];
     const ban = nhom.bans[0].id;
 
@@ -670,7 +748,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // `documentType` theo ĐUÔI, không ghi cứng 'word' — seed có cả .pdf.
     expect(trang.text).toContain('"documentType":"word"');
     const pdfMa = await taoNhiemVuCho('TF-16b');
-    await nopFile(apiNv, pdfMa, PDF);
+    await luuVaGuiFile(apiNv, pdfMa, PDF);
     const banPdf = (await docFiles(apiNv, pdfMa))[0].bans[0].id;
     const trangPdf = await apiNv.get(`/api/v1/task-file-versions/${banPdf}/editor`);
     expect(trangPdf.text).toContain('"documentType":"pdf"');
@@ -687,7 +765,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
       [PPT, 'slide'],
     ]) {
       const ma = await taoNhiemVuCho(`TF-16b-${file.ten}`);
-      await nopFile(apiNv, ma, file);
+      await luuVaGuiFile(apiNv, ma, file);
       const ban = (await docFiles(apiNv, ma))[0].bans[0].id;
       const trang = await apiNv.get(`/api/v1/task-file-versions/${ban}/editor`);
       expect(trang.status, `${file.ten}: ${trang.text?.slice(0, 200)}`).toBe(200);
@@ -696,7 +774,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // ẢNH: DS không có bộ soạn thảo nào. Trước đây `?? 'word'` biến mọi đuôi lạ thành Word ⇒ mở ra
     // một trang editor lỗi không ai hiểu; nay phải là 400 với câu đọc được.
     const maAnh = await taoNhiemVuCho('TF-16b-anh');
-    await nopFile(apiNv, maAnh, PNG);
+    await luuVaGuiFile(apiNv, maAnh, PNG);
     const banAnh = (await docFiles(apiNv, maAnh))[0].bans[0].id;
     const trangAnh = await apiNv.get(`/api/v1/task-file-versions/${banAnh}/editor`);
     expect(trangAnh.status).toBe(400);
@@ -709,7 +787,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // chứng ở người dùng vẫn là «không mở được màn hình sửa» — thực ra máy chủ vừa sập nên mọi thứ
     // khác chết theo. Xảy ra ngay khi DS đòi bản của bộ seed (seed chỉ tạo dòng CSDL, không có file).
     const ma = await taoNhiemVuCho('TF-17');
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiNv, ma))[0];
     const ban = nhom.bans[0].id;
 
@@ -740,7 +818,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     //   sendServerRequest returned an error: data = {"ok":true,"data":{"error":0,...}}
     // Bản mới VẪN được lưu nên «Lịch sử» có bản mới, càng khó lần ra. Ca này canh HÌNH DẠNG phản hồi.
     const ma = await taoNhiemVuCho('TF-18');
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiNv, ma))[0];
     const ban = nhom.bans[0].id;
     const duong = `/api/v1/task-files-ds/callback/${ban}?token=${encodeURIComponent(tokenDs('callback', ban))}`;
@@ -774,7 +852,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     // Chính busboy trong máy chủ này làm hỏng, nên nếu `tenGocUtf8` không gỡ được thì đỏ ngay.
     const ma = await taoNhiemVuCho('TF-19');
     const tenThat = 'Báo cáo KẾT QUẢ — Đợt 1 (bản chính).docx';
-    const res = await nopFile(apiNv, ma, { ...DOCX, ten: tenThat });
+    const res = await luuVaGuiFile(apiNv, ma, { ...DOCX, ten: tenThat });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const nhom = (await docFiles(apiNv, ma))[0];
     expect(nhom.ten_goc).toBe(tenThat);
@@ -788,7 +866,7 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
     // Tên ASCII đi qua đường thật cũng không được đổi.
     const ma2 = await taoNhiemVuCho('TF-19b');
-    const res2 = await nopFile(apiNv, ma2, { ...DOCX, ten: 'ket-qua-ascii.docx' });
+    const res2 = await luuVaGuiFile(apiNv, ma2, { ...DOCX, ten: 'ket-qua-ascii.docx' });
     expect(res2.status).toBe(200);
     expect((await docFiles(apiNv, ma2))[0].ten_goc).toBe('ket-qua-ascii.docx');
   });
@@ -796,18 +874,21 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
 
 describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
   async function taoLenh(cho = 'can-bo') {
-    const ma = await taoNhiemVuCho('Lenh sua');
-    const { nhom, ban } = (await nopFile(apiNv, ma, DOCX)).body.data;
+    // Q6 (ĐỢT B): lệnh sửa «cho lãnh đạo» chỉ sinh ra được khi TP/PP CÓ nút «TP/PP phê duyệt», mà nút
+    // đó chỉ tồn tại khi nhiệm vụ bật tích «Gửi BLĐ phê duyệt».
+    const ma = await taoNhiemVuCho('Lenh sua', { guiBld: cho === 'lanh-dao' });
+    const { nhom, ban } = (await luuVaGuiFile(apiNv, ma, DOCX)).body.data;
     if (cho === 'lanh-dao') {
-      await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-        hanhDong: 'trinh-lanh-dao',
+      const trinh = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+        hanhDong: 'tp-phe-duyet',
         noiDung: 'Trình lãnh đạo xem kết quả',
       });
+      expect(trinh.status, JSON.stringify(trinh.body)).toBe(200);
     }
     const res = await (cho === 'can-bo' ? apiTp : apiPgdA).post(
       `/api/v1/task-files/${nhom.id}/verdict`,
       {
-        hanhDong: cho === 'can-bo' ? 'yeu-cau-sua' : 'tra-ve-tp',
+        hanhDong: cho === 'can-bo' ? 'tra-ve-cbo' : 'tra-ve-tp',
         noiDung: 'Bổ sung số liệu đối chiếu trước khi gửi lại',
       }
     );
@@ -885,8 +966,13 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
     }
   );
 
+  // 2026-09-09 — «file:create = ✓» KHÔNG còn tự chốt cho Trưởng/Phó phòng. Trước đây ✓ nghĩa là
+  // «nộp lên là Đã duyệt ngay», mà TP/PP lại là cửa duyệt ĐẦU TIÊN của file trong phòng; từ ngày họ
+  // được nhận việc trực tiếp thì đó chính là tự duyệt (quyết định «Chặn tự duyệt, buộc trình Phó GĐ»,
+  // và «chặn cả người thực hiện LẪN người đã tải file lên»). Với hai vai này ✓ bị CHẶN TRẦN ở
+  // «cho-lanh-dao»: bản của họ luôn phải lên Phó GĐ phụ trách. Cán bộ vẫn tự động như TC-TF-05.
   it.each(['cho-duyet', 'cho-phep'])(
-    'TC-LS-04: TP nhận lệnh riêng và gửi theo quyền %s',
+    'TC-LS-04: TP nhận lệnh riêng và gửi theo quyền %s — cả hai đều về «cho-lanh-dao»',
     async (quyen) => {
       const { nhom } = await taoLenh('lanh-dao');
       expect((await apiTp.get('/api/v1/task-files/lenh-sua')).body.data.items).toHaveLength(1);
@@ -897,10 +983,10 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
       await datGhiDe('Trưởng phòng', 'file', 'create', quyen);
       const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`);
       expect(res.status, JSON.stringify(res.body)).toBe(200);
-      expect(res.body.data.nhom.trang_thai).toBe(
-        quyen === 'cho-phep' ? 'da-duyet' : 'cho-lanh-dao'
-      );
+      expect(res.body.data.nhom.trang_thai).toBe('cho-lanh-dao');
       expect(res.body.data.nhom.lenh_sua_cho).toBeNull();
+      // Không một dòng «duyet-tu-dong» nào được ghi cho bản của TP/PP.
+      expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).not.toContain('duyet-tu-dong');
     }
   );
 
@@ -915,7 +1001,7 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
           .status
       ).toBe(403);
     }
-    expect((await nopFile(apiNv, ma, DOCX, { fileId: nhom.id })).status).toBe(403);
+    expect((await luuVaGuiFile(apiNv, ma, DOCX, { fileId: nhom.id })).status).toBe(403);
     await datGhiDe('Trưởng phòng', 'file', 'create', 'tu-choi');
     expect((await apiTp.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(403);
   });
@@ -1001,6 +1087,9 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
     try {
       await db.query('BEGIN');
       const bans = (await db.query('SELECT * FROM task_file_versions ORDER BY id')).rows;
+      // Test lịch sử 020 trên DB _test: tái tạo dữ liệu trước V4 trong giao dịch sẽ ROLLBACK.
+      // Không chạy 025 down, không xóa bản file; 020 không thể biết hai hành động của 025.
+      await db.query("DELETE FROM task_file_flow WHERE hanh_dong IN ('luu-tam', 'gui-duyet')");
       await db.query(down);
       expect(
         (
@@ -1028,14 +1117,24 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
     }
   });
 
-  it('TC-LS-07: chưa có bản thì 409; không cần tạo file mới để hủy lệnh', async () => {
+  it('TC-LS-07: nhóm chưa có bản vẫn chưa thể gửi hoặc hủy khi chưa có lệnh sửa', async () => {
     const ma = await taoNhiemVuCho('Chưa có bản');
     const res = await apiNv.post(`/api/v1/work-items/${ma}/results`, { tenKetQua: 'Chờ bổ sung' });
     const nhom = res.body.data.nhom;
-    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+    const verdict = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Bổ sung file kết quả trước khi gửi',
     });
+    expect(verdict.status).toBe(409);
+    expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(409);
+    expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/huy-lenh-sua`)).status).toBe(409);
+    // Dòng cũ trước V4 có thể là cho-xem dù 0 bản: vẫn hủy được lệnh, không ép tạo file.
+    await pool.query("UPDATE task_files SET trang_thai='cho-xem' WHERE id=$1", [nhom.id]);
+    const cu = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tra-ve-cbo',
+      noiDung: 'Bổ sung file kết quả trước khi gửi',
+    });
+    expect(cu.status).toBe(200);
     expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/gui-ban-moi`)).status).toBe(409);
     expect((await apiNv.post(`/api/v1/task-files/${nhom.id}/huy-lenh-sua`)).status).toBe(200);
   });
@@ -1044,7 +1143,7 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
 describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2026-09-02)', () => {
   it('TC-HCPD-01: TP thấy «cho-xem»/«can-sua» của PHÒNG MÌNH, kèm nút đúng vai; phòng khác KHÔNG thấy', async () => {
     const ma = await taoNhiemVuCho('HCPD-01');
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
 
     const res = await apiTp.get('/api/v1/task-files/cho-duyet');
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -1062,10 +1161,14 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
     // dòng dưới, nên máy chủ phải trả tên bản — hai thứ lệch nhau ngay khi ai đó nộp bản mới bằng
     // file tên khác.
     expect(dong.ban_cuoi_ten).toBe('ket-qua.docx');
-    // Nút của TP ở «cho-xem»: 3 hành động, KHÔNG có 'duyet' (đó là cửa của PGD).
+    // Nút của TP ở «cho-xem»: KHÔNG có 'duyet' (đó là cửa của PGD).
+    // ĐIỂM 9 (ĐỢT B): «Yêu cầu sửa» đã gộp vào «Đẩy về Cán bộ».
+    // Q6 (ĐỢT B, 11/09/2026): nhiệm vụ này KHÔNG bật tích «Gửi BLĐ phê duyệt» ⇒ TP/PP là chặng cuối,
+    // nút «TP/PP phê duyệt» biến mất khỏi hàng chờ và chỉ còn nút chốt + nút đẩy về.
     const ma3 = dong.hanhDong.map((h) => h.ma).sort();
-    expect(ma3).toEqual(['hoan-thanh', 'tra-ve-cbo', 'trinh-lanh-dao', 'yeu-cau-sua'].sort());
-    expect(dong.hanhDong.find((h) => h.ma === 'yeu-cau-sua').canNoiDung).toBe(true);
+    expect(ma3).toEqual(['hoan-thanh', 'tra-ve-cbo'].sort());
+    expect(ma3).not.toContain('tp-phe-duyet');
+    expect(dong.hanhDong.find((h) => h.ma === 'tra-ve-cbo').canNoiDung).toBe(true);
     expect(dong.hanhDong.find((h) => h.ma === 'hoan-thanh').canNoiDung).toBe(false);
 
     // Cán bộ (không có cửa duyệt nào) và người phòng khác: danh sách RỖNG.
@@ -1074,18 +1177,19 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
   });
 
   it('TC-HCPD-02: PGD chỉ thấy «cho-lanh-dao» của phòng mình PHỤ TRÁCH; TP không thấy dòng đó nữa', async () => {
-    const ma = await taoNhiemVuCho('HCPD-02');
-    await nopFile(apiNv, ma, DOCX);
+    const ma = await taoNhiemVuCho('HCPD-02', { guiBld: true }); // Q6: cần nút «TP/PP phê duyệt»
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiTp, ma))[0];
 
     // Trước khi trình: PGD chưa thấy gì, TP thấy 1 dòng.
     expect((await apiPgdA.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
     expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(1);
 
-    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
-      hanhDong: 'trinh-lanh-dao',
+    const trinh = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tp-phe-duyet',
       noiDung: 'Kính trình Phó giám đốc xem xét',
     });
+    expect(trinh.status, JSON.stringify(trinh.body)).toBe(200);
 
     // Sau khi trình: dòng chuyển sang hàng chờ của PGD, biến khỏi hàng chờ của TP.
     const cuaPgd = (await apiPgdA.get('/api/v1/task-files/cho-duyet')).body.data.items;
@@ -1097,14 +1201,14 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
 
   it('TC-HCPD-03: file đã chốt KHÔNG còn trong hàng chờ của ai; admin đặt ⏳ ⇒ TP mất nút chốt', async () => {
     const ma = await taoNhiemVuCho('HCPD-03');
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
     const nhom = (await docFiles(apiTp, ma))[0];
 
     // ⏳ ở «Duyệt kết quả» của Trưởng phòng ⇒ hàng chờ KHÔNG được mời họ bấm nút chốt nữa.
     await datGhiDe('Trưởng phòng', 'file', 'approve', 'cho-duyet');
     const sauGhiDe = (await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items[0];
     expect(sauGhiDe.hanhDong.map((h) => h.ma)).not.toContain('hoan-thanh');
-    expect(sauGhiDe.hanhDong.map((h) => h.ma)).toContain('trinh-lanh-dao');
+    expect(sauGhiDe.hanhDong.map((h) => h.ma)).toContain('tp-phe-duyet');
 
     // Trả ⏳ về ✓ rồi chốt: dòng phải rời khỏi hàng chờ của mọi người.
     await datGhiDe('Trưởng phòng', 'file', 'approve', 'cho-phep');
@@ -1141,7 +1245,7 @@ describe('TC-HCPD — hàng chờ phê duyệt KẾT QUẢ (tab con thứ hai, 2
     // Ô «Lãnh đạo phòng phụ trách» của nhiệm vụ = người được GẮN ở `department_managers` (luật siết:
     // chỉ ai có tên ở đây mới xử được file ⇒ người nhận thông báo cũng đúng danh sách này). Cấp 3
     // chỉ nhận MỘT id (CHECK `task_leader_single`) nên gán thẳng từ lúc tạo, không PATCH sau.
-    await nopFile(apiNv, ma, DOCX);
+    await luuVaGuiFile(apiNv, ma, DOCX);
 
     // Người được gắn phụ trách ở `department_managers` VÀ đứng tên ô lãnh đạo của nhiệm vụ: có báo.
     const cuaQuanLy = (await thongBaoCua(quanLy.id)).filter((t) => t.ref_type === 'task_file');
@@ -1166,10 +1270,13 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
   const khai = (api, ref, body) =>
     api.post(`/api/v1/work-items/${encodeURIComponent(ref)}/results`, body);
   /** Nộp «Báo cáo» — nội dung là chữ; `fileId` có = thêm bản vào nhóm đã khai. */
-  const nopBaoCao = (api, ref, body) =>
-    api.post(`/api/v1/work-items/${encodeURIComponent(ref)}/reports`, body);
+  const nopBaoCao = async (api, ref, body) =>
+    guiSauKhiLuu(
+      api,
+      await api.post(`/api/v1/work-items/${encodeURIComponent(ref)}/reports`, body)
+    );
 
-  it('TC-KQ2-01: Cán bộ khai dòng kết quả (tên + định dạng + ý kiến) ⇒ nhóm 0 BẢN, «cho-xem», có dòng luồng', async () => {
+  it('TC-KQ2-01: Cán bộ khai dòng kết quả (tên + định dạng + ý kiến) ⇒ nhóm 0 BẢN, «luu-tam», có dòng luồng', async () => {
     const ma = await taoNhiemVuCho('KQ2-01');
     const res = await khai(apiNv, ma, {
       tenKetQua: 'Báo cáo tổng kết quý 3',
@@ -1182,7 +1289,7 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     expect(res.body.data.tuDong).toBe(false);
     expect(nhom.ten_ket_qua).toBe('Báo cáo tổng kết quý 3');
     expect(nhom.dinh_dang).toBe('Word');
-    expect(nhom.trang_thai).toBe('cho-xem');
+    expect(nhom.trang_thai).toBe('luu-tam');
 
     // 0 bản: chính là dòng «Chưa có» ở cột 4 của bảng kết quả.
     const doc = await docFiles(apiNv, ma);
@@ -1195,7 +1302,7 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     // chưa có bản nào.
     const luong = await luongCuaNhom(nhom.id);
     expect(luong).toHaveLength(1);
-    expect(luong[0].hanh_dong).toBe('nop');
+    expect(luong[0].hanh_dong).toBe('luu-tam');
     expect(luong[0].version_no).toBeNull();
     expect(luong[0].noi_dung).toBe('Sẽ nộp bản Word trước ngày 20');
   });
@@ -1209,7 +1316,7 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
     expect((await apiAdmin.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
 
-    const nop = await nopFile(apiNv, ma, XLSX, { fileId: nhom.id });
+    const nop = await luuVaGuiFile(apiNv, ma, XLSX, { fileId: nhom.id });
     expect(nop.status, JSON.stringify(nop.body)).toBe(200);
     // Vẫn ĐÚNG MỘT nhóm: file nộp vào nhóm đã khai, không mở nhóm thứ hai.
     const doc = await docFiles(apiNv, ma);
@@ -1247,15 +1354,16 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     expect(doc[0].bans[0].noi_dung).toContain('12 trạm');
 
     // Có bản ⇒ vào hàng chờ và bấm được đúng bộ nút của TP, y như một file.
+    // Q6 (ĐỢT B): nhiệm vụ không bật tích «Gửi BLĐ phê duyệt» ⇒ TP/PP chốt luôn, không còn nút trình.
     const hangCho = (await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items;
     expect(hangCho).toHaveLength(1);
     expect(hangCho[0].laBaoCao).toBe(true);
     expect(hangCho[0].hanhDong.map((h) => h.ma).sort()).toEqual(
-      ['hoan-thanh', 'tra-ve-cbo', 'trinh-lanh-dao', 'yeu-cau-sua'].sort()
+      ['hoan-thanh', 'tra-ve-cbo'].sort()
     );
   });
 
-  it('TC-KQ2-04: Báo cáo dùng lại nguyên luồng — góp ý theo bản, «Yêu cầu sửa», nộp bản 2 rồi TP chốt', async () => {
+  it('TC-KQ2-04: Báo cáo dùng lại nguyên luồng — góp ý theo bản, «Đẩy về Cán bộ», nộp bản 2 rồi TP chốt', async () => {
     const ma = await taoNhiemVuCho('KQ2-04');
     const tao = await nopBaoCao(apiNv, ma, { noiDung: 'Bản báo cáo lần một, còn thiếu số liệu.' });
     const nhomId = tao.body.data.nhom.id;
@@ -1268,7 +1376,7 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     expect(gy.status, JSON.stringify(gy.body)).toBe(200);
 
     const ycs = await apiTp.post(`/api/v1/task-files/${nhomId}/verdict`, {
-      hanhDong: 'yeu-cau-sua',
+      hanhDong: 'tra-ve-cbo',
       noiDung: 'Thiếu số liệu, viết lại phần kết luận',
     });
     expect(ycs.status, JSON.stringify(ycs.body)).toBe(200);
@@ -1331,19 +1439,21 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
     ).toBe(403);
   });
 
-  it('TC-KQ2-07: file:create = ✓ ⇒ Báo cáo cũng TỰ ĐỘNG «da-duyet» kèm dòng luồng duyet-tu-dong', async () => {
+  it('TC-KQ2-07: R6 — file:create = ✓ KHÔNG còn tự duyệt BÁO CÁO: vẫn vào hàng chờ của TP', async () => {
     const ma = await taoNhiemVuCho('KQ2-07');
     await datGhiDe('Nhân viên', 'file', 'create', 'cho-phep');
     const res = await nopBaoCao(apiNv, ma, {
       noiDung: 'Báo cáo nộp khi phân quyền không yêu cầu duyệt.',
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.data.tuDong).toBe(true);
-    expect(await trangThaiNhom(res.body.data.nhom.id)).toBe('da-duyet');
+    // Luật cũ cho bản báo cáo tự chốt «da-duyet» y như file. R6 bỏ: ✓ chỉ còn nghĩa «được phép
+    // khai/nộp», nên báo cáo cũng phải có người ký như mọi kết quả khác.
+    expect(res.body.data.tuDong).toBe(false);
+    expect(await trangThaiNhom(res.body.data.nhom.id)).toBe('cho-xem');
     const luong = await luongCuaNhom(res.body.data.nhom.id);
-    expect(luong.map((g) => g.hanh_dong)).toEqual(['nop', 'duyet-tu-dong']);
-    // Đã chốt ⇒ không còn trong hàng chờ của ai.
-    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(0);
+    expect(luong.map((g) => g.hanh_dong)).toEqual(['luu-tam', 'gui-duyet']);
+    // Chưa ai ký ⇒ vẫn nằm trong hàng chờ của Trưởng phòng.
+    expect((await apiTp.get('/api/v1/task-files/cho-duyet')).body.data.items).toHaveLength(1);
   });
 
   it('TC-KQ2-08: xoá nhóm có bản Báo cáo (ten_luu NULL) không nổ; nhóm 0 bản cũng xoá được', async () => {
@@ -1360,10 +1470,110 @@ describe('TC-KQ2 — khai kết quả trước + «Báo cáo» là bản không 
 
   it('TC-KQ2-09: nộp file trực tiếp (không qua ＋) vẫn tự điền ten_ket_qua + dinh_dang theo đuôi', async () => {
     const ma = await taoNhiemVuCho('KQ2-09');
-    await nopFile(apiNv, ma, PDF);
+    await luuVaGuiFile(apiNv, ma, PDF);
     const doc = await docFiles(apiNv, ma);
     expect(doc[0].ten_ket_qua).toBe('ket-qua.pdf');
     expect(doc[0].dinh_dang).toBe('PDF');
     expect(doc[0].laBaoCao).toBe(false);
+  });
+});
+
+// ============================================================================
+// 2026-09-09 — TRƯỞNG/PHÓ PHÒNG NHẬN VIỆC TRỰC TIẾP: CHẶN TỰ DUYỆT
+// ============================================================================
+// Quyết định người dùng: «Chặn tự duyệt, buộc trình Phó GĐ». Lý do phải có nhóm ca này: TP/PP giữ
+// `file:approve` = ✓ (họ là cửa duyệt ĐẦU TIÊN của mọi file trong phòng), mà `hoan-thanh` là TRẠNG
+// THÁI KẾT được tienDo.js tính là XONG và cộng dồn lên cả cây theo `ty_le`. Nếu TP vừa là người
+// thực hiện vừa được tự chốt thì chỉ cần «Đẩy về Cán bộ» rồi «Hoàn thành» — hai lần bấm — là tự
+// duyệt xong việc của chính mình, không ai nhìn thấy.
+//
+// ĐỢT B (R6) đã bỏ hẳn nhánh tự duyệt theo `file:create = ✓` cho MỌI vai, nên TC-LDTT-01 nay chỉ
+// còn là ca khẳng định nhánh TP/PP của `apTuDong` vẫn đưa bản lên «cho-lanh-dao». Chốt chặn thật
+// của nhóm này là TC-LDTT-02: TP không được «Hoàn thành» bản do chính mình nộp.
+describe('TC-LDTT — lãnh đạo phòng làm người thực hiện trực tiếp thì KHÔNG được tự duyệt', () => {
+  /** Nhiệm vụ cấp 3 gán cho Trưởng phòng; TP cũng là lãnh đạo phụ trách (đúng ca dễ lọt nhất). */
+  const nhiemVuCuaTp = (name) => taoNhiemVuCho(name, { assigneeId: tp.id });
+
+  it('TC-LDTT-01: file:create của Trưởng phòng = ✓ ⇒ TP nộp bản của CHÍNH MÌNH vẫn KHÔNG tự «da-duyet»', async () => {
+    const ma = await nhiemVuCuaTp('LDTT-01');
+    await datGhiDe('Trưởng phòng', 'file', 'create', 'cho-phep');
+    const res = await luuVaGuiFile(apiTp, ma, PDF);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    // Bản của TP/PP đi THẲNG lên Ban lãnh đạo kiểm soát (Q5), không dừng ở «cho-xem» như của Cán bộ.
+    expect(res.body.data.tuDong).toBe(false);
+    expect(res.body.data.nhom.trang_thai).toBe('cho-lanh-dao');
+    // Không có dòng «duyet-tu-dong» nào được ghi.
+    expect((await luongCuaNhom(res.body.data.nhom.id)).map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+    ]);
+  });
+
+  it('TC-LDTT-02: TP là người thực hiện ⇒ «Hoàn thành» trên bản mình nộp bị 403', async () => {
+    const ma = await nhiemVuCuaTp('LDTT-02');
+    const nhom = (await luuVaGuiFile(apiTp, ma, PDF)).body.data.nhom;
+    // Đẩy về «can-sua» trước: đó là trạng thái mà `hoan-thanh` được phép chạy (BANG_VERDICT.tu),
+    // tức đúng CÁI ĐƯỜNG VÒNG mà người dùng lo — nếu không chặn thì hai lần bấm là tự duyệt xong.
+    // Nội dung là BẮT BUỘC từ ĐIỂM 9 (ĐỢT B): trả việc về mà không nói vì sao là đúng cái đang dọn.
+    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tra-ve-cbo',
+      noiDung: 'Thiếu bảng đối chiếu số liệu, làm lại phần này',
+    });
+    expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
+    const chot = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'hoan-thanh',
+    });
+    expect(chot.status, JSON.stringify(chot.body)).toBe(403);
+    expect(chot.body.error.message).toContain('không được tự chốt kết quả của chính mình');
+    // Trạng thái không nhúc nhích, và KHÔNG có dòng luồng nào được ghi (giao dịch đã hoàn tác).
+    expect(await trangThaiNhom(nhom.id)).toBe('can-sua');
+    expect((await luongCuaNhom(nhom.id)).map((g) => g.hanh_dong)).toEqual([
+      'luu-tam',
+      'gui-duyet',
+      'tra-ve-cbo',
+    ]);
+  });
+
+  it('TC-LDTT-03: TP tự «Đẩy về Cán bộ» trên việc của mình ⇒ thông báo bay cho PHÓ GĐ, không tự báo mình', async () => {
+    const ma = await nhiemVuCuaTp('LDTT-03');
+    const nhom = (await luuVaGuiFile(apiTp, ma, PDF)).body.data.nhom;
+    const res = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tra-ve-cbo',
+      noiDung: 'Phòng yêu cầu bổ sung số liệu rồi nộp lại',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    // `bao()` LOẠI chính người hành động; trước đây danh sách hoá RỖNG ⇒ đầu việc nằm im không ai
+    // được báo. Nay lùi về Phó GĐ phụ trách phòng.
+    const baoPgd = await thongBaoCua(pgdA.id);
+    expect(baoPgd.some((x) => x.content.includes('trả về để sửa'))).toBe(true);
+    const baoTp = await thongBaoCua(tp.id);
+    expect(baoTp.some((x) => x.content.includes('trả về để sửa'))).toBe(false);
+  });
+
+  it('TC-LDTT-04: đường kết thúc hợp lệ — TP nộp, PHÓ GĐ «Duyệt» ⇒ «da-duyet»', async () => {
+    const ma = await nhiemVuCuaTp('LDTT-04');
+    const nhom = (await luuVaGuiFile(apiTp, ma, PDF)).body.data.nhom;
+    expect(await trangThaiNhom(nhom.id)).toBe('cho-lanh-dao');
+    const duyet = await apiPgdA.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'duyet',
+    });
+    expect(duyet.status, JSON.stringify(duyet.body)).toBe(200);
+    expect(await trangThaiNhom(nhom.id)).toBe('da-duyet');
+  });
+
+  it('TC-LDTT-05: TP duyệt hộ bản của CÁN BỘ vẫn được — chặn chỉ nhắm việc của chính mình', async () => {
+    const ma = await taoNhiemVuCho('LDTT-05'); // gán cho nv như mặc định
+    const nhom = (await luuVaGuiFile(apiNv, ma, PDF)).body.data.nhom;
+    // Đưa về «can-sua» để `hoan-thanh` hợp lệ theo trạng thái, rồi chốt như TC-TF-11a.
+    await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'tra-ve-cbo',
+      noiDung: 'Phòng yêu cầu bổ sung số liệu',
+    });
+    await luuVaGuiFile(apiNv, ma, PDF, { fileId: nhom.id });
+    const chot = await apiTp.post(`/api/v1/task-files/${nhom.id}/verdict`, {
+      hanhDong: 'hoan-thanh',
+    });
+    expect(chot.status, JSON.stringify(chot.body)).toBe(200);
+    expect(await trangThaiNhom(nhom.id)).toBe('hoan-thanh');
   });
 });

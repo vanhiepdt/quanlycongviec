@@ -13,6 +13,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let api;
 let dept;
 let admin;
@@ -28,11 +29,18 @@ const makeWork = (over = {}) =>
     ...over,
   });
 
-const create = (body) => api.post('/api/v1/work-items', { workRef: work.code, ...body });
+const create = (body) =>
+  api.post('/api/v1/work-items', { assigneeId: taskStaff.id, workRef: work.code, ...body });
 
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment();
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   admin = await makeLoginUser({ code: 'NV001', email: 'admin@congty.vn', role: 'admin' });
   api = client(app);
   await api.login(admin.email);
@@ -115,7 +123,11 @@ describe('POST /api/v1/work-items — tạo (§7 việc 3.2)', () => {
   });
 
   it('công việc không tồn tại ⇒ 404, không tạo dòng nào', async () => {
-    const res = await api.post('/api/v1/work-items', { workRef: 'CV999', name: 'Mồ côi' });
+    const res = await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: 'CV999',
+      name: 'Mồ côi',
+    });
     expect(res.status).toBe(404);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM work_items`);
     expect(rows[0].n).toBe(0);
@@ -123,7 +135,11 @@ describe('POST /api/v1/work-items — tạo (§7 việc 3.2)', () => {
 
   it('chưa đăng nhập ⇒ 401', async () => {
     const guest = client(app);
-    const res = await guest.post('/api/v1/work-items', { workRef: work.code, name: 'X' });
+    const res = await guest.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: work.code,
+      name: 'X',
+    });
     expect(res.status).toBe(401);
   });
 });
@@ -194,7 +210,7 @@ describe('PATCH /api/v1/work-items/:id — sáu nhánh chặn (§7 việc 3.3)',
     expect(after.level).toBe(3);
     expect(after.parent_id).toBe(sub.id);
     expect(after.assignee_id).toBe(admin.id);
-    expect(after.completion).toBe(40);
+    expect(after.completion).toBe(0); // bỏ trường nhập tay, không có file nên vẫn 0
     expect(after.reminders).toHaveLength(1);
     // Mã KHÔNG đổi khi sửa — mã là thứ người dùng đọc và trích dẫn (§13.4 mục 6).
     expect(after.code).toBe(task.code);
@@ -215,14 +231,14 @@ describe('PATCH /api/v1/work-items/:id — sáu nhánh chặn (§7 việc 3.3)',
     expect(res.body.data.item.assignee_id).toBe(admin.id);
   });
 
-  it('TC-TREE-21: tên người thực hiện TRÙNG hai người ⇒ giữ tên, bỏ id, kèm cảnh báo', async () => {
+  it('TC-TREE-21: tên trùng không xác định Cán bộ trực tiếp ⇒ từ chối, giữ phân công cũ', async () => {
     await makeLoginUser({ code: 'NV002', email: 'b1@congty.vn', full_name: 'Trùng Tên' });
     await makeLoginUser({ code: 'NV003', email: 'b2@congty.vn', full_name: 'Trùng Tên' });
+    const before = await itemsRepo.findByCode(task.code);
     const res = await api.patch(`/api/v1/work-items/${task.code}`, { assigneeName: 'Trùng Tên' });
-    expect(res.status).toBe(200);
-    expect(res.body.data.item.assignee_id).toBeNull();
-    expect(res.body.data.item.assignee_name).toBe('Trùng Tên');
-    expect(res.body.data.warnings.map((w) => w.code)).toContain('ASSIGNEE_NAME_DUPLICATED');
+    expect(res.status).toBe(400);
+    expect(res.body.error.field).toBe('assigneeId');
+    expect(await itemsRepo.findByCode(task.code)).toEqual(before);
   });
 
   // PLACEHOLDER-PATCH
@@ -470,7 +486,7 @@ describe('Đồng thời và cuộn lại (§8.4 mục C)', () => {
       Array.from({ length: 20 }, (_, n) =>
         api.post(
           '/api/v1/work-items',
-          { workRef: work.code, level: 3, name: `Nhiệm vụ ${n + 1}` },
+          { assigneeId: taskStaff.id, workRef: work.code, level: 3, name: `Nhiệm vụ ${n + 1}` },
           { csrf }
         )
       )
@@ -531,11 +547,11 @@ describe('Kiểm dữ liệu vào và phòng cả ba cấp (§7 việc 3.10, 3.1
     expect(rows[0].n).toBe(0);
   });
 
-  it('tiến độ 0 và 100 là hợp lệ (biên)', async () => {
+  it('payload tiến độ cũ 0/100 vẫn hợp lệ nhưng không ghi đè kết quả file', async () => {
     for (const completion of [0, 100]) {
       const res = await create({ name: `Tiến độ ${completion}`, completion });
       expect(res.status).toBe(200);
-      expect(res.body.data.item.completion).toBe(completion);
+      expect(res.body.data.item.completion).toBe(0);
     }
   });
 
@@ -559,6 +575,7 @@ describe('Kiểm dữ liệu vào và phòng cả ba cấp (§7 việc 3.10, 3.1
 
     const noDeptWork = await makeWork({ name: 'Công việc chưa gán phòng', department_id: null });
     const res = await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: noDeptWork.code,
       name: 'Không phòng',
     });

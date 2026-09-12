@@ -62,7 +62,13 @@ async function batXoaChoDuyet(vai, entityType) {
 
 /** Một công việc cấp 1 đã duyệt, kèm công việc con + nhiệm vụ bên trong (cây 3 tầng đủ). */
 async function taoCayDaDuyet() {
-  const cv = await apiTp.post('/api/v1/works', { name: 'Việc phòng A', departmentId: phongA.id });
+  // Đợt A (028): người nhận thông báo «xin xoá» = supervisor_ids của mục,
+  // không còn là mọi Phó Giám đốc của phòng — nên phải chọn PGĐ A ngay khi tạo.
+  const cv = await apiTp.post('/api/v1/works', {
+    name: 'Việc phòng A',
+    departmentId: phongA.id,
+    supervisorIds: [pgdA.id],
+  });
   const work = cv.body.data.work;
   await apiPgdA.post(`/api/v1/approvals/work/${work.code}/approve`);
   const con = await apiTp.post('/api/v1/work-items', {
@@ -79,7 +85,12 @@ async function taoCayDaDuyet() {
     name: 'Nhiệm vụ của cán bộ',
     assigneeId: nv.id,
   });
-  return { work, conCode, nvCode: nvItem.body.data.item.code };
+  const nvCode = nvItem.body.data.item.code;
+  // ĐỢT B (Q3 + R5): nhiệm vụ cấp 3 không còn «Đã duyệt» riêng lẻ, và nhiệm vụ thêm SAU vào cây đã
+  // duyệt thì «Chờ duyệt» MỘT MÌNH NÓ — nên phải ký thêm một lần nữa thì cây mới thật sự đã duyệt
+  // như cái tên của hàm này hứa. Không ký thì cả bộ test đứng trên một cây còn chờ.
+  await apiPgdA.post(`/api/v1/approvals/work-item/${nvCode}/approve`);
+  return { work, conCode, nvCode };
 }
 
 beforeEach(async () => {

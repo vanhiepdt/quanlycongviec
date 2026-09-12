@@ -4,6 +4,12 @@
 // `CV021` mà cột duyệt ra `Đã duyệt`, vì cột có DEFAULT 'Đã duyệt' và không chỗ nào ở Phase 3/4
 // đặt 'Chờ duyệt'. Nên các phép kiểm dưới đây ĐỌC LẠI CỘT TRONG CSDL sau mỗi lần tạo, đúng cách
 // lượt khói đã bắt ra lỗi — không tin vào thân phản hồi.
+//
+// ĐỢT B (11/09/2026) đổi HAI luật mà file này khoá, nên các ca cũ đã được viết lại theo luật mới:
+//   • Q3 — nhiệm vụ cấp 3 không còn sinh ra «Đã duyệt» riêng lẻ (điểm bất hợp lý số 2);
+//   • R6 — bỏ quyền tự duyệt: admin / Phó Giám đốc lập việc cũng ra «Chờ duyệt», người duyệt và
+//     người lập phải là hai người khác nhau. Cửa «Đã duyệt ngay» còn lại là GHI ĐỀ create = ✓ mà
+//     admin chủ động đặt cho một VAI ở Bảng phân quyền.
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool } from '../../src/db/pool.js';
@@ -11,6 +17,7 @@ import { makeDepartment, pool, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
+let taskStaff;
 let dept;
 let deptKhac;
 
@@ -38,6 +45,12 @@ async function dangNhap(over) {
 beforeEach(async () => {
   await resetTables();
   dept = await makeDepartment({ code: 'PH01', name: 'Phòng Kỹ thuật' });
+  taskStaff = await makeLoginUser({
+    code: 'NV099',
+    email: 'fixture-task@test.local',
+    full_name: 'Cán bộ thực hiện test',
+    department_id: dept.id,
+  });
   deptKhac = await makeDepartment({ code: 'PH02', name: 'Phòng Kế hoạch', sort_order: 2 });
 });
 
@@ -99,8 +112,8 @@ describe('TC-APR-01/02 — Trưởng phòng, Phó phòng tạo ⇒ Chờ duyệt
   });
 });
 
-describe('TC-APR-03/04 — admin và Phó Giám đốc tạo ⇒ Đã duyệt ngay', () => {
-  it('TC-APR-03: admin tạo công việc ⇒ Đã duyệt', async () => {
+describe('TC-APR-03/04 — R6: admin và Phó Giám đốc KHÔNG còn tự duyệt việc mình lập', () => {
+  it('TC-APR-03: admin tạo công việc ⇒ Chờ duyệt', async () => {
     const { api } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -108,10 +121,10 @@ describe('TC-APR-03/04 — admin và Phó Giám đốc tạo ⇒ Đã duyệt ng
       department_id: null,
     });
     await api.post('/api/v1/works', { name: 'Việc của admin', departmentId: dept.id });
-    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Đã duyệt');
+    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Chờ duyệt');
   });
 
-  it('TC-APR-04: Phó Giám đốc phụ trách phòng tạo công việc ⇒ Đã duyệt', async () => {
+  it('TC-APR-04: Phó Giám đốc phụ trách phòng tạo công việc ⇒ Chờ duyệt', async () => {
     const pgd = await makeLoginUser({
       code: 'NV002',
       email: 'pgd@test.local',
@@ -128,10 +141,10 @@ describe('TC-APR-03/04 — admin và Phó Giám đốc tạo ⇒ Đã duyệt ng
 
     const res = await api.post('/api/v1/works', { name: 'Việc của Phó GĐ', departmentId: dept.id });
     expect(res.status).toBe(200);
-    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Đã duyệt');
+    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Chờ duyệt');
   });
 
-  it('Phó Giám đốc tạo công việc con ⇒ Đã duyệt', async () => {
+  it('Phó Giám đốc tạo công việc con ⇒ Chờ duyệt', async () => {
     const pgd = await makeLoginUser({
       code: 'NV002',
       email: 'pgd@test.local',
@@ -148,12 +161,33 @@ describe('TC-APR-03/04 — admin và Phó Giám đốc tạo ⇒ Đã duyệt ng
 
     await api.post('/api/v1/works', { name: 'Việc gốc', departmentId: dept.id });
     await api.post('/api/v1/work-items', { workRef: 'CV001', level: 2, name: 'Con' });
-    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Đã duyệt');
+    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Chờ duyệt');
+  });
+
+  it('R6: cửa «Đã duyệt ngay» còn lại là GHI ĐÈ create = ✓ admin đặt cho một VAI, không phải vai tự ký', async () => {
+    const { api: adminApi } = await dangNhap({
+      code: 'NV001',
+      email: 'admin@test.local',
+      role: 'admin',
+      department_id: null,
+    });
+    const dat = await adminApi.put('/api/v1/permissions', {
+      thayDoi: [{ vai: 'Trưởng phòng', entityType: 'work', action: 'create', giaTri: 'cho-phep' }],
+    });
+    expect(dat.status, JSON.stringify(dat.body)).toBe(200);
+
+    const { api } = await dangNhap({
+      code: 'NV010',
+      email: 'tp01@test.local',
+      role: 'Trưởng phòng',
+    });
+    await api.post('/api/v1/works', { name: 'Việc của phòng', departmentId: dept.id });
+    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Đã duyệt');
   });
 });
 
-describe('TC-APR-05 — nhiệm vụ cấp 3 LUÔN Đã duyệt, bất kể ai tạo', () => {
-  it('Trưởng phòng tạo nhiệm vụ cấp 3 ⇒ Đã duyệt', async () => {
+describe('TC-APR-05 — Q3: nhiệm vụ cấp 3 KHÔNG còn «Đã duyệt» riêng lẻ, bất kể ai tạo', () => {
+  it('Trưởng phòng tạo nhiệm vụ cấp 3 ⇒ Chờ duyệt', async () => {
     const { api: adminApi } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -167,11 +201,16 @@ describe('TC-APR-05 — nhiệm vụ cấp 3 LUÔN Đã duyệt, bất kể ai t
       email: 'tp01@test.local',
       role: 'Trưởng phòng',
     });
-    await api.post('/api/v1/work-items', { workRef: 'CV001', level: 3, name: 'Nhiệm vụ' });
-    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Đã duyệt');
+    await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: 'CV001',
+      level: 3,
+      name: 'Nhiệm vụ',
+    });
+    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Chờ duyệt');
   });
 
-  it('không gửi level (mặc định cấp 3, TC-TREE-07) ⇒ Đã duyệt', async () => {
+  it('không gửi level (mặc định cấp 3, TC-TREE-07) ⇒ Chờ duyệt', async () => {
     const { api: adminApi } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -181,12 +220,16 @@ describe('TC-APR-05 — nhiệm vụ cấp 3 LUÔN Đã duyệt, bất kể ai t
     await adminApi.post('/api/v1/works', { name: 'Việc gốc', departmentId: dept.id });
 
     const { api } = await dangNhap({ code: 'NV011', email: 'pp01@test.local', role: 'Phó phòng' });
-    const res = await api.post('/api/v1/work-items', { workRef: 'CV001', name: 'Không gửi cấp' });
+    const res = await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: 'CV001',
+      name: 'Không gửi cấp',
+    });
     expect(res.body.data.item.level).toBe(3);
-    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Đã duyệt');
+    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Chờ duyệt');
   });
 
-  it('Nhân viên tự nhận nhiệm vụ ⇒ Đã duyệt', async () => {
+  it('Nhân viên tự nhận nhiệm vụ ⇒ Chờ duyệt', async () => {
     const { api: adminApi } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -209,7 +252,31 @@ describe('TC-APR-05 — nhiệm vụ cấp 3 LUÔN Đã duyệt, bất kể ai t
       assigneeId: nv.id,
     });
     expect(res.status).toBe(200);
-    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Đã duyệt');
+    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Chờ duyệt');
+  });
+
+  it('Q3: «Lưu nháp» vẫn thắng — cấp 3 nháp là NHÁP chứ không phải «Chờ duyệt»', async () => {
+    const { api: adminApi } = await dangNhap({
+      code: 'NV001',
+      email: 'admin@test.local',
+      role: 'admin',
+      department_id: null,
+    });
+    await adminApi.post('/api/v1/works', { name: 'Việc gốc', departmentId: dept.id });
+
+    const { api } = await dangNhap({
+      code: 'NV010',
+      email: 'tp01@test.local',
+      role: 'Trưởng phòng',
+    });
+    await api.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
+      workRef: 'CV001',
+      level: 3,
+      name: 'Nhiệm vụ nháp',
+      saveAsDraft: true,
+    });
+    expect(await khoaDuyetCuaDong('CV001-001')).toBe('Nháp');
   });
 });
 
@@ -293,6 +360,9 @@ describe('Nhân bản đi qua đúng cửa duyệt của người bấm', () => 
       department_id: null,
     });
     await adminApi.post('/api/v1/works', { name: 'Việc gốc', departmentId: dept.id });
+    // ĐỢT B (R6): admin lập việc KHÔNG còn tự ra «Đã duyệt», nên đặt trạng thái nguồn bằng tay —
+    // ca này khảo sát cửa duyệt của NGƯỜI BẤM nhân bản, không khảo sát lúc tạo.
+    await pool.query(`UPDATE works SET approval_status = 'Đã duyệt' WHERE code = 'CV001'`);
     expect(await khoaDuyetCuaCongViec('CV001')).toBe('Đã duyệt');
 
     const { api } = await dangNhap({
@@ -305,7 +375,7 @@ describe('Nhân bản đi qua đúng cửa duyệt của người bấm', () => 
     expect(await khoaDuyetCuaCongViec('CV002')).toBe('Chờ duyệt');
   });
 
-  it('admin nhân bản một công việc BỊ TỪ CHỐI ⇒ bản sao Đã duyệt, không mang theo lý do', async () => {
+  it('R6: admin nhân bản một công việc BỊ TỪ CHỐI ⇒ bản sao Chờ duyệt, không mang theo lý do', async () => {
     const { api } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -323,10 +393,10 @@ describe('Nhân bản đi qua đúng cửa duyệt của người bấm', () => 
       'SELECT approval_status, reject_reason FROM works WHERE code = $1',
       ['CV002']
     );
-    expect(rows[0]).toEqual({ approval_status: 'Đã duyệt', reject_reason: '' });
+    expect(rows[0]).toEqual({ approval_status: 'Chờ duyệt', reject_reason: '' });
   });
 
-  it('nhân bản kéo theo cây: bản sao cấp 2 theo cửa duyệt, cấp 3 luôn Đã duyệt', async () => {
+  it('Q3: nhân bản kéo theo cây — bản sao cấp 2 lẫn cấp 3 đều theo cửa duyệt của người bấm', async () => {
     const { api: adminApi } = await dangNhap({
       code: 'NV001',
       email: 'admin@test.local',
@@ -336,6 +406,7 @@ describe('Nhân bản đi qua đúng cửa duyệt của người bấm', () => 
     await adminApi.post('/api/v1/works', { name: 'Việc gốc', departmentId: dept.id });
     await adminApi.post('/api/v1/work-items', { workRef: 'CV001', level: 2, name: 'Con' });
     await adminApi.post('/api/v1/work-items', {
+      assigneeId: taskStaff.id,
       workRef: 'CV001',
       level: 3,
       parentRef: 'CV001-001',
@@ -354,9 +425,10 @@ describe('Nhân bản đi qua đúng cửa duyệt của người bấm', () => 
          FROM work_items i JOIN works w ON w.id = i.work_id
         WHERE w.code = 'CV002' ORDER BY i.code`
     );
+    // Cấp 3 không còn «Đã duyệt» riêng lẻ (Q3): bản sao của cả cây cùng đi qua một cửa duyệt.
     expect(rows).toEqual([
       { code: 'CV002-003', level: 2, approval_status: 'Chờ duyệt' },
-      { code: 'CV002-004', level: 3, approval_status: 'Đã duyệt' },
+      { code: 'CV002-004', level: 3, approval_status: 'Chờ duyệt' },
     ]);
   });
 });
@@ -369,9 +441,8 @@ describe('Phòng khác không lọt vào phạm vi', () => {
       role: 'Trưởng phòng',
       department_id: deptKhac.id,
     });
-    await api.post('/api/v1/works', { name: 'Việc lấn phòng', departmentId: dept.id });
-    // §6 hiện cho Trưởng phòng `create` chung (chưa xét dòng), nên việc vẫn tạo được — nhưng
-    // trạng thái vẫn phải là Chờ duyệt: luật 5.1 xét VAI, không xét phòng.
-    expect(await khoaDuyetCuaCongViec('CV001')).toBe('Chờ duyệt');
+    const res = await api.post('/api/v1/works', { name: 'Việc lấn phòng', departmentId: dept.id });
+    expect(res.status).toBe(403);
+    expect(await khoaDuyetCuaCongViec('CV001')).toBeNull();
   });
 });

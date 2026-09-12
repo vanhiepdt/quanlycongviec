@@ -8,10 +8,11 @@
 //   4. Phòng lọc do SERVER quyết: admin/Phó GĐ chọn được nhiều phòng, vai khác bị ÉP về
 //      phòng mình dù query string nói gì (TC-STAT-10).
 import { can } from '../../middleware/rbac.js';
+import { laLanhDaoLamTrucTiep, nhanKemVai } from '../assignments/service.js';
 import * as deptRepo from '../departments/repo.js';
 import { demNhomFileTheoItem } from '../taskFiles/repo.js';
 import * as usersRepo from '../users/repo.js';
-import { ganTienDo, tienDoWork } from '../workItems/tienDo.js';
+import { ganTienDo, ganTienDoWorks, tienDoWork, nhanKetQua } from '../workItems/tienDo.js';
 import * as repo from './repo.js';
 
 /** "yyyy-MM-dd" theo giờ địa phương — cùng quy ước với `bootstrap/service.js` (`cron.js`). */
@@ -31,20 +32,7 @@ function ngayCua(value) {
 /** EXPORT cho Gantt (6.6). */
 export { ngayCua };
 
-const laHoanThanh = (status) =>
-  String(status ?? '')
-    .toLowerCase()
-    .includes('hoàn thành');
-/**
- * Thẻ «Đang làm» của UI GỘP BA trạng thái: đang thực hiện + chưa bắt đầu + tạm dừng
- * (`renderStats`: active-tasks = count4 + count3 + count5). Chuẩn đối chiếu là số ĐANG HIỆN
- * trên giao diện (§7 Phase 6 · TC-STAT-16), nên REST đếm giống hệt — khác với `getSummaryStats`
- * của backend cũ vốn chỉ đếm 'đang'.
- */
-const theDangLam = (status) => {
-  const st = String(status ?? '').toLowerCase();
-  return st.includes('đang') || st.includes('chưa') || st.includes('tạm dừng');
-};
+const laHoanThanh = (row) => row.hoan_thanh === true;
 
 /**
  * Giao nhau giữa khoảng của dòng và khoảng lọc (việc 6.4).
@@ -136,13 +124,23 @@ export function dungPhong(row, phongIds) {
  * đường đọc chênh nhau một chữ là đối chiếu số liệu (6.9) vô nghĩa.
  */
 export async function taiDuLieuDem(user) {
-  const [works, itemsRaw] = await Promise.all([repo.listCountableWorks(), repo.listCountableItems()]);
-  const items = itemsRaw.filter((row) =>
-    can(user, 'read', row.level === 2 ? 'subwork' : 'task', row).ok
+  const [works, itemsRaw] = await Promise.all([
+    repo.listCountableWorks(),
+    repo.listCountableItems(),
+  ]);
+  const items = itemsRaw.filter(
+    (row) => can(user, 'read', row.level === 2 ? 'subwork' : 'task', row).ok
   );
   // Bug 2 (8b): tiến độ = mức hoàn thành các NHÓM FILE KẾT QUẢ. Gắn `tien_do` ở nguồn chung
   // này để thống kê lẫn Gantt (cùng uống `taiDuLieuDem`) kể một câu chuyện.
-  ganTienDo(items, await demNhomFileTheoItem());
+  ganTienDo(
+    items,
+    await demNhomFileTheoItem(
+      null,
+      items.map((row) => row.id)
+    )
+  );
+  ganTienDoWorks(works, items);
   return {
     works: works.filter((row) => can(user, 'read', 'work', row).ok),
     items,
@@ -184,9 +182,9 @@ export function summaryFrom(works, tasks) {
   let ongoingTasks = 0;
   let overdueTasks = 0;
   for (const row of tasks) {
-    const hoanThanh = laHoanThanh(row.status);
+    const hoanThanh = laHoanThanh(row);
     if (hoanThanh) completedTasks += 1;
-    else if (theDangLam(row.status)) ongoingTasks += 1;
+    else ongoingTasks += 1;
     const han = ngayCua(row.due_date);
     if (han && han < homNay && !hoanThanh) overdueTasks += 1;
   }
@@ -245,7 +243,7 @@ function bieuDoTrangThai(tasks) {
   if (tasks.length === 0) return RONG('status');
   const dem = new Map();
   for (const row of tasks) {
-    const nhan = String(row.status ?? '').trim() || 'Không xác định';
+    const nhan = nhanKetQua(row);
     dem.set(nhan, (dem.get(nhan) ?? 0) + 1);
   }
   return { type: 'status', labels: [...dem.keys()], data: [...dem.values()] };
@@ -311,17 +309,27 @@ async function bieuDoNhanSu(tasks) {
     if (!theoNguoi.has(ten)) theoNguoi.set(ten, { total: 0, done: 0 });
     const so = theoNguoi.get(ten);
     so.total += 1;
-    if (laHoanThanh(row.status)) so.done += 1;
+    if (laHoanThanh(row)) so.done += 1;
   }
   const labels = [];
   const data = [];
   const completed = [];
   const rates = [];
-  // Giữ thứ tự danh sách nhân sự như bản cũ (`allStaff.map(...).filter(total>0)`).
-  for (const person of people) {
+  // Giữ thứ tự danh sách nhân sự như bản cũ (`allStaff.map(...).filter(total>0)` — tức đúng thứ tự
+  // `ORDER BY full_name, id` của `users.listAll`), CHỈ thêm một lần TÁCH NHÓM ổn định: Cán bộ giữ
+  // nguyên thứ tự cũ rồi mới tới Trưởng/Phó phòng (2026-09-09 — hai vai này nay nhận việc trực tiếp
+  // được, để lẫn thì không đọc ra ai là lãnh đạo đang ôm việc). Không sắp xếp lại bên trong từng
+  // nhóm: thứ tự đó là chuẩn đối chiếu của TC-STAT-16.
+  const coViec = people.filter((person) => (theoNguoi.get(person.full_name)?.total ?? 0) > 0);
+  const nguoiDem = [
+    ...coViec.filter((p) => !laLanhDaoLamTrucTiep(p.role)),
+    ...coViec.filter((p) => laLanhDaoLamTrucTiep(p.role)),
+  ];
+  for (const person of nguoiDem) {
     const so = theoNguoi.get(person.full_name);
-    if (!so || so.total === 0) continue;
-    labels.push(person.full_name);
+    // Nhãn kèm vai, tra vai theo CHÍNH `users.role` của người đó (không đoán từ tên — tên trùng
+    // là có thật, phép 15 `legacy-gd2-parity`).
+    labels.push(nhanKemVai(person.full_name, person.role));
     data.push(so.total);
     completed.push(so.done);
     rates.push(Math.round((so.done / so.total) * 100));
@@ -343,8 +351,8 @@ function bieuDoThoiGian(tasks) {
   }
   let co = false;
   for (const row of tasks) {
-    const baoCao = ngayCua(row.report_date);
-    if (!baoCao || !laHoanThanh(row.status)) continue;
+    const baoCao = ngayCua(row.hoan_thanh_luc);
+    if (!baoCao || !laHoanThanh(row)) continue;
     if (dem.has(baoCao)) {
       dem.set(baoCao, dem.get(baoCao) + 1);
       co = true;
@@ -357,7 +365,7 @@ function bieuDoThoiGian(tasks) {
 /**
  * E3 — so sánh công việc (`renderProjectComparisonChart`): top 5 theo tổng nhiệm vụ.
  *
- * Số nhiệm vụ đếm theo trạng thái như cũ; RIÊNG `completionRate` (bug 2 · 8b) là tiến độ
+ * Số nhiệm vụ xong đếm theo kết quả đã duyệt đủ; `completionRate` (bug 2 · 8b) là tiến độ
  * bình quân gia quyền theo file kết quả — cùng một phép tính với E4.
  */
 function bieuDoSoSanh(works, tasks, itemsByWork) {
@@ -370,7 +378,7 @@ function bieuDoSoSanh(works, tasks, itemsByWork) {
   const hang = works
     .map((work) => {
       const nhiemVu = tasksByWork.get(work.id) ?? [];
-      const xong = nhiemVu.filter((r) => laHoanThanh(r.status)).length;
+      const xong = nhiemVu.filter((r) => laHoanThanh(r)).length;
       const ten = work.name || work.code;
       return {
         name: ten.length > 15 ? `${ten.slice(0, 15)}...` : ten,

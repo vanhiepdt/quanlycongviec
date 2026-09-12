@@ -16,6 +16,12 @@ import { deriveOrigin, diffRows, originOf } from '../../utils/origin.js';
 import { withPgErrors } from '../../utils/pgError.js';
 import * as logsRepo from '../activityLogs/repo.js';
 import * as assignments from '../assignments/service.js';
+import { updateChildWeights } from '../workItems/childWeights.js';
+import {
+  baoKhiHaVeChoDuyet,
+  recordReviewerChanges,
+  recordReviewerItemChanges,
+} from '../approvals/changes.js';
 import {
   CHO_DUYET,
   boCotKhoaDuyet,
@@ -25,6 +31,8 @@ import {
   phaiChoDuyetKhiSua,
   xoaPhaiQuaDuyet,
 } from '../approvals/rules.js';
+import { demNhomFileTheoItem } from '../taskFiles/repo.js';
+import { ganTienDo, ganTienDoWorks } from '../workItems/tienDo.js';
 import * as itemsRepo from '../workItems/repo.js';
 import * as monthNamesRepo from '../workMonthNames/repo.js';
 import { assertThangDatDuoc } from '../workMonthNames/service.js';
@@ -35,6 +43,12 @@ const LEVEL_WORK = 1;
 
 /** Chặn theo quyền + phạm vi trên MỘT dòng cụ thể (§6: kiểm ở cả middleware và service). */
 function assertCan(user, action, row) {
+  if (
+    action === 'update' &&
+    row?.approval_status === CHO_DUYET &&
+    can(user, 'approve', 'work', row).ok
+  )
+    return;
   const verdict = can(user, action, 'work', row);
   if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
 }
@@ -44,6 +58,7 @@ function assertCan(user, action, row) {
  * và xoá được (§7 việc 5.6). Gọi SAU `assertCan` để mã lỗi chung của §6 ra trước.
  */
 function assertSuaDuoc(user, row) {
+  if (row?.approval_status === CHO_DUYET && can(user, 'approve', 'work', row).ok) return;
   const verdict = coSuaDuocKhiChoDuyet(user, row);
   if (!verdict.ok) throw new AppError('FORBIDDEN', verdict.message);
 }
@@ -55,8 +70,24 @@ async function mustFind(ref, client = null) {
   return work;
 }
 
+async function ganKetQuaCongViec(user, works) {
+  const items = (await itemsRepo.listForWorks(works.map((row) => row.id))).filter(
+    (row) =>
+      thayDuocNhap(user, row) &&
+      can(user, 'read', Number(row.level) === 2 ? 'subwork' : 'task', row).ok
+  );
+  ganTienDo(
+    items,
+    await demNhomFileTheoItem(
+      null,
+      items.map((row) => row.id)
+    )
+  );
+  return ganTienDoWorks(works, items);
+}
+
 /** Danh sách công việc, đã lọc bỏ những dòng ngoài phạm vi người đang xem. */
-export async function list(user, filter = {}) {
+export async function list(user, filter = {}, { withProgress = true } = {}) {
   const rows = await repo.list(filter);
   // `thayDuocNhap` bó thêm đúng trạng thái «Nháp» (012): bản nháp chỉ người lập và admin thấy.
   const thayDuoc = rows.filter(
@@ -66,7 +97,11 @@ export async function list(user, filter = {}) {
   // lần rồi đổi tháng ngay trên máy khách, nên nếu tên tháng phải xin thêm thì mỗi lần đổi tháng là
   // một vòng mạng. Truy vấn thêm là một câu `= ANY(...)`, chỉ cho các dòng đã lọc quyền.
   const rieng = await monthNamesRepo.listForWorks(thayDuoc.map((r) => r.id));
-  return ganTenThang(thayDuoc, banDoTenThang(rieng), 'work');
+  return ganTenThang(
+    withProgress ? await ganKetQuaCongViec(user, thayDuoc) : thayDuoc,
+    banDoTenThang(rieng),
+    'work'
+  );
 }
 
 export async function getOne(user, ref) {
@@ -75,81 +110,161 @@ export async function getOne(user, ref) {
   // Bản NHÁP (012): `can()` không biết gì về nháp nên đọc THẲNG theo mã vẫn lọt nếu không chặn ở
   // đây. Trả 404 chứ không 403 — nói «có một bản nháp mà bạn không được xem» đã là tiết lộ.
   if (!thayDuocNhap(user, work)) throw notFound(`Không tìm thấy công việc "${ref}"`);
-  return work;
+  return (await ganKetQuaCongViec(user, [work]))[0];
 }
 
 /** Kiểm Ban lãnh đạo kiểm soát + Lãnh đạo phòng phụ trách theo phòng CUỐI CÙNG của dòng. */
 async function assertPhanCong(patch, departmentId, client) {
-  await assignments.assertSupervisor(patch.supervisor_id ?? null, departmentId, client);
+  // Đợt A (028): cấp 1 là NGUỒN của cả cây nên không có tập cha để đối chiếu — `assertSupervisorsByLevel`
+  // ở cấp 1 chỉ kiểm vai/phòng của từng người. Cấp 2/cấp 3 mới có ràng buộc ⊆ cấp trên.
+  await assignments.assertSupervisorsByLevel(
+    patch.supervisor_ids ?? [],
+    { level: LEVEL_WORK, departmentId },
+    client
+  );
   await assignments.assertLeaders(patch.leader_ids ?? [], departmentId, client);
 }
 
-export async function create(user, input) {
-  assertCan(user, 'create', null);
-  // Người nhận việc của cấp 1 là người quản lý công việc: tự đứng tên ⇒ "Tự đăng ký", giao cho
-  // người khác ⇒ "Được giao" + ghi lại ai giao (§2.3).
-  const origin = deriveOrigin({
-    actor: user,
-    recipientId: input.manager_id ?? null,
-    recipientName: input.manager_name ?? null,
-  });
-  // Phân công kiểm NGUỒN ở server: supervisor phải là admin/Phó GĐ phụ trách phòng; leaders phải
-  // là Trưởng/Phó phòng của phòng. Công việc chung (không phòng) ⇒ leaders phải rỗng.
-  await withTransaction(async (client) => {
+export function create(user, input) {
+  return withTransaction(async (client) => {
+    assertCan(user, 'create', { department_id: input.department_id ?? null });
+    assignments.assertAssignmentActor(user, input);
+    // Người nhận việc của cấp 1 là người quản lý công việc: tự đứng tên ⇒ "Tự đăng ký", giao cho
+    // người khác ⇒ "Được giao" + ghi lại ai giao (§2.3).
+    const origin = deriveOrigin({
+      actor: user,
+      recipientId: input.manager_id ?? null,
+      recipientName: input.manager_name ?? null,
+    });
+    // Phân công kiểm NGUỒN ở server: supervisor phải là admin/Phó GĐ phụ trách phòng; leaders phải
+    // là Trưởng/Phó phòng của phòng. Công việc chung (không phòng) ⇒ leaders phải rỗng.
     await assertPhanCong(input, input.department_id ?? null, client);
-    return null;
+    // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo (§7 việc 5.1), không nhận từ thân request:
+    // `boCotKhoaDuyet` gỡ giá trị người dùng gửi lên trước, nếu không thì Trưởng phòng chỉ cần
+    // thêm `approvalStatus: 'Đã duyệt'` là tự duyệt xong việc của mình.
+    const work = await withPgErrors(() =>
+      repo.insert(
+        {
+          ...boCotKhoaDuyet(input),
+          // `luuNhap` (012): người lập bấm «Lưu nháp» ⇒ 'Nháp', chưa gửi ai duyệt, chưa vào thống kê.
+          approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK, {
+            luuNhap: input.luuNhap === true,
+          }),
+          ...origin,
+        },
+        client
+      )
+    );
+    return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
   });
-  // Khoá duyệt do MÁY CHỦ quyết theo vai người tạo (§7 việc 5.1), không nhận từ thân request:
-  // `boCotKhoaDuyet` gỡ giá trị người dùng gửi lên trước, nếu không thì Trưởng phòng chỉ cần
-  // thêm `approvalStatus: 'Đã duyệt'` là tự duyệt xong việc của mình.
-  const work = await withPgErrors(() =>
-    repo.insert({
-      ...boCotKhoaDuyet(input),
-      // `luuNhap` (012): người lập bấm «Lưu nháp» ⇒ 'Nháp', chưa gửi ai duyệt, chưa vào thống kê.
-      approval_status: trangThaiDuyetKhiTao(user, LEVEL_WORK, { luuNhap: input.luuNhap === true }),
-      ...origin,
-    })
-  );
-  return { work, warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate') };
 }
 
-export async function update(user, ref, patch) {
-  const current = await mustFind(ref);
-  assertCan(user, 'update', current);
-  assertSuaDuoc(user, current);
-  // Đổi phòng cùng lúc với đổi phân công ⇒ kiểm theo phòng MỚI (phòng đích), không theo phòng cũ.
-  const phongMoi = Object.hasOwn(patch, 'department_id')
-    ? patch.department_id
-    : current.department_id;
-  await withTransaction(async (client) => {
-    await assertPhanCong(patch, phongMoi ?? null, client);
-    return null;
+export function update(user, ref, patch, { client: transactionClient } = {}) {
+  const transact = transactionClient ? (fn) => fn(transactionClient) : withTransaction;
+  return transact(async (client) => {
+    let current = await mustFind(ref, client);
+    await client.query('SELECT id FROM works WHERE id = $1 FOR UPDATE', [current.id]);
+    current = await mustFind(ref, client);
+    assertCan(user, 'update', current);
+    assertSuaDuoc(user, current);
+    // Đổi phòng cùng lúc với đổi phân công ⇒ kiểm theo phòng MỚI (phòng đích), không theo phòng cũ.
+    const phongMoi = Object.hasOwn(patch, 'department_id')
+      ? patch.department_id
+      : current.department_id;
+    if (phongMoi !== current.department_id) {
+      assertCan(user, 'create', { ...current, department_id: phongMoi });
+      assertCan(user, 'update', { ...current, department_id: phongMoi });
+    }
+    assignments.assertAssignmentActor(user, patch, current);
+    await assertPhanCong(
+      phongMoi !== current.department_id ? { ...current, ...patch } : patch,
+      phongMoi ?? null,
+      client
+    );
+    if (phongMoi !== current.department_id) {
+      await assignments.assertTreeAssignments(
+        await itemsRepo.listByWork(current.id, {}, client),
+        phongMoi,
+        client,
+        // Đợt A (D2): cấp 2 phải nằm trong tập của cấp 1 ⇒ truyền cả dòng công việc làm tập nguồn.
+        // Truyền `{...current, ...patch}` chứ không phải `current`: đổi phòng thường đi kèm đổi
+        // phân công, kiểm theo giá trị SẮP LƯU mới đúng, kiểm theo giá trị cũ là cho lọt.
+        { ...current, ...patch }
+      );
+    } else if (Object.hasOwn(patch, 'supervisor_ids')) {
+      // Chỉ đổi danh sách kiểm soát, KHÔNG đổi phòng ⇒ vẫn phải kiểm lại cả cây, vì tập nguồn của
+      // mọi công việc con vừa đổi (D2). Không dùng `assertTreeAssignments` ở nhánh này: hàm đó còn
+      // kiểm «nhiệm vụ giao cho TP/PP thì phòng phải có Phó GĐ», mà dữ liệu cũ chưa thoả điều đó sẽ
+      // làm hỏng một lượt sửa danh sách kiểm soát không liên quan gì tới người thực hiện.
+      const dr = await itemsRepo.listByWork(current.id, {}, client);
+      const theoId = new Map(dr.map((r) => [String(r.id), r]));
+      const capCha = { ...current, ...patch };
+      for (const item of dr) {
+        await assignments.assertSupervisorsByLevel(
+          item.supervisor_ids,
+          {
+            level: item.level,
+            parentRow: item.parent_id == null ? null : theoId.get(String(item.parent_id)),
+            workRow: capCha,
+            departmentId: phongMoi ?? null,
+          },
+          client
+        );
+      }
+    }
+    const laNguoiDuyetSua =
+      current.approval_status === CHO_DUYET && can(user, 'approve', 'work', current).ok;
+    const truocCacMucTrongCay = laNguoiDuyetSua
+      ? new Map(
+          (await itemsRepo.listByWork(current.id, {}, client)).map((item) => [
+            String(item.id),
+            item,
+          ])
+        )
+      : null;
+    // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
+    // Ghi đè «Chờ duyệt» cho Sửa (011): vai có ghi đè update = 'cho-duyet' sửa mục «Đã duyệt» ⇒
+    // quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — cùng luồng với TP/PP sửa CV con.
+    const phaiDuyetLai = phaiChoDuyetKhiSua(user, 'work', current.approval_status);
+    const work = await withPgErrors(() =>
+      repo.update(
+        current.id,
+        phaiDuyetLai
+          ? {
+              ...boCotKhoaDuyet(patch),
+              approval_status: CHO_DUYET,
+              approver_id: null,
+              approved_at: null,
+              reject_reason: '',
+            }
+          : boCotKhoaDuyet(patch),
+        client
+      )
+    );
+    if (phaiDuyetLai) {
+      await client.query('UPDATE works SET submitted_by = $2 WHERE id = $1', [work.id, user.id]);
+      // R7 (đợt A): hạ về «Chờ duyệt» thì PHẢI có người biết. Trong cùng giao dịch — xem chú thích
+      // của `baoKhiHaVeChoDuyet`. Lấy `supervisor_ids` của dòng VỪA LƯU: lượt sửa này có thể đổi
+      // luôn danh sách kiểm soát, báo cho người cũ là báo sai người.
+      await baoKhiHaVeChoDuyet(work, user, 'work', 'Công việc', client);
+    }
+    await recordReviewerChanges(user, 'work', current, work, client);
+    if (truocCacMucTrongCay) {
+      await recordReviewerItemChanges(
+        user,
+        truocCacMucTrongCay,
+        await itemsRepo.listByWork(work.id, {}, client),
+        client
+      );
+    }
+    return {
+      work,
+      choDuyetLai: phaiDuyetLai,
+      // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
+      changes: diffRows(current, work, repo.WRITABLE),
+      warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate'),
+    };
   });
-  // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
-  // Ghi đè «Chờ duyệt» cho Sửa (011): vai có ghi đè update = 'cho-duyet' sửa mục «Đã duyệt» ⇒
-  // quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — cùng luồng với TP/PP sửa CV con.
-  const phaiDuyetLai = phaiChoDuyetKhiSua(user, 'work', current.approval_status);
-  const work = await withPgErrors(() =>
-    repo.update(
-      current.id,
-      phaiDuyetLai
-        ? {
-            ...boCotKhoaDuyet(patch),
-            approval_status: CHO_DUYET,
-            approver_id: null,
-            approved_at: null,
-            reject_reason: '',
-          }
-        : boCotKhoaDuyet(patch)
-    )
-  );
-  return {
-    work,
-    choDuyetLai: phaiDuyetLai,
-    // Nhật ký "các lần chỉnh sửa": route đưa vào `res.locals.audit.details` (§2.3).
-    changes: diffRows(current, work, repo.WRITABLE),
-    warnings: warnDueBeforeStart(work.start_date, work.end_date, 'endDate'),
-  };
 }
 
 /**
@@ -221,7 +336,7 @@ export function copy(user, ref, { name = null } = {}) {
   return withTransaction(async (client) => {
     const source = await mustFind(ref, client);
     assertCan(user, 'read', source);
-    assertCan(user, 'create', null);
+    assertCan(user, 'create', source);
 
     const code = await repo.nextWorkCode(client);
     // Bản sao là đầu việc MỚI: người lập là người bấm Nhân bản, không phải người đã lập bản gốc.
@@ -247,6 +362,21 @@ export function copy(user, ref, { name = null } = {}) {
     );
 
     const items = await itemsRepo.listByWork(source.id, {}, client);
+    for (const item of items) {
+      const entity = Number(item.level) === 2 ? 'subwork' : 'task';
+      for (const action of ['read', 'create']) {
+        const verdict = can(user, action, entity, item);
+        if (!verdict.ok) throw new AppError(verdict.code, verdict.message);
+      }
+      assignments.assertAssignmentActor(user, { assignee_id: item.assignee_id }, item);
+      await assignments.assertTaskAssignee(
+        item,
+        { actor: user, departmentId: source.department_id },
+        client
+      );
+    }
+    await assertPhanCong(source, source.department_id, client);
+    await assignments.assertTreeAssignments(items, source.department_id, client);
     const idMap = new Map();
     const copiedCodes = [];
 
@@ -292,6 +422,7 @@ export function copy(user, ref, { name = null } = {}) {
       copiedCodes.push(copied.code);
     }
 
+    for (const id of idMap.values()) await updateChildWeights(id, client);
     return { work, copiedItems: copiedCodes, copiedCount: copiedCodes.length };
   });
 }

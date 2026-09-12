@@ -6,15 +6,22 @@
 // hai lần là hai chỗ để lệch, và chỗ lệch ở đây không nổ ra lỗi — nó chỉ lặng lẽ cho một mục
 // chưa duyệt lọt vào thống kê. Đó đúng là kiểu hỏng mà cả Phase 5 đang phòng.
 //
-// Luật (§6 và §7 việc 5.1):
-//   admin, Phó Giám đốc            ⇒ 'Đã duyệt' ngay (họ chính là người duyệt)
-//   Trưởng phòng, Phó phòng        ⇒ 'Chờ duyệt' cho cấp 1 và cấp 2
-//   Nhiệm vụ cấp 3                 ⇒ LUÔN 'Đã duyệt', không ai phải duyệt
-//   các vai còn lại (Quản lý công việc, Nhân viên) ⇒ chỉ tạo được cấp 3 (§6), nên rơi vào dòng trên
+// Luật (§6, viết lại theo Q3 + R5 + R6 ngày 11/09/2026):
+//   «Lưu nháp»                      ⇒ 'Nháp' — thắng mọi luật khác
+//   ghi đè create = ⏳ / ✓           ⇒ 'Chờ duyệt' / 'Đã duyệt' (admin đặt ở Bảng phân quyền)
+//   MỌI trường hợp còn lại          ⇒ 'Chờ duyệt'
 //
-// Cấp 3 không qua duyệt là quyết định nghiệp vụ, không phải bỏ sót: cửa duyệt đặt ở tầng "khối
-// việc" (Công việc / Công việc con). Nhiệm vụ nằm dưới một khối chưa duyệt vẫn không được đếm —
-// phần đó do `v_countable_items` lo (004_countable_views.sql), không phải do cột của chính nó.
+// Hai luật CŨ đã bị BỎ ở ĐỢT B, đừng thêm lại:
+//   • «Nhiệm vụ cấp 3 LUÔN Đã duyệt» (điểm bất hợp lý số 2) — thêm một nhiệm vụ vào cây đã duyệt là
+//     nó có hiệu lực ngay, không ai ký. Nay Q3 chốt «Nháp là nháp TẤT CẢ, cấp 3 không còn sinh ra
+//     Đã duyệt riêng lẻ», và R5 chốt nhiệm vụ thêm SAU vào cây đã duyệt thì `Chờ duyệt` MỘT MÌNH NÓ,
+//     duyệt riêng. `v_countable_items` vẫn không mất số của phần cây đã duyệt: nó loại đúng dòng
+//     `Chờ duyệt` chứ không hạ cả cây.
+//   • «admin / Phó Giám đốc tự duyệt việc mình lập» (`VAI_TU_DUYET`) — R6 chốt BỎ quyền tự duyệt.
+//     Người duyệt và người lập phải là hai người khác nhau, kể cả khi đó là Giám đốc.
+//
+// Ghi đè `create = ✓` VẪN trả 'Đã duyệt': đó là admin chủ động đặt luật cho một VAI ở Bảng phân
+// quyền, không phải một vai tự duyệt việc của mình — khác hẳn `VAI_TU_DUYET` vừa bỏ.
 
 /** Bốn giá trị hợp lệ của cột `approval_status` (CHECK ở 001_init.sql, nới bởi 012). */
 export const NHAP = 'Nháp';
@@ -22,18 +29,13 @@ export const CHO_DUYET = 'Chờ duyệt';
 export const DA_DUYET = 'Đã duyệt';
 export const TU_CHOI = 'Từ chối';
 
-/** Vai KHÔNG cần ai duyệt việc mình lập: chính họ là người có quyền duyệt (§6). */
-const VAI_TU_DUYET = Object.freeze(['admin', 'Phó Giám đốc']);
-
-/** Cấp 3 (Nhiệm vụ) không có bước duyệt. */
-const LEVEL_TASK = 3;
-
 /**
  * Trạng thái duyệt của một dòng MỚI TẠO.
  *
  * @param {object|null} user người đang tạo (đã chuẩn hoá, có `role`)
- * @param {number} level 1 = Công việc, 2 = Công việc con, 3 = Nhiệm vụ
- * @returns {'Chờ duyệt'|'Đã duyệt'}
+ * @param {number} level 1 = Công việc, 2 = Công việc con, 3 = Nhiệm vụ — nay chỉ dùng để chọn
+ *   đúng ô ghi đè (`work:create` / `subwork:create` / `task:create`), KHÔNG còn quyết định trạng thái
+ * @returns {'Nháp'|'Chờ duyệt'|'Đã duyệt'}
  */
 export function trangThaiDuyetKhiTao(user, level, { luuNhap = false } = {}) {
   // «Lưu nháp» (012, Vòng 13) thắng MỌI luật khác: người lập chủ động nói «chưa gửi đi duyệt».
@@ -47,8 +49,6 @@ export function trangThaiDuyetKhiTao(user, level, { luuNhap = false } = {}) {
   const ghiDe = ghiDeTho && typeof ghiDeTho === 'object' ? ghiDeTho.gia_tri : ghiDeTho;
   if (ghiDe === 'cho-duyet') return CHO_DUYET;
   if (ghiDe === 'cho-phep') return DA_DUYET;
-  if (Number(level) === LEVEL_TASK) return DA_DUYET;
-  if (user && VAI_TU_DUYET.includes(user.role)) return DA_DUYET;
   return CHO_DUYET;
 }
 
@@ -114,6 +114,9 @@ export function xoaPhaiQuaDuyet(user, entityType) {
  * đặt yêu cầu xoá cho người khác — đúng kiểu đường vòng mà `boCotKhoaDuyet` sinh ra để bịt.
  */
 const COT_KHOA_DUYET = Object.freeze([
+  // Cột lịch sử được giữ trong CSDL; hoàn thành/tiến độ nay chỉ do kết quả file quyết định.
+  'status',
+  'completion',
   'approval_status',
   'approver_id',
   'approved_at',

@@ -79,7 +79,8 @@ export async function findByName(name, client = null) {
 /** Ai phụ trách phòng này, kèm tên người để hiện ra giao diện. */
 export async function listManagers(departmentId, client = null) {
   const { rows } = await db(client).query(
-    `SELECT dm.department_id, dm.user_id, dm.role, u.full_name, u.email
+    `SELECT dm.department_id, dm.user_id, dm.role, u.full_name, u.email,
+            u.role AS user_role, u.is_active
        FROM department_managers dm
        JOIN users u ON u.id = dm.user_id
       WHERE dm.department_id = $1
