@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260908-1");
+console.info("[QLCV] app.js 20260912-02");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -23,7 +23,11 @@ let chartInstance = null,
   allApps = [],
   currentProposalFilter = "",
   currentOverviewProjectFilter = null,
-  tasksXemThang = new Date().getMonth() + 1,
+  // 2026-09-10: tab Nhiệm vụ MẶC ĐỊNH «Tất cả tháng» (0), giống `projectsXemThang` bên dưới.
+  // Trước đây mặc định là tháng hiện tại nên nhiệm vụ có ngày rơi vào tháng khác — điển hình là
+  // nhiệm vụ trực thuộc công việc cha vừa tạo, hạn tháng sau — BIẾN MẤT khỏi tab mà không một câu
+  // nào giải thích. Người dùng báo đúng ca đó: «không hiển thị nhiệm vụ trực thuộc công việc cha».
+  tasksXemThang = 0,
   tasksXemNam = new Date().getFullYear(),
   tasksLocCanBo = "",
   tasksLocPhong = "",
@@ -211,8 +215,15 @@ function handleLogin(email, password) {
     setLoginLoading(false), document.getElementById("login-loading").classList.add("hidden"), showLoginError("Lỗi kết nối: " + error.message);
   }).authenticateUser(email, password);
 }
-function handleSuccessfulLogin(data) {
-  currentUser = data.user, isAuthenticated = true, allProjects = data.projects || [], allTasks = data.tasks || [], allStaff = data.staff || [], allProposals = data.proposals || [], allApps = data.apps || [], allAdminNames = data.adminNames || [], updateUIForUser(currentUser), renderStats(data.summaryStats), renderProjects(), renderTasks(), renderStaff(), renderProposals(), renderApps(), renderChart(data.chartData), renderProjectProgressChart(), renderTaskPriorityChart(), renderTimelineProgressChart(), renderProjectComparisonChart(), renderStaffPerformanceChart(), renderActivity(data.recentActivities), renderPriorityTasksMini(), renderTaskStats(), renderProjectStats(), updateOverviewProjectDatalist();
+async function handleSuccessfulLogin(data) {
+  if (currentUser?.id !== data.user?.id) { capNhatBangQuyen(null); phamViQuyen = null; }
+  currentUser = data.user;
+  isAuthenticated = true;
+  const nguoiDangNhap = currentUser;
+  await napPhanQuyenHienTai();
+  if (currentUser !== nguoiDangNhap || !isAuthenticated) return;
+  batDauHoiLaiQuyen();
+  allProjects = data.projects || [], allTasks = data.tasks || [], allStaff = data.staff || [], allProposals = data.proposals || [], allApps = data.apps || [], allAdminNames = data.adminNames || [], updateUIForUser(currentUser), renderStats(data.summaryStats), renderProjects(), renderTasks(), renderStaff(), renderProposals(), renderApps(), renderChart(data.chartData), renderProjectProgressChart(), renderTaskPriorityChart(), renderTimelineProgressChart(), renderProjectComparisonChart(), renderStaffPerformanceChart(), renderActivity(data.recentActivities), renderPriorityTasksMini(), renderTaskStats(), renderProjectStats(), updateOverviewProjectDatalist();
   if (currentSection === "overview") {
     const overviewFilterContainerEl = document.getElementById("overview-filter-container");
     overviewFilterContainerEl && overviewFilterContainerEl.classList.remove("hidden");
@@ -238,14 +249,14 @@ function loadDepartmentContext(callback) {
       const departmentNavEl = document.getElementById("nav-departments");
       departmentNavEl && departmentNavEl.classList.toggle("hidden", !isAdmin());
       currentSection === "departments" && renderDepartments();
-      if (isDeputyDirectorUser || truocLaDeputy || isDepartmentHeadUser || truocLaHead) {
+      if (currentUser || isDeputyDirectorUser || truocLaDeputy || isDepartmentHeadUser || truocLaHead) {
         // Vòng 12d: thêm TP/PP — lần vẽ đầu của họ chạy lúc `myDepartment` còn rỗng (bối cảnh
         // phòng về SAU), giờ bối cảnh về là phải vẽ lại đúng như đã vá cho Phó GĐ (bẫy §13.5).
         // Vài hàm vẽ lại (renderProjectStats...) không tự kiểm phần tử null — bọc try/catch để một
         // khung thiếu trên trang không chặn mất `callback(response)` bên dưới (bài học api-bridge.js:
         // "vỡ thì vẫn phải thấy dấu vết, không được nuốt", nhưng KHÔNG được làm mất lượt gọi tiếp theo).
         try {
-          renderProjects(), renderTasks(), renderProjectStats(), renderTaskStats(), renderStats(), renderPriorityTasksMini();
+          hideAdminButtons(), renderProjects(), renderTasks(), renderProjectStats(), renderTaskStats(), renderStats(), renderPriorityTasksMini();
           currentSection === "gantt" && renderGanttChart();
           currentSection === "projects" && (goiNutChoDuyetPanel(), renderChoDuyetPanel());
           currentSection === "cho-duyet" && napTrangChoDuyet();
@@ -279,8 +290,6 @@ function loadChatMessagesAsync() {
   napChatTuServer({ dauTien: true }).then(() => batDauHoiLaiChat());
 }
 function updateUIForUser(user) {
-  const isAdmin2 = isAdmin(),
-    role = user.role && user.role.toLowerCase().includes("quản lý");
   document.getElementById("user-info").classList.remove("hidden"), document.getElementById("login-prompt").classList.add("hidden");
   const userAvatarEl = document.getElementById("user-avatar"),
     userNameEl = document.getElementById("user-name"),
@@ -289,28 +298,10 @@ function updateUIForUser(user) {
     const slice = user.name.split(" ").map(item => item[0]).join("").toUpperCase().slice(0, 2);
     userAvatarEl.textContent = slice, userNameEl.textContent = user.name, userRoleEl.textContent = user.role;
   }
-  const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === user.name),
-    projectsNavEl = document.getElementById("projects-nav"),
-    staffNavEl = document.getElementById("staff-nav");
-  if (isAdmin2) {
-    if (projectsNavEl) projectsNavEl.style.display = "flex";
-    if (staffNavEl) staffNavEl.style.display = "flex";
-    showAdminButtons();
-  } else {
-    // 2026-08-27: Phó Giám đốc TRƯỚC ĐÂY rơi vào nhánh `hasMatch` (chỉ thấy tab «Quản lý công
-    // việc» khi tình cờ đứng tên quản lý một công việc) vì `role` chỉ bắt chuỗi "quản lý". §6 cho
-    // vai này quyền như admin trong các phòng mình phụ trách ⇒ tab phải luôn hiện. Tab «Cán bộ»
-    // vẫn chỉ của admin: §6 cho Phó Giám đốc `user: ['read']`, không phải quản lý người dùng.
-    if (role || laQuanTriTrongPhamVi()) {
-      if (projectsNavEl) projectsNavEl.style.display = "flex";
-      if (staffNavEl) staffNavEl.style.display = "none";
-      hideAdminButtons();
-    } else {
-      projectsNavEl && (projectsNavEl.style.display = hasMatch ? "flex" : "none");
-      if (staffNavEl) staffNavEl.style.display = "none";
-      hideAdminButtons();
-    }
-  }
+  const projectsNavEl = document.getElementById("projects-nav"), staffNavEl = document.getElementById("staff-nav");
+  if (projectsNavEl) projectsNavEl.style.display = coQuyenTrongPhamVi("work", "read") ? "flex" : "none";
+  if (staffNavEl) staffNavEl.style.display = isAdmin() ? "flex" : "none";
+  isAdmin() ? showAdminButtons() : hideAdminButtons();
   // Việc 4.7 — đã bỏ chỗ ẩn/hiện `#add-notification-btn`: `index.html` KHÔNG có nút đó, nên hai
   // nhánh if này chưa bao giờ chạm được vào gì. Listener "click" của cùng id cũng đã bỏ (dòng 470
   // cũ). Hệ quả phải nói rõ: modal tạo thông báo (`createNotificationModal`) hiện KHÔNG có đường
@@ -319,23 +310,14 @@ function updateUIForUser(user) {
   updatePageTitle();
 }
 function hideAdminButtons() {
-  const values = ["add-staff-btn", "quick-add-staff", "quick-add-app", "add-app-btn"];
-  values.forEach(value => {
-    const el = document.getElementById(value);
-    el && (el.style.display = "none");
+  if (isAdmin()) { showAdminButtons(); return; }
+  ["add-staff-btn", "quick-add-staff", "quick-add-app", "add-app-btn"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
   });
-  const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === currentUser.name),
-    values2 = ["add-project-standalone", "quick-add-project"];
-  values2.forEach(values22 => {
-    const el = document.getElementById(values22);
-    el && (laQuanTriTrongPhamVi() || isManager() || laLanhDaoPhong() ? el.style.display = "" : el.style.display = "none");
-  });
-  const values3 = ["add-task-standalone", "quick-add-task"];
-  values3.forEach(values32 => {
-    const el = document.getElementById(values32);
-    el && (canUserCreateTask() ? el.style.display = "" : el.style.display = "none");
-  }), document.addEventListener("DOMContentLoaded", function () {
-    hideActionButtons();
+  ["add-project-standalone", "quick-add-project", "add-task-standalone", "quick-add-task"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (id.includes("project") ? coQuyenTaoCongViec() : canUserCreateTask()) ? "" : "none";
   });
 }
 function showAdminButtons() {
@@ -348,36 +330,15 @@ function showAdminButtons() {
   });
 }
 function hideActionButtons() {
-  const els = document.querySelectorAll(".edit-btn, .delete-btn, .copy-btn");
-  els.forEach(el => {
-    const type = el.dataset.type,
-      id = el.dataset.id;
-    // Phó Giám đốc: không quét ẩn nút của họ ở đây — quyền §6 như admin trong phòng phụ trách.
-    // Riêng nút của «staff» thì laQuanTriTrongPhamVi() KHÔNG mở (§6: user chỉ `read`), xem dưới.
-    if (isAdmin()) return;
-    if (laQuanTriTrongPhamVi() && type !== "staff") return;
-    if (el.classList.contains("copy-btn")) {
-      !canUserCopyResource(type, id) && (el.style.display = "none");
-      return;
-    }
-    if (isManager()) type === "staff" && (el.style.display = "none");else {
-      if (type === "project" || type === "staff") el.style.display = "none";else {
-        if (type === "task") {
-          const task = allTasks.find(task2 => task2[COL.T_ID] === id);
-          if (task) {
-            const taskPid = task[COL.T_PID],
-              project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
-            if (project && project[COL.P_MANAGER] === currentUser.name) return;
-            task[COL.T_ASSIGNEE] !== currentUser.name && (el.style.display = "none");
-          }
-        }
-      }
-    }
+  document.querySelectorAll(".edit-btn, .delete-btn, .copy-btn").forEach(el => {
+    const fn = el.classList.contains("copy-btn") ? canUserCopyResource : el.classList.contains("delete-btn") ? canUserDeleteResource : canUserEditResource;
+    el.style.display = fn(el.dataset.type, el.dataset.id) ? "" : "none";
   });
 }
 function handleLogout() {
   showConfirmDialog("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?", function () {
     google.script.run.withSuccessHandler(function (response) {
+      dungHoiLaiQuyen();
       currentUser = null, isAuthenticated = false, allProjects = [], allTasks = [], allStaff = [], document.getElementById("user-info").classList.add("hidden"), document.getElementById("login-prompt").classList.remove("hidden"), clearAllSections(), showLoginModal(), showToast("Đăng xuất thành công", "success");
     }).withFailureHandler(function (error) {
       showToast("Lỗi khi đăng xuất: " + error.message, "error");
@@ -513,10 +474,10 @@ function updatePageTitle() {
   }
 }
 function isAdmin() {
-  return currentUser && currentUser.role && currentUser.role.toLowerCase().includes("admin");
+  return (phamViQuyen?.vai || currentUser?.role) === "admin";
 }
 function isManager() {
-  return currentUser && currentUser.role && currentUser.role.toLowerCase().includes("quản lý");
+  return false; // Vai phân quyền Quản lý công việc đã bỏ ở migration021.
 }
 /**
  * 2026-08-27 — «quản trị TRONG PHẠM VI»: admin toàn hệ thống, hoặc Phó Giám đốc (§6 cho vai này
@@ -532,8 +493,7 @@ function isManager() {
  */
 function laQuanTriTrongPhamVi() {
   if (isAdmin()) return true;
-  if (typeof isDeputyDirectorUser !== "undefined" && isDeputyDirectorUser) return true;
-  return !!(currentUser && String(currentUser.role || "") === "Phó Giám đốc");
+  return !!(currentUser && (phamViQuyen?.vai || currentUser.role) === "Phó Giám đốc");
 }
 /** Trưởng phòng / Phó phòng — hai vai lãnh đạo phòng (§6, Quyết định số 5: quyền như nhau).
  * 2026-08-29: được THÊM công việc cấp 1 — máy chủ PERMISSIONS đã cho work.create, nút phía
@@ -556,14 +516,14 @@ function setupEventListeners() {
     });
   }), document.getElementById("send-chat-btn")?.addEventListener("click", sendChatMessage), document.getElementById("chat-input")?.addEventListener("keypress", function (event) {
     event.key === "Enter" && sendChatMessage();
-  }), document.addEventListener("click", handleQuickCompleteTask), document.getElementById("change-password-btn")?.addEventListener("click", showChangePasswordModal), document.getElementById("uy-quyen-btn")?.addEventListener("click", moModalUyQuyen), document.getElementById("mobile-menu-btn").addEventListener("click", toggleMobileMenu), document.getElementById("mobile-overlay").addEventListener("click", closeMobileMenu), document.getElementById("login-btn")?.addEventListener("click", showLoginModal), document.getElementById("logout-btn")?.addEventListener("click", handleLogout), document.getElementById("login-form")?.addEventListener("submit", function (event) {
+  }), document.getElementById("change-password-btn")?.addEventListener("click", showChangePasswordModal), document.getElementById("uy-quyen-btn")?.addEventListener("click", moModalUyQuyen), document.getElementById("mobile-menu-btn").addEventListener("click", toggleMobileMenu), document.getElementById("mobile-overlay").addEventListener("click", closeMobileMenu), document.getElementById("login-btn")?.addEventListener("click", showLoginModal), document.getElementById("logout-btn")?.addEventListener("click", handleLogout), document.getElementById("login-form")?.addEventListener("submit", function (event) {
     event.preventDefault();
     const trimmed = document.getElementById("login-email").value.trim(),
       trimmed2 = document.getElementById("login-password").value.trim();
     handleLogin(trimmed, trimmed2);
   }), document.getElementById("quick-add-project")?.addEventListener("click", (event) => {
     event && event.preventDefault();
-    if (isAuthenticated && (laQuanTriTrongPhamVi() || isManager() || laLanhDaoPhong())) openModal("project");
+    if (isAuthenticated && coQuyenTaoCongViec()) openModal("project");
   }), document.getElementById("quick-add-task")?.addEventListener("click", (event) => {
     event && event.preventDefault();
     if (isAuthenticated && isAdmin()) {
@@ -581,7 +541,7 @@ function setupEventListeners() {
     if (isAuthenticated && isAdmin()) openModal("app");
   }), document.getElementById("add-project-standalone")?.addEventListener("click", (event) => {
     event && event.preventDefault();
-    if (isAuthenticated && (laQuanTriTrongPhamVi() || isManager() || laLanhDaoPhong())) openModal("project");
+    if (isAuthenticated && coQuyenTaoCongViec()) openModal("project");
   }), document.getElementById("add-task-standalone")?.addEventListener("click", (event) => {
     event && event.preventDefault();
     if (isAuthenticated && canUserCreateTask()) {
@@ -598,20 +558,20 @@ function setupEventListeners() {
     filterCards(".project-card", event.target.value.toLowerCase());
   }), document.getElementById("export-btn")?.addEventListener("click", capNhatLinkXuatExcel),document.getElementById("tasks-search")?.addEventListener("input", event => {
     filterTaskRows(event.target.value.toLowerCase());
-  }), document.getElementById("tasks-status-filter")?.addEventListener("change", filterTasks), document.getElementById("projects-status-filter")?.addEventListener("change", filterProjects), document.addEventListener("click", function (event) {
+  }), document.addEventListener("click", function (event) {
     if (!isAuthenticated) return;
     if (event.target.matches(".add-task-from-project-btn") || event.target.closest(".add-task-from-project-btn")) {
       const target = event.target.matches(".add-task-from-project-btn") ? event.target : event.target.closest(".add-task-from-project-btn"),
         projectId = target.dataset.projectId,
         projectName = target.dataset.projectName;
-      isAuthenticated && canUserCreateTask() ? openTaskModalForProject(projectId, projectName) : showToast("Bạn không có quyền tạo nhiệm vụ", "error");
+      isAuthenticated && canUserCreateTask(projectId) ? openTaskModalForProject(projectId, projectName) : showToast("Bạn không có quyền tạo nhiệm vụ", "error");
     }
     if (event.target.matches(".add-subwork-from-work-btn") || event.target.closest(".add-subwork-from-work-btn")) {
       const target = event.target.matches(".add-subwork-from-work-btn") ? event.target : event.target.closest(".add-subwork-from-work-btn"),
         projectId = target.dataset.projectId,
         projectName = target.dataset.projectName;
       event.stopPropagation();
-      canUserCreateSubwork() ? openTaskModalForProject(projectId, projectName, {
+      canUserCreateSubwork(projectId) ? openTaskModalForProject(projectId, projectName, {
         level: 2
       }) : showToast("Bạn không có quyền tạo công việc con", "error");
     }
@@ -621,7 +581,7 @@ function setupEventListeners() {
         projectName = target.dataset.projectName,
         parentId = target.dataset.parentId;
       event.stopPropagation();
-      canUserCreateTask() ? openTaskModalForProject(projectId, projectName, {
+      canUserCreateTask(projectId) ? openTaskModalForProject(projectId, projectName, {
         level: 3,
         parentId: parentId
       }) : showToast("Bạn không có quyền tạo nhiệm vụ", "error");
@@ -703,8 +663,19 @@ function setupEventListeners() {
   setupTrangTaiKhoan();
   document.addEventListener("click", function (event) {
     const toggleBtn = event.target.closest(".tasks-subwork-toggle");
-    if (!toggleBtn) return;
-    doiTrangThaiThuGonTasks(toggleBtn.dataset.khoi || "");
+    if (toggleBtn) {
+      doiTrangThaiThuGonTasks(toggleBtn.dataset.khoi || "");
+      return;
+    }
+    // «Xem kết quả» của hàng file mở POPUP nhật ký riêng của file đó (thiết kế lại 2026-09-10),
+    // không mở modal nhiệm vụ như bản cũ.
+    const tichAn = event.target.closest(".task-files-toggle");
+    if (tichAn) {
+      doiTrangThaiAnFile(tichAn.dataset.anFile || "");
+      return;
+    }
+    const nutNhatKy = event.target.closest(".task-file-history-btn");
+    if (nutNhatKy) moNhatKyFileKetQua(nutNhatKy.dataset.maNhiemVu || "", nutNhatKy.dataset.fileId || "");
   });
 }
 function setupOverviewProjectFilter() {
@@ -777,62 +748,42 @@ function openTaskModalFromProject(projectId, projectName) {
   }, openTaskModalForProject(projectId, projectName);
 }
 function filterTasks() {
-  const searchTerm = document.getElementById("tasks-search").value.toLowerCase(),
-    value = document.getElementById("tasks-status-filter").value,
-    els = document.querySelectorAll("#tasks-section .glass-card:has(table)");
-  els.forEach(el => {
-    const els2 = el.querySelectorAll("tbody tr");
-    let flag = false;
-    els2.forEach(els22 => {
-      const lower = els22.textContent.toLowerCase(),
-        el2 = els22.querySelector(".status-badge"),
-        trimmed = el2 ? el2.textContent.trim() : "",
-        hasMatch = lower.includes(searchTerm),
-        flag2 = !value || trimmed === value,
-        hasMatch2 = hasMatch && flag2;
-      els22.style.display = hasMatch2 ? "" : "none";
-      if (hasMatch2) flag = true;
-    }), el.style.display = flag ? "" : "none";
-  });
+  filterTaskRows(document.getElementById("tasks-search")?.value.toLowerCase() || "");
 }
 function filterProjects() {
-  const searchTerm = document.getElementById("projects-search").value.toLowerCase(),
-    value = document.getElementById("projects-status-filter").value,
-    els = document.querySelectorAll(".project-card");
-  els.forEach(el => {
-    const lower = el.textContent.toLowerCase(),
-      el2 = el.querySelector(".status-badge"),
-      trimmed = el2 ? el2.textContent.trim() : "",
-      hasMatch = lower.includes(searchTerm),
-      flag = !value || trimmed === value,
-      hasMatch2 = hasMatch && flag;
-    el.style.display = hasMatch2 ? "block" : "none";
-  });
+  filterCards(".project-card", document.getElementById("projects-search")?.value.toLowerCase() || "");
 }
 function filterTaskRows(searchTerm) {
-  const els = document.querySelectorAll("#tasks-section .glass-card"),
-    filtered = Array.from(els).filter(item => item.querySelector("table") !== null);
-  filtered.forEach(filtered2 => {
-    const els2 = filtered2.querySelectorAll("tbody tr");
-    let flag = false;
-    els2.forEach(els22 => {
-      const lower = els22.textContent.toLowerCase(),
-        hasMatch = lower.includes(searchTerm);
-      els22.style.display = hasMatch ? "" : "none";
-      if (hasMatch) flag = true;
-    }), filtered2.style.display = flag ? "" : "none";
+  document.querySelectorAll("#tasks-grid .glass-card:has(table)").forEach((block) => {
+    const groups = new Map();
+    block.querySelectorAll("tbody tr[data-task-group]").forEach((row) => {
+      const key = row.dataset.taskGroup;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    });
+    let visible = false;
+    groups.forEach((rows) => {
+      const match = rows.some((row) => row.textContent.toLowerCase().includes(searchTerm));
+      rows.forEach((row) => {
+        // Hàng file của nhiệm vụ đang bị GẬP thì giữ nguyên trạng thái gập: bộ lọc tìm kiếm không
+        // được tự mở lại những gì người dùng vừa tích ẩn (thiết kế lại tab Nhiệm vụ 2026-09-10).
+        const biAn = !row.classList.contains("task-row-chinh") && tasksAnFile.has(row.dataset.taskGroup);
+        row.style.display = match && !biAn ? "" : "none";
+      });
+      visible ||= match;
+    });
+    block.style.display = visible ? "" : "none";
   });
 }
 function showProjectDetailsModal(projectId, projectName) {
   const filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
     filteredTaskCount = filteredTasks.length,
-    count = filteredTasks.filter(filteredTask => (filteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    count2 = filteredTasks.filter(filteredTask => (filteredTask[COL.T_STATUS] || "").toLowerCase().includes("đang")).length,
-    count3 = filteredTasks.filter(filteredTask => (filteredTask[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
-    count4 = filteredTasks.filter(filteredTask => isTaskOverdue(filteredTask[COL.T_DUE]) && !(filteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
-    num = filteredTaskCount > 0 ? Math.round(filteredTaskTotal / filteredTaskCount) : 0,
-    text = "\n    <div id=\"project-details-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-0 md:mx-4 h-full md:h-[90vh] flex flex-col p-0 rounded-none md:rounded-2xl\">\n            <!-- Header -->\n            <div class=\"flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10 sticky top-0 md:relative\">\n                <h3 class=\"text-lg md:text-xl font-bold text-gray-900 truncate pr-2\">Chi tiết công việc: " + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 p-2\">\n                    <i class=\"fas fa-times text-lg\"></i>\n                </button>\n            </div>\n            \n            <!-- Main Content -->\n            <div class=\"flex-1 overflow-y-auto md:overflow-hidden\">\n                <div class=\"grid grid-cols-1 lg:grid-cols-4 h-auto md:h-full divide-y lg:divide-y-0 lg:divide-x divide-gray-100\">\n                    \n                    <!-- Left Column: Stats -->\n                    <div class=\"p-3 md:p-6 h-auto md:h-full overflow-visible md:overflow-y-auto space-y-4 md:space-y-6 bg-gray-50/50\">\n                        <h4 class=\"font-semibold text-gray-800 hidden md:block\">Tổng quan</h4>\n                        \n                        <!-- Add Task Button (Moved to top) -->\n                        " + createSubworkFromWorkButtonHtml(projectId, projectName, "w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base mb-2", true) + "\n                        <button onclick=\"openTaskModalFromProject('" + escapeForInlineHandler(projectId) + "', '" + escapeForInlineHandler(projectName) + "')\" class=\"w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base\">\n                            <i class=\"fas fa-plus mr-2\"></i>Thêm nhiệm vụ\n                        </button>\n\n                        <!-- Stats Grid stacked -->\n                        <div class=\"grid grid-cols-2 lg:grid-cols-1 gap-2 md:gap-4\">\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Tổng nhiệm vụ</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-gray-700 leading-none\">" + escapeHtml(filteredTaskCount) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-list text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Hoàn thành</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-green-600 leading-none\">" + escapeHtml(count) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-check text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Đang thực hiện</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-blue-600 leading-none\">" + escapeHtml(count2) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-spinner text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Quá hạn</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-red-600 leading-none\">" + escapeHtml(count4) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-exclamation-triangle text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                        </div>\n\n                        <!-- Progress -->\n                        <div class=\"glass-card p-3 md:p-4\">\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <h4 class=\"font-semibold text-gray-700 text-sm md:text-base\">Tiến độ chung</h4>\n                                <span class=\"text-base md:text-lg font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                            </div>\n                            <div class=\"h-2 md:h-3 bg-gray-100 rounded-full overflow-hidden\">\n                                <div class=\"h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                            </div>\n                        </div>\n                    </div>\n\n                    <!-- Right Column: Tasks -->\n                    <div class=\"lg:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden\">\n                        <div class=\"flex-1 overflow-visible md:overflow-y-auto p-3 md:p-4 custom-scrollbar h-auto md:h-full\">\n                            " + (filteredTaskCount > 0 ? "<div class=\"grid grid-cols-2 md:grid-cols-2 xl:grid-cols-2 gap-2 md:gap-3\">\n                                    " + filteredTasks.map(filteredTask => createTaskListItem(filteredTask, true)).join("") + "\n                                </div>" : "<div class=\"h-40 md:h-full flex flex-col items-center justify-center text-gray-400\">\n                                    <i class=\"fas fa-tasks text-3xl md:text-4xl mb-2 opacity-30\"></i>\n                                    <p class=\"text-sm md:text-base\">Chưa có nhiệm vụ nào</p>\n                                </div>") + "\n                        </div>\n                         <!-- Removed Bottom Actions -->\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n";
+    count = filteredTasks.filter(filteredTask => daDuyetDuKetQua(filteredTask)).length,
+    count2 = filteredTasks.filter(filteredTask => !daDuyetDuKetQua(filteredTask)).length,
+    count3 = filteredTasks.filter(filteredTask => !daDuyetDuKetQua(filteredTask)).length,
+    count4 = filteredTasks.filter(filteredTask => isTaskOverdue(filteredTask[COL.T_DUE]) && !daDuyetDuKetQua(filteredTask)).length,
+    num = tienDoDauMucKhach(filteredTasks),
+    text = "\n    <div id=\"project-details-modal\" class=\"modal active z-[60]\">\n        <div class=\"modal-content glass-card max-w-7xl w-full mx-0 md:mx-4 h-full md:h-[90vh] flex flex-col p-0 rounded-none md:rounded-2xl\">\n            <!-- Header -->\n            <div class=\"flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10 sticky top-0 md:relative\">\n                <h3 class=\"text-lg md:text-xl font-bold text-gray-900 truncate pr-2\">Chi tiết công việc: " + escapeHtml(projectName) + " (" + escapeHtml(projectId) + ")</h3>\n                <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 p-2\">\n                    <i class=\"fas fa-times text-lg\"></i>\n                </button>\n            </div>\n            \n            <!-- Main Content -->\n            <div class=\"flex-1 overflow-y-auto md:overflow-hidden\">\n                <div class=\"grid grid-cols-1 lg:grid-cols-4 h-auto md:h-full divide-y lg:divide-y-0 lg:divide-x divide-gray-100\">\n                    \n                    <!-- Left Column: Stats -->\n                    <div class=\"p-3 md:p-6 h-auto md:h-full overflow-visible md:overflow-y-auto space-y-4 md:space-y-6 bg-gray-50/50\">\n                        <h4 class=\"font-semibold text-gray-800 hidden md:block\">Tổng quan</h4>\n                        \n                        <!-- Add Task Button (Moved to top) -->\n                        " + createSubworkFromWorkButtonHtml(projectId, projectName, "w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base mb-2", true) + "\n                        <button onclick=\"openTaskModalFromProject('" + escapeForInlineHandler(projectId) + "', '" + escapeForInlineHandler(projectName) + "')\" class=\"w-full btn-secondary justify-center py-2 md:py-2.5 text-sm md:text-base\">\n                            <i class=\"fas fa-plus mr-2\"></i>Thêm nhiệm vụ\n                        </button>\n\n                        <!-- Stats Grid stacked -->\n                        <div class=\"grid grid-cols-2 lg:grid-cols-1 gap-2 md:gap-4\">\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Tổng nhiệm vụ</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-gray-700 leading-none\">" + escapeHtml(filteredTaskCount) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-list text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Hoàn thành</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-green-600 leading-none\">" + escapeHtml(count) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-check text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Chưa duyệt đủ kết quả</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-blue-600 leading-none\">" + escapeHtml(count2) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-spinner text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                            <div class=\"glass-card p-2 md:p-4 grid grid-cols-[1fr_auto] gap-x-2 items-center h-full\">\n                                <p class=\"text-[10px] md:text-sm text-gray-500 col-span-2 md:col-span-1 md:mb-1\">Quá hạn</p>\n                                <h4 class=\"text-lg md:text-2xl font-bold text-red-600 leading-none\">" + escapeHtml(count4) + "</h4>\n                                <div class=\"w-8 h-8 md:w-10 md:h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-500 col-start-2 row-start-2 md:row-start-1 md:row-span-2 place-self-end\">\n                                    <i class=\"fas fa-exclamation-triangle text-sm md:text-base\"></i>\n                                </div>\n                            </div>\n                        </div>\n\n                        <!-- Progress -->\n                        <div class=\"glass-card p-3 md:p-4\">\n                            <div class=\"flex items-center justify-between mb-2\">\n                                <h4 class=\"font-semibold text-gray-700 text-sm md:text-base\">Tiến độ chung</h4>\n                                <span class=\"text-base md:text-lg font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                            </div>\n                            <div class=\"h-2 md:h-3 bg-gray-100 rounded-full overflow-hidden\">\n                                <div class=\"h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                            </div>\n                        </div>\n                    </div>\n\n                    <!-- Right Column: Tasks -->\n                    <div class=\"lg:col-span-3 flex flex-col h-auto md:h-full overflow-visible md:overflow-hidden\">\n                        <div class=\"flex-1 overflow-visible md:overflow-y-auto p-3 md:p-4 custom-scrollbar h-auto md:h-full\">\n                            " + (filteredTaskCount > 0 ? "<div class=\"grid grid-cols-2 md:grid-cols-2 xl:grid-cols-2 gap-2 md:gap-3\">\n                                    " + filteredTasks.map(filteredTask => createTaskListItem(filteredTask, true)).join("") + "\n                                </div>" : "<div class=\"h-40 md:h-full flex flex-col items-center justify-center text-gray-400\">\n                                    <i class=\"fas fa-tasks text-3xl md:text-4xl mb-2 opacity-30\"></i>\n                                    <p class=\"text-sm md:text-base\">Chưa có nhiệm vụ nào</p>\n                                </div>") + "\n                        </div>\n                         <!-- Removed Bottom Actions -->\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n";
   document.getElementById("modals-container").innerHTML = text;
   const projectDetailsModalEl = document.getElementById("project-details-modal");
   projectDetailsModalEl.classList.add("active");
@@ -847,11 +798,11 @@ function createTaskListItem(task, isCompact = false) {
   const taskId = task[COL.T_ID] || "N/A",
     taskName = task[COL.T_NAME] || "Chưa có tên",
     taskAssignee = task[COL.T_ASSIGNEE] || "Chưa gán",
-    taskStatus = task[COL.T_STATUS] || "Chưa bắt đầu",
+    taskStatus = nhanHoanThanhKetQua(task),
     taskPriority = task[COL.T_PRIORITY] || "Trung bình",
     dueDateText = formatDateForDisplay(task[COL.T_DUE]),
     num = parseInt(task[COL.T_COMPLETION] || 0),
-    isTaskOverdue2 = isTaskOverdue(task[COL.T_DUE]) && !taskStatus.toLowerCase().includes("hoàn thành"),
+    isTaskOverdue2 = isTaskOverdue(task[COL.T_DUE]) && !daDuyetDuKetQua(task),
     taskPid = task[COL.T_PID],
     statusClass = getStatusClass(taskStatus),
     priorityClass = getPriorityClass(taskPriority),
@@ -859,45 +810,19 @@ function createTaskListItem(task, isCompact = false) {
   if (isCompact) return "\n            <div class=\"glass-card p-2 md:p-3 hover:shadow-md transition-shadow " + (isTaskOverdue2 ? "border-l-4 border-red-500" : "") + " task-clickable cursor-pointer draggable-item flex flex-col justify-between h-full bg-white border border-gray-100 rounded-xl\" \n                  data-id=\"" + escapeHtml(taskId) + "\" \n                  data-project-id=\"" + escapeHtml(taskPid) + "\"\n                  draggable=\"true\">\n                \n                <div class=\"flex justify-between items-start mb-1.5 md:mb-2 gap-2\">\n                    <h5 class=\"font-semibold text-gray-800 text-xs md:text-sm line-clamp-2 leading-snug flex-1\" title=\"" + escapeHtml(taskName) + "\">\n                        " + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1 text-[10px] md:text-xs\"></i>" : "") + escapeHtml(taskName) + "\n                    </h5>\n                    " + (isTaskOverdue2 ? "<i class=\"fas fa-exclamation-circle text-red-500 text-[10px] md:text-xs shrink-0\" title=\"Quá hạn\"></i>" : "") + "\n                </div>\n\n                <div class=\"space-y-1.5 md:space-y-2 mt-auto\">\n                    <!-- Date & User -->\n                    <div class=\"flex items-center justify-between text-[10px] md:text-xs text-gray-500\">\n                        <div class=\"flex items-center gap-1.5 md:gap-2\">\n                             " + "\n                        </div>\n                        <span class=\"" + (isTaskOverdue2 ? "text-red-500 font-medium" : "") + "\">" + escapeHtml(dueDateText) + "</span>\n                    </div>\n\n                    <!-- Status & Priority -->\n                    <div class=\"flex items-center gap-1 md:gap-1.5 flex-wrap\">\n                        <span class=\"status-badge " + escapeHtml(statusClass) + " text-[9px] md:text-[10px] px-1 md:px-1.5 py-0.5\">" + escapeHtml(taskStatus) + "</span>" + pendingApprovalBadge(task) + "\n                        <span class=\"status-badge " + escapeHtml(priorityClass) + " text-[9px] md:text-[10px] px-1 md:px-1.5 py-0.5\">" + escapeHtml(taskPriority) + "</span>\n                    </div>\n\n                    <!-- Actions & Progress -->\n                    <div class=\"flex items-center justify-between pt-1.5 md:pt-2 border-t border-gray-50 mt-0.5 md:mt-1\">\n                        <div class=\"flex items-center gap-1 text-[10px] md:text-xs text-gray-500 truncate max-w-[50%]\">\n                             <i class=\"fas fa-user-circle text-gray-400\"></i> " + escapeHtml(taskAssignee) + "\n                        </div>\n                        \n                         <div class=\"flex items-center gap-1\">\n                                " + (() => {
     const project = allProjects.find(project3 => project3[COL.P_ID] === task[COL.T_PID]),
       project2 = project && project[COL.P_MANAGER] === currentUser.name,
-      isAdmin2 = laQuanTriTrongPhamVi() || project2;
-    return "\n                                    " + createTaskFromSubworkButtonHtml(task, "w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-indigo-600 flex items-center justify-center p-0") + "\n                                    <button class=\"w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 action-btn-edit edit-btn flex items-center justify-center p-0\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\"><i class=\"fas fa-edit text-[10px] md:text-xs\"></i></button>\n                                    " + (isAdmin2 ? "<button class=\"w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 action-btn-delete delete-btn flex items-center justify-center p-0\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\"><i class=\"fas fa-trash text-[10px] md:text-xs\"></i></button>" : "") + "\n                                    ";
-  })() + "\n                         </div>\n                    </div>\n                    \n                    <!-- Tiny Progress Bar -->\n                     <div class=\"w-full bg-gray-100 h-0.5 md:h-1 rounded-full overflow-hidden\">\n                        <div class=\"h-full " + (num === 100 ? "bg-green-500" : "bg-blue-500") + "\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                     </div>\n                </div>\n            </div>\n            ";
+      isAdmin2 = { copy: canUserCopyResource("task", task[COL.T_ID]), delete: canUserDeleteResource("task", task[COL.T_ID]) };
+    return "\n                                    " + createTaskFromSubworkButtonHtml(task, "w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-indigo-600 flex items-center justify-center p-0") + "\n                                    <button class=\"w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600 action-btn-edit edit-btn flex items-center justify-center p-0\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\"><i class=\"fas fa-edit text-[10px] md:text-xs\"></i></button>\n                                    " + (isAdmin2.delete ? "<button class=\"w-5 h-5 md:w-6 md:h-6 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 action-btn-delete delete-btn flex items-center justify-center p-0\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\"><i class=\"fas fa-trash text-[10px] md:text-xs\"></i></button>" : "") + "\n                                    ";
+  })() + "\n                         </div>\n                    </div>\n                    \n                    <!-- Tiny Progress Bar -->\n                     <div class=\"w-full bg-gray-100 h-0.5 md:h-1 rounded-full overflow-hidden\">\n                        <div class=\"h-full " + (daDuyetDuKetQua(task) ? "bg-green-500" : "bg-blue-500") + "\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                     </div>\n                </div>\n            </div>\n            ";
   return "\n    <div class=\"glass-card p-4 hover:shadow-md transition-shadow " + (isTaskOverdue2 ? "border-l-4 border-red-500" : "") + " task-clickable cursor-pointer draggable-item\" \n          data-id=\"" + escapeHtml(taskId) + "\" \n          data-project-id=\"" + escapeHtml(taskPid) + "\"\n          draggable=\"true\">\n        <div class=\"flex items-center justify-between\">\n            <div class=\"flex-1\">\n                <h5 class=\"font-medium text-gray-900\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1\" title=\"Có nhắc việc\"></i>" : "") + escapeHtml(taskName) + " <span class=\"text-gray-500 text-xs\">(" + escapeHtml(taskId) + ")</span></h5>\n                \n                <div class=\"flex flex-wrap items-center gap-2 mt-2\">\n                    <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(taskStatus) + "</span>" + pendingApprovalBadge(task) + "\n                    <span class=\"status-badge " + escapeHtml(priorityClass) + "\">" + escapeHtml(taskPriority) + "</span>\n                    " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue\">Quá hạn</span>" : "") + "\n                </div>\n            </div>\n            \n            <div class=\"ml-4 flex flex-col items-end\">\n                <div class=\"flex items-center space-x-1 mb-2\">\n                    " + (() => {
     const project = allProjects.find(project3 => project3[COL.P_ID] === task[COL.T_PID]),
       project2 = project && project[COL.P_MANAGER] === currentUser.name,
-      isAdmin2 = laQuanTriTrongPhamVi() || project2;
-    return "\n                        " + createTaskFromSubworkButtonHtml(task, "action-btn action-btn-edit") + "\n                        " + (isAdmin2 ? "<button class=\"action-btn action-btn-copy copy-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n                        <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n                        " + (isAdmin2 ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n                      ";
-  })() + "\n                </div>\n                <div class=\"flex items-center text-sm text-gray-600 mb-1\">\n                    <i class=\"fas fa-user mr-1\"></i>\n                    <span>" + escapeHtml(taskAssignee) + "</span>\n                </div>\n                <div class=\"flex items-center text-sm text-gray-600\">\n                    <i class=\"fas fa-calendar-alt mr-1\"></i>\n                    <span>" + escapeHtml(dueDateText) + "</span>\n                </div>\n            </div>\n        </div>\n        \n        <div class=\"mt-3\">\n            <div class=\"flex items-center justify-between text-xs text-gray-600 mb-1\">\n                <span>Tiến độ</span>\n                <span>" + escapeHtml(num) + "%</span>\n            </div>\n            <div class=\"h-1.5 bg-gray-200 rounded-full\">\n                <div class=\"h-full " + (taskStatus.toLowerCase().includes("hoàn thành") ? "bg-green-500" : "bg-blue-500") + " rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n            </div>\n        </div>\n    </div>\n";
+      isAdmin2 = { copy: canUserCopyResource("task", task[COL.T_ID]), delete: canUserDeleteResource("task", task[COL.T_ID]) };
+    return "\n                        " + createTaskFromSubworkButtonHtml(task, "action-btn action-btn-edit") + "\n                        " + (isAdmin2.copy ? "<button class=\"action-btn action-btn-copy copy-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n                        <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n                        " + (isAdmin2.delete ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n                      ";
+  })() + "\n                </div>\n                <div class=\"flex items-center text-sm text-gray-600 mb-1\">\n                    <i class=\"fas fa-user mr-1\"></i>\n                    <span>" + escapeHtml(taskAssignee) + "</span>\n                </div>\n                <div class=\"flex items-center text-sm text-gray-600\">\n                    <i class=\"fas fa-calendar-alt mr-1\"></i>\n                    <span>" + escapeHtml(dueDateText) + "</span>\n                </div>\n            </div>\n        </div>\n        \n        <div class=\"mt-3\">\n            <div class=\"flex items-center justify-between text-xs text-gray-600 mb-1\">\n                <span>Tiến độ</span>\n                <span>" + escapeHtml(num) + "%</span>\n            </div>\n            <div class=\"h-1.5 bg-gray-200 rounded-full\">\n                <div class=\"h-full " + (daDuyetDuKetQua(task) ? "bg-green-500" : "bg-blue-500") + " rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n            </div>\n        </div>\n    </div>\n";
 }
 function canUserEditResource(resourceType, resourceId) {
-  // 2026-08-27: Phó Giám đốc sửa được công việc/công việc con/nhiệm vụ (§6) — phạm vi phòng phụ
-  // trách do máy chủ kiểm (`inScope`), ở đây chỉ mở nút. Đề xuất KHÔNG đổi: vẫn của người tạo.
-  if (laQuanTriTrongPhamVi()) return true;
-  // Vòng 12c: Trưởng phòng / Phó phòng sửa được công việc & CV con phòng mình (§6; TP/PP sửa
-  // CV con đã duyệt sẽ tự về «Chờ duyệt» — máy chủ lo). Không phụ thuộc phân công ba lớp.
-  // 2026-09-01 (người dùng báo «trưởng phòng đang không sửa được nhiệm vụ»): THÊM 'task'. Máy chủ
-  // đã cho từ đầu — ma trận §6 cho TP/PP `task:update` và `inScope` bó theo phòng — chỉ client
-  // thiếu nhánh này nên nút ✎ của nhiệm vụ do Cán bộ tạo bị chặn ngay ở trình duyệt (im lặng,
-  // chỉ hiện toast «Bạn không có quyền chỉnh sửa mục này»). Nay đối xứng với canUserDeleteResource
-  // (đã mở 'task' từ Vòng 12e). Ngoài phạm vi phòng thì máy chủ trả 403 — đúng thiết kế.
-  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork" || resourceType === "task")) return true;
-  if (isManager()) {
-    if (resourceType === "project") return true;
-    if (resourceType === "task") return true;
-  }
-  if (resourceType === "project") {
-    const project = allProjects.find(project2 => project2[COL.P_ID] === resourceId);
-    if (project && project[COL.P_MANAGER] === currentUser.name) return true;
-    return false;
-  }
-  if (resourceType === "task") {
-    const task = allTasks.find(task2 => task2[COL.T_ID] === resourceId);
-    if (!task) return false;
-    const taskPid = task[COL.T_PID],
-      project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
-    if (project && project[COL.P_MANAGER] === currentUser.name) return true;
-    return task[COL.T_ASSIGNEE] === currentUser.name;
-  }
+  if (["project", "work", "subwork", "task"].includes(resourceType)) return coQuyenTaiDong("update", resourceType, resourceId);
+  if (isAdmin()) return true;
   if (resourceType === "proposal") {
     const proposal = allProposals.find(proposal2 => proposal2[COL.PR_ID] === resourceId);
     if (!proposal) return false;
@@ -908,28 +833,8 @@ function canUserEditResource(resourceType, resourceId) {
   return false;
 }
 function canUserDeleteResource(resourceType, resourceId) {
-  if (laQuanTriTrongPhamVi()) return true;
-  // Vòng 12e: máy chủ cho Trưởng phòng / Phó phòng XOÁ work/subwork/task trong phòng mình (ma trận
-  // §6 + `inScope` case 'Trưởng phòng'/'Phó phòng'), nên nút phải mở theo — đối xứng với
-  // canUserEditResource đã mở từ Vòng 12c. Phạm vi phòng do máy chủ bó; ngoài phạm vi thì 403.
-  if (laLanhDaoPhong() && (resourceType === "project" || resourceType === "subwork" || resourceType === "task")) return true;
-  if (isManager()) {
-    if (resourceType === "project") return true;
-    if (resourceType === "task") return true;
-  }
-  if (resourceType === "project") {
-    const project = allProjects.find(project2 => project2[COL.P_ID] === resourceId);
-    if (project && project[COL.P_MANAGER] === currentUser.name) return true;
-    return false;
-  }
-  if (resourceType === "task") {
-    const task = allTasks.find(task2 => task2[COL.T_ID] === resourceId);
-    if (!task) return false;
-    const taskPid = task[COL.T_PID],
-      project = allProjects.find(project2 => project2[COL.P_ID] === taskPid);
-    if (project && project[COL.P_MANAGER] === currentUser.name) return true;
-    return task[COL.T_ASSIGNEE] === currentUser.name;
-  }
+  if (["project", "work", "subwork", "task"].includes(resourceType)) return coQuyenTaiDong("delete", resourceType, resourceId);
+  if (isAdmin()) return true;
   if (resourceType === "proposal") {
     const proposal = allProposals.find(proposal2 => proposal2[COL.PR_ID] === resourceId);
     if (!proposal) return false;
@@ -973,28 +878,14 @@ function closeMobileMenu() {
     mobileOverlayEl = document.getElementById("mobile-overlay");
   sidebarEl.classList.remove("open"), mobileOverlayEl.classList.add("opacity-0"), setTimeout(() => mobileOverlayEl.classList.add("hidden"), 300);
 }
-function renderStats(summaryStats) {
-  const allProjects2 = getFilteredProjects(),
-    allTasks2 = getFilteredTasks();
-  const projects2Length = allProjects2.length,
-    count = allProjects2.filter(projects2 => (projects2[COL.P_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    // Bug 2 (8b): thẻ «Tỷ lệ hoàn thành» theo đúng E4 — bình quân gia quyền các đầu mục từng dự
-    // án (tienDoDauMucKhach), không còn bình quân số học trên mọi nhiệm vụ.
-    projects2Total = allProjects2.reduce((acc, projects2) => {
-      const filteredTasks2 = allTasks2.filter(tasks2 => tasks2[COL.T_PID] === projects2[COL.P_ID]);
-      return acc + tienDoDauMucKhach(filteredTasks2);
-    }, 0),
-    num = projects2Length > 0 ? Math.round(projects2Total / projects2Length) : 0,
-    tasks2Length = allTasks2.length,
-    count2 = allTasks2.filter(tasks2 => (tasks2[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    num2 = tasks2Length > 0 ? Math.round(count2 / tasks2Length * 100) : 0,
-    count3 = allTasks2.filter(tasks2 => (tasks2[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
-    count4 = allTasks2.filter(tasks2 => (tasks2[COL.T_STATUS] || "").toLowerCase().includes("đang")).length,
-    count5 = allTasks2.filter(tasks2 => (tasks2[COL.T_STATUS] || "").toLowerCase().includes("tạm dừng")).length,
-    text = count4 + count3 + count5,
-    count6 = allTasks2.filter(tasks2 => isTaskOverdue(tasks2[COL.T_DUE]) && !(tasks2[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    num3 = tasks2Length > 0 ? Math.round(count6 / tasks2Length * 100) : 0;
-  document.getElementById("total-projects").textContent = projects2Length, document.getElementById("completed-projects").textContent = count, document.getElementById("project-completion-rate").textContent = num + "%", document.getElementById("total-tasks").textContent = tasks2Length, document.getElementById("completed-tasks").textContent = count2, document.getElementById("task-completion-rate").textContent = num2 + "%", document.getElementById("active-tasks").textContent = text, document.getElementById("pending-tasks").textContent = count3, document.getElementById("paused-tasks").textContent = count5, document.getElementById("overdue-tasks").textContent = count6, document.getElementById("overdue-total-tasks").textContent = tasks2Length, document.getElementById("overdue-rate").textContent = num3 + "%";
+function renderStats() {
+  const projects = getFilteredProjects(), items = getFilteredTasks();
+  const tasks = items.filter((row) => Number(row[COL.T_LEVEL]) === 3);
+  const done = tasks.filter(daDuyetDuKetQua).length;
+  const overdue = tasks.filter((row) => !daDuyetDuKetQua(row) && isTaskOverdue(row[COL.T_DUE])).length;
+  const avg = projects.length ? Math.round(projects.reduce((sum, work) => sum + tienDoDauMucKhach(items.filter((row) => row[COL.T_PID] === work[COL.P_ID])), 0) / projects.length) : 0;
+  const data = {"total-projects":projects.length,"completed-projects":projects.filter(daDuyetDuKetQua).length,"project-completion-rate":avg+'%',"total-tasks":tasks.length,"completed-tasks":done,"task-completion-rate":(tasks.length ? Math.round(done*100/tasks.length):0)+'%',"active-tasks":tasks.length-done,"overdue-tasks":overdue,"overdue-total-tasks":tasks.length,"overdue-rate":(tasks.length?Math.round(overdue*100/tasks.length):0)+'%'};
+  Object.entries(data).forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.textContent=value;});
 }
 function createPriorityTaskCard(task) {
   const taskId = task[COL.T_ID] || "N/A",
@@ -1031,6 +922,7 @@ function renderProjects() {
     return;
   }
   projectsGridEl.innerHTML = userAllowedProjects.map(userAllowedProject => createProjectCard(userAllowedProject, true)).join("");
+  hideActionButtons();
 }
 /** Tháng đang lọc ở tab Công việc, dạng "YYYY-MM"; rỗng = «Tất cả tháng». */
 function thangLocCongViec() {
@@ -1109,14 +1001,13 @@ function createProjectCard(project, showDetails = false) {
     tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, projectName, thangLocCongViec()),
     projectDesc = project[COL.P_DESC] || "Không có mô tả",
     projectManager = project[COL.P_MANAGER] || "Chưa gán",
-    projectStatus = project[COL.P_STATUS] || "Chưa bắt đầu",
+    projectStatus = nhanHoanThanhKetQua(project),
     startDateText = formatDateForDisplay(project[COL.P_START]),
     endDateText = formatDateForDisplay(project[COL.P_END]),
     statusClass = getStatusClass(projectStatus),
     filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
-    filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
-    num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
-  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
+    num = tienDoDauMucKhach(filteredTasks);
+  return "\n    <div class=\"project-card project-clickable cursor-pointer\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\">\n        <div class=\"relative mb-4\">\n          <div class=\"absolute top-0 right-0 flex space-x-1\">\n            " + createSubworkFromWorkButtonHtml(projectId, projectName, "action-btn action-btn-edit") + "\n            <button class=\"action-btn action-btn-edit add-task-from-project-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"Thêm nhiệm vụ\">\n              <i class=\"fas fa-plus\"></i>\n            </button>\n            <button class=\"action-btn action-btn-view view-project-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xem chi tiết\">\n              <i class=\"fas fa-eye\"></i>\n            </button>\n            " + (canUserCopyResource("project", project[COL.P_ID]) ? "\n              <button class=\"action-btn action-btn-copy copy-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Tạo bản sao\">\n                <i class=\"fas fa-copy\"></i>\n              </button>\n            " : "") + "\n            " + (canUserEditResource("project", project[COL.P_ID]) ? "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n            " : "") + "\n            " + (canUserDeleteResource("project", project[COL.P_ID]) ? "\n              <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(projectName) + "\" title=\"Xóa\">\n                <i class=\"fas fa-trash\"></i>\n              </button>\n            " : "") + "\n          </div>\n          \n          <div class=\"pr-24\">\n            <div class=\"mb-3\">\n              <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(projectStatus) + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n            </div>\n          \n            <h4 class=\"font-semibold text-gray-900 text-md mb-1\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</h4>\n            <p class=\"text-sm text-gray-600 mb-2\">" + escapeHtml(projectDesc) + "</p>\n          </div>\n        </div>\n        \n        " + (showDetails ? "\n            <div class=\"space-y-2 text-xs text-gray-600\">\n                <div class=\"flex items-center\">\n                    <i class=\"fas fa-calendar-alt w-4 mr-2 text-green-500\"></i>\n                    <span>Bắt đầu: " + escapeHtml(startDateText) + "</span>\n                    \n                    <i class=\"fas fa-calendar-check w-4 mr-2 text-red-500 ml-4\"></i>\n                    <span>Kết thúc: " + escapeHtml(endDateText) + "</span>\n                </div>\n\n                <div class=\"flex items-center justify-between\">\n                  <div class=\"flex items-center\">\n                    <i class=\"fas fa-user-tie w-4 mr-2 text-purple-500\"></i>\n                    <span>Phòng: " + escapeHtml(project[COL.P_DEPT] || "Chưa gán") + "</span>\n                  </div>\n                  <div class=\"flex items-center text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full\">\n                    <i class=\"fas fa-tasks mr-1\"></i>\n                    <span>" + filteredTasks.length + " nhiệm vụ</span>\n                  </div>\n                </div>\n\n                <div class=\"pt-2 border-t border-gray-100 mt-2\">\n                    <div class=\"flex justify-between mb-1\">\n                        <span class=\"font-medium\">Tiến độ</span>\n                        <span class=\"font-bold text-blue-600\">" + escapeHtml(num) + "%</span>\n                    </div>\n                    <div class=\"w-full bg-gray-200 rounded-full h-1.5\">\n                        <div class=\"bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                </div>\n            </div>\n        " : "") + "\n    </div>\n";
 }
 /**
  * TÊN các phòng tôi phụ trách với vai **Phó Giám đốc** — có thể NHIỀU phòng (`department_managers`
@@ -1148,21 +1039,7 @@ function quanLyCungPhong(project) {
     dept === String(project?.[COL.P_DEPT_ID] ?? "").trim();
 }
 function dsNhiemVuToiDuocThay() {
-  if (isAdmin()) return allTasks;
-  const phongPhuTrach = dsPhongToiPhuTrach();
-  // Vòng 12c: Trưởng phòng / Phó phòng xem nhiệm vụ của PHÒNG MÌNH (ma trận §6 cho read theo
-  // phòng — máy chủ `inScope` đã trả đúng; client lọc theo tên phòng của công việc cha).
-  const phongCuaToi = laLanhDaoPhong() ? String(tenPhongTaiKhoan() || '').trim() : '';
-  return allTasks.filter(task => {
-    if (task[COL.T_ASSIGNEE] === currentUser.name) return true;
-    const project = allProjects.find(project2 => project2[COL.P_ID] === task[COL.T_PID]);
-    if (!project) return false;
-    if (quanLyCungPhong(project)) return true;
-    if (project[COL.P_MANAGER] === currentUser.name) return true;
-    const phongCongViec = String(project[COL.P_DEPT] || "").trim();
-    if (laLanhDaoPhong() && phongCuaToi !== "" && phongCongViec === phongCuaToi) return true;
-    return phongCongViec !== "" && phongPhuTrach.includes(phongCongViec);
-  });
+  return allTasks.filter(t => coQuyenTaiDong("read", "task", t));
 }
 function renderTasks() {
   const tasksGridEl = document.getElementById("tasks-grid");
@@ -1191,19 +1068,20 @@ function renderTasks() {
     if (xep.khoi.length === 0) return;
     text += createTasksWorkSeparatorHtml(sorted2, projectName, project, xep.tongSoNhiemVu) + xep.khoi.map(khoi => createTasksSubworkBlockHtml(khoi)).join("");
   }), tasksGridEl.innerHTML = text || "<div class=\"loading-card\">Không có nhiệm vụ nào khớp bộ lọc đã chọn. Chọn «Tất cả tháng» trong ô Tháng hoặc điều chỉnh các bộ lọc để xem nhiệm vụ khác.</div>";
+  hideActionButtons();
 }
 /**
  * Dải phân cách MỎNG của công việc cấp 1 (2026-08-27): chỉ một dòng tiêu đề, không lặp lại thanh
  * công cụ như trước — mọi nhiệm vụ nằm trong các khối công việc con phía dưới.
  */
 function createTasksWorkSeparatorHtml(maCongViec, tenCongViec, project, soNhiemVu) {
-  const trangThai = project ? project[COL.P_STATUS] || "" : "",
+  const trangThai = project ? nhanHoanThanhKetQua(project) : "",
     nguoiQuanLy = project ? project[COL.P_MANAGER] || "" : "",
     phong = project ? project[COL.P_DEPT] || "" : "",
     // Tên theo tháng đang lọc ở tab Nhiệm vụ; nút «+ Công việc con» phía dưới vẫn nhận TÊN GỐC.
     tenTheoThang = tenTheoThangCuaDong(project, tenCongViec, thangLocNhiemVu()),
     tenCuTheoThang = tenGocNeuDaDoiCuaDong(project, tenCongViec, thangLocNhiemVu());
-  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa bắt đầu") + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
+  return "\n    <div class=\"flex items-center justify-between gap-3 pt-2 pb-1 border-b-2 border-blue-200\">\n      <div class=\"flex items-center gap-2 min-w-0\">\n        <i class=\"fas fa-briefcase text-blue-500\"></i>\n        <span class=\"font-semibold text-gray-900 truncate\"" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>\n        <span class=\"status-badge " + escapeHtml(getStatusClass(trangThai)) + " text-xs\">" + (escapeHtml(trangThai) || "Chưa duyệt đủ kết quả") + "</span>" + pendingApprovalBadge(project) + nhapBadge(project) + buildXinXoaBadge(project) + "\n      </div>\n      <div class=\"flex items-center gap-3 text-xs text-gray-500 shrink-0\">\n        <span>" + (escapeHtml(nguoiQuanLy) || "Chưa gán") + (phong ? " • " + escapeHtml(phong) : "") + "</span>\n        <span class=\"bg-white px-2 py-1 rounded-full\">" + escapeHtml(soNhiemVu) + " nhiệm vụ</span>\n        " + createSubworkFromWorkButtonHtml(maCongViec, tenCongViec, "bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200", true) + "\n      </div>\n    </div>\n  ";
 }
 /**
  * Xếp các dòng của MỘT công việc cấp 1 thành khối theo CÔNG VIỆC CON (cấp 2).
@@ -1266,17 +1144,131 @@ function xepNhiemVuTheoCongViecCon(rows, maCongViec) {
  * tiến độ và trạng thái ở đầu khối luôn khớp với bảng bên dưới.
  */
 function tinhTongHopNhiemVu(rows) {
-  const tong = rows.length,
-    xong = rows.filter(row => String(row[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-    tre = rows.some(row => isTaskOverdue(row[COL.T_DUE]) && !String(row[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")),
-    hoanThanh = tong > 0 && xong === tong;
-  return {
-    tong: tong,
-    xong: xong,
-    tienDo: tong > 0 ? Math.round(xong / tong * 100) : 0,
-    trangThai: hoanThanh ? "Hoàn thành" : tre ? "Trễ hạn" : "Đang thực hiện",
-    lop: hoanThanh ? "status-completed" : tre ? "status-overdue" : "status-active"
-  };
+  const tong = rows.length, xong = rows.filter(daDuyetDuKetQua).length;
+  const tre = rows.some((row) => isTaskOverdue(row[COL.T_DUE]) && !daDuyetDuKetQua(row));
+  const total = rows.reduce((sum, row) => sum + Math.max(0, Number(row[COL.T_TY_LE] ?? 1)), 0);
+  const weighted = rows.reduce((sum, row) => sum + Math.max(0, Number(row[COL.T_TY_LE] ?? 1)) * (Number(row[COL.T_COMPLETION]) || 0), 0);
+  const hoanThanh = tong > 0 && xong === tong;
+  return { tong, xong, tienDo: total > 0 ? Math.round(weighted / total) : 0,
+    trangThai: hoanThanh ? "Đã duyệt đủ kết quả" : tre ? "Quá hạn · Chưa duyệt đủ kết quả" : "Chưa duyệt đủ kết quả",
+    lop: hoanThanh ? "status-completed" : tre ? "status-overdue" : "status-pending" };
+}
+/**
+ * MƯỜI CỘT của bảng nhiệm vụ (thiết kế lại 2026-09-10). Người dùng yêu cầu: tiêu đề cột CĂN
+ * GIỮA, cột nào ít chữ (Ưu tiên · Tỷ lệ · Tiến độ · Ngày bắt đầu · Hạn chót · Số bản) thì HẸP
+ * lại, phần rộng nhường cho tên nhiệm vụ và tên file. Bề rộng nằm ở app.css (`.tasks-results-table
+ * col.*`) vì Tailwind ở đây là BẢN BIÊN DỊCH SẴN (`assets/vendor/tailwind/tailwind.min.css`) —
+ * giá trị tuỳ ý kiểu `w-[86px]` không tồn tại, viết vào là class chết không ai báo lỗi.
+ *
+ * `c-task` để auto: nó ăn phần còn lại sau mười cột kia. Thứ tự MẢNG này là thứ tự cột thật, đổi
+ * ở đây thì phải đổi cả `buildTieuDeCotNhiemVu` và hai hàm dựng dòng bên dưới.
+ *
+ * 2026-09-10 (đợt 4): thêm cột RIÊNG «Tên file» (`c-file`) theo yêu cầu «thêm cột tên file thay vì
+ * để tên file bên dưới file kết quả như hiện tại». Ô `c-task` của hàng file nay chỉ còn dấu nối thụt
+ * vào ⇒ tên file thẳng hàng dọc ở cột của nó và LÙI VỀ PHẢI so với tên nhiệm vụ.
+ */
+const COT_BANG_NHIEM_VU = Object.freeze([
+  "c-task", "c-file", "c-who", "c-prio", "c-ratio", "c-prog",
+  "c-start", "c-due", "c-vers", "c-state", "c-act",
+]);
+const TIEU_DE_COT_NHIEM_VU = Object.freeze([
+  "Nhiệm vụ", "Tên file", "Người thực hiện", "Ưu tiên", "Tỷ lệ (%)", "Tiến độ",
+  "Bắt đầu", "Hạn chót", "Số bản", "Tình trạng kết quả", "Thao tác",
+]);
+function buildColgroupNhiemVu() {
+  return "<colgroup>" + COT_BANG_NHIEM_VU.map(c => "<col class=\"" + escapeHtmlAttr(c) + "\">").join("") + "</colgroup>";
+}
+function buildTieuDeCotNhiemVu() {
+  return TIEU_DE_COT_NHIEM_VU.map(t => "<th scope=\"col\">" + escapeHtml(t) + "</th>").join("");
+}
+/**
+ * MÀU CHỮ của tên file kết quả đổi THEO TIẾN ĐỘ (yêu cầu 2026-09-10 đợt 4: «tiến độ 100% thì màu
+ * xanh lá cây, dưới 20% là đỏ»). Bốn bậc, lấy đúng hai mốc người dùng nêu làm biên:
+ *   ≥ 100 → xanh lá · 50–99 → xanh dương · 20–49 → cam · < 20 → đỏ.
+ * Trả về TÊN CLASS có sẵn trong `app.css`, không trả màu thô: giá trị luôn nằm trong bốn chuỗi cố
+ * định nên không có dữ liệu người dùng nào lọt vào HTML. Chỗ dùng vẫn bọc `escapeHtmlAttr` cho chặt.
+ */
+function mauTienDoFile(tienDo) {
+  const p = Math.max(0, Math.min(100, Number(tienDo) || 0));
+  if (p >= 100) return "td-mau-xanh-la";
+  if (p >= 50) return "td-mau-xanh-duong";
+  if (p >= 20) return "td-mau-cam";
+  return "td-mau-do";
+}
+/**
+ * ẨN/HIỆN hàng file kết quả của TỪNG NHIỆM VỤ — NÚT MŨI TÊN (đợt 4, 2026-09-10: người dùng đòi
+ * «đổi lại cái tích … thay bằng nút mũi tên xuống và mũi tên lên để xem mở rộng kết quả và ẩn kết
+ * quả»). Mũi tên chỉ HÀNH ĐỘNG: đang gập thì hiện ▼ (bấm để MỞ RỘNG), đang mở thì hiện ▲ (bấm để ẨN).
+ * Khoá RIÊNG, không dùng chung `tasksThuGon`: cái kia thu gọn CẢ KHỐI công việc con, cái này
+ * chỉ gập các hàng file của một nhiệm vụ. Mặc định là HIỆN; tập chứa mã nhiệm vụ đang bị ẨN.
+ */
+const TASKS_AN_FILE_KEY = "qlcv_tasks_files_hidden";
+let tasksAnFile = docTrangThaiAnFile();
+function docTrangThaiAnFile() {
+  try {
+    const raw = localStorage.getItem(TASKS_AN_FILE_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+function luuTrangThaiAnFile() {
+  try {
+    localStorage.setItem(TASKS_AN_FILE_KEY, JSON.stringify([...tasksAnFile]));
+  } catch (err) {
+    /* chế độ riêng tư chặn localStorage — mũi tên vẫn hoạt động, chỉ không nhớ */
+  }
+}
+function doiTrangThaiAnFile(ma) {
+  if (!ma) return;
+  tasksAnFile.has(ma) ? tasksAnFile.delete(ma) : tasksAnFile.add(ma);
+  luuTrangThaiAnFile();
+  veLaiHangFileCuaNhiemVu(ma);
+}
+/**
+ * Nút ▼/▲ mở rộng – ẩn hàng file. Vẫn là `<button>` chứ KHÔNG phải checkbox: TC-KQ-UI-03 chốt tab
+ * nhiệm vụ không còn checkbox nào sau đợt «bỏ checkbox Hoàn thành». `data-so-file` để hàm cập nhật
+ * tại chỗ (`doiNhanNutMoRongFile`) dựng lại được đúng câu title mà không phải đếm lại hàng trong DOM.
+ */
+function buildNutMoRongFile(ma, soFile, an, tenNhiemVu) {
+  const nhan = (an ? "Mở rộng " : "Ẩn ") + soFile + " file kết quả của " + tenNhiemVu;
+  return '<button type="button" class="task-files-toggle' + (an ? ' task-files-toggle-an' : '') + '"' +
+    ' data-an-file="' + escapeHtmlAttr(ma) + '" data-so-file="' + escapeHtmlAttr(soFile) + '"' +
+    ' aria-expanded="' + (an ? 'false' : 'true') + '" title="' + escapeHtmlAttr(nhan) + '"' +
+    ' aria-label="' + escapeHtmlAttr(nhan) + '">' +
+    '<i class="fas fa-chevron-' + (an ? 'down' : 'up') + '" aria-hidden="true"></i></button>';
+}
+/** Đổi hướng mũi tên + câu title tại chỗ, KHÔNG vẽ lại bảng (giữ tiêu điểm ô tìm kiếm và chỗ cuộn). */
+function doiNhanNutMoRongFile(b, an) {
+  const i = b.querySelector("i");
+  if (i) {
+    i.classList.toggle("fa-chevron-down", an);
+    i.classList.toggle("fa-chevron-up", !an);
+  }
+  const so = b.dataset.soFile || "";
+  const nhan = (an ? "Mở rộng " : "Ẩn ") + so + " file kết quả";
+  b.title = nhan;
+  b.setAttribute("aria-label", nhan);
+  b.setAttribute("aria-expanded", an ? "false" : "true");
+  b.classList.toggle("task-files-toggle-an", an);
+}
+/**
+ * Lật ẨN/HIỆN cho MỘT nhiệm vụ mà KHÔNG vẽ lại cả tab. Vẽ lại (`renderTasks`) là cách dễ nhất
+ * nhưng sai ở đây: nó xoá `innerHTML` của #tasks-grid nên ô tìm kiếm mất tiêu điểm, cuộn trang
+ * nhảy về đầu, và hàng `display:none` do `filterTaskRows` đặt cũng mất theo. Việc cần làm chỉ là
+ * đổi `display` của vài `<tr>` — nên làm đúng vài `<tr>` đó.
+ */
+function veLaiHangFileCuaNhiemVu(ma) {
+  const an = tasksAnFile.has(String(ma));
+  document.querySelectorAll("#tasks-grid tr[data-task-group]").forEach(row => {
+    // Chỉ hàng CON (file hoặc dòng «Chưa khai») bị ẩn; hàng nhiệm vụ thì luôn hiện.
+    if (row.dataset.taskGroup === String(ma) && !row.classList.contains("task-row-chinh")) {
+      row.style.display = an ? "none" : "";
+    }
+  });
+  document.querySelectorAll("#tasks-grid .task-files-toggle").forEach(b => {
+    if (b.dataset.anFile === String(ma)) doiNhanNutMoRongFile(b, an);
+  });
 }
 /** Một khối = đầu khối (mũi tên thu gọn + thư mục đỏ + mã + đếm + tổng hợp) và bảng nhiệm vụ. */
 function createTasksSubworkBlockHtml(khoi) {
@@ -1286,7 +1278,7 @@ function createTasksSubworkBlockHtml(khoi) {
     tenThangKhoi = khoi.truc ? khoi.ten : tenTheoThangCuaDong(khoi.dong, khoi.ten, thangLocNhiemVu()),
     tenCuKhoi = khoi.truc ? "" : tenGocNeuDaDoiCuaDong(khoi.dong, khoi.ten, thangLocNhiemVu()),
     tieuDe = tenThangKhoi;
-  return "\n    <div class=\"glass-card\">\n      <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n        <div class=\"flex items-center justify-between gap-3\">\n          <h4 class=\"text-base font-semibold text-gray-900 flex items-center min-w-0\">\n            <button type=\"button\" class=\"tasks-subwork-toggle mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center shrink-0\" data-khoi=\"" + escapeHtmlAttr(khoi.khoa) + "\" title=\"Thu gọn/Mở rộng\" aria-expanded=\"" + (thuGon ? "false" : "true") + "\"><i class=\"fas fa-chevron-" + (thuGon ? "right" : "down") + "\"></i></button>\n            <i class=\"fas fa-folder" + (thuGon ? "" : "-open") + " text-red-500 mr-2 shrink-0\"></i>\n            <span class=\"truncate\"" + (tenCuKhoi ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuKhoi) + "\"" : "") + ">" + escapeHtml(tieuDe) + "</span>\n            <span class=\"status-badge " + escapeHtml(tongHop.lop) + " ml-3 text-xs shrink-0\">" + escapeHtml(tongHop.trangThai) + "</span>\n          </h4>\n          <div class=\"flex items-center gap-3 shrink-0\">\n            <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + escapeHtml(tongHop.tong) + " nhiệm vụ</span>\n            <div class=\"flex items-center gap-2\">\n              <div class=\"w-24 h-2 bg-gray-200 rounded-full\">\n                <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(tongHop.tienDo) + "%\"></div>\n              </div>\n              <span class=\"text-xs text-gray-600 w-10 text-right\">" + escapeHtml(tongHop.tienDo) + "%</span>\n            </div>\n            <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtmlAttr(khoi.maCongViec) + "\" data-project-name=\"" + escapeHtmlAttr(khoi.ten) + "\" title=\"Thêm nhiệm vụ\">\n              + Thêm\n            </button>\n          </div>\n        </div>\n      </div>\n      <div class=\"overflow-x-auto tasks-table-wrap " + (thuGon ? "hidden" : "") + "\">\n        <table class=\"min-w-full table-auto\">\n          <thead class=\"bg-gray-50\">\n            <tr>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Nhiệm vụ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Người thực hiện</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Trạng thái</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ưu tiên</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Tiến độ</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Link kết quả</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Ngày bắt đầu</th>\n              <th class=\"px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase\">Hạn chót</th>\n              <th class=\"px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase\">Thao tác</th>\n            </tr>\n          </thead>\n          <tbody class=\"bg-white divide-y divide-gray-200\">\n            " + khoi.nhiemVu.map(nhiemVu => createTaskTableRowSimple(nhiemVu)).join("") + "\n          </tbody>\n        </table>\n      </div>\n    </div>\n  ";
+  return "\n    <div class=\"glass-card\">\n      <div class=\"bg-gradient-to-r from-blue-50 to-purple-50 px-2 py-2 border-b border-gray-100\">\n        <div class=\"flex items-center justify-between gap-3\">\n          <h4 class=\"text-base font-semibold text-gray-900 flex items-center min-w-0\">\n            <button type=\"button\" class=\"tasks-subwork-toggle mr-2 w-6 h-6 rounded hover:bg-gray-200 text-gray-500 flex items-center justify-center shrink-0\" data-khoi=\"" + escapeHtmlAttr(khoi.khoa) + "\" title=\"Thu gọn/Mở rộng\" aria-expanded=\"" + (thuGon ? "false" : "true") + "\"><i class=\"fas fa-chevron-" + (thuGon ? "right" : "down") + "\"></i></button>\n            <i class=\"fas fa-folder" + (thuGon ? "" : "-open") + " text-red-500 mr-2 shrink-0\"></i>\n            <span class=\"truncate\"" + (tenCuKhoi ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuKhoi) + "\"" : "") + ">" + escapeHtml(tieuDe) + "</span>\n            <span class=\"status-badge " + escapeHtml(tongHop.lop) + " ml-3 text-xs shrink-0\">" + escapeHtml(tongHop.trangThai) + "</span>\n          </h4>\n          <div class=\"flex items-center gap-3 shrink-0\">\n            <span class=\"text-sm text-gray-600 bg-white px-3 py-1 rounded-full\">" + escapeHtml(tongHop.tong) + " nhiệm vụ</span>\n            <div class=\"flex items-center gap-2\">\n              <div class=\"w-24 h-2 bg-gray-200 rounded-full\">\n                <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(tongHop.tienDo) + "%\"></div>\n              </div>\n              <span class=\"text-xs text-gray-600 w-10 text-right\">" + escapeHtml(tongHop.tienDo) + "%</span>\n            </div>\n            <button class=\"bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 text-sm rounded-lg transition-colors duration-200 add-task-from-project-btn\" data-project-id=\"" + escapeHtmlAttr(khoi.maCongViec) + "\" data-project-name=\"" + escapeHtmlAttr(khoi.ten) + "\" title=\"Thêm nhiệm vụ\">\n              + Thêm\n            </button>\n          </div>\n        </div>\n      </div>\n      <div class=\"overflow-x-auto tasks-table-wrap " + (thuGon ? "hidden" : "") + "\">\n        <table class=\"tasks-results-table\">\n          " + buildColgroupNhiemVu() + "\n          <thead>\n            <tr>" + buildTieuDeCotNhiemVu() + "</tr>\n          </thead>\n          <tbody>\n            " + khoi.nhiemVu.map(nhiemVu => createTaskTableRowSimple(nhiemVu)).join("") + "\n          </tbody>\n        </table>\n      </div>\n    </div>\n  ";
 }
 /** ======================================================================
  * TAB NHIỆM VỤ (2026-08-27): lọc theo THÁNG/NĂM + CÁN BỘ + PHÒNG; mỗi công việc con là
@@ -1402,30 +1394,80 @@ function handleTasksDeptFilter(event) {
   tasksLocPhong = event.target.value || "", renderTasks(), renderTaskStats();
 }
 function createTaskTableRowSimple(task) {
-  const taskId = task[COL.T_ID] || "N/A",
-    taskName = task[COL.T_NAME] || "Chưa có tên",
-    // Tên theo tháng đang lọc; data-name của các nút Xoá/Nhân bản/hoàn thành vẫn là TÊN GỐC.
-    tenTheoThang = tenTheoThangCuaDong(task, taskName, thangLocNhiemVu()),
-    tenCuTheoThang = tenGocNeuDaDoiCuaDong(task, taskName, thangLocNhiemVu()),
-    taskAssignee = task[COL.T_ASSIGNEE] || "Chưa gán",
-    taskStatus = task[COL.T_STATUS] || "Chưa bắt đầu",
-    taskPriority = task[COL.T_PRIORITY] || "Trung bình",
-    startDateText = formatDateForDisplay(task[COL.T_START]),
-    dueDateText = formatDateForDisplay(task[COL.T_DUE]),
-    num = parseInt(task[COL.T_COMPLETION] || 0),
-    taskPid = task[COL.T_PID],
-    statusClass = getStatusClass(taskStatus),
-    priorityClass = getPriorityClass(taskPriority),
-    isTaskOverdue2 = isTaskOverdue(task[COL.T_DUE]) && !taskStatus.toLowerCase().includes("hoàn thành"),
-    hasMatch = taskStatus.toLowerCase().includes("hoàn thành"),
-    taskReminders = task[COL.T_REMINDERS] || [],
-    isArray = Array.isArray(taskReminders) && taskReminders.length > 0;
-  return "\n<tr class=\"hover:bg-gray-50 " + (isTaskOverdue2 ? "bg-red-overdue" : "") + " task-clickable cursor-pointer draggable-item\" \n    data-id=\"" + escapeHtml(taskId) + "\" \n    data-project-id=\"" + escapeHtml(taskPid) + "\" \n    draggable=\"true\">\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-start\">\n        <input type=\"checkbox\" \n                class=\"quick-complete-checkbox\" \n                data-id=\"" + escapeHtml(taskId) + "\" \n                data-name=\"" + escapeHtml(taskName) + "\"\n                " + (hasMatch ? "checked disabled" : "") + " \n                title=\"" + (hasMatch ? "Đã hoàn thành" : "Click để hoàn thành") + "\">\n        <div>\n            <div class=\"font-medium text-gray-900 text-sm leading-tight\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1\" title=\"Có nhắc việc\"></i>" : "") + "<span" + (tenCuTheoThang ? " title=\"Tên gốc: " + escapeHtmlAttr(tenCuTheoThang) + "\"" : "") + ">" + escapeHtml(tenTheoThang) + "</span>" + (Number(task[COL.T_LEVEL]) === 2 ? "<span class=\"ml-2 text-[10px] uppercase tracking-wide text-indigo-600\">công việc con</span>" : "") + "</div>" + "\n        </div>\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(taskAssignee) + "</td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(statusClass) + "\">" + escapeHtml(taskStatus) + "</span>\n    " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue ml-1\">Quá hạn</span>" : "") + pendingApprovalBadge(task) + "\n  </td>\n  <td class=\"px-4 py-4\">\n    <span class=\"status-badge " + escapeHtml(priorityClass) + "\">" + escapeHtml(taskPriority) + "</span>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"flex items-center space-x-2\">\n      <div class=\"w-16 h-2 bg-gray-200 rounded-full\">\n        <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n      </div>\n      <span class=\"text-sm text-gray-600\">" + escapeHtml(num) + "%</span>\n    </div>\n  </td>\n  <td class=\"px-4 py-4\">\n    <div class=\"text-sm\">\n      " + renderLinksButton(task[COL.T_RESULT_LINKS], taskId) + "\n    </div>\n  </td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(startDateText) + "</td>\n  <td class=\"px-4 py-4 text-sm text-gray-900\">" + escapeHtml(dueDateText) + "</td>\n  <td class=\"px-4 py-4 text-right\">\n    <div class=\"flex space-x-1 justify-end\">\n      " + (() => {
-    const project = allProjects.find(project3 => project3[COL.P_ID] === task[COL.T_PID]),
-      project2 = project && project[COL.P_MANAGER] === currentUser.name,
-      isAdmin2 = laQuanTriTrongPhamVi() || project2;
-    return "\n          " + createTaskFromSubworkButtonHtml(task, "action-btn action-btn-edit") + "\n          " + (isAdmin2 ? "<button class=\"action-btn action-btn-copy copy-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n          <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n          " + (isAdmin2 ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(taskId) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n        ";
-  })() + "\n    </div>\n  </td>\n</tr>\n";
+  const id = task[COL.T_ID] || "N/A", name = task[COL.T_NAME] || "Chưa có tên";
+  const title = tenTheoThangCuaDong(task, name, thangLocNhiemVu());
+  const original = tenGocNeuDaDoiCuaDong(task, name, thangLocNhiemVu());
+  const late = isTaskOverdue(task[COL.T_DUE]) && !daDuyetDuKetQua(task);
+  const files = Array.isArray(task.ketQuaFiles) ? task.ketQuaFiles : [];
+  // Nhiệm vụ không còn nhóm kết quả nào thì không có gì để ẩn — dọn mã còn sót trong tập. Ca thật:
+  // người dùng gập file rồi xoá hết nhóm; để sót thì dòng «Chưa khai file kết quả» bị ẩn vĩnh viễn
+  // mà KHÔNG CÒN dấu tích nào để mở lại (dấu tích chỉ vẽ khi có file).
+  if (!files.length && tasksAnFile.delete(String(id))) luuTrangThaiAnFile();
+  const anFile = tasksAnFile.has(String(id));
+  // MỌI ô đi qua một hàm: cùng cỡ chữ, cùng khoảng đệm. «Cùng font chữ» là yêu cầu thiết kế của
+  // đợt này nên không để từng ô tự chọn class cỡ chữ như bản cũ (bản cũ trộn text-xs/text-sm).
+  const buildTaskCellHtml = (html, cls = "") => '<td class="' + escapeHtmlAttr(cls) + '">' + html + '</td>';
+  const pct = (value) => escapeHtml(Math.max(0, Math.min(100, Number(value) || 0))) + '%';
+  const open = '<button type="button" class="action-btn action-btn-edit edit-btn" data-type="task" data-id="' + escapeHtmlAttr(id) + '" title="Xem nhiệm vụ và kết quả"><i class="fas fa-edit"></i></button>';
+  let actions = open;
+  if (canUserCopyResource("task", id)) actions += '<button class="action-btn action-btn-copy copy-btn" data-type="task" data-id="' + escapeHtmlAttr(id) + '" data-name="' + escapeHtmlAttr(name) + '" title="Tạo bản sao"><i class="fas fa-copy"></i></button>';
+  if (canUserDeleteResource("task", id)) actions += '<button class="action-btn action-btn-delete delete-btn" data-type="task" data-id="' + escapeHtmlAttr(id) + '" data-name="' + escapeHtmlAttr(name) + '" title="Xóa"><i class="fas fa-trash"></i></button>';
+  // NÚT MŨI TÊN ▼/▲ mở rộng – ẩn hàng file (đợt 4 thay cho dấu tích). Vẫn là <button>, KHÔNG phải
+  // checkbox: TC-KQ-UI-03 chốt tab nhiệm vụ không còn checkbox nào sau đợt «bỏ checkbox Hoàn thành».
+  // `button` bên trong .task-clickable được handler cuối file bỏ qua nên bấm mũi tên KHÔNG mở modal.
+  const tich = files.length
+    ? buildNutMoRongFile(id, files.length, anFile, title)
+    : '<span class="task-files-toggle-off" aria-hidden="true"></span>';
+  const soBan = files.reduce((sum, f) => sum + (Number(f.so_ban) || 0), 0);
+  let html = '<tr class="task-row-chinh task-clickable cursor-pointer draggable-item ' + (late ? 'bg-red-overdue' : '') + '" draggable="true" data-task-group="' + escapeHtmlAttr(id) + '" data-id="' + escapeHtmlAttr(id) + '" data-project-id="' + escapeHtmlAttr(task[COL.T_PID]) + '">' +
+    buildTaskCellHtml('<div class="task-ten-wrap">' + tich + '<div class="task-ten"><span class="task-ten-chinh task-ten-nhiem-vu" title="' + escapeHtmlAttr(original ? 'Tên gốc: ' + original : name) + '">' + (Array.isArray(task[COL.T_REMINDERS]) && task[COL.T_REMINDERS].length ? '<i class="fas fa-bell text-amber-500 mr-1"></i>' : '') + escapeHtml(title) + '</span>' + (files.length ? '<span class="task-so-file">' + escapeHtml(files.length) + ' kết quả</span>' : '') + '<span class="task-nhan ' + (daDuyetDuKetQua(task) ? 'task-nhan-xong' : '') + '">' + escapeHtml(nhanHoanThanhKetQua(task)) + '</span>' + (late ? '<span class="status-badge status-overdue ml-1">Quá hạn</span>' : '') + pendingApprovalBadge(task) + nhapBadge(task) + '</div></div>') +
+    // Ô «Tên file» của HÀNG NHIỆM VỤ để trống có chủ đích: tên file nay có CỘT RIÊNG và chỉ hàng
+    // file mới có tên. Để trống chứ không lặp tên nhiệm vụ sang đó.
+    buildTaskCellHtml('<span class="c-trong">—</span>', 'c-giua') +
+    // Người thực hiện CĂN GIỮA ô (yêu cầu đợt 4) — hàng file bên dưới cũng căn giữa cùng cột này.
+    buildTaskCellHtml('<span class="task-ten-chinh">' + escapeHtml(task[COL.T_ASSIGNEE] || 'Chưa gán') + '</span>', 'c-giua') +
+    buildTaskCellHtml('<span class="status-badge ' + escapeHtmlAttr(getPriorityClass(task[COL.T_PRIORITY] || 'Trung bình')) + '">' + escapeHtml(task[COL.T_PRIORITY] || 'Trung bình') + '</span>', 'c-giua') +
+    buildTaskCellHtml(pct(task[COL.T_TY_LE]), 'c-giua') + buildTaskCellHtml(pct(task[COL.T_COMPLETION]), 'c-giua') +
+    buildTaskCellHtml(escapeHtml(formatDateForDisplay(task[COL.T_START])), 'c-giua') + buildTaskCellHtml(escapeHtml(formatDateForDisplay(task[COL.T_DUE])), 'c-giua') +
+    buildTaskCellHtml(files.length ? escapeHtml(soBan) : '<span class="c-trong">—</span>', 'c-giua') +
+    buildTaskCellHtml('<span class="task-nhan ' + (daDuyetDuKetQua(task) ? 'task-nhan-xong' : '') + '">' + escapeHtml(nhanHoanThanhKetQua(task)) + '</span>') +
+    buildTaskCellHtml('<div class="task-hanh-dong">' + actions + '</div>') + '</tr>';
+  if (!files.length) return html + '<tr data-task-group="' + escapeHtmlAttr(id) + '" data-task-files-empty="1"><td colspan="' + COT_BANG_NHIEM_VU.length + '" class="task-chua-co-file">Chưa khai file kết quả</td></tr>';
+  html += files.map((file) => {
+    // ĐỢT 5 (2026-09-11) — «KẾT QUẢ LÀM ĐƯỢC» ≠ «TÊN FILE». `ten_ket_qua` là TÊN KHAI người dùng điền
+    // ở ô ＋ (migration 016), còn `ten_ban_cuoi` mới là tên file vật lý đã nộp. Đợt 4 dồn cả hai vào
+    // cột «Tên file» nên tiêu đề cột nói một đằng, nội dung một nẻo. Người dùng: «Kết quả làm được sẽ
+    // chuyển sang cùng cột Nhiệm vụ, bên cạnh icon tệp giấy gấp góc bên phải đang có đấy».
+    const tenKetQua = String(file.ten_ket_qua || file.ten_goc || 'Chưa đặt tên kết quả');
+    const tenFileThat = file.co_ban ? String(file.ten_ban_cuoi || file.dinh_dang || '') : '';
+    const trangThai = file.co_ban ? (NHAN_TRANG_THAI_FILE[file.trang_thai] || file.trang_thai) : 'Chưa nộp';
+    const mau = file.co_ban ? (MAU_TRANG_THAI_FILE[file.trang_thai] || '') : 'bg-gray-100 text-gray-500';
+    const tienDo = Math.max(0, Math.min(100, Number(file.tienDo) || 0));
+    return '<tr class="task-result-row" data-task-group="' + escapeHtmlAttr(id) + '" data-task-result="' + escapeHtmlAttr(file.id) + '"' + (anFile ? ' style="display:none"' : '') + '>' +
+      // Ô ĐẦU của hàng file: DẤU NỐI thụt vào + icon tệp giấy + «KẾT QUẢ LÀM ĐƯỢC». Vẫn thụt phải hơn
+      // tên nhiệm vụ nên nhìn là biết dòng này thuộc nhiệm vụ ngay trên nó. MÀU CHỮ THEO TIẾN ĐỘ giữ
+      // nguyên từ đợt 4: 100% xanh lá · 50–99 xanh dương · 20–49 cam · <20 đỏ.
+      buildTaskCellHtml('<div class="task-file-lui"><span class="task-file-noi" aria-hidden="true">└</span>' +
+        '<i class="fas fa-file-lines task-file-icon" aria-hidden="true"></i>' +
+        '<span class="task-file-name ' + escapeHtmlAttr(mauTienDoFile(tienDo)) + '" title="' + escapeHtmlAttr(tenKetQua) + '">' + escapeHtml(tenKetQua) + '</span></div>') +
+      // Ô «TÊN FILE» nay ĐÚNG NGHĨA: tên file vật lý của bản cuối. Cột c-file cố định + table-layout:fixed
+      // nên mọi hàng rộng bằng nhau, dài thì cắt «…», di chuột ra tên đầy đủ. Chữ MÀU TRUNG TÍNH — màu
+      // theo tiến độ đã nằm ở «Kết quả làm được» bên cột Nhiệm vụ, tô cả hai chỗ là rối mắt.
+      buildTaskCellHtml(tenFileThat
+        ? '<span class="task-file-ten-that" title="' + escapeHtmlAttr(tenFileThat) + '">' + escapeHtml(tenFileThat) + '</span>'
+        : '<span class="task-file-phu">Chưa có bản</span>') +
+      // Người nộp bản cuối — CĂN GIỮA cùng cột với người thực hiện của hàng nhiệm vụ.
+      buildTaskCellHtml('<span class="task-file-phu">' + escapeHtml(file.ten_nguoi_nop || '—') + '</span>', 'c-giua') +
+      buildTaskCellHtml('<span class="c-trong">—</span>', 'c-giua') +
+      buildTaskCellHtml(pct(file.ty_le), 'c-giua') + buildTaskCellHtml(pct(tienDo), 'c-giua') +
+      buildTaskCellHtml('<span class="c-trong">—</span>', 'c-giua') + buildTaskCellHtml('<span class="c-trong">—</span>', 'c-giua') +
+      buildTaskCellHtml(escapeHtml(Number(file.so_ban) || 0), 'c-giua') +
+      buildTaskCellHtml('<span class="status-badge ' + escapeHtmlAttr(mau) + '">' + escapeHtml(trangThai) + '</span>') +
+      // Nút mở POPUP nhật ký riêng của file. KHÔNG mang class `edit-btn`: class đó có handler toàn
+      // cục mở modal nhiệm vụ, giữ lại là một cú bấm nổ hai nơi.
+      buildTaskCellHtml('<button type="button" class="task-file-history-btn" data-ma-nhiem-vu="' + escapeHtmlAttr(id) + '" data-file-id="' + escapeHtmlAttr(file.id) + '" title="Xem nhật ký kết quả này theo thời gian">Xem kết quả</button>') + '</tr>';
+  }).join('');
+  return html;
 }
 function renderStaff() {
   const staffUsersTbodyEl = document.getElementById("staff-users-tbody"),
@@ -1494,7 +1536,7 @@ function renderChart(err) {
     }
     const data = {};
     filteredTasks.forEach(filteredTask => {
-      const taskStatus = filteredTask[COL.T_STATUS] || "Chưa xác định";
+      const taskStatus = nhanHoanThanhKetQua(filteredTask);
       data[taskStatus] = (data[taskStatus] || 0) + 1;
     }), err = {
       labels: Object.keys(data),
@@ -1708,7 +1750,7 @@ function renderStaffPerformanceChart() {
   const filtered = allStaff.map(staff => {
     const staffName = staff[COL.S_NAME] || "Không tên",
       filteredFilteredTasks = filteredTasks.filter(filteredTask => filteredTask[COL.T_ASSIGNEE] === staffName),
-      filteredFilteredFilteredTasks = filteredFilteredTasks.filter(filteredFilteredTask => (filteredFilteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")),
+      filteredFilteredFilteredTasks = filteredFilteredTasks.filter(filteredFilteredTask => daDuyetDuKetQua(filteredFilteredTask)),
       num = filteredFilteredTasks.length > 0 ? Math.round(filteredFilteredFilteredTasks.length / filteredFilteredTasks.length * 100) : 0;
     return {
       name: staffName,
@@ -1910,6 +1952,7 @@ function openModal(type, data = null) {
       flag ? handleEdit(type, data) : handleAdd(type, { luuNhap, guiDuyet });
     });
   }
+  if (typeof ganTienIchForm8b === "function") ganTienIchForm8b(type, data, el5);
   const closeButtons = el4.querySelectorAll(".close-modal");
   closeButtons.forEach(closeButton => {
     closeButton.addEventListener("click", event => {
@@ -1929,22 +1972,12 @@ function openModal(type, data = null) {
  * `handleSuccessfulLogin` đã gán xong `allProjects`/`allTasks` trước khi mình vẽ. Lỗi mạng thì vẫn
  * vẽ từ dữ liệu đang có (thà thiếu một dòng còn hơn mất luôn modal).
  */
-function veLaiChiTietSauKhiGhi(projectId, projectName) {
-  if (!isAuthenticated) {
-    showProjectDetailsModal(projectId, projectName);
-    return;
-  }
-  google.script.run
-    .withSuccessHandler(function (response) {
-      if (response && response.success) handleSuccessfulLogin(response);
-      showProjectDetailsModal(projectId, projectName);
-    })
-    .withFailureHandler(function () {
-      showProjectDetailsModal(projectId, projectName);
-    })
-    .getDataForUser();
+async function veLaiChiTietSauKhiGhi(projectId, projectName) {
+  if (!isAuthenticated) return;
+  if (await refreshData()) showProjectDetailsModal(projectId, projectName);
 }
 function openEditModal(type, id) {
+  if (["project", "task"].includes(type) && typeof moSuaMoiNhat8b === "function") return moSuaMoiNhat8b(type, id);
   let project = null;
   if (type === "project") project = allProjects.find(project2 => project2[COL.P_ID] === id);else {
     if (type === "task") project = allTasks.find(task => task[COL.T_ID] === id);else {
@@ -2095,11 +2128,14 @@ const NHAT_KY_HANH_DONG = {
 };
 // Khoá của `changes` là TÊN CỘT CSDL (máy chủ ghi thẳng cột), không phải tên trường của form.
 const NHAT_KY_COT = {
-  name: "Tên", description: "Mô tả", status: "Trạng thái", priority: "Ưu tiên",
+  name: "Tên", description: "Mô tả", status: "Trạng thái cũ (lịch sử)", priority: "Ưu tiên",
   manager_id: "Người quản lý", manager_name: "Người quản lý",
-  department_id: "Phòng", supervisor_id: "Ban lãnh đạo kiểm soát",
+  // Đợt A (028): cột đổi thành `supervisor_ids`. Giữ cả khoá cũ vì dòng nhật ký ghi TRƯỚC 028 vẫn
+  // mang tên cột cũ — bỏ đi là những dòng đó hiện ra `supervisor_id` thô cho người đọc.
+  department_id: "Phòng", supervisor_ids: "Ban lãnh đạo kiểm soát",
+  supervisor_id: "Ban lãnh đạo kiểm soát",
   leader_ids: "Lãnh đạo phòng phụ trách",
-  assignee_id: "Cán bộ trực tiếp", assignee_name: "Cán bộ trực tiếp",
+  assignee_id: "Người thực hiện trực tiếp", assignee_name: "Người thực hiện trực tiếp",
   start_date: "Ngày bắt đầu", end_date: "Ngày kết thúc", due_date: "Ngày hết hạn",
   report_date: "Ngày báo cáo", completion: "Hoàn thành (%)", target: "Chỉ tiêu",
   output: "Kết quả đầu ra", notes: "Ghi chú", result_links: "Liên kết kết quả",
@@ -2260,6 +2296,7 @@ function buildKhungNhatKy(kieu, ma) {
 // (?inline=1); DOCX tải về + góp ý trong app. Editor trực tuyến: docs/KE-HOACH-KET-QUA-FILE.md §7.
 // ============================================================================
 const NHAN_TRANG_THAI_FILE = Object.freeze({
+  "luu-tam": "Lưu tạm",
   "cho-xem": "Chờ TP/PP xem",
   "can-sua": "Cần sửa — nộp bản mới",
   "cho-lanh-dao": "Chờ Phó GĐ/Giám đốc",
@@ -2267,17 +2304,25 @@ const NHAN_TRANG_THAI_FILE = Object.freeze({
   "da-duyet": "Đã duyệt",
 });
 const MAU_TRANG_THAI_FILE = Object.freeze({
+  "luu-tam": "bg-slate-100 text-slate-600",
   "cho-xem": "bg-yellow-100 text-yellow-700",
   "can-sua": "bg-red-100 text-red-600",
   "cho-lanh-dao": "bg-purple-100 text-purple-700",
   "hoan-thanh": "bg-green-100 text-green-700",
   "da-duyet": "bg-green-800 text-white",
 });
+// ĐỢT B (11/09/2026) — ĐIỂM 9 gộp «Yêu cầu sửa» vào «Trả về Cán bộ», ĐIỂM 7 đổi «Trình lãnh đạo»
+// thành «TP/PP phê duyệt» (một LẦN KÝ có lưu người và lúc ký, không chỉ đổi trạng thái). Hai mã cũ
+// không còn tồn tại: migration 029 đã viết lại toàn bộ lịch sử nên không cần nhãn cho chúng.
+// «Phê duyệt tự động» GIỮ LẠI — R6 bỏ quyền tự duyệt nhưng các dòng lịch sử `duyet-tu-dong` vẫn còn
+// trong CSDL và phải đọc được.
 const NHAN_LUONG_FILE = Object.freeze({
+  "luu-tam": "Lưu tạm",
+  "gui-duyet": "Gửi đi duyệt",
   nop: "Nộp bản",
   "gom-y": "Góp ý",
-  "yeu-cau-sua": "Yêu cầu sửa",
-  "trinh-lanh-dao": "Trình lãnh đạo",
+  "sua-truc-tuyen": "Sửa trực tuyến",
+  "tp-phe-duyet": "TP/PP phê duyệt",
   "tra-ve-tp": "Trả về TP/PP",
   "tra-ve-cbo": "Trả về Cán bộ",
   "huy-lenh-sua": "Hủy lệnh sửa",
@@ -2285,14 +2330,55 @@ const NHAN_LUONG_FILE = Object.freeze({
   duyet: "Duyệt",
   "hoan-thanh": "Hoàn thành",
 });
+// 12/09/2026 — ba bảng nhãn cho HAI CỘT THEO TỪNG BẢN của bảng «Kết quả» («Tình trạng» và «Người
+// thực hiện»). Trước đây cột «Tình trạng» của dòng bản 1.1/1.2 để TRỐNG và cột «Người thực hiện» in
+// cứng tên người nộp, nên đọc bảng không biết bản nào bị trả về, ai trả, ai sửa.
+/**
+ * Vai viết tắt. Bảng mười cột đã hẹp, in đủ «Trưởng phòng» là đẩy cột «Hành động» xuống dòng.
+ * `admin` = Giám đốc (Q8 — không thêm vai mới), «Nhân viên» hiển thị là «Cán bộ» như `hienThiVai`.
+ */
+const NHAN_VAI_NGAN = Object.freeze({
+  "Trưởng phòng": "TP/PP",
+  "Phó phòng": "TP/PP",
+  "Phó Giám đốc": "PGĐ",
+  admin: "GĐ",
+  "Nhân viên": "Cán bộ",
+});
+/**
+ * Hành động SINH RA một bản. Dòng luồng ghi lúc bản ra đời mang đúng `vai` của người tạo nên đọc nó
+ * là biết vai, khỏi thêm cột vào `BAN` (hằng dùng chung, thêm cột là đổi hình dạng phản hồi).
+ */
+const HANH_DONG_TAO_BAN = Object.freeze(["sua-truc-tuyen", "nop", "luu-tam", "gui-duyet"]);
+/**
+ * Hành động là MỘT TÌNH TRẠNG của bản. `vai: true` ⇒ nhãn ghép vai của người làm (`sua-truc-tuyen`
+ * phải ra «TP/PP sửa trực tiếp» hay «PGĐ/GĐ sửa trực tiếp» đúng như người dùng dặn). `gom-y` cố ý
+ * KHÔNG có mặt: góp ý là ý kiến bên lề, đã có cột «Ghi ý kiến» đếm, để nó vào đây là một câu góp ý
+ * đến sau che mất «Bị trả về».
+ */
+const TINH_TRANG_BAN = Object.freeze({
+  "tra-ve-cbo": { nhan: "Bị trả về", mau: "bg-red-100 text-red-700" },
+  "tra-ve-tp": { nhan: "Bị trả về TP/PP", mau: "bg-red-100 text-red-700" },
+  "sua-truc-tuyen": { nhan: "sửa trực tiếp", vai: true, mau: "bg-amber-100 text-amber-700" },
+  "tp-phe-duyet": { nhan: "phê duyệt", vai: true, mau: "bg-purple-100 text-purple-700" },
+  duyet: { nhan: "đã duyệt", vai: true, mau: "bg-green-100 text-green-700" },
+  "hoan-thanh": { nhan: "chốt hoàn thành", vai: true, mau: "bg-green-100 text-green-700" },
+  "huy-lenh-sua": { nhan: "Hủy lệnh sửa", mau: "bg-slate-100 text-slate-600" },
+});
 const NHAN_VERDICT_FILE = Object.freeze({
-  "yeu-cau-sua": "Yêu cầu sửa",
-  "trinh-lanh-dao": "Trình Phó giám đốc",
+  "tp-phe-duyet": "TP/PP phê duyệt",
   "tra-ve-cbo": "Đẩy về Cán bộ",
   "hoan-thanh": "Hoàn thành",
   "tra-ve-tp": "Trả về TP/PP",
   duyet: "Duyệt",
 });
+/**
+ * Hai hành động CHỐT (kết thúc luồng của file) — đối trọng của `tp-phe-duyet` là TRÌNH lên.
+ * Q6/Q11: cả hai nhận GHI CHÚ TUỲ CHỌN lấy từ ô «Ý kiến», và chỉ MỘT trong hai hiện ra cho TP/PP
+ * tùy `phaiTrinhLanhDao` của máy chủ (tích «Gửi BLĐ phê duyệt» · người bấm là người thực hiện ·
+ * admin đặt ⏳ ở «Duyệt kết quả»). Nhãn nút thật đến từ `nhan` máy chủ trả; bảng này chỉ để viết câu
+ * toast «Đã hoàn thành» cho xuôi.
+ */
+const HANH_DONG_CHOT = Object.freeze(["hoan-thanh", "duyet"]);
 /**
  * ĐỊNH DẠNG kết quả — nhãn suy từ ĐUÔI file. Từ đợt 2 (016) người dùng KHAI định dạng lúc thêm dòng
  * (`nhom.dinh_dang`) nên bảng này chỉ còn là đường lùi cho dòng cũ và cho tên bản; «Báo cáo» không
@@ -2383,14 +2469,32 @@ function buildIconDinhDang(ten) {
  */
 function cauTinhTrangFile(n) {
   const luong = Array.isArray(n && n.luong) ? n.luong : [];
-  const soTraLai = luong.filter((g) => ["yeu-cau-sua", "tra-ve-tp", "tra-ve-cbo"].includes(g.hanh_dong)).length;
-  const daTrinh = luong.some((g) => g.hanh_dong === "trinh-lanh-dao");
+  // ĐIỂM 9 (ĐỢT B): «Yêu cầu sửa» đã gộp vào «Trả về Cán bộ» nên chỉ còn HAI mã trả lại.
+  const soTraLai = Number.isFinite(Number(n?.soTraLai)) ? Number(n.soTraLai) :
+    luong.filter((g) => ["tra-ve-tp", "tra-ve-cbo"].includes(g.hanh_dong)).length;
+  const nguoiNhan = Array.isArray(n?.nguoiNhan) ? n.nguoiNhan.filter(Boolean).join(" và ") :
+    String(n?.tenNguoiNhan || n?.ten_nguoi_nhan || "").trim();
+  const doiTuongSua = nguoiNhan || (n?.lenh_sua_cho === "lanh-dao" ? "Trưởng phòng/Phó phòng" : "Cán bộ");
+  // ĐIỂM 7 (ĐỢT B): mốc «TP/PP phê duyệt» nay là HAI CỘT thật của máy chủ (`tp_duyet_boi` +
+  // `ten_nguoi_tp_duyet`), không còn phải suy ra từ bảng luồng — kể được AI đã ký. Dòng lịch sử cũ
+  // chưa có mốc thì lùi về đếm mã `tp-phe-duyet` trong luồng (029 đã đổi tên toàn bộ dòng cũ).
+  // Ba tên trường vì BA đường đọc trả ba dạng: `ten_nguoi_tp_duyet` (GET …/files, hàng chờ duyệt),
+  // `tp_duyet_ten` (bản đồ gọn của tab Nhiệm vụ) và `tenNguoiTpDuyet` (nếu cầu RPC đổi sang camel).
+  const tenTpDuyet = String(n?.ten_nguoi_tp_duyet || n?.tp_duyet_ten || n?.tenNguoiTpDuyet || "").trim();
+  // LÚC ký cũng là dữ liệu máy chủ (`tp_duyet_luc`) — «ai duyệt» mà không có «lúc nào» thì mốc này
+  // vẫn chưa trả lời được câu hỏi mà điểm bất hợp lý số 7 đặt ra.
+  const lucTpDuyet = n?.tp_duyet_luc ? formatDateForDisplay(n.tp_duyet_luc, true) : "";
+  const daTrinh = tenTpDuyet !== "" || lucTpDuyet !== "" || luong.some((g) => g.hanh_dong === "tp-phe-duyet");
   const dauCau = soTraLai > 0 ? "Bị trả lại lần " + soTraLai + " — " : "";
   const cau = {
+    "luu-tam": "đã lưu tạm — chưa gửi đi duyệt",
     "cho-xem": "đang đợi Trưởng phòng/Phó phòng duyệt",
-    "can-sua": "đang đợi Cán bộ sửa và nộp bản mới",
+    "can-sua": "đang đợi " + doiTuongSua + " sửa và nộp bản mới",
     "cho-lanh-dao": daTrinh
-      ? "TP/PP đã duyệt, đang gửi lên Phó Giám đốc/Giám đốc"
+      ? (tenTpDuyet
+        ? "đã được " + tenTpDuyet + " (TP/PP) phê duyệt" + (lucTpDuyet ? " lúc " + lucTpDuyet : "") +
+          ", đang chờ Phó Giám đốc/Giám đốc"
+        : "TP/PP đã duyệt" + (lucTpDuyet ? " lúc " + lucTpDuyet : "") + ", đang gửi lên Phó Giám đốc/Giám đốc")
       : "đang đợi Phó Giám đốc/Giám đốc",
     "hoan-thanh": "Trưởng phòng/Phó phòng đã chốt Hoàn thành",
     "da-duyet": "Phó Giám đốc/Giám đốc đã duyệt — kết quả đã chốt",
@@ -2400,30 +2504,211 @@ function cauTinhTrangFile(n) {
 }
 /** Câu kể cho dòng của trang «Hàng chờ phê duyệt» — ở đó máy chủ KHÔNG trả bảng luồng. */
 function cauTinhTrangHangCho(n) {
-  return cauTinhTrangFile({ trang_thai: n && n.trang_thai, luong: [] });
+  return cauTinhTrangFile({ ...n, luong: [], soTraLai: n?.soTraLai });
 }
 // Ma trận + ghi đè nạp từ GET /api/v1/permissions (khuôn oPhanQuyenHieuLuc) — nạp lại MỖI lần mở
 // tab nên admin đổi bảng là người dùng thấy hành vi đổi NGAY cho lần nộp/duyệt tiếp theo.
 let phanQuyenFile = { macDinh: null, ghiDe: {} };
+// Phase8b: một cache quyền cho tab/nút, biểu mẫu và kết quả; nguồn là GET /permissions.
+let lanHoiQuyen = null, henHoiQuyen = null, daGanHoiQuyen = false, phamViQuyen = null;
+function giaTriMacDinhQuyen(macDinh, vai, entity, action) {
+  if (!macDinh?.[vai]?.[entity]?.includes(action)) return "tu-choi";
+  if (entity === "file" && action === "create" && !["admin", "Phó Giám đốc"].includes(vai)) return "cho-duyet";
+  if (action === "create" && ["work", "subwork"].includes(entity) && !["admin", "Phó Giám đốc"].includes(vai)) return "cho-duyet";
+  if (entity === "subwork" && action === "update" && ["Trưởng phòng", "Phó phòng"].includes(vai)) return "cho-duyet";
+  return "cho-phep";
+}
+function giaTriHieuLucQuyen(vai, entity, action, bang = phanQuyenFile) {
+  if (vai === "admin") return "cho-phep";
+  if (!bang.macDinh?.[vai]) return "tu-choi";
+  const gd = bang.ghiDe?.[entity + ":" + action]?.[vai];
+  return gd?.gia_tri || giaTriMacDinhQuyen(bang.macDinh, vai, entity, action);
+}
+function capNhatBangQuyen(data) {
+  phanQuyenFile = { macDinh: data?.macDinh || null, ghiDe: chiSoGhiDe(data?.ghiDe), settings: data?.settings || null };
+  if (data?.phamVi) phamViQuyen = data.phamVi;
+  capNhatLuaChonGuiBld();
+}
+function cungIdQuyen(a, b) {
+  return a != null && b != null && String(a) !== "" && String(b) !== "" && String(a) === String(b);
+}
+function dongPhamViQuyen(type, resource) {
+  const laWork = type === "project" || type === "work";
+  const row = typeof resource === "object" ? resource : (laWork ? allProjects : allTasks)
+    .find(r => String(r[laWork ? COL.P_ID : COL.T_ID]) === String(resource));
+  if (!row) return null;
+  const project = laWork ? row : allProjects.find(p => String(p[COL.P_ID]) === String(row[COL.T_PID] || row.work_code));
+  return { row, entity: laWork ? "work" : Number(row[COL.T_LEVEL] ?? row.level) === 2 ? "subwork" : "task",
+    dept: row.department_id ?? project?.[COL.P_DEPT_ID], deptName: project?.[COL.P_DEPT] || "",
+    mine: cungIdQuyen(row.assignee_id, currentUser?.id) || Boolean(currentUser?.name && row[COL.T_ASSIGNEE] === currentUser.name),
+    project };
+}
+function phongCuaTaiKhoan() {
+  return phamViQuyen ? phamViQuyen.departmentId : currentUser?.department_id ?? allDepartments.find(d => d[COL.D_NAME] === tenPhongTaiKhoan())?.[COL.D_DB_ID] ?? null;
+}
+function muonQuyenTrongPhong(entity, action, dept) {
+  return ["work", "subwork", "task"].includes(entity) && (phamViQuyen?.delegations || []).some(d =>
+    ["Phó Giám đốc", "Trưởng phòng", "Phó phòng"].includes(d.fromRole) &&
+    phanQuyenFile.macDinh?.[d.fromRole]?.[entity]?.includes(action) &&
+    (dept === undefined || (d.departmentIds || []).some(id => cungIdQuyen(id, dept))));
+}
+
+function coQuyenTrongPhamVi(entity, action, scope = null) {
+  const vai = phamViQuyen?.vai || currentUser?.role;
+  if (!vai || currentUser.is_active === false) return false;
+  if (vai === "admin") return true;
+  if (!phanQuyenFile.macDinh?.[vai]) return false;
+  const gd = phanQuyenFile.ghiDe?.[entity + ":" + action]?.[vai];
+  if (gd?.gia_tri === "tu-choi") return false;
+  const cho = giaTriHieuLucQuyen(vai, entity, action) !== "tu-choi";
+  if (!scope) return cho || muonQuyenTrongPhong(entity, action, undefined);
+  const dept = scope.dept, mine = phongCuaTaiKhoan();
+  const cungPhong = cungIdQuyen(dept, mine) || (dept == null && mine == null &&
+    Boolean(scope.deptName && tenPhongTaiKhoan()) && scope.deptName === tenPhongTaiKhoan());
+  if (action === "create" && ["Trưởng phòng", "Phó phòng", "Nhân viên"].includes(vai) && !cungPhong)
+    return muonQuyenTrongPhong(entity, action, dept);
+  let trongPhamVi = false;
+  if (vai === "Phó Giám đốc") trongPhamVi = (phamViQuyen?.managedDepartmentIds || currentUser.managedDepartmentIds || []).some(id => cungIdQuyen(id, dept)) ||
+    Boolean(scope.deptName && visibleDepartments.includes(scope.deptName));
+  if (["Trưởng phòng", "Phó phòng"].includes(vai)) trongPhamVi = cungPhong;
+  if (vai === "Nhân viên") trongPhamVi = action === "read" ? cungPhong || scope.mine :
+    action === "create" ? cungPhong && (entity !== "task" || scope.mine || scope.assigned) : scope.mine;
+  return Boolean(cho && (trongPhamVi || gd?.pham_vi === "tat-ca")) || muonQuyenTrongPhong(entity, action, dept);
+}
+function coQuyenTaiDong(action, type, resource) {
+  const scope = dongPhamViQuyen(type, resource);
+  if (!scope) return false;
+  const duocDuyet = (scope.row[COL.T_APPROVAL] || scope.row.approval_status) === "Chờ duyệt" && coQuyenTrongPhamVi(scope.entity, "approve", scope);
+  if (action === "update" && duocDuyet) return true;
+  if (!coQuyenTrongPhamVi(scope.entity, action, scope)) return false;
+  if (["update", "delete"].includes(action)) {
+    const status = scope.row[COL.T_APPROVAL] || scope.row.approval_status;
+    const owner = scope.row.createdByName;
+    if (owner && owner !== currentUser?.name && !isAdmin() &&
+        (status === "Nháp" || status === "Chờ duyệt" && currentUser?.role !== "Phó Giám đốc")) return false;
+  }
+  return true;
+}
+function coQuyenTaoTrongCongViec(entity, project) {
+  const scope = dongPhamViQuyen("project", project);
+  if (!scope) return false;
+  // Cán bộ được tự nhận nhiệm vụ; máy chủ còn kiểm assignee tại thời điểm gửi.
+  return coQuyenTrongPhamVi(entity, "create", { ...scope, mine: currentUser?.role === "Nhân viên" });
+}
+function congViecChoForm(entity, isEdit = false, current = null) {
+  return allProjects.filter(p => (isEdit && String(p[COL.P_ID]) === String(current?.[COL.T_PID])) ||
+    coQuyenTaoTrongCongViec(entity, p));
+}
+function coQuyenTaoCongViec() {
+  return coQuyenTrongPhamVi("work", "create") && (isAdmin() ||
+    allDepartments.some(d => coQuyenTrongPhamVi("work", "create", { dept: d[COL.D_DB_ID], deptName: d[COL.D_NAME] })));
+}
+function veLaiQuyenHienTai() {
+  if (!currentUser) return;
+  const nav = document.getElementById("projects-nav");
+  if (nav) nav.style.display = coQuyenTrongPhamVi("work", "read") ? "flex" : "none";
+  hideAdminButtons();
+  for (const type of ["project", "task"]) {
+    const form = document.getElementById(type + "-form");
+    if (!form) continue;
+    const id = form.querySelector('[name="id"]')?.value;
+    const project = allProjects.find(p => String(p[COL.P_ID]) === String(form.querySelector('[name="projectId"]')?.value));
+    const entity = Number(form.querySelector('[name="level"]')?.value) === 2 ? "subwork" : "task";
+    const allowed = id ? coQuyenTaiDong("update", type, id) : type === "project" ? coQuyenTaoCongViec() : coQuyenTaoTrongCongViec(entity, project);
+    form.querySelectorAll('button[type="submit"], [data-luu-nhap]').forEach(b => {
+      b.disabled = !allowed || form.dataset.dangLuu === "1" || form.dataset.dangKiem === "1";
+      b.title = allowed ? "" : "Quyền hiện tại không cho phép lưu mục này.";
+    });
+    if (typeof capNhatNutDuyet8b === "function") capNhatNutDuyet8b(type, id, form);
+  }
+  [renderProjects, renderTasks, hideActionButtons, refreshProjectDetailsModalIfOpen].forEach(fn => {
+    try { fn(); } catch (err) { console.error("Không vẽ lại được quyền:", err); }
+  });
+  if (currentSection === "gantt") renderGanttChart();
+  const dangSua = document.querySelector("#task-form [name=id]")?.value;
+  const dongDangSua = allTasks.find(t => String(t[COL.T_ID]) === String(dangSua));
+  if (document.getElementById("task-ket-qua-danh-sach") && taskKetQuaMa && Number(dongDangSua?.[COL.T_LEVEL]) !== 2) napKetQua(taskKetQuaMa);
+  if (currentSection === "cho-duyet") napTrangChoDuyet();
+}
+async function napPhanQuyenHienTai(veLai = false) {
+  if (!currentUser) return false;
+  if (lanHoiQuyen?.nguoi === currentUser) return lanHoiQuyen.promise;
+  lanHoiQuyen?.controller.abort();
+  const nguoi = currentUser;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  const lan = { nguoi, controller, promise: null };
+  lanHoiQuyen = lan;
+  lan.promise = (async () => {
+    const before = JSON.stringify([phanQuyenFile, phamViQuyen]);
+    const data = await restGetIm("/api/v1/permissions", { signal: controller.signal });
+    if (currentUser !== nguoi || !isAuthenticated) return false;
+    capNhatBangQuyen(data);
+    const changed = before !== JSON.stringify([phanQuyenFile, phamViQuyen]);
+    if (veLai && changed) {
+      veLaiQuyenHienTai();
+      if (data) google.script.run.withSuccessHandler(response => {
+        if (currentUser !== nguoi || !response?.success) return;
+        allProjects = response.projects || [], allTasks = response.tasks || [];
+        veLaiQuyenHienTai();
+      }).withFailureHandler(error => console.error("Không tải lại được dữ liệu theo quyền:", error)).getDataForUser();
+      if (!isAdmin() && document.getElementById("account-permission-table")) veBangPhanQuyen();
+    }
+    return Boolean(data?.macDinh);
+  })();
+  try { return await lan.promise; } finally {
+    clearTimeout(timeout);
+    if (lanHoiQuyen === lan) lanHoiQuyen = null;
+  }
+}
+function dungHoiLaiQuyen() {
+  clearInterval(henHoiQuyen);
+  henHoiQuyen = null;
+  lanHoiQuyen?.controller.abort();
+  lanHoiQuyen = null;
+  capNhatBangQuyen(null);
+  phamViQuyen = null;
+}
+function batDauHoiLaiQuyen() {
+  clearInterval(henHoiQuyen);
+  const hoi = () => { if (isAuthenticated && document.visibilityState !== "hidden") napPhanQuyenHienTai(true); };
+  henHoiQuyen = setInterval(hoi, 15000);
+  if (!daGanHoiQuyen) {
+    window.addEventListener("focus", hoi);
+    document.addEventListener("visibilitychange", hoi);
+    daGanHoiQuyen = true;
+  }
+}
 let fileKetQuaChoBan = null; // nhóm đang chờ nộp bản mới (null = nộp tạo nhóm mới)
 let taskKetQuaMa = "";       // mã nhiệm vụ đang mở tab «Kết quả & Luồng»
 /** Giá trị hiệu lực của một cửa file cho MỘT vai — client khớp server từng chữ. */
 function giaTriHieuLucFile(vai, action) {
-  if (vai === "admin") return "cho-phep";
-  const gd = phanQuyenFile.ghiDe && phanQuyenFile.ghiDe["file:" + action] && phanQuyenFile.ghiDe["file:" + action][vai];
-  if (gd) return gd.gia_tri || gd;
-  if (action === "create") {
-    if (vai === "Phó Giám đốc") return "cho-phep";
-    if (["Trưởng phòng", "Phó phòng", "Nhân viên"].includes(vai)) return "cho-duyet";
-    return "tu-choi";
-  }
-  if (action === "approve") {
-    return ["Phó Giám đốc", "Trưởng phòng", "Phó phòng"].includes(vai) ? "cho-phep" : "tu-choi";
-  }
-  const bang = phanQuyenFile.macDinh && phanQuyenFile.macDinh[vai];
-  return bang && Array.isArray(bang.file) && bang.file.includes(action) ? "cho-phep" : "tu-choi";
+  return giaTriHieuLucQuyen(vai, "file", action);
 }
 let dsBat = false; // máy chủ trả `onlyOffice` ở GET files — ONLYOFFICE đã cấu hình hay chưa
+/**
+ * CÂY của nhiệm vụ đang mở tab «Kết quả» đã `Đã duyệt` chưa (Q2, ĐỢT B).
+ *
+ * Máy chủ trả ở `quyen.cayDaDuyet` của GET /work-items/:ref/files và cũng gắn vào từng nhóm file.
+ * Chưa duyệt thì MỌI cửa sinh ra bản thật đều tắt — tải lên, nộp bản mới, ✎ sửa trực tuyến, gửi đi
+ * duyệt — chỉ còn nút ＋ khai báo (tên · định dạng · tỷ lệ). Client đọc cờ để nói rõ «vì sao không có
+ * nút tải file» thay vì để người dùng đoán; máy chủ vẫn kiểm lại khi bấm.
+ *
+ * `null` = chưa biết (form TẠO mới, hoặc REST lỗi) — nhánh chưa biết KHÔNG in câu giải thích, khỏi
+ * khẳng định sai về một cây mà client chưa hề đọc.
+ */
+let cayDaDuyetHienTai = null;
+/**
+ * QUYỀN nộp BẢN ĐẦU của nhiệm vụ đang mở tab «Kết quả» (12/09/2026).
+ *
+ * Máy chủ trả ở `quyen` của GET /work-items/:ref/files: `duocNop` (chỉ đúng người thực hiện trực tiếp
+ * mới mở được nhóm bằng một bản thật) và `tenNguoiThucHien` — tên người đó, để dải chú nêu TÊN thay
+ * vì một câu chung chung «người thực hiện trực tiếp» mà người đọc không biết là ai.
+ *
+ * `null` = chưa biết (form TẠO mới chưa có mã nhiệm vụ, hoặc REST lỗi) — nhánh chưa biết lùi về câu
+ * chung chung, không khẳng định gì về một nhiệm vụ client chưa hề đọc.
+ */
+let quyenNopBanDau = null;
 /**
  * ĐUÔI FILE kết quả được nhận (người dùng chốt 2026-09-03: thêm PowerPoint, Excel và ảnh).
  * Phải KHỚP `DUOI_FILE_HOP_LE` trong server/src/modules/taskFiles/service.js — máy chủ vẫn là
@@ -2452,10 +2737,10 @@ function xemInlineDuoc(b) {
   return MIME_XEM_INLINE.includes(String((b && b.loai_mime) || ""));
 }
 /**
- * Bản này có sửa trực tuyến được không — ONLYOFFICE có bộ soạn thảo cho Word/PDF/Excel/PowerPoint
+ * Bản này có sửa trực tuyến được không — ONLYOFFICE dùng để sửa Word/Excel/PowerPoint; PDF chỉ xem
  * nhưng KHÔNG có cho ảnh, nên nút ✎ phải ẩn ở ảnh (máy chủ trả 400 nếu vẫn gọi).
  */
-const DUOI_SUA_TRUC_TUYEN = Object.freeze([".doc", ".docx", ".pdf", ".xls", ".xlsx", ".ppt", ".pptx"]);
+const DUOI_SUA_TRUC_TUYEN = Object.freeze([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"]);
 function suaTrucTuyenDuoc(ten) {
   const khop = String(ten || "").match(/\.[a-z0-9]+$/i);
   return khop ? DUOI_SUA_TRUC_TUYEN.includes(khop[0].toLowerCase()) : false;
@@ -2561,36 +2846,93 @@ function goiDongMenuKq() {
     dongMenuKq();
   });
 }
-/** Ẩn/hiện khung Ý KIỆN (yk) hoặc LỊCH SỬ (ls) của một dòng file — bấm lần nữa là gập lại. */
+/**
+ * Ẩn/hiện khung LỊCH SỬ (ls) của một dòng file — bấm lần nữa là gập lại.
+ *
+ * ĐỢT 5 (2026-09-11): khung Ý KIỆN (yk) dưới bảng **không còn** — nội dung và ô nhập dời vào popup
+ * `moYKienKetQua`. Nhánh `'yk'` vẫn được giữ vì hàm nhận `phan` tự do và `getElementById` trả `null`
+ * thì bỏ qua êm; gọi `batTatKetQua(id,'yk')` nay là một phép KHÔNG LÀM GÌ, không phải lỗi.
+ */
 function batTatKetQua(fileId, phan) {
   const el = document.getElementById("task-kq-" + (phan === "yk" ? "yk" : "ls") + "-" + fileId);
   if (el) el.classList.toggle("hidden");
 }
-/** Panel «Ý kiến» của một dòng: thread góp ý + ô nhập + Gửi ý kiến (ghi vào BẢN MỚI NHẤT). */
-function buildYKienPanel(n, ma) {
-  const gopY = Array.isArray(n.gopY) ? n.gopY : [];
+/**
+ * «GHI Ý KIẾN» = GỘP HAI NGUỒN. Lý do người duyệt viết khi TRẢ ĐỂ SỬA / TỪ CHỐI / DUYỆT không nằm
+ * trong bảng góp ý: `taskFiles/service.js verdict()` chỉ gọi `repo.themLuong` (bảng `task_file_flow`),
+ * KHÔNG gọi `repo.themGopY`. Trước đợt 4 (2026-09-10) cột «Ghi ý kiến» chỉ đọc `gopY` nên đúng những
+ * câu «sửa chỗ X rồi nộp lại» mà người dùng cần thấy lại biến mất khỏi cột đó — chỉ còn trong bảng
+ * «Lịch sử» phải bấm mới ra. Người dùng báo: «Ghi ý kiến là các ý kiến mỗi lần sửa hoặc từ chối …
+ * có ghi ý kiến vào».
+ *
+ * Đây là sửa HIỂN THỊ, không phải sửa chỗ ghi: lý do verdict ĐÃ được lưu bền trong `task_file_flow`
+ * rồi, ghi thêm một dòng vào `task_file_comments` chỉ nhân đôi dữ liệu và làm lệch mọi phép đếm góp ý.
+ *
+ * Luật gộp: mọi dòng LUỒNG có `noi_dung` không rỗng là một ý kiến, TRỪ `gom-y` — hành động đó ghi
+ * CẢ HAI bảng (`gomY()` gọi `themGopY` rồi `themLuong`) nên lấy cả là in cùng một câu hai lần.
+ * Kết quả sắp CŨ → MỚI; `version_id` để lọc ý kiến của đúng một bản.
+ */
+function danhSachYKien(n) {
+  const gopY = Array.isArray(n && n.gopY) ? n.gopY : [];
+  const luong = Array.isArray(n && n.luong) ? n.luong : [];
+  const bans = Array.isArray(n && n.bans) ? n.bans : [];
+  const banTheoId = new Map(bans.map((b) => [Number(b.id), b.version_no]));
+  const tuGopY = gopY.map((c) => ({
+    ten_nguoi: c.ten_nguoi, vai: c.vai, created_at: c.created_at, noi_dung: c.noi_dung,
+    nhan: "Góp ý", version_id: c.version_id,
+    version_no: banTheoId.get(Number(c.version_id)) ?? null,
+  }));
+  const tuLuong = luong
+    .filter((g) => g.hanh_dong !== "gom-y" && String(g.noi_dung || "").trim())
+    .map((g) => ({
+      ten_nguoi: g.ten_nguoi, vai: g.vai, created_at: g.created_at, noi_dung: g.noi_dung,
+      nhan: NHAN_LUONG_FILE[g.hanh_dong] || g.hanh_dong,
+      version_id: g.version_id, version_no: g.version_no ?? null,
+    }));
+  return [...tuGopY, ...tuLuong].sort(
+    (a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)
+  );
+}
+/** Ý kiến của ĐÚNG một bản — dòng con 1.1/1.2 và popup nhật ký đều lọc theo `version_id`. */
+function yKienCuaBan(n, b) {
+  const ma = Number(b && b.id);
+  return danhSachYKien(n).filter((y) => Number(y.version_id) === ma);
+}
+/** MỘT ý kiến đã thoát HTML — nhãn hành động để đọc ra ý kiến này của lần «Yêu cầu sửa» hay «Góp ý». */
+function buildMotYKien(y) {
+  return "<div class=\"y-kien-muc\">" +
+    "<span class=\"y-kien-ai\">" + escapeHtml(y.ten_nguoi || "Không rõ") + "</span> " +
+    "<span class=\"y-kien-vai\">(" + escapeHtml(y.vai || "—") + ")</span> " +
+    "<span class=\"y-kien-nhan\">" + escapeHtml(y.nhan || "") + "</span> " +
+    "<span class=\"y-kien-luc\">" + escapeHtml(formatDateForDisplay(y.created_at, true)) + "</span>" +
+    (y.version_no ? "<span class=\"y-kien-ban\">bản " + escapeHtml(y.version_no) + "</span>" : "") +
+    "<div class=\"y-kien-noi\">" + escapeHtml(y.noi_dung || "") + "</div></div>";
+}
+/**
+ * Ô NHẬP + nút «Gửi ý kiến» — ghi vào BẢN MỚI NHẤT của nhóm.
+ *
+ * ĐỢT 5 (2026-09-11) tách riêng khỏi `buildYKienPanel` bên dưới: cột «Ghi ý kiến» trong bảng nay chỉ
+ * còn CHỮ «Xem ý kiến» mở POPUP, và ô nhập phải dời THEO popup (cột tên là «Ghi ý kiến» nên đọc và
+ * viết ở cùng một chỗ; bỏ ô nhập đi là mất luôn chức năng ghi). Tách ra để popup lắp đúng phần nó cần,
+ * không phải in lại cả thread.
+ */
+function buildONhapYKien(n, ma) {
   const bans = Array.isArray(n.bans) ? n.bans : [];
   const banCuoi = bans.length > 0 ? bans[bans.length - 1] : null;
-  const thread = gopY.length
-    ? gopY
-        .map(
-          (c) =>
-            "<div class=\"ml-2 border-l-2 border-blue-100 pl-3 py-1 text-xs\">" +
-            "<span class=\"font-medium text-gray-700\">" + escapeHtml(c.ten_nguoi) + "</span> " +
-            "<span class=\"text-gray-400\">(" + escapeHtml(c.vai) + ")</span> · " +
-            "<span class=\"text-gray-400\">" + escapeHtml(formatDateForDisplay(c.created_at, true)) + "</span>" +
-            "<div class=\"text-gray-600\">" + escapeHtml(c.noi_dung) + "</div></div>"
-        )
-        .join("")
-    : "<div class=\"text-xs text-gray-400\">Chưa có ý kiến nào.</div>";
+  if (!banCuoi) return "";
   return (
-    (banCuoi
-      ? "<label class=\"text-xs font-semibold text-gray-500\" for=\"task-y-kien-" + escapeHtmlAttr(n.id) + "\">Ý kiến cho bản " + escapeHtml(banCuoi.version_no) + "</label>" +
-        "<textarea id=\"task-y-kien-" + escapeHtmlAttr(n.id) + "\" data-ban-cuoi=\"" + escapeHtmlAttr(banCuoi.id) + "\" rows=\"2\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Nhập ý kiến (Yêu cầu sửa / Trình / Trả về cần tối thiểu 10 ký tự)…\"></textarea>" +
-        "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-xs mt-1\" onclick=\"guiYKien('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "')\">Gửi ý kiến</button>"
-      : "") +
-    "<div class=\"mt-2 space-y-1\">" + thread + "</div>"
+    "<label class=\"text-xs font-semibold text-gray-500\" for=\"task-y-kien-" + escapeHtmlAttr(n.id) + "\">Ý kiến cho bản " + escapeHtml(banCuoi.version_no) + "</label>" +
+    "<textarea id=\"task-y-kien-" + escapeHtmlAttr(n.id) + "\" data-ban-cuoi=\"" + escapeHtmlAttr(banCuoi.id) + "\" rows=\"2\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Nhập ý kiến (Yêu cầu sửa / Trình / Trả về cần tối thiểu 10 ký tự)…\"></textarea>" +
+    "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-xs mt-1\" onclick=\"guiYKienTuPopup('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "')\">Gửi ý kiến</button>"
   );
+}
+/** Panel «Ý kiến» của một dòng: ô nhập + thread góp ý (giữ cho test và mọi chỗ còn dùng panel). */
+function buildYKienPanel(n, ma) {
+  const yKien = danhSachYKien(n);
+  const thread = yKien.length
+    ? yKien.map((y) => buildMotYKien(y)).join("")
+    : "<div class=\"text-xs text-gray-400\">Chưa có ý kiến nào.</div>";
+  return buildONhapYKien(n, ma) + "<div class=\"mt-2 space-y-1\">" + thread + "</div>";
 }
 /** POST REST dạng FormData (upload file) — cùng cơ chế CSRF với restPost; lỗi hiện toast, trả null. */
 async function restUpload(path, formData) {
@@ -2627,19 +2969,23 @@ async function napKetQua(ma) {
   if (!khung) return;
   dongMenuKq(); // menu đang mở nằm ở <body>: vẽ lại bảng mà không gập là để nó lơ lửng mồ côi
   taskKetQuaMa = String(ma || khung.dataset.ma || "");
-  // Form TẠO chưa có mã nhiệm vụ: không gọi REST, vẽ bảng 8 cột + dòng khai tạm tại chỗ.
+  // Form TẠO chưa có mã nhiệm vụ: không gọi REST, vẽ bảng 10 cột + dòng khai tạm tại chỗ.
   // Một lần gán innerHTML (giữ nguyên số sink XSS); đừng tách nhánh tạo thành chỗ ghi thứ hai.
   let nhom = [];
+  // Xoá cờ của nhiệm vụ VỪA xem: form tạo mới mà dính cờ cũ thì in nhầm câu «cây đã duyệt».
+  cayDaDuyetHienTai = null;
+  quyenNopBanDau = null;
   if (taskKetQuaMa) {
     const ketQua = await restGet("/api/v1/work-items/" + encodeURIComponent(taskKetQuaMa) + "/files");
     if (!document.getElementById("task-ket-qua-danh-sach")) return;
     if (!ketQua) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
     const phanQuyen = await restGet("/api/v1/permissions");
     if (phanQuyen) {
-      phanQuyenFile.macDinh = phanQuyen.macDinh || null;
-      phanQuyenFile.ghiDe = phanQuyen.ghiDe || {};
+      capNhatBangQuyen(phanQuyen);
     }
     dsBat = ketQua.onlyOffice === true;
+    cayDaDuyetHienTai = ketQua.quyen ? ketQua.quyen.cayDaDuyet === true : null;
+    quyenNopBanDau = ketQua.quyen || null;
     nhom = Array.isArray(ketQua.nhom) ? ketQua.nhom : [];
   }
   khung.innerHTML = buildKhungDanhSachKetQua(nhom, taskKetQuaMa);
@@ -2658,7 +3004,7 @@ function coTheKhaiKetQua(ma) {
   return coTheNopFile(null, ma);
 }
 /**
- * KHUNG «Kết quả» (nút ＋ + bảng 8 cột + ô chọn file). Dùng chung cho SỬA (sau REST) và TẠO MỚI
+ * KHUNG «Kết quả» (nút ＋ + bảng 10 cột + ô chọn file). Dùng chung cho SỬA (sau REST) và TẠO MỚI
  * (nhom=[], ma="") — form tạo nhúng thẳng vào chuỗi HTML của `createTaskModal` nên bảng hiện NGAY,
  * không chờ setTimeout 250ms, không cần mã nhiệm vụ.
  */
@@ -2678,13 +3024,67 @@ function buildKhungDanhSachKetQua(nhom, ma) {
     "<div class=\"flex items-center gap-2 mt-1 flex-wrap\">" +
     "<span class=\"text-xs text-gray-400\">Mỗi kết quả là một dòng; bấm ▸ để xem các lần đã sửa.</span>" +
     (ds.length === 0 && !duocKhai
-      ? "<span class=\"text-xs text-gray-400\">Chỉ người được giao nhiệm vụ (và TP/PP) nộp được.</span>"
+      ? "<span class=\"text-xs text-gray-400\">Bản kết quả ĐẦU TIÊN chỉ " +
+        // Nêu TÊN khi đã đọc nhiệm vụ thật (`!taoMoi`): form tạo mới dựng bảng tại chỗ, chưa gọi REST,
+        // nên `quyenNopBanDau` ở đó là của nhiệm vụ vừa xem trước — in tên cũ là nói sai.
+        escapeHtml(
+          !taoMoi && quyenNopBanDau && quyenNopBanDau.tenNguoiThucHien
+            ? "«" + quyenNopBanDau.tenNguoiThucHien + "» (người thực hiện trực tiếp)"
+            : "người thực hiện trực tiếp của nhiệm vụ"
+        ) +
+        " nộp được.</span>"
       : "") +
     "<span class=\"ml-auto\">" + nutThem + "</span>" +
     "</div>" +
+    // Q2 (ĐỢT B): cây chưa `Đã duyệt` thì bảng KHÔNG có cửa nào tải file lên. Nói thẳng lý do ngay
+    // dưới đầu bảng — không có câu này thì người dùng chỉ thấy nút biến mất và tưởng lỗi.
+    (taoMoi || cayDaDuyetHienTai !== false ? "" : buildBaoCayChuaDuyet()) +
     (!taoMoi && duocKhai ? buildKhungKhaiKq(ma) : "") +
     buildBangKetQua(ds, ma) +
+    (ds.length ? '<p class="text-xs text-gray-500 mt-2">Tổng tỷ lệ file: ' + escapeHtml(ds.reduce((sum, n) => sum + (Number(n.ty_le) || 0), 0)) + '% — tổng khác 100% vẫn được lưu sau xác nhận.</p>' : '') +
     oChonFile
+  );
+}
+/**
+ * DẢI CHÚ «cây chưa được duyệt» — Q1 + Q2 (ĐỢT B, 11/09/2026).
+ *
+ * Người dùng chốt: «Gửi công việc cha lần đầu thì KHÔNG được up file kết quả lên.» Lần gửi ĐẦU chỉ có
+ * KHAI BÁO (tên kết quả · định dạng · tỷ lệ) đi theo cây; FILE THẬT đi chuỗi riêng SAU KHI cây
+ * `Đã duyệt`. Chuỗi tĩnh, không nội suy gì — nên không làm đổi số chỗ ghi của bộ soát XSS.
+ */
+function buildBaoCayChuaDuyet() {
+  return (
+    "<div class=\"mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2\">" +
+    "<div class=\"text-xs font-medium text-amber-800\"><i class=\"fas fa-lock mr-2\"></i>Cây công việc này chưa được duyệt nên chưa tải file lên được</div>" +
+    "<div class=\"text-xs text-amber-700 mt-1\">Bây giờ chỉ KHAI BÁO kết quả: tên · định dạng · tỷ lệ (%). File thật nộp sau, khi Ban lãnh đạo kiểm soát đã duyệt cây.</div>" +
+    "</div>"
+  );
+}
+/**
+ * Đọc ô TỶ LỆ (%) của khung/dòng khai báo — Q1 (ĐỢT B, 11/09/2026).
+ *
+ * Lần gửi ĐẦU chỉ có KHAI BÁO đi theo cây: tên kết quả · định dạng · TỶ LỆ. File thật đi chuỗi riêng
+ * sau khi cây `Đã duyệt` (Q2 cấm hẳn nút tải file trước lúc đó), nên tỷ lệ phải khai được ngay ở đây.
+ *
+ * Trả `{ok:false}` khi gõ sai để người dùng biết mà sửa, thay vì âm thầm bỏ qua con số họ vừa nhập.
+ * Để trống là `null` — nghĩa «tự chia», máy chủ chia đều theo số nhóm của nhiệm vụ.
+ */
+function docTyLeKhai(giaTri) {
+  const s = String(giaTri == null ? "" : giaTri).trim();
+  if (s === "") return { ok: true, value: null };
+  const n = Number(s);
+  if (!Number.isInteger(n) || n < 0 || n > 100) return { ok: false, value: null };
+  return { ok: true, value: n };
+}
+/** Ô nhập tỷ lệ dùng chung cho khung khai và dòng khai tạm — cùng một luật, một chỗ. */
+function oNhapTyLeKhai(id, lop, phu) {
+  const cls = ["form-input", "text-sm", lop, "w-full", phu === undefined ? "mt-1" : phu]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    "<input type=\"number\" min=\"0\" max=\"100\" step=\"1\" class=\"" + escapeHtmlAttr(cls) + "\"" +
+    (id ? " id=\"" + escapeHtmlAttr(id) + "\"" : "") +
+    " placeholder=\"Tự chia\">"
   );
 }
 /**
@@ -2694,11 +3094,13 @@ function buildKhungDanhSachKetQua(nhom, ma) {
  *
  * Ẩn sẵn, bấm ＋ mới hiện — bảng là thứ người ta vào xem, không phải cái form. Chọn «Báo cáo» thì ô
  * nội dung hiện ra để nộp CHỮ luôn thành bản 1; năm định dạng còn lại chỉ khai rồi nộp file sau.
+ *
+ * ĐỢT B thêm ô TỶ LỆ (Q1): khai báo gồm tên · định dạng · tỷ lệ.
  */
 function buildKhungKhaiKq(ma) {
   return (
     "<div id=\"task-kq-khai\" class=\"hidden mt-2 p-3 border border-gray-100 rounded-lg bg-gray-50\">" +
-    "<div class=\"grid grid-cols-1 md:grid-cols-3 gap-2\">" +
+    "<div class=\"grid grid-cols-1 md:grid-cols-4 gap-2\">" +
     "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-ten\">Kết quả làm được</label>" +
     "<input type=\"text\" id=\"task-kq-khai-ten\" maxlength=\"500\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Ví dụ: Báo cáo tổng kết quý 3\"></div>" +
     "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-dinh-dang\">Định dạng</label>" +
@@ -2706,6 +3108,8 @@ function buildKhungKhaiKq(ma) {
     "<option value=\"\">— Chưa rõ —</option>" +
     DINH_DANG_KHAI.map((d) => "<option value=\"" + escapeHtmlAttr(d) + "\">" + escapeHtml(d) + "</option>").join("") +
     "</select></div>" +
+    "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-ty-le\">Tỷ lệ (%)</label>" +
+    oNhapTyLeKhai("task-kq-khai-ty-le", "") + "</div>" +
     "<div><label class=\"text-xs font-semibold text-gray-500\" for=\"task-kq-khai-y-kien\">Ghi ý kiến</label>" +
     "<input type=\"text\" id=\"task-kq-khai-y-kien\" maxlength=\"2000\" class=\"form-input w-full text-sm mt-1\" placeholder=\"Không bắt buộc\"></div>" +
     "</div>" +
@@ -2716,7 +3120,7 @@ function buildKhungKhaiKq(ma) {
     "<div class=\"flex items-center gap-2 mt-2\">" +
     "<button type=\"button\" class=\"btn-primary py-1 px-3 text-sm\" onclick=\"guiKhaiKetQua('" + escapeForInlineHandler(ma) + "')\">Thêm dòng</button>" +
     "<button type=\"button\" class=\"btn-secondary py-1 px-3 text-sm\" onclick=\"batTatKhungKhaiKq()\">Đóng</button>" +
-    "<span class=\"text-xs text-gray-400\">Chọn «Báo cáo» thì nhập nội dung ngay; các định dạng khác thì tải file lên sau ở cột Hành động.</span>" +
+    "<span class=\"text-xs text-gray-400\">Chọn «Báo cáo» thì nhập nội dung ngay; các định dạng khác thì tải file lên sau khi cây được duyệt.</span>" +
     "</div></div>"
   );
 }
@@ -2745,10 +3149,17 @@ async function guiKhaiKetQua(ma) {
   const oDd = document.getElementById("task-kq-khai-dinh-dang");
   const oYk = document.getElementById("task-kq-khai-y-kien");
   const oNd = document.getElementById("task-kq-khai-noi-dung");
+  const oTl = document.getElementById("task-kq-khai-ty-le");
   const ten = String((oTen && oTen.value) || "").trim();
   if (!ten) {
     showToast("Nhập tên kết quả làm được trước đã", "error");
     if (oTen) oTen.focus();
+    return;
+  }
+  const tyLe = docTyLeKhai(oTl && oTl.value);
+  if (!tyLe.ok) {
+    showToast("Tỷ lệ phải là số nguyên từ 0 đến 100 — để trống thì máy chủ tự chia", "error");
+    if (oTl) oTl.focus();
     return;
   }
   const dinhDang = String((oDd && oDd.value) || "");
@@ -2756,10 +3167,11 @@ async function guiKhaiKetQua(ma) {
   const noiDung = String((oNd && oNd.value) || "").trim();
   // Form TẠO chưa có mã nhiệm vụ: không POST, điền vào dòng khai tạm trong bảng.
   if (!ma) {
-    dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung);
+    dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung, tyLe.value);
     if (oTen) oTen.value = "";
     if (oYk) oYk.value = "";
     if (oNd) oNd.value = "";
+    if (oTl) oTl.value = "";
     batTatKhungKhaiKq();
     showToast("Đã thêm dòng — sẽ gửi khi lưu nhiệm vụ", "success");
     return;
@@ -2776,14 +3188,20 @@ async function guiKhaiKetQua(ma) {
     const than = { tenKetQua: ten };
     if (dinhDang) than.dinhDang = dinhDang;
     if (yKien) than.yKien = yKien;
+    // Q1: tỷ lệ đi theo KHAI BÁO. Cây chưa duyệt thì máy chủ ghi thẳng; cây đã duyệt thì nó thành
+    // một đề nghị chờ Ban lãnh đạo kiểm soát ký (R4'') — `tyLeChange.pending` nói rõ điều đó.
+    if (tyLe.value !== null) than.tyLe = tyLe.value;
     ketQua = await restPost(duong + "/results", than);
   }
   if (!ketQua) return;
-  showToast(
-    ketQua.tuDong ? "Đã thêm dòng và PHÊ DUYỆT LUÔN — phân quyền không yêu cầu duyệt" : "Đã thêm dòng kết quả",
-    "success"
-  );
+  if (ketQua.tyLeChange && ketQua.tyLeChange.pending === true) {
+    showToast("Đã thêm dòng kết quả. Tỷ lệ " + ketQua.tyLeChange.value + "% hiện tại giữ nguyên — đề nghị đổi đã gửi Ban lãnh đạo kiểm soát.", "success");
+  } else {
+    showToast("Đã thêm dòng kết quả, lưu tạm — chưa gửi đi duyệt", "success");
+  }
+  if (oTl) oTl.value = "";
   napKetQua(ma);
+  await refreshData();
 }
 /**
  * NỘP «Báo cáo» cho MỘT dòng đã có: ô nhập nằm ngay trong bảng (cột «Hành động» của dòng Báo cáo),
@@ -2804,45 +3222,67 @@ async function guiBaoCaoKetQua(fileId, ma) {
   });
   if (!ketQua) return;
   o.value = "";
-  showToast(ketQua.tuDong ? "Đã nộp báo cáo và PHÊ DUYỆT LUÔN" : "Đã nộp bản báo cáo mới", "success");
+  showToast(thongBaoLuuKetQua(ketQua), "success");
   napKetQua(ma);
+  await refreshData();
 }
 /**
- * BẢNG «Kết quả» 8 cột theo sheet «kq-modal» (2026-09-03) — thay cho các thẻ rời trước đây.
+ * BẢNG «Kết quả» 10 cột (2026-09-10), thêm tỷ lệ và tiến độ riêng từ sheet «kq-modal» — thay cho các thẻ rời trước đây.
  * Rỗng thì nói rõ là chưa có, đừng để một bảng trắng không ai biết đang tải hay chưa có gì.
  */
+/**
+ * Bề rộng MƯỜI cột của bảng «Kết quả» trong modal nhiệm vụ — đợt 4 (2026-09-10), người dùng:
+ * «Tỷ lệ công việc (%) Tiến độ, độ rộng bé đi… sửa để cân đối hơn». `c-kq-ten` để auto: nó ăn phần
+ * còn lại. Tổng chín cột khai số là 81% ⇒ cột «Kết quả làm được» còn 19%.
+ * PHẢI đi với `table-layout: fixed` trong `app.css`; không có nó trình duyệt tự chia theo nội dung và
+ * mọi con số ở đây bị bỏ qua. Thứ tự mảng là thứ tự cột thật — đổi thì phải đổi `buildOTieuDeKq` bên
+ * dưới và MỌI chỗ `colspan="10"` (dòng trống, dòng khai tạm, dòng panel của `buildKhoiFile`).
+ */
+const COT_BANG_KET_QUA = Object.freeze([
+  "c-kq-thoi-gian", "c-kq-ten", "c-kq-dinh-dang", "c-kq-file", "c-kq-ty-le",
+  "c-kq-tien-do", "c-kq-nguoi", "c-kq-y-kien", "c-kq-trang-thai", "c-kq-hanh-dong",
+]);
+function buildColgroupKetQua() {
+  return "<colgroup>" + COT_BANG_KET_QUA.map(c => "<col class=\"" + escapeHtmlAttr(c) + "\">").join("") + "</colgroup>";
+}
 function buildBangKetQua(nhom, ma) {
   const ds = Array.isArray(nhom) ? nhom : [];
   const taoMoi = !ma;
-  const buildOTieuDeKq = (t, them) => "<th class=\"px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase " + escapeHtmlAttr(them || "") + "\">" + escapeHtml(t) + "</th>";
+  // ĐỢT 5 (2026-09-11) — «tiêu đề cột căn giữa». `text-center` là class Tailwind có thật trong bản
+  // vendor biên dịch sẵn, nhưng KHÔNG dựa một mình vào nó: `app.css` cũng ép
+  // `.bang-ket-qua thead th { text-align:center }` để tiêu đề căn giữa kể cả khi class bị đổi.
+  const buildOTieuDeKq = (t, them) => "<th class=\"px-3 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase " + escapeHtmlAttr(them || "") + "\">" + escapeHtml(t) + "</th>";
   // Form TẠO (chưa có mã): một dòng khai tạm để điền 1. ngay; SỬA mà chưa có nhóm: hàng «Chưa có»
-  // vẫn nằm TRONG bảng 8 cột — người dùng chốt 2026-09-04 «khi tạo mới không thấy bảng kết quả».
+  // vẫn nằm TRONG bảng 10 cột — người dùng chốt 2026-09-04 «khi tạo mới không thấy bảng kết quả».
   let than;
   if (ds.length > 0) {
     than = ds.map((n, i) => buildKhoiFile(n, ma, i + 1)).join("");
   } else if (taoMoi && coTheKhaiKetQua(ma)) {
     than = buildDongKhaiTam(1);
   } else {
-    than = "<tr class=\"dong-kq-trong\"><td colspan=\"8\" class=\"px-3 py-3 text-xs text-gray-400\">Chưa có kết quả nào.</td></tr>";
+    than = "<tr class=\"dong-kq-trong\"><td colspan=\"10\" class=\"px-3 py-3 text-xs text-gray-400\">Chưa có kết quả nào.</td></tr>";
   }
   return (
-    "<div class=\"overflow-x-auto mt-2\"><table class=\"min-w-full text-sm bang-ket-qua\"><thead class=\"bg-gray-50\"><tr>" +
+    "<div class=\"overflow-x-auto mt-2\"><table class=\"min-w-full text-sm bang-ket-qua\">" + buildColgroupKetQua() + "<thead class=\"bg-gray-50\"><tr>" +
     buildOTieuDeKq("Thời gian") +
     buildOTieuDeKq("Kết quả làm được") +
     buildOTieuDeKq("Định dạng") +
     buildOTieuDeKq("File đã tải lên") +
+    buildOTieuDeKq("Tỷ lệ công việc (%)") +
+    buildOTieuDeKq("Tiến độ") +
     buildOTieuDeKq("Người thực hiện") +
     buildOTieuDeKq("Ghi ý kiến") +
     buildOTieuDeKq("Tình trạng") +
-    buildOTieuDeKq("Hành động", "text-right") +
+    buildOTieuDeKq("Hành động") +
     "</tr></thead><tbody class=\"divide-y divide-gray-100\">" +
     than +
     "</tbody></table></div>"
   );
 }
 /**
- * DÒNG KHAI TẠM trên form TẠO nhiệm vụ — chỉ ô tên / định dạng / ý kiến (và nội dung nếu «Báo cáo»).
- * KHÔNG dùng `buildKhoiFile`: id giả sẽ sinh menu tải/xoá/verdict gọi REST với file id không tồn tại.
+ * DÒNG KHAI TẠM trên form TẠO nhiệm vụ — chỉ ô tên / định dạng / TỶ LỆ / ý kiến (và nội dung nếu
+ * «Báo cáo»). KHÔNG dùng `buildKhoiFile`: id giả sẽ sinh menu tải/xoá/verdict gọi REST với file id
+ * không tồn tại.
  * Ô KHÔNG có `name=` — FormData của `#task-form` không được nuốt chúng vào `taskFromLegacy`.
  */
 function buildDongKhaiTam(so) {
@@ -2860,12 +3300,15 @@ function buildDongKhaiTam(so) {
     chonDd +
     "</select></td>" +
     "<td class=\"px-3 py-2 text-xs text-gray-400 align-middle\">Chưa có</td>" +
+    // Q1 (ĐỢT B): tỷ lệ khai được ngay từ lần gửi đầu. Để trống = «tự chia» theo số dòng của nhiệm vụ.
+    "<td class=\"px-3 py-2 align-middle\">" + oNhapTyLeKhai("", "kq-tam-ty-le", "") + "</td>" +
+    "<td class=\"px-3 py-2 text-xs text-gray-400\">0%</td>" +
     "<td class=\"px-3 py-2 text-xs text-gray-400 align-middle\">—</td>" +
     "<td class=\"px-3 py-2 align-middle\"><input type=\"text\" class=\"form-input text-sm kq-tam-y-kien w-full\" maxlength=\"2000\" placeholder=\"Không bắt buộc\"></td>" +
     "<td class=\"px-3 py-2 text-xs text-gray-400 align-middle\">Sẽ gửi khi lưu nhiệm vụ</td>" +
     "<td class=\"px-3 py-2 text-right align-middle\"><button type=\"button\" class=\"text-gray-400 hover:text-red-600 text-xs\" title=\"Xoá dòng này\" onclick=\"xoaDongKhaiTam(this)\"><i class=\"fas fa-times\"></i></button></td>" +
     "</tr>" +
-    "<tr class=\"kq-tam-noi-dung-hang hidden\"><td colspan=\"8\" class=\"px-3 pb-2\"><textarea class=\"form-input w-full text-sm kq-tam-noi-dung\" rows=\"3\" maxlength=\"20000\" placeholder=\"Nội dung báo cáo (tối thiểu 10 ký tự)…\"></textarea></td></tr>"
+    "<tr class=\"kq-tam-noi-dung-hang hidden\"><td colspan=\"10\" class=\"px-3 pb-2\"><textarea class=\"form-input w-full text-sm kq-tam-noi-dung\" rows=\"3\" maxlength=\"20000\" placeholder=\"Nội dung báo cáo (tối thiểu 10 ký tự)…\"></textarea></td></tr>"
   );
 }
 function tbodyKhaiTam() {
@@ -2904,7 +3347,7 @@ function doiDinhDangDongTam(sel) {
   if (hangNoiDung) hangNoiDung.classList.toggle("hidden", sel.value !== DINH_DANG_BAO_CAO);
 }
 /** Điền khung khai (nếu còn) vào dòng tạm trống đầu tiên, không thì thêm dòng mới. */
-function dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung) {
+function dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung, tyLe) {
   const tbody = tbodyKhaiTam();
   if (!tbody) return;
   const trong = tbody.querySelector(".dong-kq-trong");
@@ -2924,6 +3367,7 @@ function dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung) {
   const oTen = dich.querySelector(".kq-tam-ten");
   const oDd = dich.querySelector(".kq-tam-dinh-dang");
   const oYk = dich.querySelector(".kq-tam-y-kien");
+  const oTl = dich.querySelector(".kq-tam-ty-le");
     const oNd = dich.nextElementSibling && dich.nextElementSibling.querySelector(".kq-tam-noi-dung");
   if (oTen) oTen.value = ten;
   if (oDd) {
@@ -2931,6 +3375,7 @@ function dienDongKhaiTamTuKhung(ten, dinhDang, yKien, noiDung) {
     doiDinhDangDongTam(oDd);
   }
   if (oYk) oYk.value = yKien;
+  if (oTl) oTl.value = tyLe == null ? "" : String(tyLe);
   if (oNd) oNd.value = noiDung;
 }
 /** Đọc các dòng khai tạm TRƯỚC khi `closeModal` gỡ DOM. Bỏ dòng chưa đặt tên. */
@@ -2941,9 +3386,18 @@ function thuThapDongKhaiTam() {
     if (!ten) return;
     const dinhDang = String((tr.querySelector(".kq-tam-dinh-dang") || {}).value || "");
     const yKien = String((tr.querySelector(".kq-tam-y-kien") || {}).value || "").trim();
+    // Q1: tỷ lệ khai ở dòng tạm đi theo dòng; gõ sai thì bỏ qua con số (để «tự chia») chứ không chặn
+    // cả lượt lưu nhiệm vụ — người dùng đang bấm «Lưu» cho một form lớn, không phải cho ô này.
+    const tyLe = docTyLeKhai((tr.querySelector(".kq-tam-ty-le") || {}).value);
     const noiDungEl = tr.nextElementSibling && tr.nextElementSibling.querySelector(".kq-tam-noi-dung");
     const noiDung = String((noiDungEl || {}).value || "").trim();
-    ra.push({ tenKetQua: ten, dinhDang: dinhDang || null, yKien, noiDung });
+    ra.push({
+      tenKetQua: ten,
+      dinhDang: dinhDang || null,
+      yKien,
+      noiDung,
+      tyLe: tyLe.ok ? tyLe.value : null,
+    });
   });
   return ra;
 }
@@ -2970,6 +3424,7 @@ async function guiDongKhaiTam(ma, dongs) {
       const than = { tenKetQua: d.tenKetQua };
       if (d.dinhDang) than.dinhDang = d.dinhDang;
       if (d.yKien) than.yKien = d.yKien;
+      if (d.tyLe !== null && d.tyLe !== undefined) than.tyLe = d.tyLe;
       ketQua = await restPost(duong + "/results", than);
     }
     if (ketQua) ok += 1;
@@ -2979,11 +3434,18 @@ async function guiDongKhaiTam(ma, dongs) {
   if (loi > 0) showToast(loi + " dòng kết quả chưa gửi được — mở lại nhiệm vụ để khai tiếp", "error");
   return loi === 0;
 }
-/** Ai được nộp file theo TRẠNG THÁI + quyền hiệu lực (máy chủ vẫn là rào chặn cuối). */
+/** Ai được nộp file theo TRẠNG THÁI + quyền hiệu lực (máy chủ vẫn là rào chặn cuối).
+ *
+ * 12/09/2026 — BẢN ĐẦU của một nhóm chỉ NGƯỜI THỰC HIỆN TRỰC TIẾP nộp được. Luật này nằm ở cờ
+ * `duocSua` máy chủ tính (`taskFiles/service.doc`) nên nhánh `typeof n?.duocSua === "boolean"` dưới
+ * đây đã mang nó theo; phần tự suy chỉ chạy cho nhóm dựng ở client (dòng khai tạm trong form tạo
+ * nhiệm vụ, `n === null` cho nút ＋) — nơi chưa có bản nào để nộp nên không cần xét.
+ */
 function coTheNopFile(n, ma) {
   const vai = currentUser && currentUser.role;
   if (!vai) return false;
   if (giaTriHieuLucFile(vai, "create") === "tu-choi") return false;
+  if (typeof n?.duocSua === "boolean") return n.duocSua;
   const trangThai = n && n.trang_thai ? n.trang_thai : "cho-xem";
   if (["hoan-thanh", "da-duyet"].includes(trangThai)) return false;
   if (trangThai === "cho-lanh-dao") {
@@ -2996,10 +3458,22 @@ function coTheNopFile(n, ma) {
   return Boolean(dong && dong[COL.T_ASSIGNEE] === (currentUser && currentUser.name));
 }
 /** Mở ô chọn file. fileId null = tạo nhóm mới; số = nộp bản mới vào nhóm đó. */
+function datDinhDangOChonFile(input, fileId) {
+  const row = [...document.querySelectorAll('[data-file][data-dinh-dang]')].find(r => String(r.dataset.file) === String(fileId));
+  const khai = row?.dataset.dinhDang || '';
+  input.dataset.dinhDang = khai;
+  const ds = Object.keys(NHAN_DINH_DANG).filter(ext => NHAN_DINH_DANG[ext] === khai);
+  input.accept = ds.length ? ds.join(',') : ACCEPT_KET_QUA;
+}
+function loiDinhDangChonFile(khai, ten) {
+  if (!khai || !DINH_DANG_KHAI.includes(khai) || dinhDangCuaTen(ten) === khai) return '';
+  return 'nhóm này khai ' + khai + ', ' + (khai === DINH_DANG_BAO_CAO ? 'chỉ nhận nội dung chữ, không nhận file' : 'chỉ nhận ' + Object.keys(NHAN_DINH_DANG).filter(ext => NHAN_DINH_DANG[ext] === khai).join('/'));
+}
 function moChonFileKetQua(fileId) {
   const input = document.getElementById("task-file-input");
   if (!input) return;
   fileKetQuaChoBan = fileId ? Number(fileId) : null;
+  datDinhDangOChonFile(input, fileId);
   input.value = "";
   input.click();
 }
@@ -3045,6 +3519,8 @@ async function uploadKetQua(input) {
   const veLaiTrang = dangOTrangChoDuyet;
   dangOTrangChoDuyet = false;
   if (!file) return;
+  const loiDinhDang = loiDinhDangChonFile(input?.dataset?.dinhDang, file.name);
+  if (loiDinhDang) { showToast(loiDinhDang, "error"); return; }
   if (!RE_DUOI_KET_QUA.test(file.name)) {
     showToast("Chỉ nhận file " + DUOI_KET_QUA.join(" "), "error");
     return;
@@ -3070,9 +3546,35 @@ async function uploadKetQua(input) {
     return;
   }
   veTrangThaiUpload(oTrangThai, file.name, true, false);
-  showToast(ketQua.tuDong ? "Đã nộp và PHÊ DUYỆT LUÔN — phân quyền không yêu cầu duyệt" : "Đã nộp bản mới", "success");
+  showToast(thongBaoLuuKetQua(ketQua), "success");
   if (veLaiTrang) renderChoDuyetKetQua();
   else napKetQua(taskKetQuaMa);
+  await refreshData();
+}
+/** Tải bình thường chỉ lưu; đáp ứng lệnh sửa mới gửi thẳng (Q5). */
+function thongBaoLuuKetQua(ketQua) {
+  if (ketQua.nhom?.trang_thai === "luu-tam") return "Đã lưu tạm — chưa gửi đi duyệt";
+  return ketQua.tuDong ? "Đã gửi bản đáp ứng lệnh sửa và phê duyệt tự động" : "Đã gửi bản đáp ứng lệnh sửa đi duyệt";
+}
+/** Gửi đúng bản người dùng vừa xem; khóa thao tác ở client, server khóa nhóm + kiểm phiên bản. */
+const fileDangGuiDuyet = new Set();
+async function guiDiDuyetFile(fileId, ma, versionId, tuHangCho = false) {
+  const khoa = String(fileId);
+  if (fileDangGuiDuyet.has(khoa)) return;
+  if (!window.confirm("Gửi bản đang xem đi duyệt? Nếu đã có bản mới hơn, hệ thống sẽ yêu cầu tải lại.")) return;
+  fileDangGuiDuyet.add(khoa);
+  try {
+    const ketQua = await restPost("/api/v1/task-files/" + encodeURIComponent(fileId) + "/gui-di-duyet",
+      { versionId: versionId == null ? null : String(versionId) });
+    if (!ketQua) return;
+    showToast(ketQua.tuDong ? "Đã gửi và PHÊ DUYỆT LUÔN — phân quyền cho phép" : "Đã gửi đi duyệt", "success");
+    if (tuHangCho) await renderChoDuyetKetQua();
+    else if (ma) await napKetQua(ma);
+    await capNhatNavChoDuyet();
+    await refreshData();
+  } finally {
+    fileDangGuiDuyet.delete(khoa);
+  }
 }
 /** Một hành động verdict: hỏi nội dung khi bắt buộc, chốt thì xác nhận trước khi khóa. */
 async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
@@ -3090,6 +3592,13 @@ async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
       if (noiDung !== "") showToast("Nội dung cần ít nhất 10 ký tự", "error");
       return;
     }
+  } else if (HANH_DONG_CHOT.includes(hanhDong)) {
+    // Q6/Q11 (người dùng chốt 11/09/2026): nút CHỐT («Hoàn thành / Duyệt», «Duyệt») nay CÓ ghi chú,
+    // nhưng là TUỲ CHỌN — để trống vẫn chốt được. Đọc đúng ô «Ý kiến» sẵn có của khối file, không
+    // bật hộp thoại hỏi thêm: bắt người duyệt gõ chữ cho một lần chốt là thêm một bước cản. Máy chủ
+    // lưu ghi chú này vào `task_file_flow.noi_dung` và nối vào thông báo chuông.
+    const oYKien = document.getElementById("task-y-kien-" + fileId);
+    noiDung = String((oYKien && oYKien.value) || "").trim().slice(0, 2000);
   }
   const ketQua = await restPost("/api/v1/task-files/" + encodeURIComponent(fileId) + "/verdict", {
     hanhDong,
@@ -3098,6 +3607,7 @@ async function xuLyVerdictFile(fileId, hanhDong, canNoiDung, ma) {
   if (!ketQua) return;
   showToast("Đã " + (NHAN_VERDICT_FILE[hanhDong] || hanhDong).toLowerCase(), "success");
   napKetQua(ma);
+  await refreshData();
 }
 /** Gửi Ý KIỆN từ ô nhập của khối file — ghi vào BẢN MỚI NHẤT (data-ban-cuoi); vai máy chủ kiểm. */
 async function guiYKien(fileId, ma) {
@@ -3126,6 +3636,116 @@ async function guiYKien(fileId, ma) {
   showToast("Đã gửi ý kiến", "success");
   napKetQua(ma);
 }
+/**
+ * ĐỢT 5 (2026-09-11) — gửi ý kiến TỪ POPUP rồi đóng popup.
+ *
+ * `guiYKien` báo lỗi bằng toast và GIỮ NGUYÊN chữ trong ô khi không gửi được (chưa nhập, quá 2000 ký
+ * tự, REST lỗi); chỉ khi gửi THÀNH CÔNG nó mới xoá ô nhập. Lấy đúng dấu hiệu đó làm điều kiện đóng:
+ * ô còn chữ ⇒ ở lại cho người dùng sửa tiếp, ô rỗng ⇒ đóng. Đóng là bắt buộc vì `guiYKien` đã gọi
+ * `napKetQua(ma)` vẽ lại bảng — để popup mở là nó đang kể chuyện cũ.
+ */
+async function guiYKienTuPopup(fileId, ma) {
+  await guiYKien(fileId, ma);
+  const o = document.getElementById("task-y-kien-" + fileId);
+  if (!o || !String(o.value || "").trim()) dongPopupYKien();
+}
+/** Hàm dọn popup đang mở (gỡ cả listener phím) — `null` khi không có popup nào. */
+let yKienDong = null;
+function dongPopupYKien() {
+  if (yKienDong) {
+    const don = yKienDong;
+    yKienDong = null;
+    don();
+  }
+}
+/**
+ * POPUP «XEM Ý KIẾN» của bảng «Kết quả» trong trang Chỉnh sửa nhiệm vụ.
+ *
+ * Người dùng chốt đợt 5: «phần ghi ý kiến sẽ là hiển thị chữ "xem ý kiến", click vào đấy sẽ hiển thị
+ * popup xem ý kiến của bản đấy, còn bản đầu 1. đấy sẽ xem tất cả». Vậy Ô TRONG BẢNG chỉ còn một chữ
+ * «Xem ý kiến», nội dung dời hết ra popup:
+ *   • dòng CHA (1., 2., 3.) ⇒ `banId` RỖNG ⇒ in **TẤT CẢ** ý kiến của nhóm + Ô NHẬP để ghi tiếp;
+ *   • dòng BẢN (1.1, 1.2…)  ⇒ `banId` = id bản ⇒ in ĐÚNG ý kiến của bản đó, **CHỈ ĐỌC** — máy chủ chỉ
+ *     cho ghi góp ý vào BẢN MỚI NHẤT (`guiYKien` POST theo `data-ban-cuoi`), để ô nhập ở popup của bản
+ *     cũ là mời người dùng viết vào một chỗ rồi chữ chạy sang bản khác.
+ *
+ * Ý kiến ở đây là DANH SÁCH GỘP (`danhSachYKien`): góp ý gõ tay + LÝ DO mỗi lần yêu cầu sửa / trả về /
+ * từ chối nằm trong `task_file_flow` — bẫy đợt 4, đừng chỉ đọc `gopY`.
+ *
+ * Dữ liệu lấy LẠI TỪ REST chứ không đọc từ DOM đã vẽ: bảng có thể đã cũ, và `buildDongBanKetQua` chỉ
+ * cầm nhóm chứ không giữ bản. MÁY CHỦ TRẢ `bans`, KHÔNG phải `ban` — bẫy đợt 4.
+ */
+async function moYKienKetQua(maNhiemVu, fileId, banId) {
+  if (!maNhiemVu || !fileId) return;
+  const duLieu = await restGet("/api/v1/work-items/" + encodeURIComponent(maNhiemVu) + "/files");
+  if (!duLieu) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
+  const nhom = (Array.isArray(duLieu.nhom) ? duLieu.nhom : [])
+    .find((g) => String(g.id) === String(fileId));
+  if (!nhom) {
+    showToast("Không tìm thấy kết quả này — có thể vừa bị xoá, hãy tải lại trang", "error");
+    return;
+  }
+  const bans = Array.isArray(nhom.bans) ? nhom.bans : [];
+  const ban = banId ? bans.find((b) => String(b.id) === String(banId)) || null : null;
+  const tenNhom = nhom.ten_ket_qua || nhom.ten_goc || "chưa đặt tên";
+  const dsY = ban ? yKienCuaBan(nhom, ban) : danhSachYKien(nhom);
+  const tieuDe = ban
+    ? "Ý kiến của bản " + (ban.version_no ?? "?") + " — " + tenNhom
+    : "Toàn bộ ý kiến — " + tenNhom;
+
+  // MỘT lần innerHTML cho cả thân popup: mọi giá trị đều đã qua `escapeHtml`/`escapeHtmlAttr`/
+  // `escapeForInlineHandler` bên trong các hàm `build*` (cùng khuôn `napKetQua`).
+  //   • dòng CHA ⇒ dùng lại NGUYÊN `buildYKienPanel` (ô nhập + thread của TẤT CẢ ý kiến) để ô nhập chỉ
+  //     được dựng ở MỘT chỗ, popup và mã cũ không thể lệch nhau;
+  //   • dòng BẢN ⇒ CHỈ ĐỌC, vì máy chủ chỉ cho ghi góp ý vào BẢN MỚI NHẤT.
+  const than = ban
+    ? "<div class=\"yk-danh-sach\">" +
+      (dsY.length
+        ? dsY.map((y) => buildMotYKien(y)).join("")
+        : "<div class=\"text-xs text-gray-400\">Chưa có ý kiến nào cho bản này.</div>") +
+      "</div>" +
+      "<p class=\"yk-chu-thich\">Popup của một bản chỉ để ĐỌC — ý kiến mới luôn ghi vào bản mới nhất. Muốn viết, bấm «Xem ý kiến» ở dòng cha của kết quả này.</p>"
+    : buildYKienPanel(nhom, maNhiemVu);
+
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+  const overlay = el("div", "qlcv-dialog yk-dialog");
+  overlay.id = "y-kien-dialog";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  const panel = document.createElement("section");
+  panel.append(el("h3", null, tieuDe));
+  const content = el("div", "qlcv-dialog-content yk-noi-dung");
+  content.innerHTML = than;
+  const chan = document.createElement("footer");
+  const nutDong = el("button", "btn-secondary", "Đóng");
+  nutDong.type = "button";
+  chan.append(nutDong);
+  panel.append(content, chan);
+  overlay.append(panel);
+
+  const bamPhim = (event) => {
+    if (event.key === "Escape") dongPopupYKien();
+  };
+  function don() {
+    document.removeEventListener("keydown", bamPhim);
+    overlay.remove();
+  }
+  nutDong.addEventListener("click", () => dongPopupYKien());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) dongPopupYKien();
+  });
+  // Gỡ popup cũ + listener cũ TRƯỚC khi gắn cái mới: mở liên tiếp hai dòng mà không gỡ là chồng hai
+  // lớp phủ và Escape phải bấm hai lần mới tắt.
+  dongPopupYKien();
+  yKienDong = don;
+  document.addEventListener("keydown", bamPhim);
+  document.body.append(overlay);
+}
 /** Xoá NHÓM file — người tạo + admin, chưa «Đã duyệt» (máy chủ kiểm lại). */
 async function xoaKetQuaFile(fileId, ma) {
   if (!confirm("Xoá nhóm file này cùng mọi bản, góp ý và bảng luồng?")) return;
@@ -3133,6 +3753,7 @@ async function xoaKetQuaFile(fileId, ma) {
   if (ketQua === null) return;
   showToast("Đã xoá nhóm file", "success");
   napKetQua(ma);
+  await refreshData();
 }
 function taiFileKetQua(banId) {
   window.location = "/api/v1/task-files/" + encodeURIComponent(banId) + "/download";
@@ -3164,22 +3785,41 @@ function nutVerdictFile(n, ma, hanhDong, nhan, canNoiDung, laChot) {
  * TRẠNG THÁI; máy chủ vẫn kiểm lại khi bấm (client chỉ ẩn/hiện cho đẹp).
  */
 function dsVerdictFile(n) {
+  if (n.duocVerdict === false || !coQuyenTrongPhamVi("file", "read")) return [];
+  // ĐƯỜNG CHÍNH: máy chủ đã tính sẵn `hanhDong` bằng `BANG_VERDICT` + `phaiTrinhLanhDao` +
+  // `giaTriHieuLuc`. Client KHÔNG suy luật lần nữa — chỉ lọc lại nút chốt theo phân quyền đang hiển
+  // thị (đặt ⏳ là mất nút, khỏi phải tải lại trang) và đánh dấu nút nào là nút CHỐT để vẽ icon ✓.
+  if (Array.isArray(n.hanhDong)) return n.hanhDong
+    .filter(h => !HANH_DONG_CHOT.includes(h.ma) || giaTriHieuLucFile(currentUser?.role, "approve") === "cho-phep")
+    .map(h => ({ hanhDong: h.ma, nhan: h.nhan, canNoiDung: h.canNoiDung, laChot: HANH_DONG_CHOT.includes(h.ma) }));
   const vai = currentUser && currentUser.role;
   if (!vai) return [];
   const tt = n.trang_thai;
   const laLanhDaoPhong = ["Trưởng phòng", "Phó phòng"].includes(vai);
   const ds = [];
+  // Danh sách DỰ PHÒNG cho dòng chưa có `hanhDong` của máy chủ. Thứ tự và điều kiện bám đúng
+  // `BANG_VERDICT` (taskFiles/service.js) — ĐỢT B đổi hai chỗ:
+  //  • ĐIỂM 7: «Trình Phó giám đốc» (`trinh-lanh-dao`) thành «TP/PP phê duyệt» (`tp-phe-duyet`),
+  //    vì đây là một LẦN KÝ có lưu người ký và lúc ký, không chỉ đổi trạng thái;
+  //  • ĐIỂM 9: «Yêu cầu sửa» (`yeu-cau-sua`) gộp vào «Đẩy về Cán bộ», và nội dung nay BẮT BUỘC
+  //    (≥ 10 ký tự) như `tra-ve-tp` — trả việc về mà không nói vì sao là đúng cái đang dọn.
+  //
+  // Q6/Q11 — danh sách dự phòng CỐ Ý hiện cả «TP/PP phê duyệt» lẫn «Hoàn thành / Duyệt», dù luật
+  // thật là hai nút LOẠI TRỪ NHAU: điều kiện loại trừ nằm ở `gui_bld_phe_duyet` + `assignee_id` của
+  // NHIỆM VỤ, mà `NHOM` của GET …/files không trả hai cột đó (chỉ hàng chờ là có). Đoán mò ở đây thì
+  // sai theo chiều NGƯỢC — ẩn mất nút mà người duyệt đang cần. Nên dự phòng chọn sai theo chiều
+  // thừa nút: bấm nhầm là máy chủ 409 kèm câu chỉ đúng nút phải dùng. Đường này chỉ chạy khi payload
+  // cũ/thiếu `hanhDong`, không phải đường thường.
   if (laLanhDaoPhong) {
     if (["cho-xem", "can-sua"].includes(tt)) {
-      ds.push({ hanhDong: "yeu-cau-sua", nhan: "Yêu cầu sửa", canNoiDung: true, laChot: false });
-      ds.push({ hanhDong: "trinh-lanh-dao", nhan: "Trình Phó giám đốc", canNoiDung: true, laChot: false });
-      // file:approve = ✓ ⇒ nút chốt «Hoàn thành / Duyệt» hiện (chốt 'hoan-thanh'); ⏳ ⇒ ẨN.
-      if (giaTriHieuLucFile(vai, "approve") === "cho-phep") {
-        ds.push({ hanhDong: "hoan-thanh", nhan: "Hoàn thành / Duyệt", canNoiDung: false, laChot: true });
-      }
+      ds.push({ hanhDong: "tp-phe-duyet", nhan: "TP/PP phê duyệt", canNoiDung: true, laChot: false });
     }
     if (["cho-xem", "cho-lanh-dao", "can-sua"].includes(tt)) {
-      ds.push({ hanhDong: "tra-ve-cbo", nhan: "Đẩy về Cán bộ", canNoiDung: false, laChot: false });
+      ds.push({ hanhDong: "tra-ve-cbo", nhan: "Đẩy về Cán bộ", canNoiDung: true, laChot: false });
+    }
+    // file:approve = ✓ ⇒ nút chốt «Hoàn thành / Duyệt» hiện (chốt 'hoan-thanh'); ⏳ ⇒ ẨN.
+    if (["cho-xem", "can-sua"].includes(tt) && giaTriHieuLucFile(vai, "approve") === "cho-phep") {
+      ds.push({ hanhDong: "hoan-thanh", nhan: "Hoàn thành / Duyệt", canNoiDung: false, laChot: true });
     }
   }
   if (["Phó Giám đốc", "admin"].includes(vai) && tt === "cho-lanh-dao") {
@@ -3197,6 +3837,197 @@ function buildNutVerdictFile(n, ma) {
   );
   return nut.length === 0 ? "" : "<div class=\"flex flex-wrap gap-2 mt-3\">" + nut.join("") + "</div>";
 }
+/**
+ * POPUP «NHẬT KÝ FILE KẾT QUẢ» — nút «Xem kết quả» của tab Nhiệm vụ (thiết kế lại 2026-09-10).
+ *
+ * Người dùng đòi đọc được THEO THỜI GIAN: ban đầu AI ĐĂNG KÝ kết quả này, rồi AI THỰC HIỆN, xem
+ * LỊCH SỬ CÁC BẢN và Ý KIẾN của từng lần. Bốn mục đó là bốn khối trong cùng một popup.
+ *
+ * Dựng BẰNG textContent, KHÔNG nối chuỗi HTML: mọi giá trị ở đây là tên người, tên file và nội
+ * dung ý kiến — đúng ba thứ do người khác gõ vào. Vì không thêm chỗ ghi HTML nào nên PIN XSS
+ * không tăng vì hàm này (docs/XSS-4.6.md). Cùng cách với `hopThoai8b` bên phase8b-review.js và
+ * dùng lại lớp `.qlcv-dialog` đã có trong app.css, không phát minh hộp thoại thứ hai.
+ *
+ * Dữ liệu lấy từ REST CÓ SẴN `GET /work-items/:ref/files` (máy chủ trả nhóm + bản + góp ý + bảng
+ * luồng cho cả nhiệm vụ) rồi lọc đúng một nhóm — KHÔNG mở endpoint mới chỉ để xem một file.
+ */
+async function moNhatKyFileKetQua(maNhiemVu, fileId) {
+  if (!maNhiemVu || !fileId) return;
+  const duLieu = await restGet("/api/v1/work-items/" + encodeURIComponent(maNhiemVu) + "/files");
+  if (!duLieu) return; // restGet đã toast lỗi + bật lại modal đăng nhập nếu 401
+  const nhom = (Array.isArray(duLieu.nhom) ? duLieu.nhom : [])
+    .find((g) => String(g.id) === String(fileId));
+  if (!nhom) {
+    showToast("Không tìm thấy kết quả này — có thể vừa bị xoá, hãy tải lại trang", "error");
+    return;
+  }
+  const nhiemVu = allTasks.find((t) => String(t[COL.T_ID]) === String(maNhiemVu)) || {};
+  // MÁY CHỦ TRẢ `bans`, KHÔNG phải `ban` (`taskFiles/service.js doc()` → `routes.js` `/work-items/:ref/files`).
+  // Bản đầu của popup đọc nhầm `nhom.ban` nên LUÔN ra rỗng: chip «Số bản» hiện 0 và khối 3 báo
+  // «Chưa có bản nào được tải lên» dù nhóm có bản thật. Test đơn vị mock theo cùng cái tên sai nên
+  // không bắt được — fixture phải chép đúng tên khoá của `doc()`.
+  const ban = Array.isArray(nhom.bans) ? nhom.bans : [];
+  const gopY = Array.isArray(nhom.gopY) ? nhom.gopY : [];
+  const luong = Array.isArray(nhom.luong) ? nhom.luong : [];
+  // Tiến độ của nhóm không nằm trong phản hồi này (nó do `tienDo.js` tính cho danh sách) — lấy lại
+  // từ chính dòng đang hiển thị để hai nơi không nói hai số khác nhau.
+  const dongTrongBang = (Array.isArray(nhiemVu.ketQuaFiles) ? nhiemVu.ketQuaFiles : [])
+    .find((f) => String(f.id) === String(fileId)) || {};
+
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+  const nut = (cls, nhan, viec) => {
+    const b = el("button", cls, nhan);
+    b.type = "button";
+    b.addEventListener("click", viec);
+    return b;
+  };
+
+  const overlay = el("div", "qlcv-dialog nk-file-dialog");
+  overlay.id = "nhat-ky-file-dialog";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  const panel = document.createElement("section");
+  panel.append(el("h3", null,
+    "Nhật ký kết quả — " + (nhom.ten_ket_qua || nhom.ten_goc || "chưa đặt tên")));
+  const content = el("div", "qlcv-dialog-content nk-noi-dung");
+
+  // ── Tóm tắt: đọc một cái là biết kết quả này đang ở đâu ────────────────────────────────────
+  const tomTat = el("div", "nk-tom-tat");
+  const chip = (nhan, giaTri) => {
+    const c = el("span", "nk-chip");
+    c.append(el("span", "nk-chip-nhan", nhan), el("span", "nk-chip-gia-tri", String(giaTri)));
+    tomTat.append(c);
+  };
+  chip("Tình trạng", ban.length
+    ? (NHAN_TRANG_THAI_FILE[nhom.trang_thai] || nhom.trang_thai)
+    : "Chưa nộp");
+  chip("Định dạng", nhom.dinh_dang || dinhDangCuaTen(nhom.ten_goc) || "—");
+  chip("Tỷ lệ", nhom.ty_le == null ? "—" : Math.max(0, Number(nhom.ty_le) || 0) + "%");
+  chip("Tiến độ", dongTrongBang.tienDo == null
+    ? "—"
+    : Math.max(0, Math.min(100, Number(dongTrongBang.tienDo) || 0)) + "%");
+  chip("Số bản", ban.length);
+  content.append(tomTat);
+
+  // ── 1 + 2 · Ai đăng ký / Ai thực hiện ────────────────────────────────────────────────────────
+  // Người dùng chốt 2026-09-10 (đợt 4): BỎ hai tiêu đề «Ai đăng ký kết quả này» và «Ai thực hiện»,
+  // ghi thẳng thành bốn dòng đánh số 1. / 2. Ô «Lãnh đạo phòng phụ trách:» GIỮ NHÃN kể cả khi trống
+  // — chính chỗ trống đó nói lên nhiệm vụ chưa gán lãnh đạo, ẩn dòng đi là mất thông tin.
+  const khoiDau = el("div", "nk-dong-dau");
+  khoiDau.append(
+    el("div", "nk-dong",
+      "1. " + (nhom.ten_nguoi_tao || "Không rõ ai") + " đăng ký lúc " +
+      formatDateForDisplay(nhom.created_at, true)),
+    el("div", "nk-dong",
+      "Tên khai báo: " + (nhom.ten_ket_qua || nhom.ten_goc || "—") +
+      " · định dạng khai: " + (nhom.dinh_dang || "—")),
+    el("div", "nk-dong",
+      "2. Người thực hiện trực tiếp: " + (nhiemVu[COL.T_ASSIGNEE] || "")),
+    el("div", "nk-dong",
+      "Lãnh đạo phòng phụ trách: " + (nhiemVu[COL.T_LEADERS] || ""))
+  );
+  content.append(khoiDau);
+
+  // ── 3 · Lịch sử các bản + ý kiến của từng lần ─────────────────────────────────────────────
+  content.append(el("h4", "nk-tieu-de", "3 · Lịch sử các bản và ý kiến từng lần"));
+  if (!ban.length) {
+    content.append(el("p", "nk-trong", "Chưa có bản nào được tải lên."));
+  } else {
+    const olBan = el("ol", "nk-ban");
+    ban.forEach((b, i) => {
+      const li = el("li", "nk-ban-muc");
+      const dauBan = el("div", "nk-ban-dau");
+      dauBan.append(
+        el("span", "nk-ban-so", "Bản " + (b.version_no ?? i + 1) + (i === 0 ? "" : " — sửa lần " + i)),
+        el("span", "nk-ban-ten", b.ten_goc || nhom.ten_goc || "")
+      );
+      const cumNut = el("span", "nk-ban-nut");
+      // Bản «Báo cáo» là chữ nhập thẳng, không có file để tải/xem — cùng luật với bảng trong modal.
+      if (!laBanBaoCaoKq(b)) {
+        cumNut.append(nut("nk-link", "⬇ tải", () => taiFileKetQua(b.id)));
+        if (xemInlineDuoc(b)) cumNut.append(nut("nk-link", "👁 xem", () => xemFileKetQua(b.id)));
+      }
+      dauBan.append(cumNut);
+      li.append(dauBan);
+      li.append(el("div", "nk-ban-ai",
+        (b.ten_nguoi_nop || "Không rõ ai") + " nộp lúc " + formatDateForDisplay(b.uploaded_at, true)));
+      if (laBanBaoCaoKq(b) && b.noi_dung) li.append(el("div", "nk-bao-cao", b.noi_dung));
+      // Ý kiến của ĐÚNG bản này, GỘP cả lý do verdict (`danhSachYKien`) — popup phải kể được «lần này
+      // bị trả về vì sao», không chỉ những câu gõ tay ở nút «Gửi ý kiến».
+      const yRieng = yKienCuaBan(nhom, b);
+      if (yRieng.length) {
+        const ulY = el("ul", "nk-y-kien");
+        yRieng.forEach((c) => {
+          const liY = el("li");
+          liY.append(el("span", "nk-y-ai",
+            (c.ten_nguoi || "Không rõ") + " (" + (c.vai || "—") + ") · " + (c.nhan || "Góp ý") + " · " +
+            formatDateForDisplay(c.created_at, true)));
+          liY.append(el("div", "nk-y-noi-dung", c.noi_dung || ""));
+          ulY.append(liY);
+        });
+        li.append(ulY);
+      } else {
+        li.append(el("div", "nk-trong", "Chưa có ý kiến cho bản này."));
+      }
+      olBan.append(li);
+    });
+    content.append(olBan);
+  }
+
+  // ── 4 · Diễn biến theo thời gian (luồng + góp ý gộp lại, CŨ trước MỚI sau) ─────────────────
+  content.append(el("h4", "nk-tieu-de", "4 · Diễn biến theo thời gian"));
+  const banTheoId = new Map(ban.map((b) => [Number(b.id), b.version_no]));
+  const dongThoiGian = [
+    ...luong.map((g) => ({
+      luc: g.created_at, ai: g.ten_nguoi, vai: g.vai,
+      gi: NHAN_LUONG_FILE[g.hanh_dong] || g.hanh_dong,
+      soBan: g.version_no ?? null, noi: g.noi_dung || "",
+    })),
+    ...gopY.map((c) => ({
+      luc: c.created_at, ai: c.ten_nguoi, vai: c.vai, gi: "Góp ý",
+      soBan: banTheoId.get(Number(c.version_id)) ?? null, noi: c.noi_dung || "",
+    })),
+  ].sort((a, b) => new Date(a.luc || 0) - new Date(b.luc || 0));
+  if (!dongThoiGian.length) {
+    content.append(el("p", "nk-trong", "Chưa có diễn biến nào được ghi."));
+  } else {
+    const olTg = el("ol", "nk-dong-thoi-gian");
+    dongThoiGian.forEach((d) => {
+      const li = el("li");
+      li.append(el("span", "nk-tg-luc", formatDateForDisplay(d.luc, true)));
+      li.append(el("span", "nk-tg-gi", d.gi || ""));
+      li.append(el("span", "nk-tg-ai",
+        (d.ai || "Hệ thống") + (d.vai ? " (" + d.vai + ")" : "") +
+        (d.soBan ? " · bản " + d.soBan : "")));
+      if (d.noi) li.append(el("div", "nk-tg-noi", d.noi));
+      olTg.append(li);
+    });
+    content.append(olTg);
+  }
+
+  const chan = document.createElement("footer");
+  chan.append(nut("btn-secondary", "Đóng", () => tatNhatKyFile()));
+  panel.append(content, chan);
+  overlay.append(panel);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) tatNhatKyFile();
+  });
+  const bamPhim = (event) => {
+    if (event.key === "Escape") tatNhatKyFile();
+  };
+  function tatNhatKyFile() {
+    document.removeEventListener("keydown", bamPhim);
+    overlay.remove();
+  }
+  document.getElementById("nhat-ky-file-dialog")?.remove();
+  document.addEventListener("keydown", bamPhim);
+  document.body.append(overlay);
+}
 /** BẢNG LUỒNG: Thời điểm · Người (vai) · Hành động · Bản · Nội dung — mới nhất trên đầu. */
 function buildBangLuongFile(n) {
   const luong = Array.isArray(n.luong) ? n.luong : [];
@@ -3212,7 +4043,9 @@ function buildBangLuongFile(n) {
       "</tr>"
     )
     .join("");
-  const buildO = (t) => "<th class=\"px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase\">" + escapeHtml(t) + "</th>";
+  // ĐỢT 5: bảng luồng nằm TRONG khung «Lịch sử» của cùng trang Chỉnh sửa nhiệm vụ nên tiêu đề cột
+  // cũng căn giữa cho nhất quán — để căn trái cạnh bảng chính đã căn giữa là lệch mắt.
+  const buildO = (t) => "<th class=\"px-3 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase\">" + escapeHtml(t) + "</th>";
   return (
     "<div class=\"mt-3 overflow-x-auto\"><table class=\"min-w-full text-xs\"><thead class=\"bg-gray-50\"><tr>" +
     buildO("Thời điểm") + buildO("Người (vai)") + buildO("Hành động") + buildO("Bản") + buildO("Nội dung") +
@@ -3254,6 +4087,100 @@ function buildBanFileList(n) {
     })
     .join("");
 }
+// ── TÌNH TRẠNG VÀ NGƯỜI CỦA TỪNG BẢN (12/09/2026) ───────────────────────────────────────────────
+// Nguồn dữ liệu là `n.luong` máy chủ đã gửi kèm nhóm (`listLuongByFile`, MỚI→CŨ theo id) lọc theo
+// `version_id`, nên không cần gọi thêm API nào. Hai hàm dưới lấp đúng hai cột mà người dùng chỉ ra:
+// «ở cột Tình trạng file kết quả, ghi ở từng bản tình trạng, ví dụ bị trả về hoặc tp/pp sửa trực
+// tiếp, PGĐ/GĐ sửa trực tiếp, lưu ý thêm tên vào nhé» và «phần Người thực hiện sẽ là người duyệt
+// hoặc người sửa đối với các bản sau, chỉ hiển thị Người thực hiện trực tiếp nếu trực tiếp sửa lại
+// bản bị trả về hoặc tải lên lần đầu».
+function vaiNgan(vai) {
+  return NHAN_VAI_NGAN[vai] || hienThiVai(vai) || "—";
+}
+/** Mọi dòng luồng ghi cho ĐÚNG bản này, vẫn theo thứ tự MỚI→CŨ của máy chủ. */
+function luongCuaBan(n, b) {
+  const luong = Array.isArray(n && n.luong) ? n.luong : [];
+  if (!b || b.id == null) return [];
+  return luong.filter((g) => String(g.version_id) === String(b.id));
+}
+/**
+ * Bản ngay TRƯỚC bản này có bị trả về không — một nửa điều kiện để cột «Người thực hiện» được ghi
+ * «Người thực hiện trực tiếp». `n.bans` về theo `version_no` tăng dần nên `chiSo` là đúng thứ tự bản.
+ * Chỉ xét hai mã đang sống: migration 029 đã viết lại `yeu-cau-sua` thành `tra-ve-cbo` và CHECK của
+ * `task_file_flow` không còn nhận mã cũ.
+ */
+function banTruocBiTraVe(n, chiSo) {
+  const bans = Array.isArray(n && n.bans) ? n.bans : [];
+  const truoc = chiSo > 0 ? bans[chiSo - 1] : null;
+  if (!truoc) return false;
+  return luongCuaBan(n, truoc).some((g) => ["tra-ve-cbo", "tra-ve-tp"].includes(g.hanh_dong));
+}
+/**
+ * AI tạo ra bản này và họ tạo bằng cách nào. Tên lấy từ dòng luồng để khớp với vai ghi trên cùng
+ * dòng; thiếu thì lùi về `ten_nguoi_nop` của bản (dòng lịch sử cũ ghi trước khi có luồng theo bản).
+ */
+function nguoiTaoBan(n, b) {
+  const cac = luongCuaBan(n, b).filter((g) => HANH_DONG_TAO_BAN.includes(g.hanh_dong));
+  // Danh sách là MỚI→CŨ nên phần tử CUỐI là dòng ghi lúc bản ra đời.
+  const dau = cac.length > 0 ? cac[cac.length - 1] : null;
+  return {
+    ten: (dau && dau.ten_nguoi) || (b && b.ten_nguoi_nop) || "",
+    vai: (dau && dau.vai) || "",
+    suaTrucTiep: Boolean(dau) && dau.hanh_dong === "sua-truc-tuyen",
+  };
+}
+/**
+ * Cột «Tình trạng» của MỘT BẢN: dòng luồng CÓ Ý NGHĨA mới nhất thắng, luôn kèm TÊN người làm.
+ * Không có dòng nào (bản vừa tải lên, chưa ai đụng) thì kể đúng việc vừa xảy ra.
+ * Trả về `{ nhan, mau }` — `mau` là cặp lớp Tailwind cùng kiểu với `MAU_TRANG_THAI_FILE`.
+ */
+function tinhTrangMotBan(n, b, chiSo) {
+  const moc = luongCuaBan(n, b).find((g) => TINH_TRANG_BAN[g.hanh_dong]);
+  if (moc) {
+    const luat = TINH_TRANG_BAN[moc.hanh_dong];
+    const dau = luat.vai ? vaiNgan(moc.vai) + " " + luat.nhan : luat.nhan;
+    return { nhan: dau + (moc.ten_nguoi ? " — " + moc.ten_nguoi : ""), mau: luat.mau };
+  }
+  const tao = nguoiTaoBan(n, b);
+  const dau =
+    chiSo === 0
+      ? "Tải lên lần đầu"
+      : banTruocBiTraVe(n, chiSo)
+        ? "Sửa lại bản bị trả về"
+        : "Nộp lại";
+  return {
+    nhan: dau + (tao.ten ? " — " + tao.ten : ""),
+    mau: "bg-slate-100 text-slate-600",
+  };
+}
+/**
+ * Cột «Người thực hiện» của MỘT BẢN. «Người thực hiện trực tiếp» CHỈ hiện khi đúng người được giao
+ * nhiệm vụ (`n.assignee_id`) tải lên LẦN ĐẦU hoặc trực tiếp nộp lại BẢN BỊ TRẢ VỀ; còn lại là người
+ * duyệt/người sửa, kèm vai viết tắt để phân biệt TP/PP với PGĐ/GĐ.
+ */
+function nguoiThucHienCuaBan(n, b, chiSo) {
+  const tao = nguoiTaoBan(n, b);
+  const dungNguoiGiao =
+    n && n.assignee_id != null && b && String(b.uploaded_by) === String(n.assignee_id);
+  if (dungNguoiGiao && (chiSo === 0 || banTruocBiTraVe(n, chiSo))) {
+    return {
+      nhan: "Người thực hiện trực tiếp",
+      chu: chiSo === 0 ? "Tải lên bản đầu tiên" : "Trực tiếp sửa lại bản bị trả về",
+      ten: tao.ten,
+    };
+  }
+  if (tao.suaTrucTiep) {
+    return { nhan: vaiNgan(tao.vai) + " sửa trực tiếp", chu: "Sửa ngay trong OnlyOffice, lưu thành bản mới", ten: tao.ten };
+  }
+  if (chiSo === 0) {
+    return {
+      nhan: vaiNgan(tao.vai) + " nộp thay",
+      chu: "Dữ liệu cũ: bản đầu do người không được giao nhiệm vụ nộp. Nay máy chủ chỉ cho chính người thực hiện nộp bản đầu.",
+      ten: tao.ten,
+    };
+  }
+  return { nhan: vaiNgan(tao.vai) + " sửa", chu: "Người duyệt hoặc người sửa nộp bản này", ten: tao.ten };
+}
 /**
  * DÒNG CON của bảng «Kết quả»: mỗi BẢN là một dòng 1.1, 1.2 … kèm chữ «Sửa lần N» (sheet «kq-modal»
  * dòng 5: «đây là liệt kê các lần file đã sửa, ghi thêm chữ "Sửa lần …" đằng sau tên ban đầu»).
@@ -3264,18 +4191,13 @@ function buildBanFileList(n) {
  * `soCha` = số thứ tự dòng cha (1, 2, 3…) để đánh 1.1 / 1.2; góp ý của ĐÚNG bản đó hiện ở cột
  * «Ghi ý kiến» — không trộn góp ý của bản khác vào.
  */
-function buildDongBanKetQua(n, b, chiSo, soCha) {
-  const gopY = (Array.isArray(n.gopY) ? n.gopY : []).filter((c) => Number(c.version_id) === Number(b.id));
-  const yKien = gopY.length
-    ? gopY
-        .map(
-          (c) =>
-            "<div class=\"text-xs\"><span class=\"font-medium text-gray-700\">" + escapeHtml(c.ten_nguoi) +
-            "</span> <span class=\"text-gray-400\">(" + escapeHtml(c.vai) + ")</span>" +
-            "<div class=\"text-gray-600\">" + escapeHtml(c.noi_dung) + "</div></div>"
-        )
-        .join("")
-    : "<span class=\"text-xs text-gray-300\">—</span>";
+function buildDongBanKetQua(n, b, chiSo, soCha, ma = "") {
+  // ĐỢT 5 (2026-09-11): ô «Ghi ý kiến» của dòng bản cũng chỉ còn CHỮ «Xem ý kiến» mở POPUP, nhưng
+  // truyền `banId` = id của ĐÚNG bản này ⇒ popup chỉ in ý kiến của bản đó («click vào đấy sẽ hiển thị
+  // popup xem ý kiến của bản đấy»). Vẫn ĐẾM theo danh sách GỘP (`yKienCuaBan` → `danhSachYKien`) để
+  // con số kể cả LÝ DO mỗi lần yêu cầu sửa / trả về, không chỉ những câu gõ tay ở nút «Gửi ý kiến».
+  const soY = yKienCuaBan(n, b).length;
+  const nutY = soY > 0 ? "Xem ý kiến (" + soY + ")" : "Xem ý kiến";
   // Bản «Báo cáo» không có file ⇒ không có gì để tải/xem; nội dung đã in ngay ở cột 4 của dòng này.
   const muc = laBanBaoCaoKq(b)
     ? []
@@ -3285,6 +4207,10 @@ function buildDongBanKetQua(n, b, chiSo, soCha) {
   }
   // «Sửa lần N»: bản 1 là bản đầu tiên nên không phải lần sửa nào.
   const nhanSua = chiSo === 0 ? "" : " — Sửa lần " + chiSo;
+  // Hai cột theo TỪNG BẢN (12/09/2026) — xem `tinhTrangMotBan` / `nguoiThucHienCuaBan` ở trên.
+  const ttBan = tinhTrangMotBan(n, b, chiSo);
+  const nguoiBan = nguoiThucHienCuaBan(n, b, chiSo);
+  const chuNguoiBan = nguoiBan.nhan + (nguoiBan.ten ? " — " + nguoiBan.ten : "") + ". " + nguoiBan.chu;
   return (
     "<tr class=\"dong-ban-kq hidden\" data-ban=\"" + escapeHtmlAttr(b.id) + "\" data-nhom=\"" + escapeHtmlAttr(n.id) + "\">" +
     "<td class=\"px-3 py-2 text-xs text-gray-500 whitespace-nowrap\">" + escapeHtml(formatDateForDisplay(b.uploaded_at, true)) + "</td>" +
@@ -3299,21 +4225,76 @@ function buildDongBanKetQua(n, b, chiSo, soCha) {
       : "<button type=\"button\" class=\"text-blue-600 hover:underline\" title=\"Tải bản này\" onclick=\"taiFileKetQua('" +
         escapeForInlineHandler(b.id) + "')\">" + escapeHtml(b.ten_goc || n.ten_goc) + "</button>") +
     "<div class=\"text-gray-400\">bản " + escapeHtml(b.version_no) + "</div></td>" +
-    "<td class=\"px-3 py-2 text-xs text-gray-600\">" + escapeHtml(b.ten_nguoi_nop) + "</td>" +
-    "<td class=\"px-3 py-2\">" + yKien + "</td>" +
-    "<td class=\"px-3 py-2\"></td>" +
+    // Tỷ lệ + Tiến độ của dòng bản để «—» (tỷ lệ gắn theo NHÓM, không theo từng bản) nhưng vẫn CĂN
+    // GIỮA cho thẳng với tiêu đề cột nay đã căn giữa (đợt 5).
+    "<td class=\"px-2 py-2 text-center kq-o-ty-le\">—</td><td class=\"px-2 py-2 text-center kq-o-tien-do\">—</td>" +
+    // 7. Người thực hiện — NHÃN + TÊN. Nhãn «Người thực hiện trực tiếp» chỉ dành cho đúng người
+    // được giao nhiệm vụ khi họ tải lên lần đầu hoặc trực tiếp sửa bản bị trả về; bản sau là của
+    // người duyệt/người sửa (kèm vai viết tắt). Tên đẩy vào `title` để ô không phình khi tên dài.
+    "<td class=\"px-3 py-2 text-xs text-gray-600 text-center kq-o-nguoi\" title=\"" + escapeHtmlAttr(chuNguoiBan) + "\">" +
+    "<div class=\"font-medium text-gray-700\">" + escapeHtml(nguoiBan.nhan) + "</div>" +
+    "<div class=\"text-gray-500\">" + escapeHtml(nguoiBan.ten) + "</div></td>" +
+    "<td class=\"px-3 py-2 text-center kq-o-y-kien\"><div class=\"kq-y-kien-nut\">" +
+    "<button type=\"button\" title=\"Mở popup xem ý kiến của đúng bản này\" class=\"text-blue-600 hover:underline text-xs font-medium\" onclick=\"moYKienKetQua('" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(b.id) + "')\">" + escapeHtml(nutY) + "</button>" +
+    "</div></td>" +
+    // 9. Tình trạng CỦA BẢN NÀY (ô này trước đây để TRỐNG): «Bị trả về — Nguyễn Văn A»,
+    // «TP/PP sửa trực tiếp — Trần Thị B», «PGĐ/GĐ đã duyệt — …». Badge cùng kiểu với dòng cha để
+    // hai cấp đọc bằng một ngôn ngữ màu; dòng cha vẫn kể tình trạng của CẢ NHÓM (`cauTinhTrangFile`).
+    "<td class=\"px-3 py-2 text-center\">" +
+    "<span class=\"text-[11px] px-2 py-0.5 rounded-full inline-block " + escapeHtmlAttr(ttBan.mau) + "\" title=\"" + escapeHtmlAttr(ttBan.nhan) + "\">" +
+    escapeHtml(ttBan.nhan) + "</span></td>" +
     "<td class=\"px-3 py-2 text-right\">" + buildMenuHanhDongKq("ban-" + b.id, muc) + "</td>" +
     "</tr>"
   );
 }
 /**
- * MỘT DÒNG CHA của bảng «Kết quả» (thiết kế mới theo sheet «kq-modal», 8 cột):
+ * MỘT DÒNG CHA của bảng «Kết quả» (thiết kế mới theo sheet «kq-modal», thêm hai cột tỷ lệ/tiến độ):
  * Thời gian · Kết quả làm được · Định dạng · File đã tải lên · Người thực hiện · Ghi ý kiến ·
  * Tình trạng · Hành động.
  *
  * Trả về NHIỀU `<tr>`: dòng cha (1., 2., 3.) → các dòng bản 1.1/1.2 (ẩn, bấm ▸ mới bung) → một
- * dòng `colspan=8` giữ hai khung «Ý kiến» và «Lịch sử». `soCha` = số thứ tự dòng trong bảng.
+ * dòng `colspan=10` giữ hai khung «Ý kiến» và «Lịch sử». `soCha` = số thứ tự dòng trong bảng.
  */
+/** V2: tỷ lệ và tiến độ ở ngay tên nhóm, giữ bảng mười cột của đợt 8b.
+ *  Đợt 4 (2026-09-10): ô HẸP lại nên input và nút «Lưu tỷ lệ» XẾP DỌC — bề rộng thật do `app.css`
+ *  quyết (`.kq-o-ty-le-nhap`), không dùng `w-20` của Tailwind vì cột nay hẹp hơn 5rem. */
+function buildTyLeFile(n, ma) {
+  return '<div class="text-xs kq-o-ty-le-trong"><input aria-label="Tỷ lệ công việc (%)" type="number" min="0" max="100" step="1" required class="form-input kq-o-ty-le-nhap" data-ty-le-file="' + escapeHtmlAttr(n.id) + '" value="' + escapeHtmlAttr(Number(n.ty_le) || 0) + '"' + (n.duocSuaTyLe === true ? '' : ' disabled') + '>' +
+    (n.duocSuaTyLe === true ? '<button type="button" data-luu-ty-le-file="1" class="text-blue-600 kq-nut-luu-ty-le" data-file-id="' + escapeHtmlAttr(n.id) + '" data-ma="' + escapeHtmlAttr(ma) + '" onclick="luuTyLeFile(this.dataset.fileId, this.dataset.ma)">Lưu tỷ lệ</button>' : '') + '</div>';
+}
+async function luuTyLeFile(fileId, ma) {
+  const input = [...document.querySelectorAll('[data-ty-le-file]')].find(o => String(o.dataset.tyLeFile) === String(fileId));
+  if (!input || input.disabled || input.dataset.dangLuu === '1') return;
+  if (!input.reportValidity() || !Number.isInteger(Number(input.value)) || !input.value.trim()) {
+    showToast('Tỷ lệ công việc của file phải là số nguyên từ 0 đến 100', 'error'); return;
+  }
+  const tyLe = Number(input.value);
+  input.dataset.dangLuu = '1';
+  try {
+    const latest = await restGet('/api/v1/work-items/' + encodeURIComponent(ma) + '/files');
+    if (!latest?.nhom || !input.isConnected) return;
+    const tong = latest.nhom.reduce((sum, n) => sum + (String(n.id) === String(fileId) ? tyLe : Number(n.ty_le) || 0), 0);
+    if (tong !== 100) {
+      const agreed = await new Promise(resolve => {
+        const dialog = hopThoai8b('Tổng tỷ lệ file khác 100%', 'Tổng mới: ' + tong + '% — bạn có thể sửa lại hoặc vẫn lưu. Tiến độ được chia cho tổng tỷ lệ thực tế.');
+        dialog.actions.append(taoNut8b('Sửa lại', () => { dialog.close(); resolve(false); }), taoNut8b('Vẫn lưu', () => { dialog.close(); resolve(true); }, true));
+        dialog.actions.firstElementChild.focus();
+      });
+      if (!agreed || !input.isConnected) return;
+    }
+    const result = await restGhi('PATCH', '/api/v1/task-files/' + encodeURIComponent(fileId) + '/ty-le', { tyLe });
+    if (!result.ok) { showToast(result.error, 'error'); return; }
+    // ĐỢT B (R4''): cây ĐÃ duyệt thì máy chủ không đổi `ty_le` ngay — nó lập MỘT ĐỀ NGHỊ trong
+    // `approval_changes` và trả về `pending = true` cùng GIÁ TRỊ CŨ trong `nhom.ty_le`. Nói «đã lưu»
+    // ở nhánh này là nói dối: con số trong ô vẫn y nguyên tới khi Ban lãnh đạo kiểm soát ký.
+    const deNghi = result.data.tyLeChange?.pending === true;
+    showToast(deNghi
+      ? 'Đã trình đề nghị đổi tỷ lệ file lên Ban lãnh đạo kiểm soát. Tỷ lệ vẫn là ' + (Number(result.data.nhom?.ty_le) || 0) + '% cho tới khi được duyệt.'
+      : 'Đã lưu tỷ lệ file. Tổng hiện tại: ' + result.data.tongTyLe + '%', 'success');
+    await napKetQua(ma);
+    await refreshData();
+  } finally { delete input.dataset.dangLuu; }
+}
 function buildKhoiFile(n, ma, soCha) {
   const bans = Array.isArray(n.bans) ? n.bans : [];
   const banCuoi = bans.length > 0 ? bans[bans.length - 1] : null;
@@ -3322,6 +4303,11 @@ function buildKhoiFile(n, ma, soCha) {
   // Dòng «Báo cáo» (016) là CHỮ, không có file: không mời tải lên, không mời tải về, không ✎ — ô
   // nhập nội dung nằm ngay trong cột «Hành động» bên dưới menu.
   const laBaoCao = laDongBaoCao(n);
+  if (n.duocGuiDuyet === true && banCuoi) {
+    muc.push(
+      buildMucMenuKq("fa-paper-plane", "Gửi đi duyệt", "guiDiDuyetFile('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(banCuoi.id) + "')")
+    );
+  }
   // «Tải lên (với trường hợp chưa có file)» — sheet gộp phần tải file vào chính bảng kết quả.
   if (coTheNopFile(n, ma) && !laBaoCao) {
     muc.push(
@@ -3364,11 +4350,21 @@ function buildKhoiFile(n, ma, soCha) {
       )
     );
   }
-  const gopY = Array.isArray(n.gopY) ? n.gopY : [];
-  const nutYKien = gopY.length > 0 ? "Xem ý kiến (" + gopY.length + ")" : "Xem ý kiến";
-  const dongBan = bans.map((b, i) => buildDongBanKetQua(n, b, i, so)).join("");
+  // ĐẾM theo danh sách GỘP (góp ý + lý do mỗi lần sửa/trả về/từ chối) — xem `danhSachYKien`.
+  const dsYKien = danhSachYKien(n);
+  const nutYKien = dsYKien.length > 0 ? "Xem ý kiến (" + dsYKien.length + ")" : "Xem ý kiến";
+  // Nhóm mới KHAI (0 bản) mà người xem KHÔNG phải người thực hiện trực tiếp thì mục «Tải lên» đã
+  // biến mất (máy chủ tắt `duocSua`). Nói rõ ai nộp được — không có câu này thì ô «Hành động» trống
+  // trơn và người dùng tưởng nút bị lỗi.
+  const doiNguoiNop =
+    bans.length === 0 && !laBaoCao && !coTheNopFile(n, ma)
+      ? "<div class=\"text-xs text-gray-400 mt-1 text-left\" title=\"Bản kết quả ĐẦU TIÊN phải do chính người thực hiện trực tiếp nộp; TP/PP và PGĐ/GĐ chỉ sửa hoặc nộp từ bản thứ hai trở đi\">Bản đầu chỉ " +
+        escapeHtml(n.ten_nguoi_thuc_hien ? "«" + n.ten_nguoi_thuc_hien + "»" : "người thực hiện trực tiếp") +
+        " nộp được.</div>"
+      : "";
+  const dongBan = bans.map((b, i) => buildDongBanKetQua(n, b, i, so, ma)).join("");
   return (
-    "<tr class=\"dong-kq-nhom\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
+    "<tr class=\"dong-kq-nhom\" data-file=\"" + escapeHtmlAttr(n.id) + "\" data-dinh-dang=\"" + escapeHtmlAttr(n.dinh_dang || "") + "\">" +
     // 1. Thời gian — tự ghi nhận lúc tạo, người dùng không phải điền (sheet dòng 4 cột 1).
     "<td class=\"px-3 py-2 text-xs text-gray-500 whitespace-nowrap\">" + escapeHtml(formatDateForDisplay(n.created_at, true)) + "</td>" +
     // 2. Kết quả làm được — TÊN KHAI của người dùng (016 `ten_ket_qua`); dòng cũ lùi về tên file.
@@ -3391,12 +4387,30 @@ function buildKhoiFile(n, ma, soCha) {
           : "<button type=\"button\" class=\"text-blue-600 hover:underline text-left\" title=\"Tải file này\" onclick=\"taiFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')\">" + escapeHtml(banCuoi.ten_goc || n.ten_goc) + "</button>")
       : "<span class=\"text-gray-400\">Chưa có</span>") +
     "</td>" +
-    // 5. Người thực hiện.
-    "<td class=\"px-3 py-2 text-xs text-gray-600\">" + escapeHtml(n.ten_nguoi_tao) + "</td>" +
-    // 6. Ghi ý kiến — hai nút mở khung bên dưới (ô nhập nằm trong khung «Ý kiến»).
-    "<td class=\"px-3 py-2 whitespace-nowrap\">" +
-    "<button type=\"button\" class=\"text-blue-600 hover:underline text-xs font-medium\" onclick=\"batTatKetQua('" + escapeForInlineHandler(n.id) + "', 'yk')\">" + escapeHtml(nutYKien) + "</button>" +
+    // Tỷ lệ + Tiến độ: HẸP lại và CĂN GIỮA (đợt 4 — «Tỷ lệ công việc (%) Tiến độ, độ rộng bé đi…
+    // sửa để cân đối hơn»). Bỏ `text-right`: căn phải trong cột hẹp đẩy cụm «input + Lưu tỷ lệ» tràn
+    // sang cột bên. Bề rộng thật của hai cột nằm ở colgroup của `buildBangKetQua` + `app.css`.
+    "<td class=\"px-2 py-2 kq-o-ty-le\">" + buildTyLeFile(n, ma) + "</td>" +
+    "<td class=\"px-2 py-2 text-center whitespace-nowrap kq-o-tien-do\">" + escapeHtml(Number(n.tienDo) || 0) + "%</td>" +
+    // 5. Người thực hiện — ĐỢT 5: CĂN GIỮA ô («Người thực hiện cũng sẽ căn giữa»), khớp với tab Nhiệm vụ.
+    // 5. Người thực hiện — ĐỢT 5: CĂN GIỮA ô («Người thực hiện cũng sẽ căn giữa»), khớp với tab Nhiệm vụ.
+    //    12/09/2026: dòng cha in NGƯỜI THỰC HIỆN TRỰC TIẾP của nhiệm vụ, không in `ten_nguoi_tao`
+    //    nữa — kể từ Q1 nhóm có thể do TP/PP KHAI BÁO trước, nên tên người khai dưới cột «Người thực
+    //    hiện» chính là thứ gây nhầm mà người dùng vừa báo. Ai đụng vào TỪNG BẢN thì dòng con 1.1/1.2
+    //    bên dưới nói rõ (người duyệt hay người sửa). Chưa gán người thực hiện thì lùi về người khai.
+    "<td class=\"px-3 py-2 text-xs text-gray-600 text-center kq-o-nguoi\" title=\"" +
+    escapeHtmlAttr(n.ten_nguoi_thuc_hien ? "Người thực hiện trực tiếp của nhiệm vụ" : "Nhiệm vụ chưa gán người thực hiện trực tiếp — đây là người khai báo kết quả") +
+    "\">" + escapeHtml(n.ten_nguoi_thuc_hien || n.ten_nguoi_tao) + "</td>" +
+    // 6. Ghi ý kiến — ĐỢT 5 (2026-09-11): ô CHỈ CÒN CHỮ «Xem ý kiến» mở POPUP, không in nội dung tại
+    //    chỗ nữa. Người dùng: «phần ghi ý kiến sẽ là hiển thị chữ "xem ý kiến", click vào đấy sẽ hiển thị
+    //    popup xem ý kiến của bản đấy, còn bản đầu 1. đấy sẽ xem tất cả» ⇒ dòng cha (1.) truyền `banId`
+    //    RỖNG để popup in TẤT CẢ. Ô NHẬP dời theo popup (`buildONhapYKien`) — cột tên «Ghi ý kiến» nên
+    //    đọc và viết phải ở cùng một chỗ. Số trong ngoặc vẫn ĐẾM theo danh sách GỘP (`danhSachYKien`).
+    "<td class=\"px-3 py-2 text-center kq-o-y-kien\">" +
+    "<div class=\"kq-y-kien-nut\">" +
+    "<button type=\"button\" title=\"Mở popup xem toàn bộ ý kiến của kết quả này\" class=\"text-blue-600 hover:underline text-xs font-medium\" onclick=\"moYKienKetQua('" + escapeForInlineHandler(ma) + "', '" + escapeForInlineHandler(n.id) + "', '')\">" + escapeHtml(nutYKien) + "</button>" +
     "<button type=\"button\" title=\"Ẩn/hiện lịch sử các lần chỉnh sửa\" class=\"text-gray-500 hover:text-gray-700 text-xs ml-2\" onclick=\"batTatKetQua('" + escapeForInlineHandler(n.id) + "', 'ls')\"><i class=\"fas fa-clock-rotate-left mr-1\"></i>Lịch sử</button>" +
+    "</div>" +
     "</td>" +
     // 7. Tình trạng — badge + CÂU KỂ (sheet đòi đọc được «đang đợi ai, trả lại lần mấy»).
     "<td class=\"px-3 py-2\">" +
@@ -3406,11 +4420,12 @@ function buildKhoiFile(n, ma, soCha) {
     // 8. Hành động — MỘT menu, đúng câu chú trong sheet; dòng «Báo cáo» thêm ô nhập chữ (016) vì
     // kết quả của nó KHÔNG phải file: nhập rồi bấm Nộp là thành BẢN MỚI, đi đúng luồng duyệt cũ.
     "<td class=\"px-3 py-2 text-right\">" + buildMenuHanhDongKq("kq-" + n.id, muc) +
-    (laBaoCao && coTheNopFile(n, ma) ? buildONhapBaoCao(n, ma) : "") + "</td>" +
+    (laBaoCao && coTheNopFile(n, ma) ? buildONhapBaoCao(n, ma) : "") + doiNguoiNop + "</td>" +
     "</tr>" +
     dongBan +
-    "<tr class=\"dong-kq-panel\"><td colspan=\"8\" class=\"px-3 pb-2 pt-0\">" +
-    "<div id=\"task-kq-yk-" + escapeHtmlAttr(n.id) + "\" class=\"hidden mt-2 border-t border-gray-50 pt-2\">" + buildYKienPanel(n, ma) + "</div>" +
+    // ĐỢT 5: khung «Ý kiến» ẩn dưới bảng ĐÃ BỎ — nội dung và ô nhập dời hết vào popup
+    // `moYKienKetQua`. Chỉ còn khung «Lịch sử» (bảng các bản + bảng luồng).
+    "<tr class=\"dong-kq-panel\"><td colspan=\"10\" class=\"px-3 pb-2 pt-0\">" +
     "<div id=\"task-kq-ls-" + escapeHtmlAttr(n.id) + "\" class=\"hidden mt-2 border-t border-gray-50 pt-2\">" +
       buildBanFileList(n) +
       buildBangLuongFile(n) +
@@ -3558,15 +4573,22 @@ function createProjectModal(isEdit, project) {
   }, 100), setTimeout(function () {
       // Phân công ba lớp: nạp ứng viên theo phòng; đổi phòng là nạp lại toàn bộ nguồn
       const deptSel = document.getElementById("project-dept-select"),
-        supSel = document.getElementById("project-supervisor-select"),
+        supBox = document.getElementById("project-supervisors-box"),
+        supInput = document.getElementById("project-supervisors-input"),
         leadBox = document.getElementById("project-leaders-box"),
         leadInput = document.getElementById("project-leaders-input");
-      if (deptSel && supSel && leadBox && leadInput) {
-        const supGoc = isEdit && project ? project.supervisorId : "",
+      if (deptSel && supBox && supInput && leadBox && leadInput) {
+        // ĐỢT A (028): đọc `supervisorIds` (mảng) thay cho `supervisorId` (một người). Cầu RPC vẫn
+        // trả khoá đơn `supervisorId` = người ĐẦU để client cũ không vỡ, nhưng form nay cần cả danh
+        // sách — điền sẵn một người rồi bấm Lưu là âm thầm XOÁ những người còn lại.
+        const supGoc = isEdit && project ? project.supervisorIds || [] : [],
           leadGoc = isEdit && project ? project.leaderIds || [] : [];
         let lanDau = true;
         const napPhanCong = function () {
-          napUngVienPhanCong({ deptValue: deptSel.value, supervisorSelect: supSel, leadersBox: leadBox, leadersInput: leadInput, selectedSupervisor: lanDau ? supGoc : "", selectedLeaders: lanDau ? leadGoc : [], applyDefault: true });
+          napUngVienPhanCong({ deptValue: deptSel.value, supervisorsBox: supBox, supervisorsInput: supInput, leadersBox: leadBox, leadersInput: leadInput, selectedSupervisors: lanDau ? supGoc : null, selectedLeaders: lanDau ? leadGoc : [], applyDefault: !isEdit && currentUser?.role !== "Nhân viên" }).then(() => {
+            khoaPhanCongVoiNhanVien(null, leadBox, null, supBox);
+            if (currentUser?.role === "Nhân viên") leadInput.disabled = true;
+          });
           lanDau = false;
         };
         deptSel.addEventListener("change", napPhanCong);
@@ -3581,8 +4603,15 @@ function createProjectModal(isEdit, project) {
         // nạp phân công — không thì ô phòng trống vĩnh viễn cho tới khi đóng/mở lại modal.
         Array.isArray(allDepartments) && allDepartments.length > 0 ? veLaiPhong() : loadDepartmentContext(veLaiPhong);
       }
-    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project", thangSuaDuocCuaDauViec(project[COL.P_START], project[COL.P_END]).length > 0) : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <select name=\"supervisorId\" id=\"project-supervisor-select\" class=\"form-select\"></select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !isAdmin() && !isManager() ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label\">Trạng thái</label>\n                      <select name=\"status\" class=\"form-select\">\n                          <option value=\"Chưa bắt đầu\" " + (isEdit && project[COL.P_STATUS] === "Chưa bắt đầu" ? "selected" : "") + ">Chưa bắt đầu</option>\n                          <option value=\"Đang thực hiện\" " + (isEdit && project[COL.P_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                          <option value=\"Hoàn thành\" " + (isEdit && project[COL.P_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                          <option value=\"Tạm dừng\" " + (isEdit && project[COL.P_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                          <option value=\"Hủy bỏ\" " + (isEdit && project[COL.P_STATUS] === "Hủy bỏ" ? "selected" : "") + ">Hủy bỏ</option>\n                      </select>\n                  </div>\n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  " + buildLuuNhapNutHtml(isEdit) + "\n                  <button type=\"submit\" " + (!isEdit ? "data-gui-duyet=\"1\" " : "") + "class=\"btn-primary\">" + escapeHtml(isEdit ? text2 : "Gửi đi duyệt") + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) + buildKhungTenThang("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
+    }, 250), "\n  <div id=\"project-modal\" class=\"modal\">\n      <div class=\"modal-content\">\n          <div class=\"flex items-center justify-between mb-6\">\n              <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text) + "</h3>\n              <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600\">\n                  <i class=\"fas fa-times\"></i>\n              </button>\n          </div>\n          \n          " + (isEdit ? buildThanhTabNhatKy("project", thangSuaDuocCuaDauViec(project[COL.P_START], project[COL.P_END]).length > 0) : "") + "\n          <form id=\"project-form\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(project[COL.P_ID]) + "\">" : "") + "\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label required\">Tên công việc</label>\n                  <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(project[COL.P_NAME]) || "" : "") + "\" " + (isEdit && !coQuyenTaiDong("update", "project", project) ? "disabled" : "") + ">\n\n              </div>\n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Mô tả</label>\n                  <textarea name=\"description\" class=\"form-textarea\" " + (isEdit && !coQuyenTaiDong("update", "project", project) ? "disabled" : "") + ">" + (isEdit ? escapeHtml(project[COL.P_DESC]) || "" : "") + "</textarea>\n              </div>\n              \n              \n              \n              <div class=\"form-group\">\n                  <label class=\"form-label\">Phòng</label>\n                  <select name=\"departmentId\" id=\"project-dept-select\" class=\"form-select\">\n                      " + buildDeptIdOptions(isEdit && project ? project[COL.P_DEPT_ID] : "") + "\n                  </select>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                  <div id=\"project-supervisors-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"supervisorIds\" id=\"project-supervisors-input\" value=\"" + (isEdit && project ? (project.supervisorIds || []).join(",") : "") + "\">\n                  <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Chỉ người có tên ở đây mới duyệt được công việc này — kể cả Giám đốc. Công việc con chỉ chọn được trong danh sách này; nhiệm vụ chọn đúng một người trong danh sách của công việc con.</p>\n              </div>\n              <div class=\"form-group\">\n                  <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                  <div id=\"project-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                  <input type=\"hidden\" name=\"leaderIds\" id=\"project-leaders-input\" value=\"" + (isEdit && project ? (project.leaderIds || []).join(",") : "") + "\">\n              </div>\n              <div class=\"grid grid-cols-3 gap-4\">\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày bắt đầu</label>\n                      <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_START])) : "") + "\" " + (isEdit && !coQuyenTaiDong("update", "project", project) ? "disabled" : "") + ">\n                  </div>\n                  <div class=\"form-group\">\n                      <label class=\"form-label required\">Ngày kết thúc</label>\n                      <input type=\"date\" name=\"endDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(project[COL.P_END])) : "") + "\" " + (isEdit && !coQuyenTaiDong("update", "project", project) ? "disabled" : "") + ">\n                  </div>\n                  \n              </div>              \n              \n              <div class=\"flex justify-end space-x-3 mt-6\">\n                  <button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>\n                  " + buildLuuNhapNutHtml(isEdit) + "\n                  <button type=\"submit\" " + (!isEdit ? "data-gui-duyet=\"1\" " : "") + "class=\"btn-primary\">" + escapeHtml(isEdit ? text2 : "Gửi đi duyệt") + "</button>\n              </div>\n          </form>\n          " + (isEdit ? buildKhungNhatKy("project", project[COL.P_ID]) + buildKhungTenThang("project", project[COL.P_ID]) : "") + "\n      </div>\n  </div>\n";
 }
+/**
+ * Ba vai được đứng ở ô «Người thực hiện trực tiếp» của NHIỆM VỤ (cấp 3).
+ * Phó Giám đốc và admin KHÔNG có ở đây: họ thuộc lớp «Ban lãnh đạo kiểm soát» (`supervisor_ids`),
+ * đưa họ xuống ô này là trộn hai lớp phân công (§0.1). Máy chủ giữ cùng danh sách trong
+ * `assignments.VAI_LANH_DAO_LAM_TRUC_TIEP` — hai nơi phải đổi cùng lúc.
+ */
+const VAI_LAM_TRUC_TIEP = Object.freeze(["Nhân viên", "Trưởng phòng", "Phó phòng"]);
 function createTaskModal(isEdit, task) {
   const draft = isEdit ? null : pendingTaskCreate;
   if (!isEdit) pendingTaskCreate = null;
@@ -3591,11 +4620,18 @@ function createTaskModal(isEdit, task) {
     createProject = !isEdit && draft && draft.projectId ? String(draft.projectId) : "",
     text = isEdit ? "Chỉnh sửa nhiệm vụ" : createLevel === 2 ? "Tạo công việc con" : "Tạo nhiệm vụ mới",
     text2 = isEdit ? "Cập nhật" : createLevel === 2 ? "Tạo công việc con" : "Tạo nhiệm vụ";
+  // MỚI-5 (12/09/2026): «lập mới nhiệm vụ cấp 3» là trường hợp DUY NHẤT cán bộ thường được chọn
+  // «Ban lãnh đạo kiểm soát» và «Người thực hiện trực tiếp». `laCapHai` khai báo ở CUỐI hàm nên chỗ
+  // này phải tự tính — dùng nó ở đây là dính lỗi TDZ.
+  const lapMoiCapBa = !isEdit && createLevel !== 2;
   let list = [];
-  // 2026-09-02 — Trưởng phòng/Phó phòng KHÔNG chọn được «Cán bộ trực tiếp» khi tạo nhiệm vụ: họ
-  // không qua isAdmin()/isManager() nên rơi vào nhánh cuối («chỉ chính mình»), rồi bộ lọc
+  // 2026-09-02 — Trưởng phòng/Phó phòng KHÔNG chọn được «Người thực hiện trực tiếp» khi tạo nhiệm
+  // vụ: họ không qua isAdmin()/isManager() nên rơi vào nhánh cuối («chỉ chính mình»), rồi bộ lọc
   // role === "Nhân viên" ở dưới cắt sạch ⇒ dropdown rỗng. Nay có nhánh riêng: ứng viên là NHÂN
   // VIÊN CÙNG PHÒNG. Máy chủ vẫn bó lại theo inScope — giao diện không nới quyền.
+  // 2026-09-09 — Trưởng/Phó phòng nay ĐƯỢC nhận việc trực tiếp (quyết định người dùng), nên bộ lọc
+  // vai nới thêm hai vai đó; Phó GĐ và admin vẫn bị ẩn vì họ thuộc lớp «Ban lãnh đạo phụ trách».
+  // Việc họ CÓ được gán hay không còn tuỳ phòng có Phó GĐ phụ trách — xem capNhatUngVienTrucTiep().
   if (isAdmin()) list = allStaff;else if (isManager() || laQuanTriTrongPhamVi()) list = allStaff.filter(staff => {
     const lower = (staff[COL.S_ROLE] || "").toLowerCase();
     return !lower.includes("admin");
@@ -3606,9 +4642,24 @@ function createTaskModal(isEdit, task) {
       if (lower.includes("admin")) return false;
       // Chưa tra được tên phòng của mình (allDepartments chưa nạp) ⇒ giữ cả danh sách để ô không
       // rỗng; chọn người ngoài phòng thì máy chủ trả 403.
-      if (phongToi === "") return true;
+      if (phongToi === "") return false;
       return String(staff[COL.S_DEPT] || "").trim() === phongToi;
     });
+  } else if (lapMoiCapBa) {
+    // MỚI-5 (12/09/2026): người dùng báo «nhân viên khi được phép tạo nhiệm vụ cấp 3, nhưng không
+    // chọn được Ban lãnh đạo kiểm soát, Người thực hiện trực tiếp». Nhánh cuối bên dưới chỉ còn đúng
+    // MỘT ứng viên là chính mình, nên ô có mở ra cũng chẳng có gì để chọn. Lúc LẬP MỚI thì chưa có
+    // «việc của mình» nào để mà tự duyệt, nay cho chọn trong NHÂN VIÊN CÙNG PHÒNG — cùng luật với
+    // nhánh Trưởng/Phó phòng ngay trên. Máy chủ vẫn bó lại, giao diện không nới quyền: RBAC `create`
+    // của vai Nhân viên đòi cùng phòng và đã có việc trong cây, `assertSupervisorsByLevel` đòi BLĐKS
+    // cấp 3 nằm trong tập của công việc con chứa nó.
+    const phongToi = tenPhongCuaToi();
+    const cungPhong = phongToi === "" ? [] : allStaff.filter(staff => {
+      const lower = (staff[COL.S_ROLE] || "").toLowerCase();
+      return !lower.includes("admin") && String(staff[COL.S_DEPT] || "").trim() === phongToi;
+    });
+    // Chưa tra được phòng của mình (allDepartments chưa nạp) thì GIỮ NGUYÊN bản cũ: chỉ chính mình.
+    list = cungPhong.length ? cungPhong : allStaff.filter(staff => staff[COL.S_NAME] === currentUser.name);
   } else {
     const hasMatch = allProjects.some(project => project[COL.P_MANAGER] === currentUser.name);
     hasMatch ? list = allStaff.filter(staff => {
@@ -3617,11 +4668,18 @@ function createTaskModal(isEdit, task) {
     }) : list = allStaff.filter(staff => staff[COL.S_NAME] === currentUser.name);
   }
   list = list.filter(list2 => list2[COL.S_OBJECT_TYPE] !== "Nhà cung cấp")
-      .filter(canBo => canBo[COL.S_ROLE] === "Nhân viên"); // Ứng viên «Cán bộ trực tiếp»: chỉ Nhân viên (ẩn Trưởng/Phó phòng/Phó GĐ)
+      .filter(nguoi => VAI_LAM_TRUC_TIEP.includes(nguoi[COL.S_ROLE])); // Ứng viên «Người thực hiện trực tiếp»: Cán bộ + Trưởng/Phó phòng (ẩn Phó GĐ/admin)
   const isEdit2 = isEdit && task && task[COL.T_ASSIGNEE] === currentUser.name && !isAdmin(),
     taskPid = isEdit && task ? task[COL.T_PID] : "",
     taskPid2 = taskPid && allProjects.find(project => project[COL.P_ID] === taskPid && project[COL.P_MANAGER] === currentUser.name),
-    isEdit22 = isEdit2 && !taskPid2;
+    isEdit22 = isEdit && !coQuyenTaiDong("update", "task", task);
+  // 2026-09-09 — ai được TỰ CHỌN người thực hiện thì KHÔNG điền sẵn tên mình. Trước đây chỉ admin
+  // được đối xử như vậy; nay Trưởng/Phó phòng cũng đứng trong danh sách ứng viên nên nếu cứ giữ
+  // luật cũ, TP mở form tạo nhiệm vụ là thấy tên CHÍNH MÌNH được chọn sẵn — một mặc định sai dễ lọt
+  // qua mắt. Điều kiện khớp đúng `updateAssigneePermission` bên dưới (ô không bị disabled).
+  // MỚI-5 (12/09/2026): thêm `lapMoiCapBa` — cán bộ lập mới nhiệm vụ cấp 3 nay cũng tự chọn, nếu cứ
+  // điền sẵn tên mình thì danh sách cùng phòng vừa mở ra ở trên thành vô nghĩa.
+  const tuChonDuoc = isAdmin() || laQuanTriTrongPhamVi() || laLanhDaoPhong() || lapMoiCapBa;
   // Bug 2 (8b): ô nhập «Tiến độ (%)» đã bỏ — tiến độ do server tính từ mức hoàn thành các nhóm
   // file kết quả (tienDo.js), listener «chọn Hoàn thành tự điền 100%» cũng hết chỗ bám.
   setTimeout(() => {
@@ -3651,7 +4709,9 @@ function createTaskModal(isEdit, task) {
       }
       const elValue = el.value,
         project = allProjects.find(project2 => project2[COL.P_ID] === elValue);
-      if (isAdmin() || laQuanTriTrongPhamVi() || laLanhDaoPhong() || project && project[COL.P_MANAGER] === currentUser.name) el2.disabled = false;else el2.disabled = true, el2.value = currentUser.name;
+      // MỚI-5 (12/09/2026): `lapMoiCapBa` — cán bộ lập mới nhiệm vụ cấp 3 được chọn người thực hiện,
+      // khớp đúng điều kiện của `tuChonDuoc` ở trên để hai nơi không lệch nhau.
+      if (laQuanTriTrongPhamVi() || laLanhDaoPhong() || lapMoiCapBa) el2.disabled = false;else el2.disabled = true, el2.value = currentUser.name;
     }
     el && el3 && el4 && (el.addEventListener("change", updateTaskDateLimits), el.addEventListener("change", updateAssigneePermission), updateTaskDateLimits(), updateAssigneePermission(), el3.addEventListener("change", function () {
       el4.value && this.value > el4.value && (el4.value = this.value);
@@ -3666,12 +4726,24 @@ function createTaskModal(isEdit, task) {
   }, 100);
   // Cấp 2 (công việc con) có đủ ô phân công; nhiệm vụ (cấp 3) chỉ chọn MỘT lãnh đạo phòng
   const laCapHai = isEdit && task ? Number(task[COL.T_LEVEL]) === 2 : createLevel === 2;
+  setTimeout(() => {
+    capNhatLuaChonGuiBld();
+    const form = document.getElementById("task-form");
+    if (form) form.addEventListener("change", capNhatLuaChonGuiBld);
+  }, 110);
+  const parentForm = isEdit ? task?.[COL.T_PARENT] || "" : createParent;
+  // ĐỢT A (028_supervisor_ids.sql): CẢ HAI cấp đều có ô «Ban lãnh đạo kiểm soát» RIÊNG — cấp 2 chọn
+  // NHIỀU người trong danh sách của công việc cha, cấp 3 chọn ĐÚNG MỘT người trong danh sách của
+  // công việc con. Trước đợt A nhiệm vụ nằm dưới công việc con bị ẨN ô này (`coSupervisorRieng =
+  // laCapHai || !parentForm`) và mặc nhiên dùng người của cấp 2; nay cấp 3 phải tự chọn, vì chính
+  // người đó duyệt file kết quả của nhiệm vụ (điểm bất hợp lý số 5 và 12, bản rà soát 10/09/2026).
+  const dungOChonNhieu = laCapHai;
   // Bug 2 (8b): «Tỷ lệ công việc (%)» chỉ có ở ĐẦU MỤC (cấp 2, hoặc cấp 3 không nằm trong công
   // việc con). Server chia đều khi tạo; người giữ quyền «sửa tỷ lệ» (rbac.js ACTION_TY_LE) chỉnh
   // tay. Client chỉ là ổ khoá trang trí — gửi tyLe mà KHÔNG có quyền thì service.js trả 403 cả bản
   // ghi, nên người không có quyền thấy ô KHÓA và KHÔNG có name (không lọt vào FormData).
-  const laDauMucForm = isEdit && task ? Number(task[COL.T_LEVEL]) === 2 || Number(task[COL.T_LEVEL]) === 3 && !task[COL.T_PARENT] : createLevel === 2 || createLevel === 3 && !createParent,
-    duocSuaTyLe = isAdmin() || laQuanTriTrongPhamVi() || laLanhDaoPhong();
+  const laDauMucForm = true,
+    duocSuaTyLe = isEdit ? coQuyenTaiDong("ty-le", "task", task) : coQuyenTrongPhamVi(createLevel === 2 ? "subwork" : "task", "ty-le");
   const taskReminders = isEdit && task ? task[COL.T_REMINDERS] || [] : [],
     taskId = isEdit && task ? task[COL.T_ID] : "";
   // Phân công ba lớp của form nhiệm vụ/CV con: nguồn ứng viên theo PHÒNG của công việc đang
@@ -3679,37 +4751,72 @@ function createTaskModal(isEdit, task) {
   setTimeout(() => {
     const projectSel = document.querySelector("#task-modal select[name=\"projectId\"]"),
       supSel = document.getElementById("task-supervisor-select"),
+      supBox = document.getElementById("task-supervisors-box"),
+      supInput = document.getElementById("task-supervisors-input"),
       leadBox = document.getElementById("task-leaders-box"),
       leadInput = document.getElementById("task-leaders-input"),
       leadSel = document.getElementById("task-leader-select");
     if (!projectSel) return;
+    // Hai ô «Ban lãnh đạo kiểm soát» cùng tên trường `supervisorIds` nhưng chỉ MỘT ô được gửi: ô
+    // không dùng phải `disabled` (select) hoặc không có `name` (hidden input). Để cả hai cùng gửi
+    // thì `FormData` chỉ giữ giá trị cuối — mà giá trị cuối là của ô người dùng KHÔNG nhìn thấy.
+    // Đúng cái bẫy mà cặp ô `leaderIds` cạnh bên đã phải xử lý bằng cùng cách.
+    if (supSel && dungOChonNhieu) supSel.disabled = true;
+    const supGroup = document.getElementById("task-supervisor-group");
+    if (supGroup) supGroup.style.display = dungOChonNhieu ? "none" : "";
+    const supMulti = document.getElementById("task-supervisors-multi");
+    if (supMulti) supMulti.style.display = dungOChonNhieu ? "" : "none";
+    if (leadSel && laCapHai) leadSel.disabled = true;
+    if (leadInput && !laCapHai) leadInput.disabled = true;
+    // Ô «Người thực hiện trực tiếp» vẽ lại SAU khi máy chủ cho biết phòng có Phó GĐ phụ trách hay
+    // không: không có thì cắt Trưởng/Phó phòng khỏi danh sách (2026-09-09). Giữ nguyên lựa chọn cũ
+    // nếu người đó vẫn còn hợp lệ; nếu bị cắt thì trả về rỗng để `required` bắt chọn lại, chứ đừng
+    // âm thầm đổi sang người khác — đổi người thực hiện là đổi cả luồng duyệt.
+    const selTrucTiep = document.querySelector("#task-modal select[name=\"assignee\"]");
+    const veLaiUngVienTrucTiep = function (payload) {
+      if (!selTrucTiep || laCapHai) return;
+      const dangChon = selTrucTiep.value;
+      selTrucTiep.innerHTML = buildUngVienTrucTiepHtml(list, dangChon, payload?.coPhoGiamDocPhuTrach === true);
+      capNhatLuaChonGuiBld();
+    };
     const napPhanCongTask = function () {
       const project = allProjects.find(p => p[COL.P_ID] === projectSel.value);
       napUngVienPhanCong({
         deptValue: project ? project[COL.P_DEPT_ID] : "",
-        supervisorSelect: laCapHai ? supSel : null,
+        parentRef: laCapHai ? "" : parentForm,
+        supervisorSelect: dungOChonNhieu ? null : supSel,
+        supervisorsBox: dungOChonNhieu ? supBox : null,
+        supervisorsInput: dungOChonNhieu ? supInput : null,
         leadersBox: laCapHai ? leadBox : null,
         leadersInput: laCapHai ? leadInput : null,
         singleLeaderSelect: laCapHai ? null : leadSel,
+        // ĐỢT A: cấp 3 lấy nguồn từ CÔNG VIỆC CON (máy chủ lọc `supervisors` theo `parentRef`), nên
+        // KHÔNG điền sẵn từ công việc cha như bản cũ — `applyDefault` tick người ĐẦU của cấp 2 (Q12).
+        // Cấp 2 thừa hưởng nguyên danh sách của công việc cha, đúng như ô lãnh đạo phòng bên dưới.
         selectedSupervisor: isEdit && task ? task.supervisorId : "",
-        selectedLeaders: isEdit && task ? task.leaderIds || [] : [],
-        applyDefault: true
-      }).then(() => khoaPhanCongVoiNhanVien(supSel, leadBox, leadSel));
+        selectedSupervisors: isEdit && task ? task.supervisorIds || [] : dungOChonNhieu ? project?.supervisorIds || [] : null,
+        selectedLeaders: isEdit && task ? task.leaderIds || [] : laCapHai ? project?.leaderIds || [] : [],
+        applyDefault: !isEdit && currentUser?.role !== "Nhân viên"
+      }).then(payload => {
+        // MỚI-5 (12/09/2026): khi LẬP MỚI nhiệm vụ cấp 3, ô «Ban lãnh đạo kiểm soát» phải mở cho cán
+        // bộ — truyền `null` để `khoaPhanCongVoiNhanVien` không đụng tới nó. Ô «Lãnh đạo phòng phụ
+        // trách» (`leadSel`) VẪN khoá: người dùng chỉ yêu cầu mở BLĐKS + người thực hiện trực tiếp,
+        // và máy chủ cũng vẫn từ chối cán bộ đổi `leader_ids` (`assertAssignmentActor`).
+        khoaPhanCongVoiNhanVien(lapMoiCapBa ? null : supSel, leadBox, leadSel, supBox);
+        if (currentUser?.role === "Nhân viên" && leadInput) leadInput.disabled = true;
+        veLaiUngVienTrucTiep(payload);
+      });
     };
     projectSel.addEventListener("change", napPhanCongTask);
     napPhanCongTask();
-    // Kết quả file (014/016): SỬA thì nạp REST. TẠO MỚI (cấp 3) đã nhúng bảng 8 cột + dòng khai
+    // Kết quả file (014/016): SỬA thì nạp REST. TẠO MỚI (cấp 3) đã nhúng bảng 10 cột + dòng khai
     // tạm vào chuỗi HTML bên dưới nên người dùng thấy bảng NGAY, không chờ 250ms, không cần mã.
-    if (isEdit) napKetQua(taskId);
+    if (isEdit && !laCapHai) napKetQua(taskId);
   }, 250);
-  return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">" + (isEdit ? "\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        " : "") + "</div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              " + (isEdit ? buildThanhTabNhatKy("task", thangSuaDuocCuaDauViec(task[COL.T_START], task[COL.T_DUE]).length > 0) : "") + "\n              <!-- 3 Columns Content -->\n              <div id=\"task-form-body\" class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3 md:col-span-1\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 || createProject ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + (isAdmin() || isManager() ? allProjects : getUserAllowedProjects()).map(item => {
+  return "\n  <div id=\"task-modal\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n      <div class=\"modal-content glass-card md:max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"width: 90vw !important; max-width: none !important; height: 96vh !important;\">\n          <form id=\"task-form\" class=\"h-full flex flex-col\">\n              " + (isEdit ? "<input type=\"hidden\" name=\"id\" value=\"" + escapeHtml(taskId) + "\">" : "<input type=\"hidden\" id=\"task-create-level\" name=\"level\" value=\"" + escapeHtml(createLevel) + "\"><input type=\"hidden\" id=\"task-create-parent\" name=\"parent\" value=\"" + escapeHtml(createParent) + "\">") + "\n              \n              <!-- Sticky Header Row -->\n              <div class=\"flex flex-col md:flex-row gap-6 items-center mb-6 sticky bg-white z-10 pb-4 border-b border-gray-100 -mx-8 px-8 -mt-8 pt-4 relative\" style=\"top: -32px;\">\n                " + (!isEdit ? "\n                <button type=\"button\" class=\"close-modal absolute top-4 right-4 text-gray-400 hover:text-gray-600 md:hidden\">\n                    <i class=\"fas fa-times text-xl\"></i>\n                </button>\n                " : "") + "\n                <div class=\"flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full\">\n                    <div class=\"flex items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">\n                            <i class=\"fas " + (isEdit ? "fa-edit" : "fa-plus-circle") + " text-blue-500 mr-2\"></i>" + escapeHtml(text) + "\n                        </h3>\n                    </div>\n                    <div class=\"flex items-center justify-between\">\n                        <div class=\"flex-1 flex justify-center\">" + (isEdit ? "\n                            <button type=\"submit\" class=\"btn-primary flex items-center shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all w-full md:w-auto justify-center\">\n                                <i class=\"fas fa-save mr-2\"></i>" + escapeHtml(text2) + "\n                            </button>\n                        " : "") + "</div>\n                        " + (!isEdit ? "\n                        <button type=\"button\" class=\"close-modal text-gray-400 hover:text-gray-600 hidden md:block\">\n                            <i class=\"fas fa-times text-xl\"></i>\n                        </button>\n                        " : "") + "\n                    </div>\n                </div>\n                " + (isEdit ? "\n                <div class=\"w-full md:w-72 flex items-center gap-2\">\n                    <div class=\"font-semibold text-gray-900 flex items-center cursor-pointer select-none flex-1\" onclick=\"toggleTaskReminders()\">\n                        <i id=\"reminder-toggle-icon\" class=\"fas fa-chevron-down text-gray-400 mr-2 transition-transform duration-300\"></i>\n                        <i class=\"fas fa-bell text-amber-500 mr-2\"></i>\n                        Lịch sử nhắc việc\n                        <button type=\"button\" onclick=\"event.stopPropagation(); openAddReminderModal('" + escapeForInlineHandler(taskId) + "')\" class=\"ml-3 p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors\" title=\"Thêm nhắc việc\">\n                            <i class=\"fas fa-plus text-sm\"></i>\n                        </button>\n                    </div>\n                    <button type=\"button\" class=\"close-modal bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full p-2 transition-colors flex-shrink-0\">\n                        <i class=\"fas fa-times\"></i>\n                    </button>\n                </div>\n                " : "") + "\n              </div>\n\n              " + (isEdit ? buildThanhTabNhatKy("task", thangSuaDuocCuaDauViec(task[COL.T_START], task[COL.T_DUE]).length > 0) : "") + "\n              <!-- 3 Columns Content -->\n              <div id=\"task-form-body\" class=\"flex flex-col md:flex-row gap-6 items-start h-full pb-4 flex-1\">\n                  \n                  <!-- Left Container (Cols 1 & 2) -->\n                  <div class=\"flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 h-auto md:h-full overflow-visible md:overflow-y-auto pr-0 md:pr-2 custom-scrollbar w-full order-2 md:order-1\">\n                      \n                      <!-- Column 1 -->\n                      <div class=\"space-y-3 md:col-span-1\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Tên nhiệm vụ</label>\n                            <input type=\"text\" name=\"name\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(task[COL.T_NAME]) || "" : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                          </div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label required\">Thuộc dự án</label>\n                            <select name=\"projectId\" class=\"form-select\" required " + (isEdit22 || createProject ? "disabled" : "") + ">\n                              <option value=\"\">-- Chọn dự án --</option>\n                              " + congViecChoForm(laCapHai ? "subwork" : "task", isEdit, task).map(item => {
     const text3 = (isEdit ? task[COL.T_PID] : createProject) === item[COL.P_ID] ? "selected" : "";
     return "<option value=\"" + escapeHtml(item[COL.P_ID]) + "\" " + text3 + ">" + escapeHtml(item[COL.P_NAME]) + " (" + escapeHtml(item[COL.P_ID]) + ")</option>";
-  }).join("") + "\n                            </select>\n                          </div>\n                          <div id=\"task-supervisor-group\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                              <select name=\"supervisorId\" id=\"task-supervisor-select\" class=\"form-select\"></select>\n                          </div>\n                          <div id=\"task-leaders-multi\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <div id=\"task-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                          </div>\n                          <div id=\"task-leader-single\" class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <select name=\"leaderIds\" id=\"task-leader-select\" class=\"form-select\"></select>\n                          </div>\n                          <input type=\"hidden\" " + (laCapHai ? "name=\"leaderIds\" " : "") + "id=\"task-leaders-input\" value=\"" + (isEdit && task ? (task.leaderIds || []).join(",") : "") + "\">\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mô tả</label>\n                            <textarea name=\"description\" class=\"form-textarea\" rows=\"5\" " + (isEdit22 ? "disabled" : "") + ">" + (isEdit ? escapeHtml(task[COL.T_DESC]) || "" : "") + "</textarea>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                                <label class=\"form-label\">Cán bộ trực tiếp</label>\n                                <select name=\"assignee\" class=\"form-select\" " + (isEdit22 || laCapHai ? "disabled" : "") + ">\n                                  <option value=\"\">-- Chọn người thực hiện --</option>\n                                  " + list.map(list2 => {
-    let text3 = "";
-    if (isEdit) text3 = task[COL.T_ASSIGNEE] === list2[COL.S_NAME] ? "selected" : "";else !isAdmin() && (text3 = list2[COL.S_NAME] === currentUser.name ? "selected" : "");
-    return "<option value=\"" + escapeHtml(list2[COL.S_NAME]) + "\" " + text3 + ">" + escapeHtml(list2[COL.S_NAME]) + "</option>";
-  }).join("") + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (isEdit && task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "selected") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Trạng thái</label>\n                                  <select name=\"status\" class=\"form-select\">\n                                      <option value=\"Chưa bắt đầu\" " + (isEdit && task[COL.T_STATUS] === "Chưa bắt đầu" ? "selected" : "selected") + ">Chưa bắt đầu</option>\n                                      <option value=\"Đang thực hiện\" " + (isEdit && task[COL.T_STATUS] === "Đang thực hiện" ? "selected" : "") + ">Đang thực hiện</option>\n                                      <option value=\"Hoàn thành\" " + (isEdit && task[COL.T_STATUS] === "Hoàn thành" ? "selected" : "") + ">Hoàn thành</option>\n                                      <option value=\"Tạm dừng\" " + (isEdit && task[COL.T_STATUS] === "Tạm dừng" ? "selected" : "") + ">Tạm dừng</option>\n                                  </select>\n                              </div>" + (laDauMucForm ? "\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tỷ lệ công việc (%)</label>\n                                  <input type=\"number\" " + (duocSuaTyLe ? "name=\"tyLe\"" : "disabled title=\"Chỉ lãnh đạo phụ trách mới sửa được tỷ lệ\"") + " class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? Number(task[COL.T_TY_LE] || 0) : "") + "\"" + (isEdit ? "" : " placeholder=\"Chia đều\"") + ">\n                              </div>" : "") + "\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày hoàn thành</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3 md:col-span-2\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. --><div id=\"task-ket-qua-danh-sach\">" + (!isEdit && createLevel !== 2 ? buildKhungDanhSachKetQua([], "") : "") + "</div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n              " + (!isEdit ? "<div class=\"chan-form-tao sticky bottom-0 -mx-8 px-8 pt-3 pb-3 mt-4 border-t border-gray-100 bg-white flex flex-wrap items-center justify-end gap-3\"><span class=\"mr-auto text-xs text-gray-500 hidden md:inline\"><i class=\"fas fa-info-circle mr-1\"></i>«Lưu tạm» giữ ở Nháp để sửa tiếp · «Gửi đi duyệt» đưa vào hàng chờ</span><button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>" + buildLuuNhapNutHtml(false) + "<button type=\"submit\" data-gui-duyet=\"1\" class=\"btn-primary\"><i class=\"fas fa-paper-plane mr-2\"></i>Gửi đi duyệt</button></div>" : "") + "\n          </form>\n      </div>\n  </div>\n";
+  }).join("") + "\n                            </select>\n                          </div>\n                          <div id=\"task-supervisor-group\" class=\"form-group\" style=\"" + (dungOChonNhieu ? "display:none" : "") + "\">\n                              <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                              <select name=\"supervisorIds\" id=\"task-supervisor-select\" class=\"form-select\"></select>\n                              <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Chọn ĐÚNG MỘT người trong danh sách của công việc con. Người này duyệt kết quả file của nhiệm vụ.</p>\n                          </div>\n                          <div id=\"task-supervisors-multi\" class=\"form-group\" style=\"" + (dungOChonNhieu ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Ban lãnh đạo kiểm soát</label>\n                              <div id=\"task-supervisors-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                              <p class=\"text-xs text-gray-500 mt-1\"><i class=\"fas fa-info-circle mr-1\"></i>Chỉ chọn được trong danh sách đã chọn ở công việc cha. Mỗi nhiệm vụ bên dưới sẽ chọn đúng một người trong danh sách này.</p>\n                          </div>\n                          <input type=\"hidden\" " + (laCapHai ? "name=\"supervisorIds\" " : "") + "id=\"task-supervisors-input\" value=\"" + (isEdit && task ? (task.supervisorIds || []).join(",") : "") + "\">\n                          <div id=\"task-leaders-multi\" class=\"form-group\" style=\"" + (laCapHai ? "" : "display:none") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <div id=\"task-leaders-box\" class=\"flex flex-wrap gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50 min-h-[42px] items-center\"></div>\n                          </div>\n                          <div id=\"task-leader-single\" class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                              <label class=\"form-label\">Lãnh đạo phòng phụ trách</label>\n                              <select name=\"leaderIds\" id=\"task-leader-select\" class=\"form-select\"></select>\n                          </div>\n                          <input type=\"hidden\" " + (laCapHai ? "name=\"leaderIds\" " : "") + "id=\"task-leaders-input\" value=\"" + (isEdit && task ? (task.leaderIds || []).join(",") : "") + "\">\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mô tả</label>\n                            <textarea name=\"description\" class=\"form-textarea\" rows=\"5\" " + (isEdit22 ? "disabled" : "") + ">" + (isEdit ? escapeHtml(task[COL.T_DESC]) || "" : "") + "</textarea>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\" style=\"" + (laCapHai ? "display:none" : "") + "\">\n                                <label class=\"form-label required\">Người thực hiện trực tiếp</label>\n                                <select name=\"assignee\" class=\"form-select\" required" + (isEdit22 || laCapHai ? "disabled" : "") + ">\n                                  <option value=\"\">-- Chọn người thực hiện --</option>\n                                  " + buildUngVienTrucTiepHtml(list, isEdit ? task[COL.T_ASSIGNEE] : tuChonDuoc ? "" : currentUser.name, true) + "\n                                </select>\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Ưu tiên</label>\n                                  <select name=\"priority\" class=\"form-select\" " + (isEdit22 ? "disabled" : "") + ">\n                                      <option value=\"Thấp\" " + (isEdit && task[COL.T_PRIORITY] === "Thấp" ? "selected" : "") + ">Thấp</option>\n                                      <option value=\"Trung bình\" " + (!isEdit || task[COL.T_PRIORITY] === "Trung bình" ? "selected" : "") + ">Trung bình</option>\n                                      <option value=\"Cao\" " + (isEdit && task[COL.T_PRIORITY] === "Cao" ? "selected" : "") + ">Cao</option>\n                                  </select>\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Ngày bắt đầu</label>\n                                  <input type=\"date\" name=\"startDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_START])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                              <div class=\"form-group\">\n                                  <label class=\"form-label required\">Hạn chót</label>\n                                  <input type=\"date\" name=\"dueDate\" class=\"form-input\" required value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_DUE])) : "") + "\" " + (isEdit22 ? "disabled" : "") + ">\n                              </div>\n                          </div>\n                      \n                          <div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n                              " + (laDauMucForm ? "\n                              <div class=\"form-group\">\n                                  <label class=\"form-label\">Tỷ lệ công việc (%)</label>\n                                  <input type=\"number\" " + (duocSuaTyLe ? "name=\"tyLe\"" : "disabled title=\"Chỉ lãnh đạo phụ trách mới sửa được tỷ lệ\"") + " class=\"form-input\" min=\"0\" max=\"100\" value=\"" + (isEdit ? Number(task[COL.T_TY_LE] || 0) : "") + "\"" + (isEdit ? "" : " placeholder=\"Chia đều\"") + ">\n                              </div>" : "") + "\n                              <div class=\"form-group\">\n                                <label class=\"form-label\">Ngày báo cáo</label>\n                                <input type=\"date\" name=\"reportDate\" class=\"form-input\" value=\"" + (isEdit ? escapeHtml(formatDateForInput(task[COL.T_REPORT_DATE])) : "") + "\">\n                              </div>\n                          </div>\n                      </div>\n\n                      <!-- Column 2 -->\n                      <div class=\"space-y-3 md:col-span-2\">\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Mục tiêu</label>\n                            <textarea name=\"target\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_TARGET]) || "" : "") + "</textarea>\n                          </div>\n\n                          <!-- Vòng 14: KẾT QUẢ NHIỆM VỤ LÀ FILE — mỗi file nhân viên nộp là MỘT DÒNG; bấm icon Lịch sử hiện các bản + bảng luồng, bấm «Xem ý kiến» bung chi tiết góp ý. napKetQua nạp vào đây. -->" + (laCapHai ? "" : buildGuiBldCheckboxHtml(isEdit, task)) + "<div id=\"task-ket-qua-danh-sach\">" + (!isEdit && createLevel !== 2 ? buildKhungDanhSachKetQua([], "") : "") + "</div>\n\n                          <div class=\"form-group mb-0\">\n                            <label class=\"form-label\">Kết quả đầu ra</label>\n                            <textarea name=\"output\" class=\"form-textarea\" rows=\"5\">" + (isEdit ? escapeHtml(task[COL.T_OUTPUT]) || "" : "") + "</textarea>\n                          </div>\n                          \n                          <div class=\"form-group mb-0\">\n                              <label class=\"form-label\">Ghi chú</label>\n                              <textarea name=\"notes\" class=\"form-textarea\" rows=\"2\">" + (isEdit ? escapeHtml(task[COL.T_NOTES]) || "" : "") + "</textarea>\n                          </div>\n                      </div>\n                  </div>\n\n                  <!-- Column 3 (Reminders) - Only show in edit mode -->\n                  " + (isEdit ? "\n                  <div id=\"task-reminders-container\" class=\"order-1 md:order-2 w-full md:w-72 h-auto max-h-160 md:h-full flex flex-col pt-1 transition-all duration-300 ease-in-out border-b border-gray-100 pb-4 mb-4 md:border-b-0 md:pb-0 md:mb-0\" style=\"top: 60px;\">\n                      <div id=\"reminders-list\" class=\"reminders-list h-full overflow-y-auto space-y-3 custom-scrollbar pr-1\">\n                          " + (taskReminders.length > 0 ? taskReminders.map((taskReminder, index) => "\n                              <div class=\"reminder-item p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors\">\n                                  <div class=\"flex items-start justify-between\">\n                                      <div class=\"flex-1\">\n                                          <div class=\"flex items-center text-sm font-medium text-gray-900 mb-1\">\n                                              <i class=\"fas fa-calendar-alt text-amber-500 mr-2 text-xs\"></i>\n                                              " + escapeHtml(formatDateForDisplay(taskReminder.date)) + "\n                                          </div>\n                                          <p class=\"text-sm text-gray-600 leading-relaxed reminder-content\">" + (linkifyText(taskReminder.content) || "<em class=\"text-gray-400\">Không có nội dung</em>") + "</p>\n                                      </div>\n                                      " + (isAdmin() || isEdit2 || taskPid2 ? "\n                                      <div class=\"flex items-center space-x-1 ml-2\">\n                                          <button type=\"button\" onclick=\"openEditReminderModal('" + escapeForInlineHandler(taskId) + "', " + index + ", '" + escapeForInlineHandler(taskReminder.date) + "', decodeURIComponent('" + escapeForInlineHandler(encodeURIComponent(taskReminder.content || "")) + "'))\" class=\"p-1 text-gray-400 hover:text-blue-600 transition-colors\" title=\"Sửa\">\n                                              <i class=\"fas fa-edit text-xs\"></i>\n                                          </button>\n                                          <button type=\"button\" onclick=\"handleDeleteReminder('" + escapeForInlineHandler(taskId) + "', " + index + ")\" class=\"p-1 text-gray-400 hover:text-red-600 transition-colors\" title=\"Xóa\">\n                                              <i class=\"fas fa-trash text-xs\"></i>\n                                          </button>\n                                      </div>\n                                      " : "") + "\n                                  </div>\n                              </div>\n                          ").join("") : "\n                              <div class=\"text-center py-8 text-gray-400\">\n                                  <i class=\"fas fa-bell-slash text-3xl mb-2\"></i>\n                                  <p class=\"text-sm\">Chưa có nhắc việc nào</p>\n                              </div>\n                          ") + "\n                      </div>\n                  </div>\n                  " : "") + "\n\n              </div>\n              " + (isEdit ? buildKhungNhatKy("task", taskId) + buildKhungTenThang("task", taskId) : "") + "\n              " + (!isEdit ? "<div class=\"chan-form-tao sticky bottom-0 -mx-8 px-8 pt-3 pb-3 mt-4 border-t border-gray-100 bg-white flex flex-wrap items-center justify-end gap-3\"><span class=\"mr-auto text-xs text-gray-500 hidden md:inline\"><i class=\"fas fa-info-circle mr-1\"></i>«Lưu tạm» giữ ở Nháp để sửa tiếp · «Gửi đi duyệt» đưa vào hàng chờ</span><button type=\"button\" class=\"btn-secondary close-modal\">Hủy</button>" + buildLuuNhapNutHtml(false) + "<button type=\"submit\" data-gui-duyet=\"1\" class=\"btn-primary\"><i class=\"fas fa-paper-plane mr-2\"></i>Gửi đi duyệt</button></div>" : "") + "\n          </form>\n      </div>\n  </div>\n";
 }
 function toggleTaskReminders(forceShow) {
   const taskRemindersContainerEl = document.getElementById("task-reminders-container"),
@@ -3738,10 +4845,30 @@ function buildDeptRoleOptions(selected) {
  * Quy ước BUILDER: hàm dựng HTML phải có tiền tố build, create hoặc render.
  */
 
-/** Ô chọn "Ban lãnh đạo kiểm soát" — MỘT người (admin hoặc Phó GĐ phụ trách phòng). */
+/**
+ * Ô chọn "Ban lãnh đạo kiểm soát" — MỘT người, nay chỉ còn dùng ở CẤP 3 (nhiệm vụ).
+ *
+ * ĐỢT A (028_supervisor_ids.sql): cấp 1 và cấp 2 chuyển sang chọn NHIỀU (`buildSupervisorCheckboxesHtml`
+ * bên dưới), cấp 3 vẫn đúng một người — và chỉ được chọn trong danh sách của công việc con chứa nó,
+ * nên máy chủ trả về `supervisors` đã lọc sẵn theo tập của cấp 2. Ô này vì thế KHÔNG cần tự lọc.
+ */
 function buildSupervisorOptionsHtml(list, selectedId, defaultValue) {
   const chosen = String(selectedId == null ? "" : selectedId).trim() || String(defaultValue == null ? "" : defaultValue).trim() || "";
   return "<option value=\"\">-- Không chọn --</option>" + list.map(s => "<option value=\"" + escapeHtmlAttr(s.id) + "\"" + (String(s.id) === chosen ? " selected" : "") + ">" + escapeHtml(s.name) + "</option>").join("");
+}
+
+/**
+ * Nhóm checkbox «Ban lãnh đạo kiểm soát» của CẤP 1 (công việc) và CẤP 2 (công việc con) — ĐỢT A.
+ *
+ * Cùng khuôn `buildLeaderCheckboxesHtml`: tick nhiều người, id ghi vào một hidden input phân tách
+ * dấu phẩy. Viết thành hàm RIÊNG chứ không tham số hoá tên class dùng chung, vì class nằm trong
+ * thuộc tính HTML và mọi chỗ nội suy biến vào HTML đều phải qua rà soát XSS (`docs/XSS-4.6.md`);
+ * giữ tên class là chuỗi hằng viết thẳng thì chỗ này không sinh thêm điểm phải thoát.
+ */
+function buildSupervisorCheckboxesHtml(list, selectedIds) {
+  const dangChon = new Set((selectedIds || []).map(String));
+  if (!list || list.length === 0) return "<span class=\"text-gray-400 text-sm\">Chưa có Ban lãnh đạo nào để chọn — hãy phân công Phó Giám đốc phụ trách phòng này trước</span>";
+  return list.map(s => "<label class=\"inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-blue-300\"><input type=\"checkbox\" class=\"supervisor-opt accent-blue-600\" value=\"" + escapeHtmlAttr(s.id) + "\"" + (dangChon.has(String(s.id)) ? " checked" : "") + "><span class=\"text-sm\">" + escapeHtml(s.name) + "</span></label>").join("");
 }
 
 /** Nhóm checkbox "Lãnh đạo phòng phụ trách" — NHIỀU người, ghi id vào hidden input. */
@@ -3749,6 +4876,31 @@ function buildLeaderCheckboxesHtml(list, selectedIds) {
   const dangChon = new Set((selectedIds || []).map(String));
   if (!list || list.length === 0) return "<span class=\"text-gray-400 text-sm\">Không có lãnh đạo phòng nào để chọn</span>";
   return list.map(l => "<label class=\"inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-md px-2 py-1 cursor-pointer hover:border-blue-300\"><input type=\"checkbox\" class=\"leader-opt accent-blue-600\" value=\"" + escapeHtmlAttr(l.id) + "\"" + (dangChon.has(String(l.id)) ? " checked" : "") + "><span class=\"text-sm\">" + escapeHtml(l.name) + "</span></label>").join("");
+}
+
+/**
+ * Ô «Người thực hiện trực tiếp» của NHIỆM VỤ (cấp 3) — MỘT người.
+ *
+ * `value` là TÊN người, không phải id: cả luồng lưu/sửa và dữ liệu cũ đều đối chiếu theo tên
+ * (xem phép 15 `legacy-gd2-parity`), đổi sang id ở đây là vỡ tương thích ngược.
+ *
+ * `choChonLanhDao` = phòng của công việc đang chọn CÓ Phó Giám đốc phụ trách hay không. Khi KHÔNG
+ * có thì Trưởng/Phó phòng bị cắt khỏi danh sách: họ nộp kết quả lên sẽ không ai duyệt được
+ * (quyết định người dùng 2026-09-09). Máy chủ chặn lại lần nữa trong
+ * `assignments.assertTaskAssignee` với mã `ASSIGNEE_LEADER_NO_DEPUTY` — giao diện chỉ đừng đưa ra
+ * lựa chọn chắc chắn bị từ chối.
+ *
+ * Tên có kèm vai trong NGOẶC cho hai vai lãnh đạo, vì từ 2026-09-09 họ đứng chung danh sách với
+ * Cán bộ (quyết định «nhãn kèm vai»); Cán bộ không kèm để danh sách khỏi rối.
+ */
+function buildUngVienTrucTiepHtml(list, selectedName, choChonLanhDao) {
+  const chon = String(selectedName == null ? "" : selectedName).trim();
+  const duocChon = (list || []).filter(nguoi => choChonLanhDao === true || nguoi[COL.S_ROLE] === "Nhân viên");
+  return "<option value=\"\">-- Chọn người thực hiện --</option>" + duocChon.map(nguoi => {
+    const ten = nguoi[COL.S_NAME],
+      vai = nguoi[COL.S_ROLE];
+    return "<option value=\"" + escapeHtmlAttr(ten) + "\"" + (String(ten) === chon ? " selected" : "") + ">" + escapeHtml(ten) + (choChonLanhDao === true && vai && vai !== "Nhân viên" ? " (" + escapeHtml(vai) + ")" : "") + "</option>";
+  }).join("");
 }
 
 /**
@@ -3764,7 +4916,7 @@ function buildLeaderCheckboxesHtml(list, selectedIds) {
  * Vai được sửa: admin · Phó Giám đốc · Trưởng phòng · Phó phòng (đúng nhóm `laLanhDaoPhong()` +
  * `laQuanTriTrongPhamVi()`); mọi vai còn lại chỉ xem.
  */
-function khoaPhanCongVoiNhanVien(supervisorSelect, leadersBox, singleLeaderSelect) {
+function khoaPhanCongVoiNhanVien(supervisorSelect, leadersBox, singleLeaderSelect, supervisorsBox) {
   if (laQuanTriTrongPhamVi() || laLanhDaoPhong()) return;
   const ghiChu = "Chỉ Trưởng phòng / Phó phòng / Phó Giám đốc / Giám đốc đổi được ô này.";
   if (singleLeaderSelect) {
@@ -3781,6 +4933,15 @@ function khoaPhanCongVoiNhanVien(supervisorSelect, leadersBox, singleLeaderSelec
     });
     leadersBox.title = ghiChu;
   }
+  // ĐỢT A: ô «Ban lãnh đạo kiểm soát» cấp 1/cấp 2 nay là nhóm checkbox. Khoá nó CÒN quan trọng hơn
+  // khoá ô lãnh đạo phòng: danh sách này quyết định AI DUYỆT được cả cây (R1a), để Cán bộ tự đổi là
+  // tự chỉ định người duyệt cho việc của mình.
+  if (supervisorsBox) {
+    supervisorsBox.querySelectorAll(".supervisor-opt").forEach((o) => {
+      o.disabled = true;
+    });
+    supervisorsBox.title = ghiChu;
+  }
 }
 /** Đọc checkbox đang chọn rồi ghi danh sách id (phân tách dấu phẩy) vào hidden input. */
 function capNhatLeaderInput(leadersBoxEl, leadersInputEl) {
@@ -3788,25 +4949,40 @@ function capNhatLeaderInput(leadersBoxEl, leadersInputEl) {
   const ids = Array.from(leadersBoxEl.querySelectorAll(".leader-opt:checked")).map(item => item.value);
   leadersInputEl.value = ids.join(",");
 }
+/** Như `capNhatLeaderInput` nhưng cho nhóm «Ban lãnh đạo kiểm soát» (đợt A). */
+function capNhatSupervisorInput(boxEl, inputEl) {
+  if (!boxEl || !inputEl) return;
+  const ids = Array.from(boxEl.querySelectorAll(".supervisor-opt:checked")).map(item => item.value);
+  inputEl.value = ids.join(",");
+}
 /** Ô chọn PHÒNG của form công việc — value là id phòng; "" = Công việc chung. */
 function buildDeptIdOptions(selectedId) {
   const value = String(selectedId == null ? "" : selectedId).trim(),
     tong = Array.isArray(allDepartments) ? allDepartments.length : 0,
-    list = (Array.isArray(allDepartments) ? allDepartments : []).filter(d => String(d[COL.D_DB_ID] == null ? "" : d[COL.D_DB_ID]).trim() !== "");
+    list = (Array.isArray(allDepartments) ? allDepartments : []).filter(d => String(d[COL.D_DB_ID] == null ? "" : d[COL.D_DB_ID]).trim() !== "" &&
+      coQuyenTrongPhamVi("work", "create", { dept: d[COL.D_DB_ID], deptName: d[COL.D_NAME] }));
   if (list.length < tong)
     console.warn("[QLCV] Bỏ " + (tong - list.length) + "/" + tong + " phòng vì máy chủ không gửi ID phòng (D_DB_ID) — máy chủ đang chạy bản cũ, cần cập nhật server/src/rpc/legacyFields.js rồi khởi động lại.");
   // allDepartments là object khoá legacy (COL.D_*): đọc d.id/d.name là undefined ⇒ dropdown trống
   // (bẫy 2026-08-26 lần 2). Value PHẢI là D_DB_ID (id số) — preselect khi sửa dùng P_DEPT_ID.
-  return '<option value="">-- Công việc chung --</option>' + list.map(d => "<option value=\"" + escapeHtmlAttr(d[COL.D_DB_ID]) + "\"" + (String(d[COL.D_DB_ID]) === value ? " selected" : "") + ">" + escapeHtml(d[COL.D_NAME]) + "</option>").join("");
+  const chon = value || String(phongCuaTaiKhoan() || "");
+  return (isAdmin() || coQuyenTrongPhamVi("work", "create", { dept: null }) ? '<option value="">-- Công việc chung --</option>' : '<option value="" disabled>-- Tài khoản cần được phân phòng --</option>') + list.map(d => "<option value=\"" + escapeHtmlAttr(d[COL.D_DB_ID]) + "\"" + (String(d[COL.D_DB_ID]) === chon ? " selected" : "") + ">" + escapeHtml(d[COL.D_NAME]) + "</option>").join("");
 }
 
 /**
  * Nạp ứng viên phân công cho form đang mở và vẽ vào DOM.
- * singleLeaderSelect: nhiệm vụ (chọn MỘT leader); leadersBox + leadersInput: công việc/CV con.
+ *
+ * Bốn ô, mỗi ô một cặp tham số — CẤP của dòng đang mở quyết định ô nào được truyền vào:
+ *   • `supervisorSelect`                   Ban lãnh đạo kiểm soát của NHIỆM VỤ (cấp 3) — MỘT người;
+ *   • `supervisorsBox` + `supervisorsInput`  … của công việc / công việc con (cấp 1, 2) — NHIỀU
+ *                                          người (đợt A, 028_supervisor_ids.sql);
+ *   • `singleLeaderSelect`                 lãnh đạo phòng của nhiệm vụ — MỘT người;
+ *   • `leadersBox` + `leadersInput`        lãnh đạo phòng của công việc / công việc con — NHIỀU người.
  */
 async function napUngVienPhanCong(opts) {
   const { deptValue = "", parentRef = "", supervisorSelect = null, singleLeaderSelect = null,
-          leadersBox = null, leadersInput = null, selectedSupervisor = "", selectedLeaders = [],
+          leadersBox = null, leadersInput = null, supervisorsBox = null, supervisorsInput = null,
+          selectedSupervisor = "", selectedSupervisors = null, selectedLeaders = [],
           applyDefault = false } = opts;
   const query = [];
   if (deptValue) query.push("departmentId=" + encodeURIComponent(deptValue));
@@ -3821,6 +4997,17 @@ async function napUngVienPhanCong(opts) {
   const supervisors = Array.isArray(payload.supervisors) ? payload.supervisors : [],
     leaders = Array.isArray(payload.leaders) ? payload.leaders : [];
   if (supervisorSelect) supervisorSelect.innerHTML = buildSupervisorOptionsHtml(supervisors, selectedSupervisor, applyDefault ? payload.defaultSupervisorId : "");
+  if (supervisorsBox && supervisorsInput) {
+    // ĐỢT A (028): cấp 1 và cấp 2 chọn NHIỀU Ban lãnh đạo kiểm soát. Đổi phòng là «chọn lại» —
+    // không có chọn gốc thì tick sẵn người máy chủ đề nghị (`defaultSupervisorId`: Phó GĐ phụ trách
+    // phòng, cùng luật với backfill 005/028); khi SỬA thì giữ nguyên chọn gốc. Đúng khuôn ô lãnh đạo
+    // phòng ngay bên dưới để hai ô cạnh nhau cư xử giống nhau, người dùng khỏi phải học hai kiểu.
+    const chonGoc = Array.isArray(selectedSupervisors) ? selectedSupervisors : null;
+    const danhDau = chonGoc && chonGoc.length > 0 ? chonGoc : applyDefault && payload.defaultSupervisorId != null ? [payload.defaultSupervisorId] : [];
+    supervisorsBox.innerHTML = buildSupervisorCheckboxesHtml(supervisors, danhDau);
+    capNhatSupervisorInput(supervisorsBox, supervisorsInput);
+    supervisorsBox.onchange = () => capNhatSupervisorInput(supervisorsBox, supervisorsInput);
+  }
   if (singleLeaderSelect) {
     const chosen = String(selectedLeaders && selectedLeaders[0] != null ? selectedLeaders[0] : "").trim() || (applyDefault && payload.defaultLeaderId != null ? String(payload.defaultLeaderId) : "");
     singleLeaderSelect.innerHTML = "<option value=\"\">-- Không chọn --</option>" + leaders.map(l => "<option value=\"" + escapeHtmlAttr(l.id) + "\"" + (String(l.id) === chosen ? " selected" : "") + ">" + escapeHtml(l.name) + "</option>").join("");
@@ -3834,6 +5021,9 @@ async function napUngVienPhanCong(opts) {
     capNhatLeaderInput(leadersBox, leadersInput);
     leadersBox.onchange = () => capNhatLeaderInput(leadersBox, leadersInput);
   }
+  // Trả phản hồi ra ngoài: ô «Người thực hiện trực tiếp» cần đọc `coPhoGiamDocPhuTrach` để quyết
+  // có hiện Trưởng/Phó phòng hay không (2026-09-09). Gọi lại API lần nữa là thừa một vòng mạng.
+  return payload;
 }
 
 // ===== Việc 4.6: ba hàm thoát ký tự dùng chung cho mọi chỗ dựng HTML bằng chuỗi =====
@@ -4189,15 +5379,32 @@ function handleAdd(type, { luuNhap = false, guiDuyet = false } = {}) {
     data[key] = value;
   }
   if (type === "task") {
-    const els = el.querySelectorAll("input[disabled], textarea[disabled], select[disabled]");
+    const els = el.querySelectorAll('select[name="projectId"][disabled], select[name="assignee"][disabled]');
     els.forEach(el3 => {
       el3.name && el3.value && (data[el3.name] = el3.value);
     });
   }
+  if (type === "task") thuGuiBldForm(el, data);
   if (type === "app") {
     const els = el.querySelectorAll("input[name=\"app-permissions\"]:checked"),
       mapped = Array.from(els).map(item => item.value);
     data[COL.A_PERMISSIONS] = mapped.join(", ");
+  }
+  // MỚI-5 (12/09/2026): cán bộ LẬP MỚI nhiệm vụ cấp 3 thì được chọn «Ban lãnh đạo kiểm soát», nên
+  // phải GIỮ khoá đó lại — xoá như bản cũ thì máy chủ lại tự lấy người đầu của cấp 2 (Q12) và ô vừa
+  // mở ra trên form thành vô nghĩa. Chỉ giữ khi người dùng THẬT SỰ có chọn: để trống thì vẫn xoá khoá
+  // để máy chủ dùng mặc định, đúng hành vi cũ và không bao giờ sinh nhiệm vụ cấp 3 không có ai duyệt.
+  // `leaderIds` (Lãnh đạo phòng phụ trách) VẪN xoá — người dùng không yêu cầu mở, và máy chủ cũng vẫn
+  // từ chối (`assertAssignmentActor`). Form SỬA (`handleEdit` bên dưới) giữ nguyên van cũ.
+  const giuBldksKhiLapMoi =
+    type === "task" && Number(data.level) === 3 && String(data.supervisorIds || "").trim() !== "";
+  if (["project", "task"].includes(type) && !laQuanTriTrongPhamVi() && !laLanhDaoPhong()) {
+    // ĐỢT A (028): ô này nay tên `supervisorIds`. Vẫn xoá THÊM khoá cũ `supervisorId` vì trang đang
+    // mở từ trước khi tải bản mới còn gửi khoá đó, và cầu RPC vẫn nhận nó — thiếu một khoá là Cán bộ
+    // đổi được người duyệt kết quả của chính mình.
+    if (!giuBldksKhiLapMoi) delete data.supervisorIds;
+    delete data.supervisorId;
+    delete data.leaderIds;
   }
   // «Lưu nháp» (012) chỉ có nghĩa với công việc/nhiệm vụ — cầu RPC chuyển thẳng khoá này thành
   // `saveAsDraft` của REST (rpc/table.js). Vai nào tạo cũng lưu nháp được (người dùng chốt cả 3 cấp).
@@ -4274,17 +5481,30 @@ function handleEdit(type, proposal) {
     if (key !== "id") data[key] = value;
   }
   if (type === "task") {
-    const els = el.querySelectorAll("input[disabled], textarea[disabled], select[disabled]");
+    const els = el.querySelectorAll('select[name="projectId"][disabled]');
     els.forEach(el3 => {
       el3.name && el3.name !== "id" && el3.value && (data[el3.name] = el3.value);
     });
   }
+  if (type === "task") thuGuiBldForm(el, data);
   if (type === "app") {
     const els = el.querySelectorAll("input[name=\"app-permissions\"]:checked"),
       mapped = Array.from(els).map(item => item.value);
     data[COL.A_PERMISSIONS] = mapped.join(", ");
   }
   const id = formData.get("id");
+  if (["project", "task"].includes(type) && !laQuanTriTrongPhamVi() && !laLanhDaoPhong()) {
+    // ĐỢT A (028): ô này nay tên `supervisorIds`. Vẫn xoá THÊM khoá cũ `supervisorId` vì trang đang
+    // mở từ trước khi tải bản mới còn gửi khoá đó, và cầu RPC vẫn nhận nó — thiếu một khoá là Cán bộ
+    // đổi được người duyệt kết quả của chính mình.
+    delete data.supervisorIds;
+    delete data.supervisorId;
+    delete data.leaderIds;
+  }
+  if (["project", "task"].includes(type) && proposal?.[COL.P_APPROVAL] === "Chờ duyệt" &&
+      coQuyenTaiDong("approve", type, proposal) && typeof luuSuaVaQuyetDinh8b === "function") {
+    return luuSuaVaQuyetDinh8b(type, proposal, data, el);
+  }
   updateOptimisticUpdate(type, id, data), closeModal(type + "-modal"), showToast(type.charAt(0).toUpperCase() + type.slice(1) + " đang được cập nhật...", "info"), setButtonLoading(el2, true);
   let text = "";
   if (type === "project") text = "updateProjectWithAuth";else {
@@ -4299,7 +5519,7 @@ function handleEdit(type, proposal) {
   google.script.run.withSuccessHandler(function (response) {
     setButtonLoading(el2, false);
     if (response.success) {
-      showToast(type.charAt(0).toUpperCase() + type.slice(1) + " đã được cập nhật thành công!", "success");
+      showToast(response.guiBldChange?.pending ? "Đã trình đề nghị đổi Gửi BLĐ; tích hiện tại giữ nguyên đến khi được duyệt." : type.charAt(0).toUpperCase() + type.slice(1) + " đã được cập nhật thành công!", "success");
       if (type === "project") google.script.run.withSuccessHandler(response2 => {
         allProjects = response2, renderProjects(), renderProjectStats(), renderStats(), renderProjectProgressChart(), renderProjectComparisonChart();
       }).getProjects();else {
@@ -4393,11 +5613,15 @@ function confirmDelete(type, id, name) {
 }
 function refreshData() {
   if (!isAuthenticated || typeof google === "undefined" || !google.script) return Promise.resolve(false);
+  const nguoi = currentUser;
   return new Promise((resolve) => {
     google.script.run.withSuccessHandler(function (response) {
+      if (!isAuthenticated || currentUser !== nguoi) { resolve(false); return; }
       if (response && response.success) {
-        handleSuccessfulLogin(response);
-        resolve(true);
+        Promise.resolve(handleSuccessfulLogin(response)).then(() => resolve(true), error => {
+          showToast("Không cập nhật được màn hình: " + error.message, "error");
+          resolve(false);
+        });
       } else {
         showToast((response && response.error) || "Lỗi khi tải dữ liệu", "error");
         resolve(false);
@@ -4497,23 +5721,12 @@ function buildLuuNhapNutHtml(isEdit) {
     "\"><i class=\"fas fa-pen-nib mr-2\"></i>" + escapeHtml("Lưu tạm") + "</button>"
   );
 }
-/**
- * CHẾ ĐỘ DUYỆT — CHỈ ĐỌC của modal chi tiết (012, Vòng 13).
- *
- * Người duyệt bấm «Xem chi tiết» trên hộp chờ duyệt để đọc CẢ CÂY (công việc cấp 1 → công việc con
- * → nhiệm vụ) trước khi ký một lần cho cả cây. Ở màn đó KHÔNG cho sửa gì: người duyệt đọc rồi
- * quyết, muốn đổi nội dung thì bấm «Trả lại để sửa» cho người lập.
- *
- * Là một cờ toàn cục chứ không phải tham số vì hàm dựng modal nằm ở `project-details.js` và gọi
- * xuống nhiều builder con (`coQuyenSuaCongViecCon`, `createSubworkFromWorkButtonHtml`…); luồn tham
- * số qua từng tầng thì phải sửa mọi chữ ký, mà chỉ để trả lời một câu hỏi duy nhất.
- * Máy chủ vẫn là rào chặn cuối: mở nút bằng tay vẫn không ghi được (`coSuaDuocKhiChoDuyet`).
- */
+// Màn hình duyệt giữ ngữ cảnh cây; quyền approve cho phép sửa mục đang Chờ duyệt.
 let cheDoDuyetChiDoc = false;
 function laCheDoDuyetChiDoc() {
-  return cheDoDuyetChiDoc === true;
+  return false; // Người duyệt sửa được nội dung theo quyền hiện tại; cờ còn để theo dõi màn duyệt.
 }
-/** Mở modal chi tiết công việc ở chế độ chỉ đọc, và tự tắt cờ khi modal đóng. */
+/** Mở modal chi tiết để duyệt, và tự tắt cờ khi modal đóng. */
 /** Mở modal duyệt ngay từ bootstrap hiện có, rồi làm mới authoritative ở nền. */
 function moChiTietCheDoDuyet(maCongViec, tenCongViec) {
   const ve = () => {
@@ -4540,6 +5753,7 @@ function moChiTietCheDoDuyet(maCongViec, tenCongViec) {
     return refreshData().then(ok => { if (ok) ve(); });
   }
   if (!ve()) return;
+  if (typeof lamMoiChiTiet8b === "function") return;
   if (typeof google === "undefined" || !google.script || typeof refreshData !== "function") return;
   const modalBefore = document.getElementById("project-details-modal");
   refreshData().then((ok) => {
@@ -4622,21 +5836,12 @@ function pendingApprovalBadge(row) {
   return "<span class=\"status-badge status-awaiting ml-1\" title=\"" + escapeHtmlAttr(tieuDe) + "\"><i class=\"fas fa-hourglass-half mr-1\"></i>" + escapeHtml("Chờ duyệt") + "</span>";
 }
 function getStatusClass(status) {
-  const lower = status.toLowerCase();
-  if (lower.includes("hoàn thành")) return "status-completed";
-  if (lower.includes("đang")) return "status-active";
-  if (lower.includes("quá hạn")) return "status-overdue";
-  if (lower.includes("tạm dừng")) return "status-paused";
-  if (lower.includes("hủy bỏ")) return "status-canceled";
+  if (status === "Đã duyệt đủ kết quả") return "status-completed";
+  if (String(status).includes("Quá hạn")) return "status-overdue";
   return "status-pending";
 }
 function getStatusIconClass(status) {
-  const lower = (status || "").toLowerCase();
-  if (lower.includes("hoàn thành")) return "text-green-500";
-  if (lower.includes("đang")) return "text-blue-500";
-  if (lower.includes("tạm dừng")) return "text-yellow-500";
-  if (lower.includes("hủy bỏ")) return "text-red-500";
-  return "text-gray-500";
+  return status === "Đã duyệt đủ kết quả" ? "text-green-500" : "text-gray-500";
 }
 function getPriorityClass(priority) {
   const lower = priority.toLowerCase();
@@ -4719,67 +5924,22 @@ function showToast(message, type = "info") {
   }, 5000);
 }
 function getUserAllowedProjects() {
-  if (isAdmin()) return allProjects;
-  // 2026-08-27: Phó Giám đốc thấy công việc của CÁC PHÒNG MÌNH PHỤ TRÁCH. `visibleDepartments` là
-  // danh sách TÊN phòng do `getDepartmentContext()` trả về và với vai này chính là các phòng phụ
-  // trách (bootstrap/service.js), nên đây là bản sao đúng phạm vi của máy chủ, không phải toàn cục.
-  // Chưa nạp xong ngữ cảnh phòng (mảng rỗng) thì rơi về luật cũ, không mở rộng bừa.
-  if (laQuanTriTrongPhamVi() && Array.isArray(visibleDepartments) && visibleDepartments.length > 0) {
-    const trongPham = allProjects.filter(project => visibleDepartments.includes(project[COL.P_DEPT]));
-    if (trongPham.length > 0) return trongPham;
-  }
-  // Vòng 12e: Trưởng phòng / Phó phòng thấy công việc của PHÒNG MÌNH — ma trận §6 cho họ
-  // work:read/update/delete theo phòng và máy chủ (`inScope` case 'Trưởng phòng'/'Phó phòng') đã
-  // trả về đủ; thiếu nhánh này thì họ rơi xuống luật cuối «việc mình đứng tên quản lý hoặc được
-  // giao» ⇒ chỉ thấy 1–2 công việc và rất dễ chẩn đoán nhầm thành lỗi bộ lọc tháng.
-  // Phòng lấy từ `tenPhongTaiKhoan()` — KHÔNG dùng `visibleDepartments` (kênh riêng của Phó GĐ,
-  // bẫy §13.5). Bối cảnh phòng chưa về (tên rỗng) ⇒ rơi về luật cũ, không nới bừa; `
-  // loadDepartmentContext` đã vẽ lại cho TP/PP từ Vòng 12d nên lần vẽ sau là đúng.
-  if (laLanhDaoPhong()) {
-    const phongCuaToi = String(tenPhongTaiKhoan() || "").trim();
-    if (phongCuaToi !== "") {
-      return allProjects.filter(project => String(project[COL.P_DEPT] || "").trim() === phongCuaToi);
-    }
-  }
-  if (isManager()) {
-    const filteredProjects2 = allProjects.filter(project => project[COL.P_MANAGER] === currentUser.name),
-      filteredTasks2 = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name),
-      values2 = [...new Set(filteredTasks2.map(filteredTasks22 => filteredTasks22[COL.T_PID]))],
-      set2 = new Set([...filteredProjects2.map(filteredProjects22 => filteredProjects22[COL.P_ID]), ...values2]);
-    return allProjects.filter(project => quanLyCungPhong(project) || set2.has(project[COL.P_ID]));
-  }
-  const filteredTasks = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name),
-    values = [...new Set(filteredTasks.map(filteredTask => filteredTask[COL.T_PID]))],
-    filteredProjects = allProjects.filter(project => project[COL.P_MANAGER] === currentUser.name),
-    mappedFilteredProjects = filteredProjects.map(filteredProject => filteredProject[COL.P_ID]),
-    set = new Set([...values, ...mappedFilteredProjects]);
-  return allProjects.filter(project => set.has(project[COL.P_ID]));
+  return allProjects.filter(p => coQuyenTaiDong("read", "project", p));
 }
-function canUserCreateTask() {
-  if (laQuanTriTrongPhamVi() || isManager()) return true;
-  if (currentUser) {
-    const filteredProjects = allProjects.filter(project => project[COL.P_MANAGER] === currentUser.name);
-    if (filteredProjects.length > 0) return true;
-    if (allTasks) {
-      const filteredTasks = allTasks.filter(task => task[COL.T_ASSIGNEE] === currentUser.name);
-      return filteredTasks.length > 0;
-    }
-  }
-  return false;
+function canUserCreateTask(projectId = null) {
+  if (projectId != null) return coQuyenTaoTrongCongViec("task", allProjects.find(p => String(p[COL.P_ID]) === String(projectId)));
+  return coQuyenTrongPhamVi("task", "create") && congViecChoForm("task").length > 0;
 }
-function canUserCreateSubwork() {
-  if (isAdmin() || isManager()) return true;
-  if (isDeputyDirectorUser || isDepartmentHeadUser) return true;
-  if (!currentUser || !currentUser.role) return false;
-  const role = String(currentUser.role);
-  return role === "Phó Giám đốc" || role === "Trưởng phòng" || role === "Phó phòng" || role === "Quản lý công việc";
+function canUserCreateSubwork(projectId = null) {
+  if (projectId != null) return coQuyenTaoTrongCongViec("subwork", allProjects.find(p => String(p[COL.P_ID]) === String(projectId)));
+  return coQuyenTrongPhamVi("subwork", "create") && congViecChoForm("subwork").length > 0;
 }
 function createSubworkFromWorkButtonHtml(projectId, projectName, className, withLabel) {
-  if (!canUserCreateSubwork()) return "";
+  if (!canUserCreateSubwork(projectId)) return "";
   return "<button type=\"button\" class=\"" + escapeHtml(className) + " add-subwork-from-work-btn\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(projectName) + "\" title=\"+ công việc con\">" + (withLabel ? "<i class=\"fas fa-layer-group mr-1\"></i>+ công việc con" : "<i class=\"fas fa-layer-group\"></i>") + "</button>";
 }
 function createTaskFromSubworkButtonHtml(task, className) {
-  if (Number(task && task[COL.T_LEVEL]) !== 2 || !canUserCreateTask()) return "";
+  if (Number(task && task[COL.T_LEVEL]) !== 2 || !canUserCreateTask(task[COL.T_PID])) return "";
   const project = allProjects.find(project2 => project2[COL.P_ID] === task[COL.T_PID]),
     projectName = project ? project[COL.P_NAME] : "";
   return "<button type=\"button\" class=\"" + escapeHtml(className) + " add-task-from-subwork-btn\" data-project-id=\"" + escapeHtml(task[COL.T_PID] || "") + "\" data-project-name=\"" + escapeHtml(projectName) + "\" data-parent-id=\"" + escapeHtml(task[COL.T_ID] || "") + "\" title=\"Thêm nhiệm vụ vào công việc con này\"><i class=\"fas fa-plus\"></i></button>";
@@ -4822,23 +5982,22 @@ function renderGanttChartLegacy() {
     if (isDateInRange(projectStartDate, ganttStartDate, ganttEndDate) || isDateInRange(projectEndDate, ganttStartDate, ganttEndDate) || projectStartDate < ganttStartDate && projectEndDate > ganttEndDate) {
       const projectBarStyle = calculateGanttBarStyleRange(projectStartDate, projectEndDate, ganttStartDate, ganttEndDate, text),
         filteredTasks = allTasks.filter(task => task[COL.T_PID] === project[COL.P_ID]),
-        count = filteredTasks.filter(filteredTask => (filteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-        num = filteredTasks.length > 0 ? Math.round(count / filteredTasks.length * 100) : 0,
-        flag = new Date() > projectEndDate && num < 100,
+        num = tienDoDauMucKhach(filteredTasks),
+        flag = new Date() > projectEndDate && !daDuyetDuKetQua(project),
         projectStartText = formatDateForGantt(project[COL.P_START]),
         projectEndText = formatDateForGantt(project[COL.P_END]),
         projectDesc = project[COL.P_DESC] || "Không có mô tả",
         projectId = project[COL.P_ID];
-      text3 += "\n            <div class=\"gantt-project-group\" data-project-id=\"" + escapeHtml(projectId) + "\">\n              <div class=\"gantt-item\" data-id=\"" + escapeHtml(projectId) + "\" data-type=\"project\">\n                <div class=\"gantt-item-label\">\n                  <button class=\"gantt-toggle-btn mr-2\" data-project=\"" + escapeHtml(projectId) + "\">\n                    <i class=\"fas fa-chevron-right\"></i>\n                  </button>\n                  <i class=\"fas fa-folder " + escapeHtml(getStatusIconClass(project[COL.P_STATUS])) + " mr-2\"></i>\n                  <span class=\"truncate\">" + escapeHtml(project[COL.P_NAME]) + "</span>\n                  <span class=\"gantt-task-count\">" + filteredTasks.length + "</span>\n                  \n                  <div class=\"gantt-item-actions\">\n                    " + createSubworkFromWorkButtonHtml(projectId, project[COL.P_NAME], "action-btn action-btn-edit mr-1") + "\n                    <button class=\"action-btn action-btn-edit add-task-from-project-btn mr-1\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Thêm nhiệm vụ\">\n                      <i class=\"fas fa-plus\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-view view-project-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xem chi tiết\">\n                      <i class=\"fas fa-eye\"></i>\n                    </button>\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Tạo bản sao\">\n                        <i class=\"fas fa-copy\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name ? "\n                      <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit\"></i>\n                      </button>\n                    " : "") + "\n                    " + (laQuanTriTrongPhamVi() || laLanhDaoPhong() || project[COL.P_MANAGER] === currentUser.name && isManager() ? "\n                      <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash\"></i>\n                      </button>\n                    " : "") + "\n                  </div>\n                </div>\n                \n                <div class=\"gantt-item-timeline\">\n                  <div class=\"gantt-bar gantt-bar-project " + (flag ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(projectBarStyle) + "\" data-tooltip=\"" + escapeHtml(project[COL.P_NAME]) + ": " + escapeHtml(projectDesc) + "\">\n                    <div class=\"gantt-bar-label\">" + escapeHtml(projectStartText) + " - " + escapeHtml(projectEndText) + ": " + escapeHtml(projectDesc) + "</div>\n                    <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                  </div>\n                </div>\n              </div>\n              \n              <div class=\"gantt-project-tasks hidden\" id=\"gantt-tasks-" + escapeHtml(projectId) + "\">\n        " + filteredTasks.map(filteredTask => {
+      text3 += "\n            <div class=\"gantt-project-group\" data-project-id=\"" + escapeHtml(projectId) + "\">\n              <div class=\"gantt-item\" data-id=\"" + escapeHtml(projectId) + "\" data-type=\"project\">\n                <div class=\"gantt-item-label\">\n                  <button class=\"gantt-toggle-btn mr-2\" data-project=\"" + escapeHtml(projectId) + "\">\n                    <i class=\"fas fa-chevron-right\"></i>\n                  </button>\n                  <i class=\"fas fa-folder " + escapeHtml(getStatusIconClass(nhanHoanThanhKetQua(project))) + " mr-2\"></i>\n                  <span class=\"truncate\">" + escapeHtml(project[COL.P_NAME]) + "</span>\n                  <span class=\"gantt-task-count\">" + filteredTasks.length + "</span>\n                  \n                  <div class=\"gantt-item-actions\">\n                    " + createSubworkFromWorkButtonHtml(projectId, project[COL.P_NAME], "action-btn action-btn-edit mr-1") + "\n                    <button class=\"action-btn action-btn-edit add-task-from-project-btn mr-1\" data-project-id=\"" + escapeHtml(projectId) + "\" data-project-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Thêm nhiệm vụ\">\n                      <i class=\"fas fa-plus\"></i>\n                    </button>\n                    <button class=\"action-btn action-btn-view view-project-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xem chi tiết\">\n                      <i class=\"fas fa-eye\"></i>\n                    </button>\n                    " + (canUserCopyResource("project", project[COL.P_ID]) ? "\n                      <button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Tạo bản sao\">\n                        <i class=\"fas fa-copy\"></i>\n                      </button>\n                    " : "") + "\n                    " + (canUserEditResource("project", project[COL.P_ID]) ? "\n                      <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" title=\"Chỉnh sửa\">\n                        <i class=\"fas fa-edit\"></i>\n                      </button>\n                    " : "") + "\n                    " + (canUserDeleteResource("project", project[COL.P_ID]) ? "\n                      <button class=\"action-btn action-btn-delete delete-btn\" data-type=\"project\" data-id=\"" + escapeHtml(projectId) + "\" data-name=\"" + escapeHtml(project[COL.P_NAME]) + "\" title=\"Xóa\">\n                        <i class=\"fas fa-trash\"></i>\n                      </button>\n                    " : "") + "\n                  </div>\n                </div>\n                \n                <div class=\"gantt-item-timeline\">\n                  <div class=\"gantt-bar gantt-bar-project " + (flag ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(projectBarStyle) + "\" data-tooltip=\"" + escapeHtml(project[COL.P_NAME]) + ": " + escapeHtml(projectDesc) + "\">\n                    <div class=\"gantt-bar-label\">" + escapeHtml(projectStartText) + " - " + escapeHtml(projectEndText) + ": " + escapeHtml(projectDesc) + "</div>\n                    <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                  </div>\n                </div>\n              </div>\n              \n              <div class=\"gantt-project-tasks hidden\" id=\"gantt-tasks-" + escapeHtml(projectId) + "\">\n        " + filteredTasks.map(filteredTask => {
         const taskStartDate = parseDateString(filteredTask[COL.T_START]),
           taskDueDate = parseDateString(filteredTask[COL.T_DUE]),
           date2 = new Date(project[COL.P_END]);
         if (true) {
           const taskBarStyle = calculateGanttBarStyleRange(taskStartDate, taskDueDate, ganttStartDate, ganttEndDate, text),
             num2 = parseInt(filteredTask[COL.T_COMPLETION] || 0),
-            isTaskOverdue2 = isTaskOverdue(filteredTask[COL.T_DUE]) && !(filteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành"),
+            isTaskOverdue2 = isTaskOverdue(filteredTask[COL.T_DUE]) && !daDuyetDuKetQua(filteredTask),
             taskAssignee = filteredTask[COL.T_ASSIGNEE] || "Chưa gán",
-            taskStatus = filteredTask[COL.T_STATUS] || "Chưa bắt đầu",
+            taskStatus = nhanHoanThanhKetQua(filteredTask),
             taskPriority = filteredTask[COL.T_PRIORITY] || "Trung bình",
             taskStartText = formatDateForGantt(filteredTask[COL.T_START]),
             taskDueText = formatDateForGantt(filteredTask[COL.T_DUE]),
@@ -4847,11 +6006,11 @@ function renderGanttChartLegacy() {
             flag2 = parseLinks(taskResultLinks).length > 0,
             taskReminders = filteredTask[COL.T_REMINDERS] || [],
             isArray = Array.isArray(taskReminders) && taskReminders.length > 0,
-            hasMatch = taskStatus.toLowerCase().includes("hoàn thành");
-          return "\n                    <div class=\"gantt-item gantt-task-item draggable-item\" \n                        data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" \n                        data-type=\"task\" \n                        data-project-id=\"" + escapeHtml(filteredTask[COL.T_PID]) + "\"\n                        draggable=\"true\">\n                      <div class=\"gantt-item-label task-clickable cursor-pointer\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\">\n                        <input type=\"checkbox\" \n                              class=\"quick-complete-checkbox ml-2\" \n                              data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" \n                              data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\"\n                              " + (hasMatch ? "checked disabled" : "") + " \n                              style=\"margin-right: 8px;\">\n                              \n                        <i class=\"fas fa-circle " + escapeHtml(getStatusIcon(taskStatus)) + " mr-2\" style=\"font-size: 8px;\"></i>\n                        <div class=\"flex flex-col min-w-0\">\n                          <span class=\"truncate flex items-center\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 flex-shrink-0\" style=\"margin-right: 1px; font-size: 10px;\" title=\"Có nhắc việc\"></i>" : "") + (taskPriority.toLowerCase().includes("cao") ? "<i class=\"fas fa-star text-yellow-400 flex-shrink-0\" style=\"margin-right: 2px; font-size: 10px;\"></i>" : "") + escapeHtml(filteredTask[COL.T_NAME]) + "</span>\n                          <span class=\"text-xs text-gray-500 truncate\">" + escapeHtml(taskAssignee) + " - " + escapeHtml(taskStatus) + " - " + escapeHtml(taskPriority) + "</span>\n                          " + (flag2 ? "<div class=\"mt-1\">" + renderLinksButton(taskResultLinks, filteredTask[COL.T_ID]) + "</div>" : "") + "\n                        </div>\n                        \n                        <div class=\"gantt-item-actions\">\n                          " + (() => {
+            hasMatch = daDuyetDuKetQua(filteredTask);
+          return "\n                    <div class=\"gantt-item gantt-task-item draggable-item\" \n                        data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" \n                        data-type=\"task\" \n                        data-project-id=\"" + escapeHtml(filteredTask[COL.T_PID]) + "\"\n                        draggable=\"true\">\n                      <div class=\"gantt-item-label task-clickable cursor-pointer\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\">\n                        \n                              \n                        <i class=\"fas fa-circle " + escapeHtml(getStatusIcon(taskStatus)) + " mr-2\" style=\"font-size: 8px;\"></i>\n                        <div class=\"flex flex-col min-w-0\">\n                          <span class=\"truncate flex items-center\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 flex-shrink-0\" style=\"margin-right: 1px; font-size: 10px;\" title=\"Có nhắc việc\"></i>" : "") + (taskPriority.toLowerCase().includes("cao") ? "<i class=\"fas fa-star text-yellow-400 flex-shrink-0\" style=\"margin-right: 2px; font-size: 10px;\"></i>" : "") + escapeHtml(filteredTask[COL.T_NAME]) + "</span>\n                          <span class=\"text-xs text-gray-500 truncate\">" + escapeHtml(taskAssignee) + " - " + escapeHtml(taskStatus) + " - " + escapeHtml(taskPriority) + "</span>\n                          " + (flag2 ? "<div class=\"mt-1\">" + renderLinksButton(taskResultLinks, filteredTask[COL.T_ID]) + "</div>" : "") + "\n                        </div>\n                        \n                        <div class=\"gantt-item-actions\">\n                          " + (() => {
             const project2 = project && project[COL.P_MANAGER] === currentUser.name,
-              isAdmin2 = laQuanTriTrongPhamVi() || project2;
-            return "\n                              " + createTaskFromSubworkButtonHtml(filteredTask, "action-btn action-btn-edit mr-1") + "\n                              " + (isAdmin2 ? "<button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n                              <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n                              " + (isAdmin2 ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n                              ";
+              isAdmin2 = { copy: canUserCopyResource("task", filteredTask[COL.T_ID]), delete: canUserDeleteResource("task", filteredTask[COL.T_ID]) };
+            return "\n                              " + createTaskFromSubworkButtonHtml(filteredTask, "action-btn action-btn-edit mr-1") + "\n                              " + (isAdmin2.copy ? "<button class=\"action-btn action-btn-copy copy-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n                              <button class=\"action-btn action-btn-edit edit-btn mr-1\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n                              " + (isAdmin2.delete ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" data-name=\"" + escapeHtml(filteredTask[COL.T_NAME]) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n                              ";
           })() + "\n                        </div>\n                      </div>\n                      \n                      <div class=\"gantt-item-timeline\">\n                          " + (isDateInRange(taskStartDate, ganttStartDate, ganttEndDate) || isDateInRange(taskDueDate, ganttStartDate, ganttEndDate) || taskStartDate < ganttStartDate && taskDueDate > ganttEndDate ? "<div class=\"gantt-bar gantt-bar-task " + (isTaskOverdue2 ? "gantt-bar-overdue" : "") + "\" style=\"" + escapeHtml(taskBarStyle) + "\" data-tooltip=\"" + escapeHtml(filteredTask[COL.T_NAME]) + ": " + escapeHtml(taskDesc) + "\">\n                              <div class=\"gantt-bar-label\">" + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": " + escapeHtml(taskDesc) + "</div>\n                              <div class=\"gantt-progress\" style=\"width: " + escapeHtml(num2) + "%\"></div>\n                          </div>" : "<div class=\"gantt-non-visible-task\" style=\"height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px; font-style: italic;\">\n                              " + escapeHtml(taskStartText) + " - " + escapeHtml(taskDueText) + ": Không hiển thị trong khoảng này\n                          </div>") + "\n                      </div>\n                    </div>\n                  ";
         }
         return "";
@@ -5165,11 +6324,7 @@ function formatDateForGantt(value) {
   }
 }
 function getStatusIcon(status) {
-  const lower = (status || "").toLowerCase();
-  if (lower.includes("hoàn thành")) return "text-green-500";
-  if (lower.includes("đang")) return "text-blue-500";
-  if (lower.includes("tạm dừng")) return "text-yellow-500";
-  return "text-gray-400";
+  return getStatusIconClass(status);
 }
 function formatTaskLinks(linksValue) {
   if (!linksValue) return "";
@@ -5180,9 +6335,10 @@ function formatTaskLinks(linksValue) {
   }).join(" | ");
 }
 function canUserCopyResource(resourceType, resourceId) {
-  if (resourceType === "project") return isAdmin() || isManager() || allProjects.some(project => project[COL.P_ID] === resourceId && project[COL.P_MANAGER] === currentUser.name);
-  if (resourceType === "task") return canUserCreateTask();
-  return false;
+  if (!["project", "subwork", "task"].includes(resourceType)) return false;
+  const scope = dongPhamViQuyen(resourceType, resourceId);
+  if (!scope || !coQuyenTrongPhamVi(scope.entity, "read", scope)) return false;
+  return coQuyenTrongPhamVi(scope.entity, "create", scope);
 }
 function openCopyModal(resourceType, resourceId, resourceName) {
   const text = "copy-" + resourceType + "-modal",
@@ -5305,8 +6461,8 @@ function renderPriorityTasksMini() {
   currentOverviewProjectFilter && (list = list.filter(list2 => list2[COL.T_PID] === currentOverviewProjectFilter));
   const filteredList = list.filter(list2 => {
     const lower = (list2[COL.T_PRIORITY] || "").toLowerCase(),
-      lower2 = (list2[COL.T_STATUS] || "").toLowerCase();
-    return lower.includes("cao") && !lower2.includes("hoàn thành");
+      done = daDuyetDuKetQua(list2);
+    return lower.includes("cao") && !done;
   });
   if (filteredList.length === 0) {
     priorityTasksMiniEl.innerHTML = "<div class=\"lg:col-span-2 text-center py-8 text-gray-500 text-sm\">Không có nhiệm vụ ưu tiên cao</div>";
@@ -5327,8 +6483,8 @@ function renderPriorityTasksMini() {
     return "\n  <div class=\"p-4 border border-orange-200 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg hover:shadow-md transition-all duration-200 hover:border-orange-300 task-clickable cursor-pointer\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\">\n    <div class=\"flex items-start justify-between mb-3\">\n      <h5 class=\"font-semibold text-gray-900 text-sm leading-tight flex-1 mr-2\">" + (isArray ? "<i class=\"fas fa-bell text-amber-500 mr-1\" title=\"Có nhắc việc\"></i>" : "") + escapeHtml(taskName) + "</h5>\n      <div class=\"flex items-center space-x-2\">\n        " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue text-xs\">Quá hạn</span>" : "<span class=\"status-badge priority-high text-xs\">Cao</span>") + "\n        \n        <div class=\"flex space-x-1\">\n          " + (() => {
       const project2 = allProjects.find(project3 => project3[COL.P_ID] === taskPid),
         project22 = project2 && project2[COL.P_MANAGER] === currentUser.name,
-        isAdmin2 = laQuanTriTrongPhamVi() || project22;
-      return "\n              " + (isAdmin2 ? "<button class=\"action-btn action-btn-copy copy-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n              " + (isAdmin2 ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n            ";
+        isAdmin2 = { copy: canUserCopyResource("task", filteredList2[COL.T_ID]), delete: canUserDeleteResource("task", filteredList2[COL.T_ID]) };
+      return "\n              " + (isAdmin2.copy ? "<button class=\"action-btn action-btn-copy copy-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Tạo bản sao\"><i class=\"fas fa-copy\"></i></button>" : "") + "\n              <button class=\"action-btn action-btn-edit edit-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" title=\"Chỉnh sửa\"><i class=\"fas fa-edit\"></i></button>\n              " + (isAdmin2.delete ? "<button class=\"action-btn action-btn-delete delete-btn\" data-type=\"task\" data-id=\"" + escapeHtml(filteredList2[COL.T_ID]) + "\" data-name=\"" + escapeHtml(taskName) + "\" title=\"Xóa\"><i class=\"fas fa-trash\"></i></button>" : "") + "\n            ";
     })() + "\n        </div>\n      </div>\n    </div>\n    \n    <div class=\"text-xs text-gray-600 space-y-1 mb-3\">\n      <div class=\"flex items-center justify-between\">\n        <div class=\"flex items-center flex-1\">\n          <i class=\"fas fa-folder text-purple-500 mr-1 w-3\"></i>\n          <span class=\"truncate\">" + escapeHtml(text) + "</span>\n        </div>\n      </div>\n\n      <div class=\"flex items-center justify-between\">\n        <div class=\"flex items-center flex-1\">\n          <i class=\"fas fa-user text-blue-500 mr-1 w-3\"></i>\n          <span class=\"truncate\">" + escapeHtml(taskAssignee) + "</span>\n        </div>\n        <div class=\"flex items-center ml-2\">\n          <i class=\"fas fa-calendar " + (isTaskOverdue2 ? "text-red-500" : "text-green-500") + " mr-1 w-3\"></i>\n          <span>" + escapeHtml(dueDateText) + "</span>\n        </div>\n      </div>\n    </div>\n    \n    <div class=\"flex items-center\">\n      <span class=\"text-xs font-semibold text-gray-700 min-w-[35px]\">" + escapeHtml(num) + "%</span>\n      <div class=\"flex-1 h-2 bg-gray-200 rounded-full ml-2\">\n        <div class=\"h-full " + (num === 0 ? "bg-gray-400" : "bg-gradient-to-r from-orange-400 to-red-500") + " rounded-full transition-all duration-500\" style=\"width: " + Math.max(num, 5) + "%\"></div>\n      </div>\n    </div>\n  </div>\n";
   }).join("");
 }
@@ -5355,9 +6511,8 @@ function renderTimelineProgressChart() {
     data[todayKey] = 0, list.push(text);
   }
   filteredTasks.forEach(filteredTask => {
-    const lower = (filteredTask[COL.T_STATUS] || "").toLowerCase(),
-      taskReportDate = filteredTask[COL.T_REPORT_DATE];
-    if (lower.includes("hoàn thành") && taskReportDate) try {
+    const taskReportDate = filteredTask.hoanThanhLuc;
+    if (daDuyetDuKetQua(filteredTask) && taskReportDate) try {
       const date = new Date(taskReportDate),
         dateKey = date.toISOString().split("T")[0];
       data.hasOwnProperty(dateKey) && data[dateKey]++;
@@ -5453,7 +6608,7 @@ function renderProjectComparisonChart() {
       projectName = filteredProject[COL.P_NAME] || projectId,
       filteredFilteredTasks = filteredTasks.filter(filteredTask => filteredTask[COL.T_PID] === projectId),
       filteredFilteredTaskCount = filteredFilteredTasks.length,
-      count = filteredFilteredTasks.filter(filteredFilteredTask => (filteredFilteredTask[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
+      count = filteredFilteredTasks.filter(filteredFilteredTask => daDuyetDuKetQua(filteredFilteredTask)).length,
       // Bug 2 (8b): completionRate theo server (tienDo.js) — bình quân gia quyền các đầu mục;
       // `completedTasks` giữ nguyên để tooltip số lượng không đổi hình dạng.
       num = tienDoDauMucKhach(filteredFilteredTasks);
@@ -5586,7 +6741,6 @@ function addOptimisticUpdate(type, user, id = null) {
       [COL.P_MANAGER]: user.manager || "",
       [COL.P_START]: user.startDate,
       [COL.P_END]: user.endDate,
-      [COL.P_STATUS]: user.status || "Chưa bắt đầu"
     };
     allProjects.unshift(data), renderProjects();
   } else {
@@ -5597,7 +6751,6 @@ function addOptimisticUpdate(type, user, id = null) {
         [COL.T_NAME]: user.name,
         [COL.T_DESC]: user.description || "",
         [COL.T_ASSIGNEE]: user.assignee || "",
-        [COL.T_STATUS]: user.status || "Chưa bắt đầu",
         [COL.T_PRIORITY]: user.priority || "Trung bình",
         [COL.T_START]: user.startDate,
         [COL.T_DUE]: user.dueDate,
@@ -5663,7 +6816,6 @@ function updateOptimisticUpdate(type, id, user) {
         [COL.P_MANAGER]: user.manager || "",
         [COL.P_START]: user.startDate,
         [COL.P_END]: user.endDate,
-        [COL.P_STATUS]: user.status
       }
     }, renderProjects(), renderProjectStats(), renderStats(), renderStaffPerformanceChart(), renderTaskPriorityChart(), renderTimelineProgressChart(), currentSection === "gantt" && renderGanttChart());
   } else {
@@ -5676,7 +6828,6 @@ function updateOptimisticUpdate(type, id, user) {
           [COL.T_PID]: user.projectId,
           [COL.T_DESC]: user.description || "",
           [COL.T_ASSIGNEE]: user.assignee || "",
-          [COL.T_STATUS]: user.status,
           [COL.T_PRIORITY]: user.priority,
           [COL.T_START]: user.startDate,
           [COL.T_DUE]: user.dueDate,
@@ -5731,12 +6882,15 @@ function removeOptimisticUpdate(type, id) {
 function refreshProjectDetailsModalIfOpen() {
   const projectDetailsModalEl = document.getElementById("project-details-modal");
   if (projectDetailsModalEl && projectDetailsModalEl.classList.contains("active")) {
-    const textContent = projectDetailsModalEl.querySelector("h3")?.textContent || "",
-      match = textContent.match(/\(([^)]+)\)$/);
+    const ref = projectDetailsModalEl.dataset.projectId;
+    const match = ref ? ["", ref] : (projectDetailsModalEl.querySelector("h3")?.textContent || "").match(/\(([^)]+)\)$/);
     if (match && match[1]) {
       const match2 = match[1],
         project = allProjects.find(project2 => project2[COL.P_ID] === match2);
-      project && showProjectDetailsModal(match2, project[COL.P_NAME]);
+      if (project) {
+        const receiptsChecked = projectDetailsModalEl.dataset.receiptsChecked;
+        showProjectDetailsModal(match2, project[COL.P_NAME], { receiptsChecked, daLamMoi: true });
+      }
     }
   }
 }
@@ -5755,30 +6909,15 @@ function showStaffValidationError(validation) {
   validation.length > 0 ? (staffValidationErrorEl.innerHTML = validation.map(validation2 => "<div class=\"text-red-600 text-sm\">" + escapeHtml(validation2) + "</div>").join(""), staffValidationErrorEl.classList.remove("hidden")) : staffValidationErrorEl.classList.add("hidden");
 }
 function renderTaskStats() {
-  // Vòng 12e: 4 thẻ đếm PHẢI cùng phạm vi với danh sách bên dưới. Trước đây chỗ này có bộ lọc
-  // riêng, hẹp hơn (chỉ nhiệm vụ của mình + công việc mình quản lý) nên Phó GĐ/TP/PP thấy nhiệm
-  // vụ trong danh sách mà 4 thẻ trên đầu vẫn hiện 0. Dùng lại `dsNhiemVuToiDuocThay()` — một
-  // nguồn sự thật cho cả tab, thêm vai mới chỉ phải sửa một chỗ.
-  const allTasks2 = dsNhiemVuToiDuocThay().filter(isCountableRow),
-    filteredTasks2 = allTasks2.filter(taskMatchesTasksFilters),
-    data = {
-      pending: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("chưa")).length,
-      active: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("đang")).length,
-      completed: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-      paused: filteredTasks2.filter(filteredTasks22 => (filteredTasks22[COL.T_STATUS] || "").toLowerCase().includes("tạm dừng")).length
-    };
-  document.getElementById("tasks-pending-count").innerHTML = "<i class=\"fas fa-pause-circle text-sm\"></i>" + escapeHtml(data.pending), document.getElementById("tasks-active-count").innerHTML = "<i class=\"fas fa-play-circle text-sm\"></i>" + escapeHtml(data.active), document.getElementById("tasks-completed-count").innerHTML = "<i class=\"fas fa-check-circle text-sm\"></i>" + escapeHtml(data.completed), document.getElementById("tasks-paused-count").innerHTML = "<i class=\"fas fa-pause text-sm\"></i>" + escapeHtml(data.paused);
+  const rows = dsNhiemVuToiDuocThay().filter((row) => Number(row[COL.T_LEVEL]) === 3 && isCountableRow(row) && taskMatchesTasksFilters(row));
+  const done = rows.filter(daDuyetDuKetQua).length;
+  const values = { total: rows.length, completed: done, incomplete: rows.length - done, overdue: rows.filter((row) => !daDuyetDuKetQua(row) && isTaskOverdue(row[COL.T_DUE])).length };
+  Object.entries(values).forEach(([key,value])=>{const el=document.getElementById('tasks-'+key+'-count');if(el)el.textContent=value;});
 }
 function renderProjectStats() {
-  const userAllowedProjects = getUserAllowedProjects().filter(isCountableRow),
-    data = {
-      pending: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("chưa")).length,
-      active: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("đang")).length,
-      completed: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("hoàn thành")).length,
-      paused: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("tạm dừng")).length,
-      canceled: userAllowedProjects.filter(userAllowedProject => (userAllowedProject[COL.P_STATUS] || "").toLowerCase().includes("hủy bỏ")).length
-    };
-  document.getElementById("projects-pending-count").innerHTML = "<i class=\"fas fa-pause-circle text-sm\"></i>" + escapeHtml(data.pending), document.getElementById("projects-active-count").innerHTML = "<i class=\"fas fa-play-circle text-sm\"></i>" + escapeHtml(data.active), document.getElementById("projects-completed-count").innerHTML = "<i class=\"fas fa-check-circle text-sm\"></i>" + escapeHtml(data.completed), document.getElementById("projects-paused-count").innerHTML = "<i class=\"fas fa-pause text-sm\"></i>" + escapeHtml(data.paused), document.getElementById("projects-canceled-count").innerHTML = "<i class=\"fas fa-times-circle text-sm\"></i>" + escapeHtml(data.canceled);
+  const rows = getUserAllowedProjects().filter((row)=>isCountableRow(row) && workMatchesMonth(row) && workMatchesProjectsDept(row));
+  const done = rows.filter(daDuyetDuKetQua).length;
+  Object.entries({total:rows.length,completed:done,incomplete:rows.length-done}).forEach(([key,value])=>{const el=document.getElementById('projects-'+key+'-count');if(el)el.textContent=value;});
 }
 function loadChatMessages() {
   return napChatTuServer();
@@ -6134,48 +7273,7 @@ function sendChatMessage() {
     showToast("Lỗi gửi tin nhắn: " + error.message, "error"), sendBtn.disabled = false, chatInputEl.disabled = false;
   }).sendChatMessage(trimmed);
 }
-function handleQuickCompleteTask(event) {
-  if (event.target.matches(".quick-complete-checkbox")) {
-    const target = event.target,
-      id = target.dataset.id,
-      name = target.dataset.name;
-    if (!target.checked) return;
-    event.preventDefault(), showConfirmDialog("Hoàn thành nhiệm vụ?", "Bạn có chắc chắn muốn đánh dấu \"" + name + "\" là đã hoàn thành không?", function () {
-      target.checked = true, target.disabled = true, showToast("Đang cập nhật trạng thái...", "info");
-      const task = allTasks.find(task2 => task2[COL.T_ID] === id);
-      if (task) {
-        const updateData = {
-          id: id,
-          projectId: task[COL.T_PID],
-          name: task[COL.T_NAME],
-          status: "Hoàn thành",
-          completion: 0x64,
-          description: task[COL.T_DESC] || "",
-          assignee: task[COL.T_ASSIGNEE] || "",
-          priority: task[COL.T_PRIORITY] || "Trung bình",
-          startDate: task[COL.T_START],
-          dueDate: task[COL.T_DUE],
-          reportDate: formatDateToISOString(new Date()),
-          target: task[COL.T_TARGET] || "",
-          resultLinks: task[COL.T_RESULT_LINKS] || "",
-          output: task[COL.T_OUTPUT] || "",
-          notes: task[COL.T_NOTES] || ""
-        };
-        updateOptimisticUpdate("task", id, updateData), google.script.run.withSuccessHandler(function (response) {
-          if (response.success) {
-            showToast("Nhiệm vụ đã hoàn thành!", "success");
-            if (currentSection === "tasks") {} else currentSection === "gantt" && renderGanttChart();
-            renderStats(), renderProjectStats(), renderProjects();
-          } else target.checked = false, target.disabled = false, showToast(response.error || "Lỗi cập nhật", "error"), refreshData();
-        }).withFailureHandler(function (error) {
-          target.checked = false, target.disabled = false, showToast("Lỗi kết nối: " + error.message, "error");
-        }).updateTaskWithAuth(id, updateData);
-      }
-    }, function () {
-      target.checked = false;
-    });
-  }
-}
+
 function formatDateToISOString(date) {
   if (!date) return "";
   const date2 = new Date(date);
@@ -6212,7 +7310,7 @@ function showConfirmDialog(title, message, onConfirm, onCancel, type = "success"
 document.addEventListener("click", function (event) {
   const taskEl = event.target.closest(".task-clickable");
   if (taskEl) {
-    if (event.target.closest("button") || event.target.closest("a") || event.target.matches("input[type=\"checkbox\"]") || event.target.closest(".quick-complete-checkbox")) return;
+    if (event.target.closest("button") || event.target.closest("a") || event.target.matches("input[type=\"checkbox\"]")) return;
     const id = taskEl.dataset.id;
     if (document.getElementById("project-details-modal")) {
       const projectDetailsModalEl = document.getElementById("project-details-modal"),
@@ -6316,9 +7414,8 @@ function openStatListModal(type, filter, title) {
     if (type === "task") {
       if (filter === "all") list = [...allTasks];else {
         if (filter === "active") list = allTasks.filter(task => {
-          const lower = (task[COL.T_STATUS] || "").toLowerCase();
-          return lower.includes("đang") || lower.includes("chưa") || lower.includes("tạm dừng");
-        });else filter === "overdue" && (list = allTasks.filter(task => isTaskOverdue(task[COL.T_DUE]) && !(task[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")));
+          return !daDuyetDuKetQua(task);
+        });else filter === "overdue" && (list = allTasks.filter(task => isTaskOverdue(task[COL.T_DUE]) && !daDuyetDuKetQua(task)));
       }
     }
   }
@@ -6353,26 +7450,25 @@ function renderStatListItems(type, items) {
     if (type === "project") {
       const projectId = item[COL.P_ID],
         projectName = item[COL.P_NAME],
-        projectStatus = item[COL.P_STATUS],
+        projectStatus = nhanHoanThanhKetQua(item),
         projectManager = item[COL.P_MANAGER] || "N/A",
         startDateText = formatDateForDisplay(item[COL.P_START]),
         endDateText = formatDateForDisplay(item[COL.P_END]),
         filteredTasks = allTasks.filter(task => task[COL.T_PID] === projectId),
-        filteredTaskTotal = filteredTasks.reduce((acc, filteredTask) => acc + parseInt(filteredTask[COL.T_COMPLETION] || 0), 0),
-        num = filteredTasks.length > 0 ? Math.round(filteredTaskTotal / filteredTasks.length) : 0;
+        num = tienDoDauMucKhach(filteredTasks);
       return "\n            <div class=\"stat-list-item rounded-xl border border-gray-100 hover:border-blue-200 bg-white p-3 mb-2 shadow-sm transition-all\" \n                  onclick=\"showProjectDetailsModal('" + escapeForInlineHandler(projectId) + "', '" + escapeForInlineHandler(projectName) + "')\">\n                \n                <div class=\"flex justify-between items-start mb-2\">\n                    <div>\n                        <div class=\"font-bold text-gray-800 text-sm\">" + escapeHtml(projectName) + " <span class=\"text-gray-400 font-normal text-xs ml-1\">(" + escapeHtml(projectId) + ")</span></div>\n                        <div class=\"text-xs text-gray-500 mt-1 flex items-center gap-3\">\n                            <span><i class=\"fas fa-user-tie mr-1 text-purple-500\"></i>" + escapeHtml(projectManager) + "</span>\n                            <span><i class=\"fas fa-calendar-alt mr-1 text-blue-500\"></i>" + escapeHtml(startDateText) + " - " + escapeHtml(endDateText) + "</span>\n                        </div>\n                    </div>\n                    <span class=\"status-badge " + escapeHtml(getStatusClass(projectStatus)) + "\">" + escapeHtml(projectStatus) + "</span>\n                </div>\n\n                <div class=\"flex items-center gap-2\">\n                    <div class=\"flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden\">\n                        <div class=\"h-full bg-blue-500 rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                    <span class=\"text-xs font-medium text-gray-600 min-w-[30px] text-right\">" + escapeHtml(num) + "%</span>\n                </div>\n            </div>\n        ";
     } else {
       const taskId = item[COL.T_ID],
         taskName = item[COL.T_NAME],
-        taskStatus = item[COL.T_STATUS],
+        taskStatus = nhanHoanThanhKetQua(item),
         taskPriority = item[COL.T_PRIORITY],
         taskAssignee = item[COL.T_ASSIGNEE] || "N/A",
         dueDateText = formatDateForDisplay(item[COL.T_DUE]),
         num = parseInt(item[COL.T_COMPLETION] || 0),
-        isTaskOverdue2 = isTaskOverdue(item[COL.T_DUE]) && !taskStatus.toLowerCase().includes("hoàn thành"),
+        isTaskOverdue2 = isTaskOverdue(item[COL.T_DUE]) && !daDuyetDuKetQua(item),
         project = allProjects.find(project2 => project2[COL.P_ID] === item[COL.T_PID]),
         projectName = project ? project[COL.P_NAME] : item[COL.T_PID];
-      return "\n            <div class=\"stat-list-item rounded-xl border border-gray-100 hover:border-blue-200 bg-white p-3 mb-2 shadow-sm transition-all " + (isTaskOverdue2 ? "border-l-4 border-l-red-500" : "") + "\" \n                  onclick=\"if(canUserEditResource('task', '" + escapeForInlineHandler(taskId) + "')) openEditModal('task', '" + escapeForInlineHandler(taskId) + "')\">\n                \n                <div class=\"flex justify-between items-start mb-1\">\n                    <div class=\"flex-1 pr-2\">\n                        <div class=\"font-semibold text-gray-800 text-sm leading-snug\">" + escapeHtml(taskName) + "</div>\n                    </div>\n                    \n                    <div class=\"flex items-center gap-2 shrink-0\">\n                        <span class=\"status-badge " + escapeHtml(getStatusClass(taskStatus)) + "\">" + escapeHtml(taskStatus) + "</span>\n                        " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue\">Quá hạn</span>" : "") + "\n                    </div>\n                </div>\n\n                <div class=\"grid grid-cols-2 gap-y-1 text-xs text-gray-500 mt-1 mb-2\">\n                    <div class=\"col-span-2 flex items-center text-gray-600 font-medium\">\n                        <i class=\"fas fa-folder-open mr-1.5 text-yellow-500\"></i>" + escapeHtml(projectName) + "\n                    </div>\n                    <div class=\"flex items-center\">\n                        <i class=\"fas fa-user mr-1.5 text-blue-400\"></i>" + escapeHtml(taskAssignee) + "\n                    </div>\n                    <div class=\"flex items-center justify-end\">\n                        <i class=\"fas fa-clock mr-1.5 " + (isTaskOverdue2 ? "text-red-500" : "text-green-500") + "\"></i>" + escapeHtml(dueDateText) + "\n                    </div>\n                </div>\n\n                <div class=\"flex items-center gap-2\">\n                    <div class=\"flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden\">\n                        <div class=\"h-full " + (num === 100 ? "bg-green-500" : "bg-blue-500") + " rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                    <span class=\"text-xs font-medium text-gray-600 min-w-[30px] text-right\">" + escapeHtml(num) + "%</span>\n                </div>\n            </div>\n        ";
+      return "\n            <div class=\"stat-list-item rounded-xl border border-gray-100 hover:border-blue-200 bg-white p-3 mb-2 shadow-sm transition-all " + (isTaskOverdue2 ? "border-l-4 border-l-red-500" : "") + "\" \n                  onclick=\"if(canUserEditResource('task', '" + escapeForInlineHandler(taskId) + "')) openEditModal('task', '" + escapeForInlineHandler(taskId) + "')\">\n                \n                <div class=\"flex justify-between items-start mb-1\">\n                    <div class=\"flex-1 pr-2\">\n                        <div class=\"font-semibold text-gray-800 text-sm leading-snug\">" + escapeHtml(taskName) + "</div>\n                    </div>\n                    \n                    <div class=\"flex items-center gap-2 shrink-0\">\n                        <span class=\"status-badge " + escapeHtml(getStatusClass(taskStatus)) + "\">" + escapeHtml(taskStatus) + "</span>\n                        " + (isTaskOverdue2 ? "<span class=\"status-badge status-overdue\">Quá hạn</span>" : "") + "\n                    </div>\n                </div>\n\n                <div class=\"grid grid-cols-2 gap-y-1 text-xs text-gray-500 mt-1 mb-2\">\n                    <div class=\"col-span-2 flex items-center text-gray-600 font-medium\">\n                        <i class=\"fas fa-folder-open mr-1.5 text-yellow-500\"></i>" + escapeHtml(projectName) + "\n                    </div>\n                    <div class=\"flex items-center\">\n                        <i class=\"fas fa-user mr-1.5 text-blue-400\"></i>" + escapeHtml(taskAssignee) + "\n                    </div>\n                    <div class=\"flex items-center justify-end\">\n                        <i class=\"fas fa-clock mr-1.5 " + (isTaskOverdue2 ? "text-red-500" : "text-green-500") + "\"></i>" + escapeHtml(dueDateText) + "\n                    </div>\n                </div>\n\n                <div class=\"flex items-center gap-2\">\n                    <div class=\"flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden\">\n                        <div class=\"h-full " + (daDuyetDuKetQua(item) ? "bg-green-500" : "bg-blue-500") + " rounded-full\" style=\"width: " + escapeHtml(num) + "%\"></div>\n                    </div>\n                    <span class=\"text-xs font-medium text-gray-600 min-w-[30px] text-right\">" + escapeHtml(num) + "%</span>\n                </div>\n            </div>\n        ";
     }
   }).join("");
 }
@@ -6502,7 +7598,7 @@ function createProposalModal(isEdit, proposal) {
     filteredTasks = proposalPid ? allTasks.filter(task2 => task2[COL.T_PID] === proposalPid) : [],
     joined3 = filteredTasks.map(filteredTask => "<option value=\"" + escapeHtml(filteredTask[COL.T_ID]) + "\" " + (filteredTask[COL.T_ID] === proposalTid ? "selected" : "") + ">" + escapeHtml(filteredTask[COL.T_NAME]) + " (" + escapeHtml(filteredTask[COL.T_ID]) + ")</option>").join(""),
     task = allTasks.find(task2 => task2[COL.T_ID] === proposalTid),
-    text3 = task ? "\n            <div class=\"bg-gray-50 p-3 rounded-lg text-sm space-y-1 mt-2\" id=\"task-details-preview\">\n                <p><strong>Nhiệm vụ:</strong> " + escapeHtml(task[COL.T_NAME]) + "</p>\n                <p><strong>Cán bộ trực tiếp:</strong> " + (escapeHtml(task[COL.T_ASSIGNEE]) || "Chưa gán") + "</p>\n                <p><strong>Trạng thái:</strong> " + (escapeHtml(task[COL.T_STATUS]) || "Chưa bắt đầu") + "</p>\n                <p><strong>Tiến độ:</strong> " + (escapeHtml(task[COL.T_COMPLETION]) || 0) + "%</p>\n            </div>\n        " : "",
+    text3 = task ? "\n            <div class=\"bg-gray-50 p-3 rounded-lg text-sm space-y-1 mt-2\" id=\"task-details-preview\">\n                <p><strong>Nhiệm vụ:</strong> " + escapeHtml(task[COL.T_NAME]) + "</p>\n                <p><strong>Người thực hiện trực tiếp:</strong> " + (escapeHtml(task[COL.T_ASSIGNEE]) || "Chưa gán") + "</p>\n                <p><strong>Duyệt kết quả:</strong> " + escapeHtml(nhanHoanThanhKetQua(task)) + "</p>\n                <p><strong>Tiến độ:</strong> " + (escapeHtml(task[COL.T_COMPLETION]) || 0) + "%</p>\n            </div>\n        " : "",
     text4 = "\n        <div id=\"" + escapeHtml(text) + "\" class=\"fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] modal-overlay\">\n            <div class=\"modal-content glass-card max-w-7xl w-full mx-4 max-h-[90vh] overflow-y-auto\" style=\"padding: 0;\">\n                <div class=\"border-b border-gray-100 px-6 py-4 relative\">\n                    <button onclick=\"closeModal('" + escapeForInlineHandler(text) + "')\" class=\"text-gray-400 hover:text-gray-600 absolute top-4 right-6 z-10\">\n                        <i class=\"fas fa-times text-xl\"></i>\n                    </button>\n                    <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 items-center\">\n                        <h3 class=\"text-xl font-bold text-gray-900\">" + escapeHtml(text2) + "</h3>\n                        <div class=\"flex items-center justify-center\">\n                            <button id=\"proposal-submit-btn\" type=\"submit\" form=\"proposal-form\" class=\"btn-primary\">\n                                " + (isEdit ? "Cập nhật" : "Tạo đề nghị") + "\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class=\"p-6\">\n                    <form id=\"proposal-form\" class=\"grid grid-cols-1 md:grid-cols-2 gap-6\" onsubmit=\"event.preventDefault(); " + (isEdit ? "handleEdit('proposal', " + escapeHtml(JSON.stringify(proposal)) + ")" : "handleAdd('proposal')") + "\">\n                        <!-- Left Column -->\n                        <div class=\"space-y-4\">\n                            <div class=\"form-group\">\n                                <label class=\"form-label required\">Loại đề nghị</label>\n                                <select id=\"proposal-type\" class=\"form-select\" required onchange=\"toggleProposalType()\">\n                                    <option value=\"Trong kế hoạch\" " + (proposalType === "Trong kế hoạch" ? "selected" : "") + ">Trong kế hoạch</option>\n                                    <option value=\"Ngoài kế hoạch\" " + (proposalType === "Ngoài kế hoạch" ? "selected" : "") + ">Ngoài kế hoạch</option>\n                                </select>\n                            </div>\n\n                            <div id=\"in-plan-fields\" class=\"" + (flag ? "" : "hidden") + "\">\n                                <div class=\"form-group\">\n                                    <label class=\"form-label required\">Chọn dự án</label>\n                                    <select id=\"proposal-project\" class=\"form-select\" " + (flag ? "required" : "") + " onchange=\"updateProposalTasks()\">\n                                        <option value=\"\">-- Chọn dự án --</option>\n                                        " + joined2 + "\n                                    </select>\n                                </div>\n                                <div class=\"form-group mt-4\">\n                                    <label class=\"form-label required\">Chọn nhiệm vụ phụ thuộc</label>\n                                    <select id=\"proposal-task\" class=\"form-select\" " + (flag ? "required" : "") + " onchange=\"showTaskDetails()\">\n                                        <option value=\"\">-- Chọn nhiệm vụ --</option>\n                                        " + joined3 + "\n                                    </select>\n                                    <div id=\"task-details-container\">" + text3 + "</div>\n                                </div>\n                            </div>\n\n                            <div class=\"form-group\">\n                                <label class=\"form-label required\">Nội dung đề nghị</label>\n                                <textarea id=\"proposal-content\" class=\"form-textarea\" rows=\"5\" required placeholder=\"Nhập nội dung đề nghị...\">" + escapeHtml(proposalContent) + "</textarea>\n                            </div>\n                        </div>\n\n                        <!-- Right Column -->\n                        <div class=\"space-y-4\">\n                            <div class=\"form-group\">\n                                <label class=\"form-label\">URL đề nghị (link) <span class=\"text-xs text-gray-400 font-normal ml-1\">([Tên link] URL)</span></label>\n                                <textarea id=\"proposal-url\" class=\"form-textarea\" rows=\"5\" placeholder=\"Nhập mỗi link trên một dòng\">" + escapeHtml(proposalUrl) + "</textarea>\n                            </div>\n\n                            <div class=\"form-group\">\n                                <label class=\"form-label\">Nhà cung cấp</label>\n                                <select id=\"proposal-supplier\" class=\"form-select\">\n                                    <option value=\"\">-- Chọn Nhà cung cấp --</option>\n                                    " + joined + "\n                                </select>\n                            </div>\n\n                            " + (showAdminFields ? "\n                            <div class=\"pt-4 border-t border-gray-100 mt-4\">\n                                <h4 class=\"text-sm font-semibold text-gray-700 mb-3\"><i class=\"fas fa-shield-alt text-orange-500 mr-2\"></i>Phần duyệt (Admin)</h4>\n                                <div class=\"form-group mb-4\">\n                                    <label class=\"form-label\">Trạng thái</label>\n                                    <select id=\"proposal-status\" class=\"form-select\">\n                                        <option value=\"Đề xuất mới\" " + (proposalStatus === "Đề xuất mới" ? "selected" : "") + ">Đề xuất mới</option>\n                                        <option value=\"Chờ duyệt\" " + (proposalStatus === "Chờ duyệt" ? "selected" : "") + ">Chờ duyệt</option>\n                                        <option value=\"Đã duyệt\" " + (proposalStatus === "Đã duyệt" ? "selected" : "") + ">Đã duyệt</option>\n                                        <option value=\"Từ chối\" " + (proposalStatus === "Từ chối" ? "selected" : "") + ">Từ chối</option>\n                                    </select>\n                                </div>\n                                <div class=\"form-group\">\n                                    <label class=\"form-label\">Ghi chú duyệt</label>\n                                    <textarea id=\"proposal-note\" class=\"form-textarea\" rows=\"4\" placeholder=\"Nhập ghi chú duyệt...\">" + escapeHtml(proposalNote) + "</textarea>\n                                </div>\n                            </div>\n                            " : "") + "\n                        </div>\n                    </form>\n                </div>\n                <div class=\"h-4\"></div> <!-- Spacer for scrolling -->\n            </div>\n        </div>";
   return text4;
 }
@@ -6542,7 +7638,7 @@ function showTaskDetails() {
     taskDetailsContainerEl.innerHTML = "";
     return;
   }
-  taskDetailsContainerEl.innerHTML = "\n            <div class=\"bg-gray-50 p-3 rounded-lg text-sm space-y-1 mt-2\">\n                <p><strong>Nhiệm vụ:</strong> " + escapeHtml(task[COL.T_NAME]) + "</p>\n                <p><strong>Cán bộ trực tiếp:</strong> " + (escapeHtml(task[COL.T_ASSIGNEE]) || "Chưa gán") + "</p>\n                <p><strong>Trạng thái:</strong> " + (escapeHtml(task[COL.T_STATUS]) || "Chưa bắt đầu") + "</p>\n                <p><strong>Tiến độ:</strong> " + (escapeHtml(task[COL.T_COMPLETION]) || 0) + "%</p>\n                " + (task[COL.T_DUE] ? "<p><strong>Hạn chót:</strong> " + escapeHtml(formatDateForDisplay(task[COL.T_DUE])) + "</p>" : "") + "\n            </div>\n        ";
+  taskDetailsContainerEl.innerHTML = "\n            <div class=\"bg-gray-50 p-3 rounded-lg text-sm space-y-1 mt-2\">\n                <p><strong>Nhiệm vụ:</strong> " + escapeHtml(task[COL.T_NAME]) + "</p>\n                <p><strong>Người thực hiện trực tiếp:</strong> " + (escapeHtml(task[COL.T_ASSIGNEE]) || "Chưa gán") + "</p>\n                <p><strong>Duyệt kết quả:</strong> " + escapeHtml(nhanHoanThanhKetQua(task)) + "</p>\n                <p><strong>Tiến độ:</strong> " + (escapeHtml(task[COL.T_COMPLETION]) || 0) + "%</p>\n                " + (task[COL.T_DUE] ? "<p><strong>Hạn chót:</strong> " + escapeHtml(formatDateForDisplay(task[COL.T_DUE])) + "</p>" : "") + "\n            </div>\n        ";
 }
 document.addEventListener("DOMContentLoaded", function () {
   setupProposalTabEvents();
@@ -6747,7 +7843,7 @@ function createGanttSubRowHtml(sub) {
 function createGanttTaskRowHtml(task) {
   const rangeStart = ganttStartDate, rangeEnd = ganttEndDate,
     totalDays = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1,
-    quaHan = isTaskOverdue(task.dueDate) && !(task.status || "").toLowerCase().includes("hoàn thành"),
+    quaHan = isTaskOverdue(task.dueDate) && !daDuyetDuKetQua(task),
     thangXem = thangLocGantt(),
     tenThang = tenTheoThangCuaDong(task, task.name || "", thangXem),
     duLieuTenJson = escapeHtmlAttr(JSON.stringify(duLieuHoverGantt(task, thangXem))),
@@ -6898,9 +7994,11 @@ function handleGanttGroupChange(event) {
 /* ===================== TOOLTIP THẺ TỰ VẼ cho TÊN công việc / nhiệm vụ =====================
  * Rê chuột lên tên (chứ KHÔNG phải thanh màu) ⇒ thẻ trắng viền đổ bóng hiện cạnh con trỏ:
  *   • Công việc: tên đầy đủ · Ban lãnh đạo kiểm soát · Lãnh đạo phòng phụ trách ·
- *     Cán bộ thực hiện (gom từ nhiệm vụ trong cây) · Tiến độ.
- *   • Nhiệm vụ: tên đầy đủ · Lãnh đạo phòng phụ trách · Cán bộ thực hiện · Tiến độ ·
+ *     Người thực hiện (gom từ nhiệm vụ trong cây) · Tiến độ.
+ *   • Nhiệm vụ: tên đầy đủ · Lãnh đạo phòng phụ trách · Người thực hiện · Tiến độ ·
  *     Kết quả đầu ra. (Chữ cán bộ cạnh tên đã BỎ khỏi hàng — xem createGanttTaskRowHtml.)
+ * Nhãn đổi từ «Cán bộ thực hiện» sang «Người thực hiện» ngày 2026-09-09: Trưởng/Phó phòng nay
+ * cũng nhận việc trực tiếp được, gọi chung là "cán bộ" là sai.
  * Toàn bộ dựng bằng BUILDER thoát ký tự đầy đủ — dữ liệu người nhập không thể thành HTML.
  */
 const GANTT_HOVER_ID = "tooltip-gantt";
@@ -6965,7 +8063,7 @@ function buildGanttHoverCardHtml(d) {
     "</div>";
   html +=
     '<div class="dong"><b>' +
-    escapeHtml("Cán bộ thực hiện") +
+    escapeHtml("Người thực hiện") +
     ": </b>" +
     escapeHtml(d.canBo || "—") +
     "</div>";
@@ -7302,7 +8400,11 @@ async function restGet(path) {
     // mà máy chủ không biết nghĩa là tiến trình node đang chạy bản CŨ (đã gặp thật với
     // /api/v1/delegations). Nói thẳng ra thay vì để người dùng đọc "HTTP 404".
     if (res.status === 404 && path.indexOf("/api/v1/") === 0) throw new Error("máy chủ chưa có đường " + path + " — có thể đang chạy bản cũ, cần khởi động lại máy chủ");
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) {
+      let message = "HTTP " + res.status;
+      try { const json = await res.json(); if (json?.error?.message) message = json.error.message; } catch {}
+      throw new Error(message);
+    }
     const json = await res.json();
     return json && json.data ? json.data : null;
   } catch (err) {
@@ -7314,9 +8416,9 @@ async function restGet(path) {
 /** GET IM LẶNG: lỗi thì trả `null`, KHÔNG toast, KHÔNG bật modal đăng nhập.
  *  Dùng cho vòng hỏi lại 10 giây của chat — một lượt mạng chập chờn không được phép nổ toast liên
  *  tục hay đá người dùng ra modal đăng nhập giữa lúc họ đang gõ. */
-async function restGetIm(path) {
+async function restGetIm(path, options = {}) {
   try {
-    const res = await fetch(path, { credentials: "same-origin", headers: { Accept: "application/json" } });
+    const res = await fetch(path, { ...options, credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json();
     return json && json.data ? json.data : null;
@@ -7381,7 +8483,7 @@ async function restPost(path, body) {
 
 /** Người đang đăng nhập có phải NGƯỜI DUYỆT (admin / Phó Giám đốc) theo §6? */
 function laNguoiDuyetHeThong() {
-  return isAuthenticated && !!currentUser && (isAdmin() || currentUser.role === "Phó Giám đốc");
+  return isAuthenticated && !!currentUser && ["work", "subwork", "task"].some(entity => coQuyenTrongPhamVi(entity, "approve"));
 }
 
 /**
@@ -7391,12 +8493,28 @@ function laNguoiDuyetHeThong() {
  * ba nút — Xem chi tiết (đọc cả cây trước khi ký) / Duyệt / Trả lại để sửa — cùng nút Từ chối vốn
  * có. Dòng cấp 2/3 gửi LẺ mang `title` là tên công việc cấp 1 (`work_name`): thiếu nó thì người
  * duyệt thấy một cái tên trơ, không rõ thuộc việc nào.
+ *
+ * MỚI-3 (2026-09-12): dòng mang HAI nhãn — «đây là duyệt cái gì» (Mới tạo / Sửa / Xoá) và «của đối
+ * tượng nào» (Công việc cha / Công việc con / Nhiệm vụ / File kết quả). Người dùng: «thêm cột thông
+ * tin về đây là duyệt công việc mới tạo, hay sửa chữa/xóa … công việc cha, công việc con., nhiệm vụ,
+ * file kết quả». Cờ `da_sua` và mốc `moc_xu_ly` do `repo.listPending` tính từ `activity_logs`; giao
+ * diện KHÔNG tự đoán lại luật, chỉ đọc — kể cả cái mốc, vì mốc của dòng cấp 2/3 có thể là lần duyệt
+ * của CÂY cha nên không xuất hiện trong nhật ký `scope=self` mà popup sẽ tải.
  */
 function buildPendingApprovalRowHtml(item) {
+  // ĐỢT B (R4''): hàng chờ nay chứa BA loại dòng — cây, đề nghị đổi TÍCH Gửi BLĐ và đề nghị đổi
+  // TỶ LỆ. Hai loại sau đều là một dòng `approval_changes` nên đi chung một builder và chung một
+  // đường quyết (`POST /approvals/changes/:id/approve|reject`). Trước ĐỢT B, dòng `ty-le` rơi xuống
+  // nhánh cây bên dưới: vẽ ra ba nút Duyệt/Trả lại/Từ chối gọi SAI URL — tức là người duyệt bấm
+  // «Duyệt» thì máy chủ trả 404, còn tỷ lệ thì vẫn treo.
+  if (item.kind === "gui-bld" || item.kind === "ty-le") return buildChangeApprovalRowHtml(item);
   const laWork = item.kind === "work";
-  const loai = laWork ? "Công việc" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  const loai = laWork ? "Công việc cha" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
   const tenCongViecCha = String((item && item.work_name) || "").trim();
   const tieuDeLoai = laWork || tenCongViecCha === "" ? "" : "Thuộc công việc: " + tenCongViecCha;
+  // `=== true` chứ không phải truthy: máy chủ cũ chưa có cột này thì `undefined` phải rơi về «Mới
+  // tạo» (nhãn trung tính, không hứa một popup có nội dung) chứ không thành «Sửa» với nút bấm rỗng.
+  const laBanSua = item.da_sua === true;
   return (
     '\n<div class="approval-row flex flex-wrap items-center gap-2 py-2 border-b border-gray-100" data-entity="' +
     escapeHtml(laWork ? "work" : "work-item") +
@@ -7406,8 +8524,13 @@ function buildPendingApprovalRowHtml(item) {
     escapeHtmlAttr(item.name || "") +
     '" data-work-code="' +
     escapeHtmlAttr(laWork ? item.code || "" : item.work_code || "") +
+    '" data-da-sua="' +
+    (laBanSua ? "1" : "0") +
+    '" data-moc-xu-ly="' +
+    escapeHtmlAttr(item.moc_xu_ly || "") +
     '">' +
-    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"' +
+    nhanDuyetHtml(laBanSua ? "sua" : "moi") +
+    '<span class="duyet-nhan bg-gray-100 text-gray-600"' +
     (tieuDeLoai ? ' title="' + escapeHtmlAttr(tieuDeLoai) + '"' : "") +
     ">" +
     escapeHtml(loai) +
@@ -7422,8 +8545,15 @@ function buildPendingApprovalRowHtml(item) {
     escapeHtml(item.created_by_name || "—") +
     "</span>" +
     '<span class="flex items-center gap-2">' +
+    // Nút «Xem các thay đổi» CHỈ hiện khi là bản sửa: hiện ra mà popup rỗng là hứa một điều không
+    // giữ được. Đặt TRƯỚC «Xem chi tiết» vì đây là cái người duyệt cần đọc trước khi quyết.
+    (laBanSua
+      ? '<button type="button" class="approval-changes btn-secondary py-1 px-3 text-xs text-blue-700" title="' +
+        escapeHtmlAttr("Xem những gì đã thay đổi so với lần duyệt trước") +
+        '"><i class="fas fa-list-check mr-1"></i>Xem các thay đổi</button>'
+      : "") +
     '<button type="button" class="approval-detail btn-secondary py-1 px-3 text-xs" title="' +
-    escapeHtmlAttr("Xem cả công việc con và nhiệm vụ bên trong (chỉ đọc)") +
+    escapeHtmlAttr("Xem chi tiết và xử lý phê duyệt công việc, công việc con, nhiệm vụ") +
     '"><i class="fas fa-eye mr-1"></i>Xem chi tiết</button>' +
     '<button type="button" class="approval-approve btn-primary py-1 px-3 text-xs" title="' +
     escapeHtmlAttr("Duyệt cả cây: công việc này và mọi mục bên trong") +
@@ -7447,6 +8577,39 @@ function buildPendingApprovalRowHtml(item) {
 }
 
 /**
+ * NHÃN «đây là duyệt cái gì» của ba bảng chờ duyệt (MỚI-3, 2026-09-12).
+ *
+ * Trả VỀ CHUỖI HTML chứ không phải node: hai builder nối chuỗi (`buildPendingApprovalRowHtml`,
+ * `buildPendingDeleteRowHtml`) chèn thẳng chuỗi này. Builder thứ ba (`buildChangeApprovalRowHtml`)
+ * dựng DOM thì tự tạo `<span>` với `textContent`, chỉ đọc CHUNG bảng chữ `NHAN_DUYET` — hai đường
+ * một nguồn, đổi nhãn một chỗ là cả ba bảng đổi theo.
+ *
+ * Cỡ chữ nằm trong luật `.duyet-nhan` ở `app.css`, KHÔNG gắn `text-[11px]`: class arbitrary đó không
+ * có trong `tailwind.min.css` đóng băng (commit db382d0) nên bấy lâu chip render cỡ 16px.
+ */
+const NHAN_DUYET = Object.freeze({
+  moi: { nhan: "Mới tạo", mau: "bg-emerald-100 text-emerald-800", yNghia: "Duyệt lần đầu" },
+  sua: { nhan: "Sửa", mau: "bg-blue-100 text-blue-700", yNghia: "Bản sửa của đầu việc đã duyệt" },
+  xoa: { nhan: "Xoá", mau: "bg-red-100 text-red-700", yNghia: "Yêu cầu xoá đầu việc" },
+});
+
+function nhanDuyetHtml(kieu) {
+  const cfg = NHAN_DUYET[kieu] || NHAN_DUYET.moi;
+  return (
+    '<span class="duyet-nhan ' +
+    // `cfg.mau` là tên class Tailwind lấy từ `NHAN_DUYET` đóng băng, không có dữ liệu người dùng —
+    // nhưng vẫn bọc `escapeHtmlAttr` cho đúng khuôn của bộ soát XSS: mọi giá trị nội suy vào chuỗi
+    // HTML đều thoát, không khai ngoại lệ cho cái gì có thể thoát được (xem `oNhapTyLeKhai`).
+    escapeHtmlAttr(cfg.mau) +
+    '" title="' +
+    escapeHtmlAttr(cfg.yNghia) +
+    '">' +
+    escapeHtml(cfg.nhan) +
+    "</span>"
+  );
+}
+
+/**
  * BUILDER: một dòng trong «Yêu cầu XOÁ chờ duyệt» (013, Vòng 13 đợt 2).
  *
  * Builder RIÊNG chứ không thêm cờ vào `buildPendingApprovalRowHtml`: hai loại dòng có bộ nút khác
@@ -7457,7 +8620,7 @@ function buildPendingApprovalRowHtml(item) {
  */
 function buildPendingDeleteRowHtml(item) {
   const laWork = item.kind === "work";
-  const loai = laWork ? "Công việc" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  const loai = laWork ? "Công việc cha" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
   const tenCongViecCha = String((item && item.work_name) || "").trim();
   const tieuDeLoai = laWork || tenCongViecCha === "" ? "" : "Thuộc công việc: " + tenCongViecCha;
   const lyDo = String((item && item.xoa_ly_do) || "").trim();
@@ -7469,7 +8632,10 @@ function buildPendingDeleteRowHtml(item) {
     '" data-name="' +
     escapeHtmlAttr(item.name || "") +
     '">' +
-    '<span class="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap"' +
+    // MỚI-3: nhãn «Xoá» đứng trước nhãn đối tượng, cùng trật tự với bảng chờ duyệt để hai bảng nằm
+    // chồng lên nhau trong một panel đọc liền một mạch.
+    nhanDuyetHtml("xoa") +
+    '<span class="duyet-nhan bg-gray-100 text-gray-600"' +
     (tieuDeLoai ? ' title="' + escapeHtmlAttr(tieuDeLoai) + '"' : "") +
     ">" +
     escapeHtml(loai) +
@@ -7518,6 +8684,7 @@ async function renderChoDuyetPanel() {
     (listEl.innerHTML = items.length
       ? items.map(buildPendingApprovalRowHtml).join("")
       : '<div class="text-sm text-gray-400 py-2">Không có mục nào chờ duyệt — tốt lắm!</div>');
+  ganNutQuyetDinhDeNghi(listEl);
   await renderYeuCauXoaPanel();
 }
 
@@ -7543,6 +8710,126 @@ async function renderYeuCauXoaPanel() {
   const countEl = document.getElementById("approvals-delete-count");
   countEl && (countEl.textContent = String(items.length));
   listEl && (listEl.innerHTML = items.map(buildPendingDeleteRowHtml).join(""));
+}
+
+/**
+ * Bẩy action ĐỔI NỘI DUNG — bản sao đúng chữ của `SUA_NOI_DUNG` bên `approvals/repo.js`, để popup
+ * «Xem các thay đổi» chỉ in ra những gì đã làm nên nhãn «Sửa» của chính dòng đó.
+ *
+ * Vì sao phải lọc: `GET …/history` trả MỌI hoạt động của đầu việc (lập, gửi duyệt, duyệt, nhân bản,
+ * sắp xếp lại…). In hết thì người duyệt phải tự mò giữa đống chữ xem đâu là phần sửa lần này — đúng
+ * cái việc mà nhãn «Sửa» sinh ra để trả lời. Hai bên phải khớp TÊN CHỮ: máy chủ đổi tên action bên
+ * `routes.js` mà không sửa danh sách này thì popup thành rỗng, và ca test «Mọi action trong hai bộ
+ * đều thật sự được ghi» bên `approvals-pending-da-sua.test.js` là cái lưới bắt.
+ */
+const HANH_DONG_SUA_NOI_DUNG = Object.freeze([
+  "works.update",
+  "works.setMonthName",
+  "works.clearMonthName",
+  "subworks.update",
+  "tasks.update",
+  "workItems.setMonthName",
+  "workItems.clearMonthName",
+]);
+
+/**
+ * POPUP «XEM CÁC THAY ĐỔI» của bảng «Chờ duyệt» — MỚI-3 (2026-09-12).
+ *
+ * Người dùng: «Đối với sửa thông tin công việc/nhiệm vụ, thêm nút xem các thay đổi, hiển thị popup
+ * các thay đổi». Nút chỉ hiện khi dòng mang `da_sua` (xem `buildPendingApprovalRowHtml`).
+ *
+ * `mocXuLy` là `moc_xu_ly` MÁY CHỦ trả kèm dòng chờ — lần gần nhất đầu việc này ra khỏi tay người
+ * duyệt (`approvals.approve` hoặc `approvals.return`). Popup chỉ in lượt sửa SAU mốc đó. KHÔNG tự tìm
+ * mốc trong `entries`: với dòng cấp 2/3 gửi lẻ, mốc là log của CÂY cha nên nằm ngoài `scope=self` mà
+ * popup này tải — tự tìm thì mốc thành `null` và popup in cả lịch sử từ ngày lập.
+ *
+ * Phạm vi tải cố ý lệch nhau theo cấp, khớp đúng luật tính `da_sua` bên `listPending`:
+ *   • công việc cha ⇒ `scope=tree`: duyệt cây là duyệt cả cây, sửa ở con cũng là thay đổi của lượt này;
+ *   • công việc con / nhiệm vụ ⇒ `scope` mặc định `self`: dòng chờ là của ĐÚNG mục đó, nhật ký của anh
+ *     em nó không phải việc của người đang duyệt dòng này.
+ *
+ * Thân popup tái dùng `buildNhatKyDong` (đã escape sẵn từng giá trị) nên KHÔNG mở sink XSS mới; phần
+ * khung dựng bằng `textContent` theo đúng khuôn `moYKienKetQua`.
+ */
+async function moPopupThayDoiChoDuyet(entity, ref, ten, mocXuLy) {
+  if (!ref) return;
+  const laWork = entity === "work";
+  const duong =
+    (laWork ? "/api/v1/works/" : "/api/v1/work-items/") +
+    encodeURIComponent(ref) +
+    "/history?" +
+    (laWork ? "scope=tree&" : "") +
+    "limit=500";
+  let duLieu = null;
+  try {
+    duLieu = await restGet(duong);
+  } catch (err) {
+    showToast("Không tải được nhật ký thay đổi: " + (err && err.message ? err.message : String(err)), "error");
+    return;
+  }
+  const entries = duLieu && Array.isArray(duLieu.entries) ? duLieu.entries : [];
+  // Mốc hỏng/thiếu (máy chủ cũ, hoặc dòng chờ dựng từ cache) ⇒ KHÔNG lọc, thà in thừa còn hơn in rỗng
+  // rồi để người duyệt tưởng «không sửa gì» mà ký.
+  const moc = Date.parse(mocXuLy || "");
+  const daSua = entries.filter((entry) => {
+    if (!entry || !HANH_DONG_SUA_NOI_DUNG.includes(String(entry.action))) return false;
+    if (!Number.isFinite(moc)) return true;
+    const luc = Date.parse(entry.created_at || "");
+    return Number.isFinite(luc) ? luc > moc : true;
+  });
+
+  const tieuDe = "Các thay đổi chờ duyệt — " + (ten || ref);
+  const than = daSua.length
+    ? '<div class="space-y-2">' +
+      // Máy chủ trả CŨ TRƯỚC; màn hình thì MỚI TRƯỚC — cùng quy ước với `renderNhatKy`.
+      daSua
+        .slice()
+        .reverse()
+        .map(buildNhatKyDong)
+        .join("") +
+      "</div>"
+    : '<div class="text-center py-8 text-gray-400"><i class="fas fa-list-check text-3xl mb-2"></i>' +
+      '<p class="text-sm">Không tìm thấy lượt sửa nào sau lần duyệt trước.</p>' +
+      '<p class="yk-chu-thich">Có thể người lập gửi lại nguyên trạng sau khi bị trả về, hoặc nhật ký đã vượt quá 500 dòng.</p></div>';
+
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  };
+  const overlay = el("div", "qlcv-dialog yk-dialog");
+  overlay.id = "thay-doi-cho-duyet-dialog";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  const panel = document.createElement("section");
+  panel.append(el("h3", null, tieuDe));
+  const content = el("div", "qlcv-dialog-content yk-noi-dung");
+  content.innerHTML = than;
+  const chan = document.createElement("footer");
+  const nutDong = el("button", "btn-secondary", "Đóng");
+  nutDong.type = "button";
+  chan.append(nutDong);
+  panel.append(content, chan);
+  overlay.append(panel);
+
+  const bamPhim = (event) => {
+    if (event.key === "Escape") dongPopupYKien();
+  };
+  function don() {
+    document.removeEventListener("keydown", bamPhim);
+    overlay.remove();
+  }
+  nutDong.addEventListener("click", () => dongPopupYKien());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) dongPopupYKien();
+  });
+  // Gỡ popup cũ TRƯỚC khi gắn cái mới — cùng bẫy đã ghi ở `moYKienKetQua`: hai lớp phủ chồng nhau thì
+  // Escape phải bấm hai lần mới tắt.
+  dongPopupYKien();
+  yKienDong = don;
+  document.addEventListener("keydown", bamPhim);
+  document.body.append(overlay);
 }
 
 /** Đồng ý xoá: POST approve-delete → mục mất thật, cả cây bên dưới. */
@@ -7610,6 +8897,9 @@ function capNhatTrangThaiChoDuyetLocal(entity, ref) {
  * trong cùng sang «Chờ duyệt», và hộp chờ duyệt của người duyệt chỉ hiện MỘT dòng.
  */
 async function guiDuyetCaCay(entity, ref) {
+  const laWork = entity === "work";
+  const rowTyLe = laWork ? null : allTasks.find(t => String(t[COL.T_ID]) === String(ref));
+  if (typeof kiemTraTyLeMoiNhat8b === "function" && !await kiemTraTyLeMoiNhat8b(laWork ? "project" : "task", { id: ref }, rowTyLe, "gửi đi")) return null;
   const ketQua = await restPost(
     "/api/v1/approvals/" + entity + "/" + encodeURIComponent(ref) + "/submit"
   );
@@ -7663,30 +8953,31 @@ let tabChoDuyetHienTai = "viec";
 let demLenhSuaCuaToi = { nguoiId: null, soLenh: 0 };
 
 /** Bấm tab: đổi lớp `active` + ẩn/hiện panel, rồi nạp đúng panel vừa mở. */
+function cacTabChoDuyet() {
+  const docFile = coQuyenTrongPhamVi("task", "read") && coQuyenTrongPhamVi("file", "read");
+  const gui = coQuyenTrongPhamVi("file", "submit");
+  const tao = coQuyenTrongPhamVi("file", "create");
+  return {
+    viec: laNguoiDuyetHeThong(),
+    "ket-qua": docFile && (gui || tao || coQuyenTrongPhamVi("file", "approve")),
+    "lenh-sua": docFile && (gui || tao || (demLenhSuaCuaToi.nguoiId === currentUser?.id && demLenhSuaCuaToi.soLenh > 0)),
+  };
+}
 function moTabChoDuyet(tab) {
-  tabChoDuyetHienTai = currentUser?.role === "Nhân viên" ? "lenh-sua"
-    : ["ket-qua", "lenh-sua"].includes(tab) ? tab : "viec";
+  if (cacTabChoDuyet()[tab]) tabChoDuyetHienTai = tab;
   capNhatTabChoDuyet();
   return napTrangChoDuyet();
 }
-
 function capNhatTabChoDuyet() {
-  const laNhanVien = currentUser?.role === "Nhân viên";
-  const coTabLenh = ["Nhân viên", "Trưởng phòng", "Phó phòng"].includes(currentUser?.role) ||
-    (demLenhSuaCuaToi.nguoiId === currentUser?.id && demLenhSuaCuaToi.soLenh > 0);
-  if (laNhanVien) tabChoDuyetHienTai = "lenh-sua";
-  else if (!coTabLenh && tabChoDuyetHienTai === "lenh-sua") tabChoDuyetHienTai = "ket-qua";
+  const tabs = cacTabChoDuyet();
+  if (!tabs[tabChoDuyetHienTai]) tabChoDuyetHienTai = Object.keys(tabs).find(t => tabs[t]) || "";
   document.querySelectorAll(".tab-cho-duyet").forEach((nut) => {
     nut.classList.toggle("active", nut.dataset.tab === tabChoDuyetHienTai);
-    nut.classList.toggle("hidden", (laNhanVien && nut.dataset.tab !== "lenh-sua") ||
-      (!coTabLenh && nut.dataset.tab === "lenh-sua"));
+    nut.classList.toggle("hidden", !tabs[nut.dataset.tab]);
   });
-  const viec = document.getElementById("panel-cho-duyet-viec");
-  const ketQua = document.getElementById("panel-cho-duyet-ket-qua");
-  viec && viec.classList.toggle("hidden", tabChoDuyetHienTai !== "viec");
-  ketQua && ketQua.classList.toggle("hidden", tabChoDuyetHienTai !== "ket-qua");
-  const lenh = document.getElementById("panel-cho-duyet-lenh-sua");
-  lenh && lenh.classList.toggle("hidden", tabChoDuyetHienTai !== "lenh-sua");
+  ["viec", "ket-qua", "lenh-sua"].forEach(tab => {
+    document.getElementById("panel-cho-duyet-" + tab)?.classList.toggle("hidden", tabChoDuyetHienTai !== tab);
+  });
 }
 
 /** Nạp trang: vẽ danh sách của tab đang mở rồi cập nhật badge thanh điều hướng. */
@@ -7742,7 +9033,7 @@ async function renderLenhSua() {
       o("file").href = "/api/v1/task-files/" + encodeURIComponent(row.ban_cuoi_id) + "/download";
     }
     const coEditor = duLieu.onlyOffice && row.duocSua && row.ban_cuoi_id &&
-      /\.(docx?|xlsx?|pptx?|pdf)$/i.test(row.ban_cuoi_ten || "");
+      suaTrucTuyenDuoc(row.ban_cuoi_ten || "");
     o("sua").disabled = !coEditor;
     o("gui").disabled = row.duocGui !== true;
     if (!coEditor) o("sua").title = "File chưa có hoặc không hỗ trợ sửa trực tuyến";
@@ -7911,6 +9202,11 @@ function buildDongChoDuyetKetQua(n) {
       )
     );
   }
+  if (n.duocGuiDuyet === true && n.ban_cuoi_id) {
+    muc.push(
+      buildMucMenuKq("fa-paper-plane", "Gửi đi duyệt", "guiDiDuyetFile('" + escapeForInlineHandler(n.id) + "', '" + escapeForInlineHandler(n.ma_nhiem_vu) + "', '" + escapeForInlineHandler(n.ban_cuoi_id) + "', true)")
+    );
+  }
   (Array.isArray(n.hanhDong) ? n.hanhDong : []).forEach((h) => {
     const laChot = h.ma === "hoan-thanh" || h.ma === "duyet";
     muc.push(
@@ -7925,7 +9221,7 @@ function buildDongChoDuyetKetQua(n) {
   });
   const soYKien = Number(n.so_y_kien || 0);
   return (
-    "<tr class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\">" +
+    "<tr class=\"dong-kq-cho-duyet\" data-file=\"" + escapeHtmlAttr(n.id) + "\" data-dinh-dang=\"" + escapeHtmlAttr(n.dinh_dang || "") + "\">" +
     // 1. Tên kết quả làm được (người dùng chốt 2026-09-04): DÒNG 1 = TÊN KẾT QUẢ đã khai ở ô
     // «Kết quả» của nhiệm vụ (016 `ten_ket_qua`) + ICON định dạng + số bản; DÒNG 2 = TÊN FILE của
     // bản mới nhất — hai thứ lệch nhau ngay khi ai đó nộp bản mới bằng file tên khác. Dòng «Báo
@@ -7979,6 +9275,7 @@ function moChonFileChoDuyet(fileId, maNhiemVu) {
   const input = document.getElementById("kq-cho-duyet-file-input");
   if (!input) return;
   fileKetQuaChoBan = fileId ? Number(fileId) : null;
+  datDinhDangOChonFile(input, fileId);
   taskKetQuaMa = String(maNhiemVu || "");
   dangOTrangChoDuyet = true;
   input.value = "";
@@ -8001,6 +9298,7 @@ async function xuLyVerdictChoDuyet(fileId, hanhDong, canNoiDung) {
   if (!ketQua) return;
   showToast("Đã " + (NHAN_VERDICT_FILE[hanhDong] || hanhDong).toLowerCase(), "success");
   await renderChoDuyetKetQua();
+  await refreshData();
 }
 
 /**
@@ -8018,12 +9316,13 @@ async function capNhatNavChoDuyet() {
   const soLenh = ((lenh && lenh.items) || []).length;
   demLenhSuaCuaToi = { nguoiId: currentUser.id, soLenh };
   capNhatTabChoDuyet();
-  const coCua = laNguoiDuyetHeThong() || ["Nhân viên", "Trưởng phòng", "Phó phòng"].includes(currentUser.role) || soLenh > 0;
+  const coCua = Object.values(cacTabChoDuyet()).some(Boolean);
   nav.classList.toggle("hidden", !coCua);
   if (!coCua) return;
   const badge = document.getElementById("nav-cho-duyet-badge");
   if (!badge) return;
-  const kq = currentUser.role === "Nhân viên" ? null : await restGet("/api/v1/task-files/cho-duyet");
+  const kq = cacTabChoDuyet()["ket-qua"] ? await restGet("/api/v1/task-files/cho-duyet") : null;
+  if (currentUser !== nguoi || !isAuthenticated) return;
   let tong = ((kq && kq.items) || []).length + soLenh;
   const tabLenh = document.getElementById("tab-lenh-sua-count");
   if (tabLenh && lenh) tabLenh.textContent = String(soLenh);
@@ -8109,13 +9408,23 @@ function goiNutChoDuyetPanel() {
     if (!rowEl) return;
     const entity = rowEl.dataset.entity,
       ref = rowEl.dataset.id;
-    if (nut.classList.contains("approval-detail")) {
-      // Xem chi tiết (012): mở modal chi tiết ở chế độ CHỈ ĐỌC — người duyệt đọc cả cây trước khi
+    if (nut.classList.contains("approval-changes")) {
+      // MỚI-3: popup «Xem các thay đổi». Đọc `data-moc-xu-ly` MÁY CHỦ trả kèm dòng chờ chứ không tự
+      // đoán mốc trong nhật ký — xem docblock `moPopupThayDoiChoDuyet`.
+      nut.disabled = true;
+      try {
+        await moPopupThayDoiChoDuyet(entity, ref, rowEl.dataset.name || "", rowEl.dataset.mocXuLy || "");
+      } finally {
+        nut.disabled = false;
+      }
+    } else if (nut.classList.contains("approval-detail")) {
+      // Xem chi tiết: người duyệt đọc và sửa cả cây trước khi
       // ký. Dòng cấp 2/3 mở theo công việc cấp 1 của nó (`data-work-code`) vì modal chi tiết vẽ
       // theo cây của cấp 1; không có mã đó thì mở theo chính nó.
       const item = entity === "work-item" ? allTasks.find((t) => String(t[COL.T_ID]) === String(ref)) : null;
       const maCongViec = rowEl.dataset.workCode || (item && item[COL.T_PID]) || ref;
       const congViec = allProjects.find((p) => String(p[COL.P_ID]) === String(maCongViec));
+      if (typeof dauViecDangDuyet8b !== "undefined") dauViecDangDuyet8b = { type: entity === "work" ? "project" : "task", ref };
       moChiTietCheDoDuyet(maCongViec, (congViec && congViec[COL.P_NAME]) || rowEl.dataset.name || maCongViec);
     } else if (nut.classList.contains("approval-approve")) {
       nut.disabled = true;
@@ -8324,7 +9633,7 @@ function createGanttWorkRowHtml(work) {
   return '\n<div class="gantt-work-block">' +
     '\n<div class="gantt-item" data-type="project" data-id="' + escapeHtml(work.code) + '">' +
     '<div class="gantt-item-label">' + createGanttToggleSlotHtml(key, true) +
-    '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(work.status)) + ' mr-2"></i>' +
+    '<i class="fas fa-folder ' + escapeHtml(getStatusIconClass(nhanHoanThanhKetQua(work))) + ' mr-2"></i>' +
     '<span class="gantt-hover-name truncate" data-hover-json="' + duLieuTenJson + '">' + escapeHtml(tenThang) + "</span>" +
     '<span class="gantt-task-count">' + escapeHtml(work.taskCount) + "</span>" +
     '<div class="gantt-item-actions"></div></div>' +
@@ -8509,22 +9818,25 @@ function tenPhongTaiKhoan() {
 // Vòng 9: cột «Quản lý công việc» đã bỏ khỏi bảng — vai cũ phía máy chủ vẫn hoạt động.
 // ============================================================================
 const BANG_PHAN_QUYEN = [
-  { ten: 'Xem Công việc / Công việc con / Nhiệm vụ', entityType: 'work', action: 'read' },
-  { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create', gc: 'Trưởng phòng / Phó phòng tạo ⇒ chờ Phó GĐ duyệt rồi mới vào thống kê.' },
+  { ten: 'Xem Công việc (cấp 1)', entityType: 'work', action: 'read' },
+  { ten: 'Xem Công việc con (cấp 2)', entityType: 'subwork', action: 'read' },
+  { ten: 'Xem Nhiệm vụ (cấp 3)', entityType: 'task', action: 'read' },
+  { ten: 'Tạo Công việc (cấp 1)', entityType: 'work', action: 'create', gc: 'Mặc định TP/PP tạo cần duyệt; đặt ✓ để tạo đã duyệt ngay. Luôn trong phòng mình, trừ ủy quyền hợp lệ.' },
   { ten: 'Tạo Công việc con (cấp 2)', entityType: 'subwork', action: 'create' },
   { ten: 'Tạo Nhiệm vụ (cấp 3)', entityType: 'task', action: 'create', gc: 'Mặc định nhiệm vụ KHÔNG qua duyệt; đặt ⏳ ở đây thì nhiệm vụ mới rơi «Chờ duyệt».' },
   { ten: 'Sửa Công việc (cấp 1)', entityType: 'work', action: 'update' },
-  { ten: 'Sửa Công việc con (cấp 2)', entityType: 'subwork', action: 'update', gc: 'TP/PP sửa lại mục đã duyệt ⇒ tự về «Chờ duyệt» chờ Phó GĐ duyệt lần nữa.' },
+  { ten: 'Sửa Công việc con (cấp 2)', entityType: 'subwork', action: 'update', gc: 'Mặc định TP/PP sửa mục đã duyệt cần duyệt lại; đặt ✓ để giữ trạng thái đã duyệt.' },
   { ten: 'Sửa Nhiệm vụ (cấp 3)', entityType: 'task', action: 'update' },
   // Bug 2 (8b): quyền «sửa tỷ lệ» của đầu mục (rbac.js ACTION_TY_LE, KHÔNG thuộc mảng ACTIONS —
   // sửa là hiệu lực ngay, không có ⏳ chờ duyệt). Mặc định ✓ cho admin/PQĐ/TP/PP; TP/PP chỉ trong
   // phòng phụ trách (inScope). Cán bộ & vai «Quản lý công việc» ✕.
   { ten: 'Sửa tỷ lệ công việc (%) — Công việc con (cấp 2)', entityType: 'subwork', action: 'ty-le', gc: 'Tỷ lệ chia đều khi tạo; đầu mục thiếu/không có tỷ lệ không tính vào tiến độ.' },
-  { ten: 'Sửa tỷ lệ công việc (%) — Nhiệm vụ (cấp 3)', entityType: 'task', action: 'ty-le', gc: 'Chỉ nhiệm vụ KHÔNG nằm trong công việc con mới là đầu mục có tỷ lệ.' },
+  { ten: 'Sửa tỷ lệ công việc (%) — Nhiệm vụ (cấp 3)', entityType: 'task', action: 'ty-le', gc: 'Nhiệm vụ trực tiếp góp tỷ lệ vào công việc cha; nhiệm vụ trong công việc con góp tỷ lệ vào công việc con.' },
+  { ten: 'Đổi tích Gửi BLĐ phê duyệt — Nhiệm vụ', entityType: 'task', action: 'gui-bld', gc: '✓ theo tùy chọn duyệt đổi tích; ⏳ luôn phải chờ, kể cả khi tùy chọn tắt; ✕ không sửa được. Cán bộ chỉ chọn khi tạo, TP/PP tự thực hiện luôn lên Phó GĐ.' },
   { ten: 'Xoá Công việc (cấp 1)', entityType: 'work', action: 'delete' },
   { ten: 'Xoá Công việc con (cấp 2)', entityType: 'subwork', action: 'delete' },
   { ten: 'Xoá Nhiệm vụ (cấp 3)', entityType: 'task', action: 'delete', gc: 'Cán bộ chỉ xoá nhiệm vụ của mình.' },
-  { ten: 'Duyệt Công việc (cấp 1)', entityType: 'work', action: 'approve', gc: 'Chỉ hai vai này được duyệt — nơi những mục ⏳ chờ.' },
+  { ten: 'Duyệt Công việc (cấp 1)', entityType: 'work', action: 'approve', gc: 'Giám đốc/Phó Giám đốc mặc định được duyệt; các vai khác cần được mở ô này trong phạm vi hợp lệ.' },
   { ten: 'Duyệt Công việc con (cấp 2)', entityType: 'subwork', action: 'approve' },
   { ten: 'Duyệt Nhiệm vụ (cấp 3)', entityType: 'task', action: 'approve', gc: 'Chỉ cần khi ô «Tạo Nhiệm vụ» đặt ⏳ — không có mục nào chờ thì không có gì để duyệt.' },
   // 014 — hai cửa mới của luồng «Kết quả nhiệm vụ là file». Nghĩa giá trị (người dùng chốt):
@@ -8533,7 +9845,8 @@ const BANG_PHAN_QUYEN = [
   //   ✓ Cho phép  = PHÊ DUYỆT LUÔN — nộp xong nhóm chuyển thẳng «Đã duyệt» kèm dòng luồng
   //                 «Tự động — phân quyền không yêu cầu duyệt»; KHÔNG gửi TP/PP/PGD.
   //   ✕ Tắt       = vai đó không nộp/không duyệt được. Đổi ở đây là hiệu lực NGAY cho lần sau.
-  { ten: 'Nộp kết quả (file nhiệm vụ)', entityType: 'file', action: 'create', gc: '⏳ mặc định cho Cán bộ, TP/PP. ✓ = nộp xong là PHÊ DUYỆT LUÔN («Tự động»). ✕ = vai đó không nộp được.' },
+  { ten: 'Lưu kết quả (file nhiệm vụ)', entityType: 'file', action: 'create', gc: 'Tải lên chỉ Lưu tạm. Khi gửi: ⏳ đi đúng cửa duyệt; ✓ cho NV tự duyệt nếu quyền Gửi không bắt buộc duyệt. TP/PP luôn chờ Phó GĐ. ✕ không tải được.' },
+  { ten: 'Gửi đi duyệt (file nhiệm vụ)', entityType: 'file', action: 'submit', gc: '✓ được gửi bản lưu theo luồng của người nộp; ⏳ bắt buộc duyệt, không tự chốt; ✕ không gửi được. Nháp chỉ người tạo nhóm và admin thấy ở hàng chờ.' },
   { ten: 'Duyệt kết quả (file nhiệm vụ)', entityType: 'file', action: 'approve', gc: '✓ = nút chốt hiện («Hoàn thành / Duyệt» của TP/PP, «Duyệt» của PGD/GĐ). ⏳ = chỉ TP/PP mất nút chốt. ✕ = vai đó không duyệt được.' },
   { ten: 'Duyệt yêu cầu XOÁ (cả 3 cấp)', gc: 'Đi theo quyền Duyệt của từng cấp ở trên, không có ô riêng. Vai bị đặt ⏳ ở hàng Xoá phải bấm «Xin xoá» rồi chờ.', a: { s: '✓', n: '' }, g: { s: '✓', n: 'Phòng phụ trách' }, tp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, pp: { s: '✕', n: 'Chỉ khi được mở ô Duyệt' }, nv: { s: '✕', n: 'Chỉ xin, không duyệt' } },
   { ten: 'Thêm / sửa / xoá Người dùng', a: { s: '✓', n: '' }, g: { s: '👁', n: 'Chỉ xem' }, tp: { s: '👁', n: 'Chỉ xem' }, pp: { s: '👁', n: 'Chỉ xem' }, nv: { s: '👁', n: 'Chỉ xem' } },
@@ -8559,25 +9872,14 @@ const MAU_KY_HIEU = { '✓': 'text-green-600', '⏳': 'text-amber-600', '↻': '
 function oPhanQuyenHieuLuc(row, vai, ghiDe, macDinh) {
   const gd = ghiDe[row.entityType + ':' + row.action] && ghiDe[row.entityType + ':' + row.action][vai];
   if (gd) {
-    if (gd.gia_tri === 'cho-phep') return { s: '✓', n: 'Ghi đè: cho phép ngay' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
-    if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: 'Ghi đè: chờ Phó GĐ duyệt' + (gd.pham_vi === 'tat-ca' ? ' · TẤT CẢ các phòng' : '') };
+    const moRong = gd.pham_vi === 'tat-ca' && !(row.action === 'create' && row.entityType !== 'file' && ['Trưởng phòng', 'Phó phòng'].includes(vai));
+    if (gd.gia_tri === 'cho-phep') return { s: '✓', n: 'Ghi đè: cho phép ngay' + (moRong ? ' · TẤT CẢ các phòng' : '') };
+    if (gd.gia_tri === 'cho-duyet') return { s: '⏳', n: (row.entityType === 'file' && row.action === 'submit' ? 'Ghi đè: bắt buộc đi đúng cửa duyệt' : 'Ghi đè: chờ Phó GĐ duyệt') + (moRong ? ' · TẤT CẢ các phòng' : '') };
     if (gd.gia_tri === 'tu-choi') return { s: '✕', n: 'Ghi đè: đã tắt' };
   }
-  // Trạng thái gốc đọc từ MA TRẬN máy chủ trả về (GET /permissions) — bảng luôn khớp server
-  // kể cả khi Giám đốc vừa lưu ghi đè mới; user khác F5 là thấy ngay.
-  const bangVai = macDinh && macDinh[vai];
-  if (bangVai && bangVai[row.entityType] && bangVai[row.entityType].includes(row.action)) {
-    const ghiChu =
-      vai === 'Nhân viên' ? 'Phòng của mình' :
-      vai === 'Phó Giám đốc' ? 'Các phòng phụ trách' :
-      'Phòng mình';
-    return { s: '✓', n: ghiChu };
-  }
-  // Ma trận KHÔNG cho: Cán bộ vẫn ĐỌC được cả phòng mình (§6) nên hàng Xem hiện 👁, còn lại ✕.
-  if (vai === 'Nhân viên' && row.entityType) {
-    return row.action === 'read' ? { s: '👁', n: 'Phòng của mình' } : { s: '✕', n: '' };
-  }
-  return row[vai === 'Phó Giám đốc' ? 'g' : vai === 'Trưởng phòng' ? 'tp' : vai === 'Phó phòng' ? 'pp' : 'nv'] || { s: '✕', n: '' };
+  const g = giaTriMacDinhQuyen(macDinh, vai, row.entityType, row.action);
+  return { s: g === 'cho-duyet' ? '⏳' : g === 'cho-phep' ? '✓' : '✕',
+    n: g === 'tu-choi' ? '' : vai === 'Phó Giám đốc' ? 'Các phòng phụ trách' : 'Phòng của mình' };
 }
 // Danh sách ghi đè của máy chủ → chỉ số tra nhanh theo cặp (thực thể:hành động) → { vai: giá trị }.
 function chiSoGhiDe(danhSach) {
@@ -8598,23 +9900,9 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
   // nhãn là lỗi Vòng 12e — cả cột Cán bộ hiện «✕ Tắt» và bấm Lưu là XOÁ sạch ghi đè của vai đó.
   const nhungHieuLuc = (row, vai) => {
     const gd = (ghiDe[row.entityType + ':' + row.action] || {})[vai];
-    if (gd) return { g: gd.gia_tri, pv: gd.pham_vi === 'tat-ca', ghiDe: true };
-    const bang = macDinh[vai];
-    const cho = bang && bang[row.entityType] && bang[row.entityType].includes(row.action);
-    if (!cho) return { g: 'tu-choi', pv: '', ghiDe: false };
-    // Vai KHÔNG có luồng duyệt phía trên thì Tạo là làm ngay: admin/Phó GĐ tự duyệt, còn
-    // 'Nhân viên' bị service chặn 'cho-duyet' (permissions/service.js) nên đừng vẽ ⏳ cho họ.
-    // 014 — 2 cửa file có mặc định RIÊNG (người dùng chốt): Phó GĐ nộp là chốt luôn; TP/PP và
-    // Cán bộ nộp rơi «Chờ duyệt»; approve của TP/PP mặc định ✓ (nút «Hoàn thành / Duyệt» hiện).
-    if (row.entityType === 'file' && row.action === 'create') {
-      return { g: vai === 'Phó Giám đốc' ? 'cho-phep' : 'cho-duyet', pv: '', ghiDe: false };
-    }
-    if (row.entityType === 'file' && row.action === 'approve') {
-      return { g: 'cho-phep', pv: '', ghiDe: false };
-    }
-    const choDuoc =
-      row.action === 'create' && vai !== 'Phó Giám đốc' && vai !== 'admin' && vai !== 'Nhân viên';
-    return { g: choDuoc ? 'cho-duyet' : 'cho-phep', pv: '', ghiDe: false };
+    if (gd) return { g: gd.gia_tri, pv: gd.pham_vi === 'tat-ca' &&
+      !(row.action === 'create' && row.entityType !== 'file' && ['Trưởng phòng', 'Phó phòng'].includes(vai)), ghiDe: true };
+    return { g: giaTriMacDinhQuyen(macDinh, vai, row.entityType, row.action), pv: '', ghiDe: false };
   };
   const NHAN_HIEU_LUC = { 'cho-phep': '✓ Cho phép', 'cho-duyet': '⏳ Chờ duyệt', 'tu-choi': '✕ Tắt' };
   const trangThaiHienTai = (row, vai) => {
@@ -8654,14 +9942,15 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
         //           «Xin xoá» kèm lý do; mục KHÔNG mất cho tới khi người duyệt đồng ý).
         const laLanhDao = vai === 'Trưởng phòng' || vai === 'Phó phòng';
         const coChoDuyet =
+          (row.entityType === 'task' && row.action === 'gui-bld') ||
           (row.action === 'create' &&
             !(row.entityType === 'file' && vai === 'Phó Giám đốc')) ||
-          (row.action === 'update' && (laLanhDao || vai === 'Nhân viên')) ||
-          (row.action === 'delete' && (laLanhDao || vai === 'Nhân viên')) ||
+          (['update', 'delete'].includes(row.action) && row.entityType !== 'file') ||
           // 014: riêng 2 hàng file — ⏳ chỉ có ở «Duyệt kết quả (file nhiệm vụ)» × Trưởng phòng/
           // Phó phòng (đặt ⏳ là mất nút «Hoàn thành / Duyệt», bắt buộc trình lên cấp trên), và
           // KHÔNG có ở Phó GĐ (cấp chốt cuối — không có ai để «chờ»).
-          (row.entityType === 'file' && row.action === 'approve' && laLanhDao);
+          (row.entityType === 'file' && row.action === 'approve' && laLanhDao) ||
+          (row.entityType === 'file' && row.action === 'submit' && vai !== 'Phó Giám đốc');
         // CÙNG MỘT HÀNG: dropdown hành động + (PGD/TP/PP) dropdown phạm vi nằm ngang.
         // Option đầu = TRẠNG THÁI ĐANG DÙNG (không lặp lại ở sau); chọn nó = về luật gốc.
         const hienTai = trangThaiHienTai(row, vai);
@@ -8677,7 +9966,8 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
           '</select>';
         // Chỉ Phó GĐ / Trưởng phòng / Phó phòng có ô phạm vi (Cán bộ: phòng của mình, không nới —
         // service chặn phamVi 'tat-ca' cho vai 'Nhân viên').
-        const coPhamVi = vaiCot.phamViText && vai !== 'Nhân viên';
+        const coPhamVi = vaiCot.phamViText && vai !== 'Nhân viên' &&
+          !(row.action === 'create' && row.entityType !== 'file' && laLanhDao);
         const oPhamVi = coPhamVi
           ? '<select class="form-select text-[10px] w-full min-w-0 flex-1" data-pv="1" data-entity="' + escapeHtmlAttr(row.entityType) + '" data-action="' + escapeHtmlAttr(row.action) + '" data-vai="' + escapeHtmlAttr(vai) + '" title="Điều kiện phạm vi dữ liệu">' +
             '<option value="">' + escapeHtml(vaiCot.phamViText) + '</option>' +
@@ -8718,15 +10008,53 @@ function buildBangPhanQuyenHtml(ghiDe, macDinh, laAdmin) {
     '<div class="col-span-full">' + chuThich + '</div>'
   );
 }
+/** V2: cấu hình số phần trăm lấy từ máy chủ; chỉ admin có nút ghi. */
+function buildCauHinhTienDoFile(data, laAdmin) {
+  if (!data?.settings?.fileProgress || !data.fileProgressLabels) return '';
+  const rows = Object.entries(data.fileProgressLabels).map(([key, label]) =>
+    '<label class="flex justify-between items-center gap-3 py-1"><span>' + escapeHtml(label) + '</span><span><input type="number" min="0" max="100" step="any" required class="form-input w-20" data-moc-file="' + escapeHtmlAttr(key) + '" data-goc="' + escapeHtmlAttr(data.settings.fileProgress[key]) + '" value="' + escapeHtmlAttr(data.settings.fileProgress[key]) + '"' + (laAdmin ? '' : ' disabled') + '> %</span></label>').join('');
+  return '<section class="mt-5 border-t pt-4"><h4 class="font-semibold">Tiến độ từng file kết quả (%)</h4><p class="text-xs text-gray-500">Chỉ Giám đốc (admin) sửa được. Mốc phải từ 0 đến 100 và không giảm trong từng nhánh duyệt; hiệu lực từ request kế tiếp.</p>' + rows +
+    buildGuiBldSettingsHtml(data.settings, laAdmin) +
+    (laAdmin ? '<button type="button" id="file-progress-save" class="btn-primary mt-2">Lưu cấu hình tiến độ file</button>' : '') + '</section>';
+}
+async function luuCauHinhTienDoFile() {
+  const button = document.getElementById('file-progress-save');
+  if (!button || button.disabled || !isAdmin()) return;
+  const fileProgress = {};
+  for (const input of document.querySelectorAll('[data-moc-file]')) {
+    if (!input.reportValidity() || !input.value.trim()) return;
+    if (Number(input.value) !== Number(input.dataset.goc)) fileProgress[input.dataset.mocFile] = Number(input.value);
+  }
+  // Chỉ gửi phần người dùng thật sự đổi: form cũ không được ghi đè Q2 mà admin khác vừa lưu.
+  const update = {};
+  if (Object.keys(fileProgress).length) update.fileProgress = fileProgress;
+  const guiBld = document.getElementById('gui-bld-change-approval');
+  if (guiBld && !guiBld.disabled && guiBld.checked !== (guiBld.dataset.original === '1')) {
+    update.guiBldChangeRequiresApproval = guiBld.checked;
+  }
+  if (!Object.keys(update).length) {
+    showToast('Cấu hình chưa có thay đổi để lưu.', 'info');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const result = await restGhi('PUT', '/api/v1/permissions/settings', update);
+    if (!result.ok) { showToast(result.error, 'error'); return; }
+    showToast('Đã lưu cấu hình; request kế tiếp dùng số mới. Phiên khác đang mở cập nhật trong 15 giây khi tab hiển thị.', 'success');
+    await veBangPhanQuyen();
+  } finally { button.disabled = false; }
+}
 /** Vẽ bảng phân quyền (động) + trình sửa cho admin; không có khung thì bỏ qua. */
 function veBangPhanQuyen() {
   const el = document.getElementById('account-permission-table');
   if (!el) return;
   el.innerHTML = '<div class="text-sm text-gray-500">Đang tải bảng phân quyền...</div>';
-  restGet('/api/v1/permissions')
+  return restGet('/api/v1/permissions')
     .then((duLieu) => {
+      capNhatBangQuyen(duLieu);
       const laAdmin = isAdmin();
-      el.innerHTML = buildBangPhanQuyenHtml(chiSoGhiDe(duLieu && duLieu.ghiDe), duLieu && duLieu.macDinh, laAdmin);
+      el.innerHTML = buildBangPhanQuyenHtml(chiSoGhiDe(duLieu && duLieu.ghiDe), duLieu && duLieu.macDinh, laAdmin) + buildCauHinhTienDoFile(duLieu, laAdmin);
+      document.getElementById("file-progress-save")?.addEventListener("click", luuCauHinhTienDoFile);
       if (laAdmin) {
         el.insertAdjacentHTML(
           'beforeend',
@@ -8749,12 +10077,17 @@ async function luuPhanQuyen() {
     if (sel.dataset.gd) gop[khoa].giaTri = sel.value || 'mac-dinh';
     if (sel.dataset.pv) gop[khoa].phamVi = sel.value || 'phong';
   });
+  Object.values(gop).forEach(g => {
+    if (g.giaTri === 'mac-dinh' && g.phamVi === 'tat-ca')
+      g.giaTri = giaTriMacDinhQuyen(phanQuyenFile.macDinh, g.vai, g.entityType, g.action);
+  });
   const ketQua = await restGhi('PUT', '/api/v1/permissions', { thayDoi: Object.values(gop) });
-  if (ketQua) {
-    showToast('Đã lưu bảng phân quyền — hiệu lực ngay', 'success');
+  if (ketQua.ok) {
+    capNhatBangQuyen({ macDinh: phanQuyenFile.macDinh, ghiDe: ketQua.data.ghiDe, settings: phanQuyenFile.settings });
+    showToast('Đã lưu. Máy chủ áp dụng từ request kế tiếp; phiên đang mở cập nhật trong 15 giây.', 'success');
     veBangPhanQuyen();
   } else {
-    showToast('Không lưu được bảng phân quyền', 'error');
+    showToast(ketQua.error || 'Không lưu được bảng phân quyền', 'error');
     nut && (nut.disabled = false);
   }
 }
@@ -9364,4 +10697,142 @@ async function huyUyQuyen(id, nguoi) {
     return;
   }
   showToast("Đã huỷ ủy quyền", "success"), closeModal("uy-quyen-modal"), await napUyQuyenCuaToi(), moModalUyQuyen();
+}
+
+
+// V7: dựng bằng DOM/textContent rồi serialize, mọi tên/người nhận đều là chữ, không phải HTML.
+function buildGuiBldCheckboxHtml(isEdit, task) {
+  const section = document.createElement("section");
+  section.className = "form-group border rounded p-3 bg-gray-50";
+  const label = document.createElement("label");
+  label.className = "flex items-center gap-2 font-semibold";
+  const box = document.createElement("input");
+  box.type = "checkbox"; box.id = "task-gui-bld";
+  box.dataset.isEdit = isEdit ? "1" : "0";
+  box.dataset.original = task?.guiBldPheDuyet === true ? "1" : "0";
+  if (task?.guiBldPheDuyet === true) box.setAttribute("checked", "");
+  box.disabled = isEdit && (currentUser?.role === "Nhân viên" || !coQuyenTaiDong("gui-bld", "task", task));
+  label.append(box, document.createTextNode("Gửi BLĐ phê duyệt"));
+  const hint = document.createElement("p"); hint.id = "task-gui-bld-help"; hint.className = "text-xs text-gray-600 mt-2";
+  hint.textContent = isEdit ? "Cán bộ không sửa sau khi tạo. TP/PP đổi tích mặc định phải chờ Phó Giám đốc duyệt." : "Không tích (mặc định): TP/PP có thể chốt. Có tích: gửi Ban lãnh đạo phụ trách đã chọn; không chọn thêm người mới.";
+  section.append(label, hint); return section.outerHTML;
+}
+function capNhatLuaChonGuiBld() {
+  const box = document.getElementById("task-gui-bld"), form = document.getElementById("task-form");
+  if (!box || !form) return;
+  const name = form.querySelector('[name="assignee"]')?.value;
+  const who = allStaff.find(p => p[COL.S_NAME] === name);
+  const leader = ["Trưởng phòng", "Phó phòng"].includes(who?.[COL.S_ROLE]);
+  const ref = form.querySelector('[name="id"]')?.value;
+  const isEdit = box.dataset.isEdit === "1";
+  box.disabled = leader || (isEdit && (currentUser?.role === "Nhân viên" || !coQuyenTaiDong("gui-bld", "task", ref)));
+  const hint = document.getElementById("task-gui-bld-help");
+  if (hint) hint.textContent = leader ? "TP/PP trực tiếp thực hiện luôn lên Phó Giám đốc, tích không có tác dụng. Nếu tích đang bật, cần duyệt tắt trước khi đổi sang TP/PP thực hiện." :
+    isEdit ? "Tích hiện hành chỉ đổi sau khi đề nghị được duyệt (mặc định). ⏳ luôn phải chờ; Cán bộ không sửa sau tạo." :
+    "Không tích (mặc định): TP/PP có thể chốt. Có tích: gửi Ban lãnh đạo phụ trách đã chọn ở nhiệm vụ hoặc công việc con.";
+}
+function thuGuiBldForm(form, data) {
+  const box = form.querySelector("#task-gui-bld");
+  if (!box) return;
+  if (box.dataset.isEdit !== "1") data.guiBldPheDuyet = box.disabled ? false : box.checked;
+  else if (!box.disabled && box.checked !== (box.dataset.original === "1")) data.guiBldPheDuyet = box.checked;
+}
+function buildGuiBldSettingsHtml(settings, admin) {
+  const label = document.createElement("label"); label.className = "flex items-center gap-2 mt-4 text-sm";
+  const box = document.createElement("input"); box.type = "checkbox"; box.id = "gui-bld-change-approval";
+  box.dataset.original = settings?.guiBldChangeRequiresApproval !== false ? "1" : "0";
+  if (box.dataset.original === "1") box.setAttribute("checked", "");
+  box.disabled = !admin;
+  label.append(box, document.createTextNode("TP/PP đổi tích Gửi BLĐ phải trình Phó Giám đốc duyệt (mặc định). Bỏ chọn: ✓ có hiệu lực ngay; ⏳ vẫn phải chờ."));
+  return label.outerHTML;
+}
+/**
+ * BUILDER: một dòng ĐỀ NGHỊ trong hàng chờ — dùng chung cho `gui-bld` (Đợt A) và `ty-le`
+ * (R4'', ĐỢT B). Cả hai đều là một dòng `approval_changes`, cùng hai nút Đồng ý/Từ chối và cùng
+ * một đường quyết, nên chỉ KHÁC CHỮ trên dòng: nhãn nút, câu tóm tắt và câu nhắc khi từ chối.
+ *
+ * Dựng bằng DOM + `textContent` chứ không nối chuỗi: tên nhiệm vụ, tên file và tên người đề nghị đều
+ * là dữ liệu người dùng nhập, cách này escape sẵn mà không phải nhớ bọc từng chỗ (TC-V7-UI-04).
+ */
+const NHAN_DE_NGHI = Object.freeze({
+  "gui-bld": {
+    loai: "Đổi tích Gửi BLĐ",
+    duyet: "Duyệt đổi tích",
+    tuChoi: "Từ chối đổi tích",
+    hoiDuyet: "Duyệt đề nghị đổi tích Gửi BLĐ?",
+    hoiTuChoi: "Từ chối đổi tích, giữ nguyên nhiệm vụ?",
+    xongDuyet: "Đã duyệt đổi tích",
+    xongTuChoi: "Đã từ chối, giữ nguyên tích và nhiệm vụ",
+    choNhap: "Lý do từ chối (ít nhất 10 ký tự) — không xoá nhiệm vụ",
+  },
+  "ty-le": {
+    loai: "Đổi tỷ lệ",
+    duyet: "Duyệt tỷ lệ mới",
+    tuChoi: "Từ chối",
+    hoiDuyet: "Duyệt đề nghị đổi tỷ lệ? Giá trị hiện tại sẽ được thay bằng giá trị mới.",
+    hoiTuChoi: "Từ chối đề nghị, giữ nguyên tỷ lệ hiện tại?",
+    xongDuyet: "Đã duyệt — tỷ lệ mới có hiệu lực",
+    xongTuChoi: "Đã từ chối, tỷ lệ hiện tại giữ nguyên",
+    choNhap: "Lý do từ chối (ít nhất 10 ký tự) — tỷ lệ hiện tại giữ nguyên",
+  },
+});
+function cauTomTatDeNghi(item, cfg) {
+  const doi = String(item.change?.label || cfg.loai) + ": " +
+    (item.change?.from || "—") + " → " + (item.change?.to || "—");
+  // Đề nghị tỷ lệ của FILE phải nói rõ là của file nào — một nhiệm vụ có nhiều kết quả, chỉ in tên
+  // nhiệm vụ thì người duyệt không biết con số nào đang bị xin đổi.
+  const doiTuong = item.tenFile ? item.name + " — " + item.tenFile : item.name;
+  return [item.code, doiTuong, doi, "Người đề nghị: " + (item.created_by_name || "—")].join(" · ");
+}
+function buildChangeApprovalRowHtml(item) {
+  const cfg = NHAN_DE_NGHI[item.kind] || NHAN_DE_NGHI["gui-bld"];
+  const row = document.createElement("div"); row.className = "change-row border-b py-3 flex flex-wrap gap-2 items-center";
+  row.dataset.changeId = String(item.id);
+  row.dataset.changeKind = String(item.kind || "gui-bld");
+  // MỚI-3: hai nhãn y như bảng chờ duyệt — «Sửa» (mọi đề nghị ở đây đều là sửa cái đã duyệt) và đối
+  // tượng. Đề nghị tỷ lệ CÓ THỂ nhắm vào một FILE kết quả (`tenFile` chỉ có ở kind `ty-le`), nên
+  // không suy đối tượng từ `level` một mình: `level` là cấp của NHIỆM VỤ chứa file đó.
+  const doiTuong = item.tenFile ? "File kết quả" : Number(item.level) === 2 ? "Công việc con" : "Nhiệm vụ";
+  // Dựng chip bằng `textContent`, không `innerHTML`: builder này vốn theo khuôn DOM (xem docblock
+  // `NHAN_DE_NGHI`) nên giữ nguyên khuôn, chỉ đọc chung bảng chữ `NHAN_DUYET`.
+  const sua = document.createElement("span");
+  sua.className = "duyet-nhan " + NHAN_DUYET.sua.mau;
+  sua.title = NHAN_DUYET.sua.yNghia;
+  sua.textContent = NHAN_DUYET.sua.nhan;
+  const doiTuongEl = document.createElement("span");
+  doiTuongEl.className = "duyet-nhan bg-gray-100 text-gray-600";
+  doiTuongEl.textContent = doiTuong;
+  const loai = document.createElement("span");
+  loai.className = "duyet-nhan bg-amber-100 text-amber-700";
+  loai.textContent = cfg.loai;
+  const title = document.createElement("span"); title.className = "font-medium flex-1";
+  title.textContent = cauTomTatDeNghi(item, cfg);
+  const reason = document.createElement("input"); reason.className = "form-input text-sm"; reason.maxLength = 2000;
+  reason.placeholder = cfg.choNhap;
+  row.append(sua, doiTuongEl, loai, title, reason);
+  for (const [action, label] of [["approve", cfg.duyet], ["reject", cfg.tuChoi]]) {
+    const button = document.createElement("button"); button.type = "button"; button.dataset.changeDecision = action;
+    button.className = action === "approve" ? "btn-primary" : "btn-secondary"; button.textContent = label; row.append(button);
+  }
+  return row.outerHTML;
+}
+function ganNutQuyetDinhDeNghi(list) {
+  list?.querySelectorAll("[data-change-decision]").forEach(button => button.addEventListener("click", async () => {
+    const row = button.closest(".change-row"); if (row.dataset.busy === "1") return;
+    const cfg = NHAN_DE_NGHI[row.dataset.changeKind] || NHAN_DE_NGHI["gui-bld"];
+    const action = button.dataset.changeDecision, reason = row.querySelector("input").value.trim();
+    if (action === "reject" && reason.length < 10) { showToast("Lý do từ chối cần ít nhất 10 ký tự", "error"); return; }
+    if (!window.confirm(action === "approve" ? cfg.hoiDuyet : cfg.hoiTuChoi)) return;
+    row.dataset.busy = "1"; row.querySelectorAll("button").forEach(b => { b.disabled = true; });
+    try {
+      const result = await restPost("/api/v1/approvals/changes/" + encodeURIComponent(row.dataset.changeId) + "/" + action, action === "reject" ? { reason } : {});
+      if (result) { showToast(action === "approve" ? cfg.xongDuyet : cfg.xongTuChoi, "success"); await napLaiSauDuyet(); }
+    } finally { delete row.dataset.busy; row.querySelectorAll("button").forEach(b => { b.disabled = false; }); }
+  }));
+}
+
+// Hoàn thành độc lập với % tiến độ và các trạng thái nhập tay cũ.
+function daDuyetDuKetQua(dong) { return dong?.hoanThanh === true; }
+function nhanHoanThanhKetQua(dong) {
+  return daDuyetDuKetQua(dong) ? "Đã duyệt đủ kết quả" : "Chưa duyệt đủ kết quả";
 }

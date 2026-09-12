@@ -18,7 +18,7 @@
     <!-- ?v= là dấu vết phiên bản: Nginx cache assets/ 30 ngày (§7 việc 4.8) nhưng KHÔNG cache
          trang này, nên đổi số này là người dùng nhận bản mới ngay lần tải sau. SỬA app.css /
          app.js / api-bridge.js thì PHẢI bump. -->
-    <link rel="stylesheet" href="assets/css/app.css?v=20260906-1">
+    <link rel="stylesheet" href="assets/css/app.css?v=20260912-02">
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen font-inter">
@@ -540,7 +540,7 @@
                             </div>
                         </div>
 
-                        <!-- Card 3: Nhiệm vụ đang làm -->
+                        <!-- Card 3: Nhiệm vụ chưa duyệt đủ -->
                         <div class="modern-stat-card group">
                             <div class="card-gradient bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700">
                             </div>
@@ -551,18 +551,10 @@
                                     </div>
                                     <div class="main-stat">
                                         <span class="stat-number" id="active-tasks">-</span>
-                                        <span class="stat-label">Nhiệm vụ đang làm</span>
+                                        <span class="stat-label">Nhiệm vụ chưa duyệt đủ</span>
                                     </div>
                                 </div>
                                 <div class="card-details">
-                                    <div class="detail-item">
-                                        <i class="fas fa-play-circle"></i>
-                                        <span>Chưa bắt đầu: <strong id="pending-tasks">-</strong></span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-pause-circle"></i>
-                                        <span>Tạm dừng: <strong id="paused-tasks">-</strong></span>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -617,7 +609,7 @@
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <!-- Row 1: Task Status, Project Progress, Task Priority -->
                     <div class="glass-card">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Trạng thái nhiệm vụ</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Duyệt kết quả nhiệm vụ</h3>
                         <div class="relative h-64">
                             <canvas id="status-chart"></canvas>
                             <div id="chart-message"
@@ -708,56 +700,16 @@
                             aria-label="Lọc công việc theo phòng">
                             <option value="">Tất cả phòng</option>
                         </select>
-                        <select id="projects-status-filter" class="form-select py-2 px-3 text-sm"
-                            aria-label="Lọc công việc theo trạng thái">
-                            <option value="">Tất cả</option>
-                            <option value="Chưa bắt đầu">Chưa bắt đầu</option>
-                            <option value="Đang thực hiện">Đang thực hiện</option>
-                            <option value="Hoàn thành">Hoàn thành</option>
-                            <option value="Tạm dừng">Tạm dừng</option>
-                        </select>
                         <button id="add-project-standalone" class="btn-primary thanh-loc-nut">
                             <i class="fas fa-plus mr-2"></i>Tạo công việc mới
                         </button>
                     </div>
                 </div>
                 <!-- Project Stats Cards -->
-                <div class="grid grid-cols-5 gap-6 mb-6">
-                    <div class="glass-card p-2 text-center">
-                        <h4 id="projects-pending-count"
-                            class="text-lg font-bold text-gray-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-pause-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Chưa bắt đầu</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-blue-50">
-                        <h4 id="projects-active-count"
-                            class="text-lg font-bold text-blue-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-play-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Đang thực hiện</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-green-50">
-                        <h4 id="projects-completed-count"
-                            class="text-lg font-bold text-green-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-check-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Hoàn thành</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-amber-50">
-                        <h4 id="projects-paused-count"
-                            class="text-lg font-bold text-amber-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-pause text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Tạm dừng</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-red-50">
-                        <h4 id="projects-canceled-count"
-                            class="text-lg font-bold text-red-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-times-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Hủy bỏ</p>
-                    </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                    <div class="glass-card p-3 text-center"><h4 id="projects-total-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Tổng số</p></div>
+                    <div class="glass-card p-3 text-center"><h4 id="projects-completed-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Đã duyệt đủ kết quả</p></div>
+                    <div class="glass-card p-3 text-center"><h4 id="projects-incomplete-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Chưa duyệt đủ kết quả</p></div>
                 </div>
                 <!-- MÀN HÌNH DUYỆT: khối «Chờ duyệt» ĐÃ CHUYỂN sang trang «Hàng chờ phê duyệt»
                      (2026-09-02, theo yêu cầu tách riêng). Không để lại bản sao ở đây: hai khối
@@ -906,49 +858,19 @@
                             aria-label="Lọc nhiệm vụ theo phòng">
                             <option value="">Tất cả phòng</option>
                         </select>
-                        <select id="tasks-status-filter" class="form-select py-2 px-3 text-sm"
-                            aria-label="Lọc nhiệm vụ theo trạng thái">
-                            <option value="">Tất cả</option>
-                            <option value="Chưa bắt đầu">Chưa bắt đầu</option>
-                            <option value="Đang thực hiện">Đang thực hiện</option>
-                            <option value="Hoàn thành">Hoàn thành</option>
-                            <option value="Tạm dừng">Tạm dừng</option>
-                        </select>
                         <button id="add-task-standalone" class="btn-secondary thanh-loc-nut">
                             <i class="fas fa-plus mr-2"></i>Tạo nhiệm vụ mới
                         </button>
                     </div>
                 </div>
-                <!-- Task Stats Cards -->
-                <div class="grid grid-cols-4 gap-6 mb-6">
-                    <div class="glass-card p-2 text-center">
-                        <h4 id="tasks-pending-count"
-                            class="text-lg font-bold text-gray-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-pause-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Chưa bắt đầu</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-blue-50">
-                        <h4 id="tasks-active-count"
-                            class="text-lg font-bold text-blue-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-play-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Đang thực hiện</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-green-50">
-                        <h4 id="tasks-completed-count"
-                            class="text-lg font-bold text-green-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-check-circle text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Hoàn thành</p>
-                    </div>
-                    <div class="glass-card p-2 text-center bg-amber-50">
-                        <h4 id="tasks-paused-count"
-                            class="text-lg font-bold text-amber-600 flex items-center justify-center gap-1">
-                            <i class="fas fa-pause text-sm"></i>-
-                        </h4>
-                        <p class="text-xs text-gray-500">Tạm dừng</p>
-                    </div>
+                <!-- Task Stats Cards — BỐN THẺ MỘT DÒNG (đợt 4, 2026-09-10): `grid-cols-2 md:grid-cols-4`
+                     của Tailwind chỉ lên 4 cột từ breakpoint md, cửa sổ hẹp hơn là rớt xuống 2 dòng.
+                     `app.css` ép `#tasks-the-tong-ke` luôn 4 cột để đúng yêu cầu «ở 1 dòng thôi». -->
+                <div id="tasks-the-tong-ke" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass-card p-3 text-center"><h4 id="tasks-total-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Tổng số</p></div>
+                    <div class="glass-card p-3 text-center"><h4 id="tasks-completed-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Đã duyệt đủ kết quả</p></div>
+                    <div class="glass-card p-3 text-center"><h4 id="tasks-incomplete-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Chưa duyệt đủ kết quả</p></div>
+                    <div class="glass-card p-3 text-center"><h4 id="tasks-overdue-count" class="text-lg font-bold">-</h4><p class="text-xs text-gray-500">Quá hạn</p></div>
                 </div>
                 <div id="tasks-grid" class="w-full">
                     <div class="loading-card">Đang tải nhiệm vụ...</div>
@@ -1305,9 +1227,10 @@
          ngay khi chạy dòng đầu (§5.1). Đổi thứ tự hai dòng này là app.js chết vì `google`
          chưa tồn tại. -->
     <script src="assets/js/api-bridge.js?v=20260825"></script>
-    <script src="assets/js/app.js?v=20260908-1"></script>
+    <script src="assets/js/app.js?v=20260912-02"></script>
 <!-- project-details.js nạp SAU app.js: ghi đè showProjectDetailsModal bằng bản rộng có phân công ba lớp (2026-08-26). Đổi app.js thì bump ?v= của cả hai. -->
-<script src="assets/js/project-details.js?v=20260907-1"></script>
+<script src="assets/js/project-details.js?v=20260912-02"></script>
+<script src="assets/js/phase8b-review.js?v=20260912-02"></script>
 
 </body>
 

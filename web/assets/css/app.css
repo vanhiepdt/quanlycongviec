@@ -3886,6 +3886,22 @@
     width: 100%;
 }
 
+/* Hai cột riêng mới: không ép ô số hẹp đến mức che mất giá trị khi modal có thanh nhắc việc. */
+.bang-ket-qua th:nth-child(5),
+.bang-ket-qua td:nth-child(5) {
+    min-width: 7.5rem;
+}
+
+.bang-ket-qua th:nth-child(6),
+.bang-ket-qua td:nth-child(6) {
+    min-width: 5rem;
+    white-space: nowrap;
+}
+
+.bang-ket-qua input[data-ty-le-file] {
+    min-width: 5rem;
+}
+
 .kq-menu-muc-chot {
     font-weight: 600;
     color: #1d4ed8;
@@ -4023,3 +4039,328 @@
 .text-gray-300 {
     color: #d1d5db;
 }
+
+/* Thông báo phải nằm trên modal chỉnh sửa, hộp xác nhận và trình xem tài liệu. */
+#toast-container {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: none;
+    max-width: min(420px, calc(100vw - 32px));
+}
+#toast-container .toast { pointer-events: auto; }
+
+.qlcv-dialog { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(15 23 42 / 55%); }
+.qlcv-dialog > section { background: white; border-radius: 16px; padding: 24px; width: min(760px, 100%); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 70px #0005; }
+.qlcv-dialog h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+.qlcv-dialog-content { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.qlcv-dialog h4 { font-weight: 600; margin-top: 16px; }
+.qlcv-dialog li { margin: 8px 0; }
+.qlcv-dialog footer, .review-form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; padding-top: 16px; }
+.review-form-actions { position: sticky; bottom: 0; background: white; padding: 16px 20px; border-top: 1px solid #e5e7eb; z-index: 15; flex-shrink: 0; }
+
+/* ─── TAB NHIỆM VỤ — bảng 11 cột, thiết kế lại 2026-09-10 (đợt 3) + chỉnh đợt 4 cùng ngày ──────────
+   Yêu cầu người dùng đợt 3: CÙNG một cỡ chữ · tiêu đề cột CĂN GIỮA · cột ít chữ (Ưu tiên, Tỷ lệ,
+   Tiến độ, Ngày bắt đầu, Hạn chót, Số bản) thì HẸP lại · tên file dài cắt «…» kèm tooltip ·
+   nhìn là phân biệt được từng NHIỆM VỤ và từng FILE KẾT QUẢ.
+   ĐỢT 4 thêm: cột RIÊNG «Tên file» nên hàng file LÙI VỀ PHẢI so với tên nhiệm vụ · NÚT MŨI TÊN ▼/▲
+   thay cho dấu tích · «Người thực hiện» CĂN GIỮA ô · tên nhiệm vụ TO HƠN tên file đúng 2 CỠ (15px/13px)
+   · MÀU CHỮ tên file đổi THEO TIẾN ĐỘ (100% xanh lá, dưới 20% đỏ).
+   Phải viết ở app.css chứ không dùng class Tailwind: Tailwind của dự án là BẢN BIÊN DỊCH SẴN
+   (assets/vendor/tailwind/tailwind.min.css) nên giá trị tuỳ ý kiểu `w-[86px]` không tồn tại —
+   viết vào là class chết mà không một dòng nào báo lỗi. */
+.tasks-results-table {
+    width: 100%;
+    min-width: 1180px;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-family: inherit;
+    font-size: 13px;
+    color: #374151;
+}
+.tasks-results-table th {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #6b7280;
+    background: #f9fafb;
+    padding: 8px 6px;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+.tasks-results-table td {
+    padding: 8px;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+    overflow: hidden;
+}
+.tasks-results-table td.c-giua { text-align: center; }
+.tasks-results-table .c-trong { color: #d1d5db; }
+/* c-task không khai bề rộng: nó ăn phần còn lại sau MƯỜI cột kia (tổng chín cột số = 63%,
+   c-file 15% ⇒ c-task còn 22%, ≈ 260px ở min-width 1180px). */
+.tasks-results-table col.c-file  { width: 15%; }
+.tasks-results-table col.c-who   { width: 9%; }
+.tasks-results-table col.c-prio  { width: 6%; }
+.tasks-results-table col.c-ratio { width: 6%; }
+.tasks-results-table col.c-prog  { width: 6%; }
+.tasks-results-table col.c-start { width: 7%; }
+.tasks-results-table col.c-due   { width: 7%; }
+.tasks-results-table col.c-vers  { width: 4%; }
+.tasks-results-table col.c-state { width: 11%; }
+.tasks-results-table col.c-act   { width: 7%; }
+
+/* HÀNG NHIỆM VỤ — gờ đậm phía trên để mỗi nhiệm vụ tách hẳn khỏi nhiệm vụ trước nó. */
+.tasks-results-table tr.task-row-chinh { background: #fff; }
+.tasks-results-table tr.task-row-chinh > td { border-top: 2px solid #cbd5e1; }
+.task-ten-wrap { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+/* NÚT MŨI TÊN ▼/▲ — là NÚT chứ không phải checkbox (TC-KQ-UI-03: tab nhiệm vụ không còn checkbox
+   nào sau đợt «bỏ checkbox Hoàn thành»). Mũi tên chỉ HÀNH ĐỘNG: đang gập → ▼ bấm để mở rộng,
+   đang mở → ▲ bấm để ẩn. */
+.task-files-toggle {
+    margin-top: 3px; flex-shrink: 0; cursor: pointer;
+    width: 18px; height: 18px; padding: 0; border: 1px solid #cbd5e1; border-radius: 4px;
+    background: #fff; color: #2563eb; font-size: 10px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.task-files-toggle:hover { border-color: #2563eb; background: #eff6ff; }
+/* Đang ẨN: nút mờ đi — vẫn nhìn thấy là có file, chỉ là đang gập. */
+.task-files-toggle-an { color: #9ca3af; background: #f8fafc; }
+.task-files-toggle-off { width: 18px; flex-shrink: 0; }
+.task-ten { min-width: 0; }
+.task-ten-chinh { font-weight: 600; color: #111827; }
+/* TÊN NHIỆM VỤ to hơn TÊN FILE đúng HAI cỡ chữ: 15px so với 13px của `.task-file-name`. */
+.task-ten-nhiem-vu { font-size: 15px; line-height: 1.3; }
+.task-so-file { margin-left: 6px; color: #6b7280; font-size: 11px; }
+.task-nhan { display: block; color: #6b7280; font-size: 11px; margin-top: 2px; }
+.task-nhan-xong { color: #16a34a; }
+.task-hanh-dong { display: flex; justify-content: center; gap: 4px; }
+
+/* HÀNG FILE — nền xám nhạt, thụt vào, gạch ĐỨT: từng file tách biệt nhau và tách khỏi nhiệm vụ. */
+.tasks-results-table tr.task-result-row { background: #f8fafc; }
+.tasks-results-table tr.task-result-row > td { border-bottom: 1px dashed #e2e8f0; }
+/* Ô ĐẦU của hàng file: chỉ còn dấu nối thụt vào (tên file đã dời sang cột `c-file` riêng) — chính
+   chỗ thụt này làm hàng file LÙI VỀ PHẢI so với tên nhiệm vụ. */
+.task-file-lui {
+    display: flex; align-items: center; gap: 4px;
+    padding-left: 26px; color: #cbd5e1; font-size: 12px;
+}
+.task-file-noi { line-height: 1; }
+.task-file-icon { color: #9ca3af; font-size: 12px; flex: 0 0 auto; }
+/* Tên file: mọi hàng RỘNG BẰNG NHAU (cột c-file cố định + table-layout:fixed) nên các tên thẳng
+   hàng dọc; dài quá thì «…», di chuột ra tên đầy đủ qua title. */
+.task-file-name {
+    display: block; font-weight: 600; font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* ĐỢT 5 (2026-09-11): «Kết quả làm được» dọn VỀ CỘT NHIỆM VỤ, nằm cạnh icon tệp giấy trong một
+   khung flex. Flex item mặc định `min-width:auto` nên KHÔNG BAO GIỜ cắt «…» — nó đẩy rộng khung ra
+   và tràn sang cột bên. Phải `min-width:0` thì `text-overflow:ellipsis` mới có tác dụng. */
+.task-file-lui .task-file-name { min-width: 0; }
+/* MÀU CHỮ THEO TIẾN ĐỘ — bốn bậc, hai mốc do người dùng nêu (100% xanh lá, dưới 20% đỏ). */
+.task-file-name.td-mau-xanh-la    { color: #16a34a; }
+.task-file-name.td-mau-xanh-duong { color: #2563eb; }
+.task-file-name.td-mau-cam        { color: #ea580c; }
+.task-file-name.td-mau-do         { color: #dc2626; }
+/* ĐỢT 5: cột «Tên file» nay chứa TÊN FILE VẬT LÝ của bản cuối (`ten_ban_cuoi`), chữ màu trung tính —
+   màu theo tiến độ đã nằm ở «Kết quả làm được» bên cột Nhiệm vụ, tô cả hai chỗ là rối mắt. */
+.task-file-ten-that {
+    display: block; color: #374151; font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-file-phu {
+    display: block; color: #6b7280; font-size: 11px; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-file-history-btn {
+    background: none; border: 0; padding: 0; color: #2563eb; font-size: 12px; cursor: pointer;
+}
+.task-file-history-btn:hover { text-decoration: underline; }
+.tasks-results-table td.task-chua-co-file { padding-left: 30px; color: #9ca3af; font-size: 11px; }
+
+/* ─── BỐN THẺ THỐNG KÊ CỦA TAB NHIỆM VỤ — MỘT DÒNG (đợt 4, 2026-09-10) ─────────────────────────────
+   index.html để `grid-cols-2 md:grid-cols-4`: dưới breakpoint md (768px) là rớt còn 2 cột = 2 dòng.
+   Người dùng đòi «Tổng số, Đã duyệt đủ kết quả, Chưa duyệt đủ kết quả, Quá hạn ở 1 dòng thôi» nên ép
+   4 cột ở MỌI bề rộng, đổi lại phải thu chữ và khoảng đệm để nhãn dài không tràn. */
+#tasks-the-tong-ke {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 10px;
+}
+#tasks-the-tong-ke .glass-card { padding: 8px 6px; }
+#tasks-the-tong-ke h4 { font-size: 17px; line-height: 1.2; }
+#tasks-the-tong-ke p { font-size: 10.5px; line-height: 1.25; margin-top: 2px; }
+
+/* ─── POPUP «NHẬT KÝ FILE KẾT QUẢ» — dùng lại khung .qlcv-dialog, chỉ thêm bố cục bên trong ─── */
+.nk-file-dialog > section { width: min(880px, 100%); }
+/* .qlcv-dialog-content đặt white-space:pre-wrap (hợp với đoạn văn bản thô của hộp 8b) — nhật ký
+   này dựng bằng thẻ nên phải trả về normal, không thì khoảng trắng trong mã nguồn thành dòng trống. */
+.nk-noi-dung { white-space: normal; }
+.nk-tom-tat { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.nk-chip { display: inline-flex; align-items: baseline; gap: 6px; background: #f3f4f6; border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.nk-chip-nhan { color: #6b7280; }
+.nk-chip-gia-tri { font-weight: 600; color: #111827; }
+.nk-tieu-de { font-weight: 600; margin-top: 16px; color: #111827; }
+.nk-danh-sach { margin: 6px 0 0 18px; font-size: 13px; }
+.nk-danh-sach li { margin: 3px 0; }
+/* KHỐI «1. ai đăng ký / 2. ai thực hiện» — đợt 4 người dùng đòi BỎ hai tiêu đề «Ai đăng ký kết quả
+   này» và «Ai thực hiện», chỉ còn bốn dòng đánh số. Không dùng <ul>: số 1./2. đã nằm trong chữ, thêm
+   dấu đầu dòng nữa là thành hai loại dấu một lúc. */
+.nk-dong-dau { margin-top: 10px; font-size: 13px; }
+.nk-dong { margin: 3px 0; color: #374151; }
+.nk-trong { color: #9ca3af; font-size: 12px; margin: 6px 0 0 18px; }
+.nk-ban { margin: 8px 0 0 18px; font-size: 13px; }
+.nk-ban-muc { margin: 8px 0; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; }
+.nk-ban-dau { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.nk-ban-so { font-weight: 600; color: #1f2937; }
+.nk-ban-ten { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.nk-ban-nut { display: inline-flex; gap: 8px; }
+.nk-link { background: none; border: 0; padding: 0; color: #2563eb; font-size: 12px; cursor: pointer; }
+.nk-link:hover { text-decoration: underline; }
+.nk-ban-ai { color: #6b7280; font-size: 12px; margin-top: 2px; }
+.nk-bao-cao { white-space: pre-line; color: #374151; font-size: 12px; margin-top: 4px; }
+.nk-y-kien { margin: 6px 0 0 16px; }
+.nk-y-ai { color: #6b7280; font-size: 12px; }
+.nk-y-noi-dung { color: #374151; font-size: 13px; }
+/* Dòng thời gian: trục dọc bên trái, mỗi diễn biến một chấm. */
+.nk-dong-thoi-gian { margin: 8px 0 0 6px; list-style: none; padding: 0; }
+.nk-dong-thoi-gian li { position: relative; padding: 0 0 10px 14px; border-left: 2px solid #e5e7eb; margin: 0; }
+.nk-dong-thoi-gian li::before {
+    content: ""; position: absolute; left: -5px; top: 5px;
+    width: 8px; height: 8px; border-radius: 50%; background: #94a3b8;
+}
+.nk-tg-luc { color: #6b7280; font-size: 11px; margin-right: 8px; white-space: nowrap; }
+.nk-tg-gi { font-weight: 600; color: #1f2937; font-size: 13px; }
+.nk-tg-ai { color: #6b7280; font-size: 12px; display: block; }
+.nk-tg-noi { color: #374151; font-size: 13px; margin-top: 2px; }
+
+/* ─── BẢNG «KẾT QUẢ» TRONG MODAL NHIỆM VỤ — cân đối lại mười cột (đợt 4, 2026-09-10) ────────────────
+   Người dùng: «Trang sửa nhiệm vụ chỉnh lại giao diện phần file kết quả, Tỷ lệ công việc (%) Tiến độ,
+   độ rộng bé đi… sửa để cân đối hơn». Trước đợt này bảng KHÔNG có colgroup và không `table-layout:
+   fixed`, nên trình duyệt tự chia theo nội dung: hai cột chỉ chứa một con số («Tỷ lệ», «Tiến độ») phình
+   ra bằng cột «Kết quả làm được» chỉ vì TIÊU ĐỀ của chúng dài. Nay bề rộng là SỐ, khai ở colgroup do
+   `buildColgroupKetQua()` vẽ ra (mảng `COT_BANG_KET_QUA` trong app.js).
+   `c-kq-ten` không khai ⇒ ăn phần còn lại: tổng chín cột số là 81%, cột tên còn 19%. */
+.bang-ket-qua {
+    table-layout: fixed;
+    min-width: 1080px;
+    border-collapse: collapse;
+}
+.bang-ket-qua col.c-kq-thoi-gian   { width: 9%; }
+.bang-ket-qua col.c-kq-dinh-dang   { width: 6%; }
+.bang-ket-qua col.c-kq-file        { width: 13%; }
+.bang-ket-qua col.c-kq-ty-le       { width: 8%; }
+.bang-ket-qua col.c-kq-tien-do     { width: 6%; }
+.bang-ket-qua col.c-kq-nguoi       { width: 8%; }
+.bang-ket-qua col.c-kq-y-kien      { width: 14%; }
+.bang-ket-qua col.c-kq-trang-thai  { width: 11%; }
+.bang-ket-qua col.c-kq-hanh-dong   { width: 6%; }
+/* Tiêu đề «Tỷ lệ công việc (%)» dài hơn cột 8%: cho XUỐNG DÒNG trong ô thay vì đẩy cột phình ra. */
+/* ĐỢT 5 (2026-09-11) — «tiêu đề cột căn giữa». `text-center` trong `buildOTieuDeKq` là class Tailwind
+   có thật, nhưng ép thêm ở đây để tiêu đề căn giữa KHÔNG PHỤ THUỘC bản vendor biên dịch sẵn. */
+.bang-ket-qua thead th { white-space: normal; word-break: break-word; hyphens: auto; text-align: center; }
+.bang-ket-qua td { overflow-wrap: anywhere; }
+
+/* Ô TỶ LỆ: input và nút «Lưu tỷ lệ» XẾP DỌC, căn giữa — cột chỉ còn 8% nên xếp ngang là tràn. */
+.kq-o-ty-le { text-align: center; }
+.kq-o-ty-le-trong { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.kq-o-ty-le-nhap { width: 58px; min-width: 0; padding: 2px 4px; text-align: center; font-size: 12px; }
+.kq-nut-luu-ty-le { font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.kq-o-tien-do { font-size: 12px; color: #374151; }
+
+/* ĐỢT 5 (2026-09-11) — «Người thực hiện cũng sẽ căn giữa»: cả dòng cha lẫn dòng bản 1.1/1.2. */
+.kq-o-nguoi { text-align: center; }
+
+/* Ô «GHI Ý KIẾN» — ĐỢT 5: nội dung KHÔNG in tại chỗ nữa, ô chỉ còn chữ «Xem ý kiến» (+ «Lịch sử»)
+   mở POPUP `moYKienKetQua`. Nguồn dữ liệu trong popup vẫn là `danhSachYKien()` — GỘP góp ý với LÝ DO
+   của mỗi lần yêu cầu sửa / trả về / từ chối, vì `verdict()` của máy chủ chỉ ghi `task_file_flow`
+   chứ không ghi `task_file_comments` (bẫy đợt 4, giữ nguyên). */
+.kq-o-y-kien { font-size: 12px; text-align: center; }
+.kq-y-kien-nut { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+.y-kien-muc {
+    border-left: 2px solid #dbeafe; padding: 2px 0 2px 6px;
+    font-size: 11.5px; line-height: 1.35; color: #374151;
+}
+.y-kien-ai { font-weight: 600; color: #1f2937; }
+.y-kien-vai { color: #9ca3af; }
+/* NHÃN HÀNH ĐỘNG — chính nó làm đọc ra ý kiến này là của lần «Yêu cầu sửa» hay một câu «Góp ý» thường. */
+.y-kien-nhan {
+    color: #1d4ed8; background: #eff6ff; border-radius: 999px;
+    padding: 0 6px; font-size: 10.5px; white-space: nowrap;
+}
+.y-kien-luc { color: #9ca3af; font-size: 10.5px; white-space: nowrap; }
+.y-kien-ban { color: #6b7280; font-size: 10.5px; white-space: nowrap; }
+.y-kien-noi { color: #374151; margin-top: 1px; white-space: pre-line; }
+
+/* ─── POPUP «XEM Ý KIẾN» — đợt 5 (2026-09-11), `moYKienKetQua` ──────────────────────────────────────
+   Dùng lại khung `.qlcv-dialog` của popup nhật ký file nên chỉ cần chỉnh vài điểm riêng. Hẹp hơn popup
+   nhật ký (880px): popup này chỉ có một danh sách ý kiến + ô nhập, 880px là chữ dài khó đọc.
+   `.qlcv-dialog-content` đặt `white-space:pre-wrap` (hợp với đoạn văn bản thô của hộp 8b) — popup này
+   dựng bằng chuỗi HTML nối nhiều dòng mã nguồn nên PHẢI trả về `normal`, đúng bẫy của `.nk-noi-dung`.
+   `.y-kien-noi` bên trong vẫn giữ `pre-line` để không mất xuống dòng người dùng gõ trong ý kiến. */
+.yk-dialog > section { width: min(620px, 100%); }
+.yk-noi-dung { white-space: normal; }
+.yk-danh-sach { display: flex; flex-direction: column; gap: 8px; }
+.yk-chu-thich {
+    margin-top: 12px; padding: 8px 10px; background: #f9fafb;
+    border-left: 2px solid #e5e7eb; border-radius: 4px;
+    color: #6b7280; font-size: 11.5px; line-height: 1.45;
+}
+
+/* ─── NÚT BÉ TRONG BA BẢNG CHỜ DUYỆT — MỚI-4 (2026-09-12) ───────────────────────────────────────────
+   Người dùng: «phần Xem chi tiết / Duyệt / Trả lại để sửa / Từ chối bé lại». Một dòng của bảng
+   «Chờ duyệt» có tới BỐN nút cộng hai hộp nhập ẩn, cỡ nút mặc định (40px cao, chữ 14px, đệm
+   10px 20px) làm bảng cao gấp đôi phần chữ và khó quét mắt.
+   PHẢI viết ở app.css: `.btn-primary`/`.btn-secondary` cũng nằm ở đây mà app.css lại nạp SAU
+   `tailwind.min.css` (index.html dòng 12 so với 21), cùng độ đặc hiệu nên cái sau thắng — mọi class
+   cỡ Tailwind gắn trên nút (`py-1 px-3 text-xs`) bấy lâu bị đè mất, đổi chúng là công cốc. Luật này
+   dùng `.approval-row button` (0,1,1) thắng `.btn-primary` (0,1,0) nên không cần `!important`.
+   Ba class dòng là ba builder riêng: `buildPendingApprovalRowHtml` / `buildPendingDeleteRowHtml` /
+   `buildChangeApprovalRowHtml` — thiếu một là bảng đó lạc lõng nút to cạnh nút bé.
+   `min-height: 24px` chứ không phải 0: giữ nút bấm được bằng ngón tay và đủ chỗ cho vòng xoay
+   `.loading::after` 16px nếu sau này có ai gọi `setButtonLoading` lên mấy nút này. */
+.approval-row button,
+.approval-delete-row button,
+.change-row button {
+    padding: 3px 9px;
+    font-size: 11px;
+    min-height: 24px;
+    border-radius: 8px;
+    line-height: 1.4;
+}
+.approval-row button i,
+.approval-delete-row button i,
+.change-row button i { font-size: 10px; }
+
+/* ─── NHÃN «ĐÂY LÀ DUYỆT CÁI GÌ» — MỚI-3 (2026-09-12) ────────────────────────────────────────────────
+   Người dùng: «thêm cột thông tin về đây là duyệt công việc mới tạo, hay sửa chữa/xóa … công việc
+   cha, công việc con., nhiệm vụ, file kết quả». Một dòng chờ nay mang HAI nhãn: hành động (Mới tạo /
+   Sửa / Xoá) rồi đối tượng (Công việc cha / Công việc con / Nhiệm vụ / File kết quả).
+   Chữ `nhanDuyetHtml` + `NHAN_DUYET` trong app.js là nguồn chữ; luật này chỉ lo hình dáng, dùng
+   chung cho cả ba builder (`buildPendingApprovalRowHtml` / `buildPendingDeleteRowHtml` /
+   `buildChangeApprovalRowHtml`) — thiếu nó là chip rơi về cỡ chữ thân 16px.
+   BẪY ĐÃ TRẢ GIÁ: chip cũ gắn `text-[11px] px-2 py-0.5 rounded-full`, mà `tailwind.min.css` là
+   artifact ĐÓNG BĂNG (commit db382d0, không build lại) KHÔNG CÓ `text-[11px]` — nên bấy lâu chip
+   render 16px chứ không phải 11px như tên class hứa. Mọi cỡ chữ nhỏ của giao diện này phải nằm ở
+   app.css, không được đặt vào class arbitrary. */
+.duyet-nhan {
+    font-size: 11px;
+    line-height: 1.5;
+    font-weight: 500;
+    padding: 1px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+/* Hai nhãn đứng SÁT nhau (4px thay vì `gap-2` 8px của hàng) để mắt đọc thành MỘT cụm «Sửa · Nhiệm
+   vụ», rồi mới tới tên đầu việc. Chỉ nhãn SAU bị kéo về trái nên khoảng cách từ nhãn cuối tới tên
+   vẫn nguyên 8px — đặt `margin-right` âm cho mọi nhãn là dính luôn cả khe đó, cụm thành không ra cụm. */
+.duyet-nhan + .duyet-nhan { margin-left: -4px; }
+
+/* ─── POPUP «XEM CÁC THAY ĐỔI» — MỚI-3 (2026-09-12) ──────────────────────────────────────────────────
+   Popup dùng lại khung `.qlcv-dialog yk-dialog` của «Xem ý kiến», mà `.yk-dialog > section` bóp bề
+   ngang còn 620px: một lượt sửa có thể đổi nhiều cột, 620px làm mỗi dòng «cũ → mới» phải xuống hai
+   hàng. Luật này trả về đúng 760px của khung gốc (id thắng class nên không cần `!important`); chiều
+   cao và cuộn thì khung gốc đã lo — `section` có `max-height:90vh` + `.qlcv-dialog-content` có
+   `overflow:auto`, đừng đặt thêm ở đây.
+   `white-space:pre-wrap` của `.qlcv-dialog-content` cũng đã bị `.yk-noi-dung { white-space:normal }`
+   chặn sẵn, vì nhật ký dựng bằng thẻ HTML chứ không phải văn bản thô. */
+#thay-doi-cho-duyet-dialog > section { width: min(760px, 100%); }

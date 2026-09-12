@@ -1,4 +1,4 @@
-﻿// Modal CHI TIẾT CÔNG VIỆC (cấp 1) — phiên bản mở rộng cho tính năng phân công ba lớp
+// Modal CHI TIẾT CÔNG VIỆC (cấp 1) — phiên bản mở rộng cho tính năng phân công ba lớp
 // (yêu cầu 2026-08-26). File này NẠP SAU app.js nên hàm cùng tên ở đây GHI ĐÈ bản cũ:
 //   • rộng ~1500px (≈ 2,5 lần modal cũ bị CSS giới hạn 600px);
 //   • hiện đầy đủ Ban giám đốc kiểm soát + "Phụ trách chung" (lãnh đạo phòng của công việc to)
@@ -18,14 +18,14 @@ function chiDocDuyet() {
   return typeof laCheDoDuyetChiDoc === "function" && laCheDoDuyetChiDoc() === true;
 }
 
-/** Dải nhắc trên đầu modal khi đang đọc để duyệt — cho người duyệt biết vì sao không có nút sửa. */
+/** Dải nhắc trên đầu modal về các thao tác sửa và xử lý khi duyệt. */
 function buildDaiCheDoDuyetHtml() {
-  if (!chiDocDuyet()) return "";
+  if (typeof cheDoDuyetChiDoc === "undefined" || !cheDoDuyetChiDoc) return "";
   return (
     '<div class="bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2 mb-3 text-xs">' +
     '<i class="fas fa-hourglass-half mr-2"></i>' +
     escapeHtml(
-      "Đang xem để DUYỆT — chỉ đọc. Mục đang chờ duyệt được tô vàng. Muốn đổi nội dung thì bấm «Trả lại để sửa» ở hộp chờ duyệt."
+      "Đang xem để DUYỆT. Bạn có thể chỉnh sửa thông tin rồi phê duyệt nội dung vừa lưu, trả để sửa lại hoặc từ chối."
     ) +
     "</div>"
   );
@@ -134,7 +134,7 @@ function buildKhoiPhanCongGonHtml(project, canBoThamGia, cvCons, tongTienDo) {
     '<div class="flex flex-wrap items-center gap-x-1 gap-y-1">' +
     chip('Ban lãnh đạo kiểm soát', project[COL.P_SUP], 'Chưa phân công') +
     chip('Lãnh đạo phòng phụ trách', project[COL.P_LEADERS], 'Chưa phân công') +
-    chip('Cán bộ thực hiện', canBoThamGia.join(', '), 'Chưa giao cho cán bộ nào') +
+    chip('Người thực hiện', canBoThamGia.join(', '), 'Chưa giao cho ai') +
     '<button type="button" class="nut-chi-tiet-phan-cong" ' +
     'onclick="batTatChiTietCongViec()" title="Ẩn/hiện thông tin phụ của công việc">' +
     '<i id="cv-chi-tiet-caret" class="fas fa-chevron-down mr-1"></i>Chi tiết</button>' +
@@ -195,14 +195,7 @@ function coQuyenSuaCongViecCon(sw) {
   // CHẾ ĐỘ DUYỆT — CHỈ ĐỌC (012, Vòng 13): người duyệt mở modal này từ hộp chờ duyệt để ĐỌC cả cây
   // trước khi ký. Không ai sửa gì ở đây, kể cả admin — muốn đổi nội dung thì «Trả lại để sửa».
   if (typeof laCheDoDuyetChiDoc === "function" && laCheDoDuyetChiDoc()) return false;
-  if (isAdmin()) return true;
-  // Ma trận §6: Phó GĐ/Trưởng phòng/Phó phòng đều có subwork:update trong phạm vi phòng mình
-  // (máy chủ `inScope` chặn phạm vi) — không phụ thuộc việc có nằm trong phân công ba lớp hay không.
-  if (laQuanTriTrongPhamVi()) return true;
-  if (['Trưởng phòng', 'Phó phòng'].includes(String(currentUser.role || ''))) return true;
-  const ten = String(currentUser.name || "").trim();
-  if (!ten) return false;
-  return tenTrongDanhSach(ten, sw[COL.T_SUP]) || tenTrongDanhSach(ten, sw[COL.T_LEADERS]);
+  return coQuyenTaiDong("update", "subwork", sw);
 }
 
 /**
@@ -236,12 +229,14 @@ function batTatNhiemVuTrongCVCon(swCode) {
 }
 
 /**
- * Khối CÔNG VIỆC CON: tiêu đề + Ban kiểm soát / Lãnh đạo phòng phụ trách / Cán bộ làm trực tiếp,
+ * Khối CÔNG VIỆC CON: tiêu đề + Ban kiểm soát / Lãnh đạo phòng phụ trách / Người thực hiện,
  * bấm vào tiêu đề để xòe các nhiệm vụ bên trong.
  */
 function createSubworkDetailHtml(sw, tatCaNV) {
   const nvTrong = tatCaNV.filter(t => t[COL.T_PARENT] === sw[COL.T_ID]);
-  // Cán bộ thực hiện của công việc con = những người được gán ở NHIỆM VỤ bên trong nó.
+  // Người thực hiện của công việc con = những người được gán ở NHIỆM VỤ bên trong nó. Từ
+  // 2026-09-09 danh sách này có thể chứa Trưởng/Phó phòng, không chỉ Cán bộ — tên biến giữ nguyên
+  // cho khỏi xáo trộn, nhãn hiển thị mới là chỗ phải đúng.
   const canBoThucHien = [
     ...new Set(nvTrong.map(t => t[COL.T_ASSIGNEE]).filter(v => v && v !== "Chưa gán")),
   ].join(", ");
@@ -305,7 +300,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     PHAN_CONG_CACH_HTML +
     buildPhanCongNhomHtml("Lãnh đạo phòng phụ trách", sw[COL.T_LEADERS], "Chưa phân công") +
     PHAN_CONG_CACH_HTML +
-    buildPhanCongNhomHtml("Cán bộ thực hiện", canBoThucHien, "Chưa có nhiệm vụ được gán") +
+    buildPhanCongNhomHtml("Người thực hiện", canBoThucHien, "Chưa có nhiệm vụ được gán") +
     "</div>" +
     '<div id="sw-tasks-' +
     escapeHtml(sw[COL.T_ID]) +
@@ -313,7 +308,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     (nvTrong.length
       ? nvTrong.map(t => createTaskListItem(t)).join("")
       : '<p class="text-sm text-gray-400 italic py-2">Chưa có nhiệm vụ nào trong công việc con này</p>') +
-    (canUserCreateTask()
+    (canUserCreateTask(sw[COL.T_PID])
       ? '<div class="pt-1"><button type="button" class="text-xs font-medium text-blue-600 hover:text-blue-800 add-task-from-subwork-btn" data-project-id="' +
         escapeHtml(sw[COL.T_PID]) +
         '" data-project-name="' +
@@ -332,17 +327,17 @@ function createSubworkDetailHtml(sw, tatCaNV) {
  * Nhiệm vụ (cấp 3) render bằng createTaskListItem (thẻ trắng); Công việc con (cấp 2) render
  * bằng createSubworkDetailHtml (khối xanh có phân công riêng) — hai cấp không lẫn kiểu.
  */
-function showProjectDetailsModal(projectId, projectName) {
+function showProjectDetailsModal(projectId, projectName, { receiptsChecked, daLamMoi = false } = {}) {
   const project = allProjects.find(p => p[COL.P_ID] === projectId) || {};
   const tatCaNV = allTasks.filter(t => t[COL.T_PID] === projectId && Number(t[COL.T_LEVEL]) === 3);
   const cvCons = allTasks.filter(t => t[COL.T_PID] === projectId && Number(t[COL.T_LEVEL]) === 2);
   const nvMoiCoi = tatCaNV.filter(t => !cvCons.some(sw => sw[COL.T_ID] === t[COL.T_PARENT]));
   const hoanThanh = tatCaNV.filter(t =>
-    (t[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")
+    daDuyetDuKetQua(t)
   ).length;
-  const dangLam = tatCaNV.filter(t => (t[COL.T_STATUS] || "").toLowerCase().includes("đang")).length;
+  const dangLam = tatCaNV.filter(t => !daDuyetDuKetQua(t)).length;
   const treHan = tatCaNV.filter(
-    t => isTaskOverdue(t[COL.T_DUE]) && !(t[COL.T_STATUS] || "").toLowerCase().includes("hoàn thành")
+    t => isTaskOverdue(t[COL.T_DUE]) && !daDuyetDuKetQua(t)
   ).length;
   // Bug 2 (8b): tiến độ dự án KHÔNG còn là bình quân «Tiến độ (%)» nhập tay của nhiệm vụ cấp 3 —
   // theo đúng server (tienDo.js): bình quân GIA QUYỀN các đầu mục qua tienDoDauMucKhach (app.js).
@@ -377,7 +372,7 @@ function showProjectDetailsModal(projectId, projectName) {
     '            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">\n' +
     buildStatCardHtml(tatCaNV.length, "Nhiệm vụ", "text-blue-600") +
     buildStatCardHtml(hoanThanh, "Hoàn thành", "text-green-600") +
-    buildStatCardHtml(dangLam, "Đang làm", "text-amber-600") +
+    buildStatCardHtml(dangLam, "Chưa duyệt đủ kết quả", "text-amber-600") +
     buildStatCardHtml(treHan, "Trễ hạn", "text-red-500") +
     "            </div>\n" +
     '<section class="project-metadata border border-gray-100 rounded-lg p-3">' +
@@ -386,7 +381,7 @@ function showProjectDetailsModal(projectId, projectName) {
     '<div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">' +
     '<span>Ngày bắt đầu: ' + escapeHtml(formatDateForDisplay(project[COL.P_START])) + '</span>' +
     '<span>Ngày kết thúc: ' + escapeHtml(formatDateForDisplay(project[COL.P_END])) + '</span>' +
-    '<span>Trạng thái: ' + escapeHtml(project[COL.P_STATUS] || '—') + '</span>' +
+    '<span>Duyệt kết quả: ' + escapeHtml(nhanHoanThanhKetQua(project)) + '</span>' +
     '<span>Trạng thái duyệt: ' + escapeHtml(project[COL.P_APPROVAL] || '—') + '</span></div></section>' +
     buildKhoiPhanCongGonHtml(project, canBoThamGia, cvCons, tongTienDo) +
     '            <div>\n' +
@@ -395,7 +390,7 @@ function showProjectDetailsModal(projectId, projectName) {
     "                    " +
     (chiDocDuyet()
       ? ""
-      : canUserCreateTask()
+      : canUserCreateTask(projectId)
         ? '<button type="button" class="btn-primary py-1.5 text-xs mr-2 add-task-from-project-btn" data-project-id="' +
           escapeHtml(projectId) +
           '" data-project-name="' +
@@ -423,9 +418,20 @@ function showProjectDetailsModal(projectId, projectName) {
   const modalEl = document.getElementById("project-details-modal");
   if (!modalEl) return;
   modalEl.classList.add("active");
-  modalEl.querySelector(".draft-close-btn")?.addEventListener("click", () => {
-    // Cha và từng lần sửa con đã được lưu riêng; không gửi một lệnh lưu giả.
-    closeModal("project-details-modal");
+  modalEl.dataset.projectId = projectId;
+  if (receiptsChecked === "1") modalEl.dataset.receiptsChecked = "1";
+  if (typeof ganNutDuyetChiTiet8b === "function") ganNutDuyetChiTiet8b(project, modalEl);
+  if (!daLamMoi && typeof lamMoiChiTiet8b === "function") lamMoiChiTiet8b(projectId, modalEl);
+  modalEl.querySelector(".draft-close-btn")?.addEventListener("click", async event => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      const confirmed = typeof kiemTraTyLeMoiNhat8b !== "function" ||
+        await kiemTraTyLeMoiNhat8b("project", { id: projectId }, null, "lưu tạm");
+      // Cha và từng lần sửa con đã được lưu riêng; chỉ đóng sau khi xác nhận tổng.
+      if (confirmed && modalEl.isConnected) closeModal("project-details-modal");
+    } finally { button.disabled = false; }
   });
   modalEl.querySelector(".draft-submit-btn")?.addEventListener("click", async event => {
     const button = event.currentTarget;
