@@ -1,5 +1,886 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
+## Ưu tiên hiện tại — ĐỢT B BỔ SUNG LƯỢT 2 12/09/2026: nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
+
+**ĐỢT B, bản sửa Q6/Q11, đợt bổ sung 12/09 và lượt 2 này CHƯA NGHIỆM THU — nghiệm thu GỘP MỘT LẦN.** Đọc
+khối này trước; các khối «Snapshot trước đợt B bổ sung lượt 2 …», «Snapshot trước đợt B bổ sung — BẢN SỬA
+Q6/Q11» và «Snapshot trước bản sửa Q6 — ĐỢT B» bên dưới vẫn còn hiệu lực ở mọi chỗ **không mâu thuẫn**
+với khối này.
+
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `029`, NGƯỜI ĐANG TEST CHỈ CẦN Ctrl+F5.** Không phải chạy lại
+`chay-test.bat`. Buster + banner **`20260912-01` → `20260912-02`** (5 chỗ: `web/index.html` dòng
+21/1230/1232/1233 + `app.js:9`). **Hình dạng phản hồi RPC/REST không đổi** — `listPending` chỉ THÊM hai
+trường `da_sua` / `moc_xu_ly`.
+
+**BỐN CHỈ ĐẠO NGHIỆP VỤ (nguyên văn):**
+
+> «Sửa hiển thị phê duyệt Công việc / Nhiệm vụ , sẽ thêm cột thông tin về đây là duyệt công việc mới tạo,
+> hay sửa chữa/xóa ... công việc cha, công việc con., nhiệm vụ, file kết quả Đối với sửa thông tin
+> công việc/nhiệm vụ, thêm nút xem các thay đổi, hiển thị popup các thay đổi, sửa (vẫn giữ logic cũ, sửa
+> file kết quả thì duyệt riêng, còn sửa tỷ lệ công việc file kết quả thì là cây duyệt kia)»
+
+> «phần Xem chi tiết / Duyệt / Trả lại để sửa / Từ chối bé lại»
+
+> «Sửa lại, nhân viên khi được phép tạo nhiệm vụ cấp 3, nhưng không chọn được Ban lãnh đạo kiểm soát,
+> Người thực hiện trực tiếp hãy sửa lại»
+
+> «Khi trưởng phòng/phó phòng duyệt file kết quả vẫn còn hiển thị gửi đi duyệt đối với file không phải gửi
+> lên ban lãnh đạo duyệt, tức là ko tích ô Gửi BLĐ phê duyệt đấy»
+
+**ĐÃ LÀM — TÓM TẮT (chi tiết ở `docs/KE-HOACH-DUYET-CAY.md` §13):**
+
+- **MỚI-3 (máy chủ):** `approvals/repo.js` — `DA_XU_LY` (dòng **106**, đúng HAI hành động
+  `approvals.approve` / `approvals.return`), `SUA_NOI_DUNG` (**107**, bảy action đổi nội dung),
+  `listPending` (**154**) thêm `LEFT JOIN LATERAL … min(created_at) AS moc_xu_ly` (**211**) và trả về
+  `moc.moc_xu_ly` (**195**) + `EXISTS (… created_at > moc_xu_ly) AS da_sua` (**205**). **Không migration**
+  — chỉ đọc `activity_logs`. Lý do không phân biệt được từ `works`/`work_items`: `submitted_by` ghi ở MỌI
+  lần gửi, **không có** `submitted_at`, còn `approver_id`/`approved_at` bị **xoá trắng** khi hạ về `Chờ
+  duyệt` (Q9).
+- **MỚI-3 (giao diện):** `app.js` — `NHAN_DUYET` (**8590**, ba khoá `moi`/`sua`/`xoa`, đóng băng),
+  `nhanDuyetHtml` (**8596**), `buildPendingApprovalRowHtml` (**8504**, `data-da-sua` **8527**,
+  `data-moc-xu-ly` **8529**, nút `approval-changes` **8551** chỉ hiện khi `da_sua === true`),
+  `buildPendingDeleteRowHtml` (**8621**), `HANH_DONG_SUA_NOI_DUNG` (**8725**, phải trùng khớp
+  `SUA_NOI_DUNG`), `moPopupThayDoiChoDuyet` (**8754**, overlay id `thay-doi-cho-duyet-dialog` **8802**,
+  TÁI DỤNG `buildNhatKyDong`), nhánh nút trong `goiNutChoDuyetPanel` (**9411**),
+  `buildChangeApprovalRowHtml` (**10787**, đọc CHUNG `NHAN_DUYET` ở 10799–10801). **Logic cũ giữ nguyên:**
+  sửa file kết quả duyệt riêng; sửa **tỷ lệ** của file đi `approval_changes` (R4/R4'/R4'').
+- **MỚI-4:** `app.css` **4309–4332** — `.approval-row button, .approval-delete-row button, .change-row
+  button { padding: 3px 9px; font-size: 11px; min-height: 24px; border-radius: 8px; }` + icon `10px`.
+  Thắng `.btn-primary` bằng **đặc hiệu (0,1,1) > (0,1,0)**, **không `!important`**. Phải phủ CẢ BA class vì
+  ba builder khác nhau dựng ba bảng.
+- **MỚI-3 (CSS nhãn + popup):** `app.css` **4334–4356** `.duyet-nhan {…}` + `.duyet-nhan + .duyet-nhan {
+  margin-left: -4px; }`; **4358–4366** `#thay-doi-cho-duyet-dialog > section { width: min(760px, 100%); }`
+  (trả lại bề ngang bị `.yk-dialog > section` bóp còn 620px).
+- **MỚI-5:** `assignments/service.js` — hằng `VAI_DUOC_DOI_PHAN_CONG` (**46**),
+  `assertAssignmentActor(user, input, current, ctx)` (**53**) với `moKhiLapMoiCapBa = taoMoi === true &&
+  level === 3` mở khoá `supervisor_ids` + `assignee_id`; `leader_ids` **vẫn khoá mọi trường hợp**; hàng rào
+  MỚI `assertAssigneeCungPhong` (**95**). Chỗ gọi: `workItems/service.js` **392–412** (`taoMoi: true` +
+  gọi hàng rào cùng phòng). `assertSupervisorsByLevel` vẫn bó BLĐKS cấp 3 trong BLĐKS của công việc con.
+- **MỚI-6:** `taskFiles/service.js` — `apTuDong` (**410**) thôi «chỉ nhìn vai»: **đọc lại `ghiDe`** qua
+  `permissionsRepo.listByVai` (vì `nguoiNop` là dòng `users`, không phải `req.user`) rồi trả
+  `phaiTrinhLanhDao(...) ? 'cho-lanh-dao' : 'cho-xem'`; `phaiTrinhLanhDao` (**864**) đúng BA lý do
+  (`gui_bld_phe_duyet === true` · người bấm là `assignee` · `file:approve !== 'cho-phep'`); tách
+  `laChuBanNhom` (**442**) khỏi `duocGuiBanLuu` (**433**) để 403 ≠ 409; `tpPpLaChanhCuoi` (**456**);
+  `hoan-thanh` mở thêm ở `luu-tam` (**922**/**1035**), `quyenFile` theo kịp (**1280**/**1703**). **R6 vẫn
+  giữ: không bao giờ trả `'da-duyet'`.** Q1 vẫn giữ: nhóm `luu-tam` **chưa có bản nào** thì không hiện nút
+  chốt.
+
+**KIỂM CHỨNG TRÊN PC (đã chạy, đã xanh):** full `npm test` **2076/2076 · 115 file · Duration 271.98s ·
+exit 0** (mốc trước 2043/114) · `npm run lint` exit 0 · `npm run format:check` còn đúng **2 nợ cũ**
+(`workItems/tyLe.js`, `stats-parity.test.js`) · pin XSS **`101 sink / 986 nội suy`** (từ `100/978`),
+CAN-THOAT **21 → 23** · `node tools/local-assets-check.mjs` in `Ban app.js = 20260912-02 (index.html
+khop).` exit 0 · ba file integration của đợt (`assignments` + `phase8c-files` +
+`approvals-pending-da-sua`) chạy cùng nhau **84 passed** · `approvals-ui.test.js` **23/23** ·
+`xss-guard.test.js` **11/11**.
+
+**NGƯỜI DÙNG TEST TRÊN PC:** Ctrl+F5, xác nhận Network có `assets/js/app.js?v=20260912-02` và Console in
+`[QLCV] app.js 20260912-02`, rồi bấm theo `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.25 (bước 61 → 79)**:
+61–68 **MỚI-3** nhãn «Mới»/«Sửa»/«Xoá» + nhãn đối tượng + nút «Xem các thay đổi» + popup đúng các lượt SAU
+mốc + bảng «Yêu cầu xoá» + bảng «Phê duyệt kết quả» giữ nguyên + hình dạng phản hồi chỉ THÊM hai trường ·
+69–70 **MỚI-4** bốn nút bé lại ở CẢ BA bảng, DevTools thấy `font-size: 11px` / `padding: 3px 9px` /
+`min-height: 24px`, icon `10px`, vòng xoay `.loading::after` không vỡ · 71–74 **MỚI-5** `nv@` lập mới cấp 3
+thấy hai ô MỞ, BLĐKS vẫn bó trong BLĐKS cấp 2, giao khác phòng ⇒ **403 «Cán bộ chỉ được giao nhiệm vụ cho
+người cùng phòng»**, SỬA nhiệm vụ có sẵn vẫn khoá, `leader_ids` khoá mọi trường hợp · 75–78 **MỚI-6** nhiệm
+vụ KHÔNG tích ⇒ `tp@` mất «Gửi đi duyệt» chỉ còn «Hoàn thành»/«Duyệt», gọi thẳng API ⇒ **409**, nhiệm vụ
+CÓ tích ⇒ vẫn `cho-lanh-dao` cho PGĐ, nhóm `luu-tam` 0 bản thì không hiện nút chốt · 79 các mục cũ **không
+đổi luật**. Rồi giữ xanh **9b.15 → 9b.24**.
+
+**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Chỉ khi nghe **OK RIÊNG ĐỢT NÀY** mới commit bằng
+**explicit paths** (không `git add .`), push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md` — **VPS
+đang ở `pgmigrations=021`, phải áp 022 → 029, backup VPS trước**. OK ngày 2026-09-08 của bản bỏ vai cũ
+**KHÔNG** áp dụng cho đợt này. Danh sách file untracked phải `git add` đích danh: xem cuối khối ĐỢT B bên
+dưới, **cộng thêm `server/tests/integration/approvals-pending-da-sua.test.js`**.
+
+**TÀI LIỆU ĐÃ CẬP NHẬT TRONG ĐỢT NÀY:** `docs/KE-HOACH-DUYET-CAY.md` **§13 (MỚI, 5 tiểu mục)** ·
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.25 (MỚI)** + dòng mới ở bảng §11 · `docs/KE-HOACH-KET-QUA-FILE.md`
+khối **«Bổ sung 12/09/2026 lượt 2» (MỚI, ở ĐẦU file)** · `docs/XSS-4.6.md` khối pin **101/986** (ở ĐẦU
+file) · `KE-HOACH-VPS.md` §13.2 (hàng mới ở TRÊN) + §13.3 (dòng «2026-09-12 (đợt B bổ sung lượt 2…)» ở
+DƯỚI) + §13.5 (khối «Bổ sung 12/09/2026 (đợt B bổ sung lượt 2 …)» — **hai mươi mốt bẫy** — ở TRÊN) ·
+`docs/BAT-DAU-SESSION.md` khối này · `chay-test.bat` **chỉ sửa chú thích REM** (thêm khối **(12)** trước
+dòng `REM =====` của phần khai báo biến) — bước `[7/7]` in buster bằng `findstr` nên không cần sửa logic.
+
+## Snapshot trước đợt B bổ sung lượt 2 — ĐỢT B BỔ SUNG 12/09/2026: «Tình trạng» và «Người thực hiện» ghi Ở TỪNG BẢN · bản ĐẦU chỉ người thực hiện trực tiếp nộp
+
+**ĐỢT B, bản sửa Q6/Q11 và đợt bổ sung này CHƯA NGHIỆM THU — nghiệm thu GỘP MỘT LẦN.** Đọc khối này
+trước; hai khối «Snapshot trước đợt B bổ sung — BẢN SỬA Q6/Q11» và «Snapshot trước bản sửa Q6 — ĐỢT B»
+bên dưới vẫn còn hiệu lực ở mọi chỗ **không mâu thuẫn** với khối này.
+
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `029`, NGƯỜI ĐANG TEST CHỈ CẦN Ctrl+F5.** Không phải chạy lại
+`chay-test.bat`. Buster + banner **`20260911-04` → `20260912-01`** (5 chỗ: `web/index.html` dòng
+21/1230/1232/1233 + `app.js:9`). **Hình dạng phản hồi RPC/REST không đổi** — chỉ THÊM ba trường trong
+`quyen`.
+
+**HAI CHỈ ĐẠO NGHIỆP VỤ (nguyên văn):**
+
+> «Sửa lại, người thực hiện trực tiếp mới được upfile đầu tiên, hiện tại đang cho Tp up file đầu tiên»
+
+> «ở cột Tình trạng fiel kết quả, ghi ở từng bản tình trạng, ví dụ bị trả về hoặc tp/pp sửa trực tiếp,
+> PGĐ/GĐ sửa trực tiếp, lưu ý thêm tên vào nhé, phần Người thực hiện sẽ là người duyệt hoặc người sửa đối
+> với các bản sau, chỉ hiển thị Người thực hiện trực tiếp nếu trực tiếp sửa lại bản bị trả về hoặc tải lên
+> lần đầu...»
+
+**ĐÃ LÀM:**
+
+- **(1) Guard bản ĐẦU** — `assertNguoiNopBanDau(user, item, versionNo, client)` ở
+  `server/src/modules/taskFiles/service.js:371`. `version_no > 1` ⇒ `return` ngay (luật cũ giữ nguyên cho
+  mọi bản sau). `assignee_id == null` ⇒ **409 CONFLICT**; sai người ⇒ **403 FORBIDDEN** kèm TÊN tra từ
+  `users`. Gọi ở **CẢ HAI** đường: `nopBaoCao` (625) và `nop` (710 — **TRƯỚC** `mkdir`/`writeFile`).
+  `luuTuCallback` **không** gác (luôn sinh bản ≥ 2). Điều kiện theo **SỐ BẢN**, không theo `fileId == null`
+  — vì Q1 tách KHAI khỏi NỘP, `khaiKetQua` tạo nhóm **0 bản**. Lỗ hổng cũ: `duocGhiTheoPhanCong`.
+- **(2) `quyenFile()` (~1498)** trả thêm `duocNop` / `tenNguoiThucHien` / `thieuNguoiThucHien`, tra `users`
+  qua `repo.nguoiTheoId` chạy song song trong `Promise.all` — **không** đọc `item.assignee_name` (rỗng khi
+  client chỉ gửi `assigneeId`, MỒ CÔI khi user bị xoá vì FK `ON DELETE SET NULL`).
+- **(3) `taskFiles/repo.js listNhomByItem`** thêm `w.assignee_id` + `nv.full_name AS ten_nguoi_thuc_hien`.
+  **Cố ý không nhét vào hằng `NHOM`** để mọi đường đọc khác giữ nguyên hình dạng.
+- **(4) `web/assets/js/app.js`** — ba bảng hằng `Object.freeze` (`NHAN_VAI_NGAN` 2340 · `HANH_DONG_TAO_BAN`
+  2351 · `TINH_TRANG_BAN` 2358); **sáu HÀM TRẢ CHUỖI** 4090–4193 (`vaiNgan`, `luongCuaBan`,
+  `banTruocBiTraVe`, `nguoiTaoBan`, `tinhTrangMotBan`, `nguoiThucHienCuaBan`) — **không hàm nào dựng
+  HTML**, nhờ vậy CAN-THOAT giữ đúng 21 chỗ; `buildDongBanKetQua` (4194) viết lại **ô 7** (NHÃN + TÊN +
+  `title`) và **ô 9** (từ ô TRỐNG thành badge); `buildKhoiFile` (4298) thêm `doiNguoiNop` (4359 → ô Hành
+  động 4423); ô 7 DÒNG CHA (4402–4403) đổi nguồn `ten_nguoi_tao` → `ten_nguoi_thuc_hien`; cờ
+  `quyenNopBanDau` (2711/2977/2988) và dải chú bảng RỖNG (3027–3035).
+
+**TEST: full `2043/2043 · 114 file · Duration 279.08s · exit 0`** (mốc trước 2034/113 — đúng **+9 ca** của
+file mới). `npm run lint` exit 0; `format:check` còn đúng **2 nợ cũ** ngoài phạm vi (`workItems/tyLe.js`,
+`stats-parity.test.js`); `tools/dem-xss.mjs` đo **100 sink / 978 nội suy** (từ 969, CAN-THOAT **không
+đổi**); `tools/local-assets-check.mjs` in `Ban app.js = 20260912-01 (index.html khop).` exit 0.
+
+- File MỚI `server/tests/integration/phase8d-ban-dau.test.js` — **9 ca** (7 ca luật bản đầu + 2 ca cờ cho
+  giao diện).
+- Vá `server/tests/integration/phase8c-files.test.js` — **3 ca** từng cho TP/admin up bản 1 làm bước dọn
+  cảnh: `TC-V2-04`, `TC-V5-03` ×2. **Sửa test theo luật mới, KHÔNG nới guard.**
+- `server/tests/unit/xss-guard.test.js` — `TC-SEC-17` đổi pin **969 → 978** + khối chú thích 2026-09-12.
+
+**NGƯỜI DÙNG TEST PC — `docs/HUONG-DAN-TEST-GIAO-DIEN.md` §9b.24 (bước 46 → 60).** 46 hiện trường ·
+47 `tp@` **mất nút «Tải lên»** ở nhóm 0 bản + dải chú «Bản đầu chỉ «Tên» nộp được.» · 48 gọi thẳng API ⇒
+**403 kèm tên**, đường «Báo cáo» cũng 403 · 49 `nv@` nộp bản 1 ⇒ 200, từ bản 2 luật cũ y nguyên · 50 chưa
+gán người thực hiện ⇒ **409** · 51–54 cột «Tình trạng» có badge **ở từng bản** kèm tên (bảng đối chiếu 8
+hành động; bản chưa ai đụng thì in «Tải lên lần đầu»/«Sửa lại bản bị trả về»/«Nộp lại»; `gom-y` cố ý không
+phải tình trạng) · 55–59 cột «Người thực hiện»: bản 1 của `nv@` và bản sửa lại sau trả về ⇒ «Người thực
+hiện trực tiếp», còn lại ⇒ người duyệt/người sửa kèm vai, dữ liệu cũ ⇒ «TP/PP nộp thay», dòng CHA lấy
+người thực hiện của nhiệm vụ · 60 các mục cũ **không đổi luật**. Rồi giữ xanh **9b.15 → 9b.23 (gồm mục J)**.
+
+**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Chỉ khi nghe **OK RIÊNG ĐỢT NÀY** mới commit bằng
+**explicit paths** (không `git add .`), push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md` — **VPS
+đang ở `pgmigrations=021`, phải áp 022 → 029, backup VPS trước**. OK ngày 2026-09-08 của bản bỏ vai cũ
+**KHÔNG** áp dụng cho đợt này. Danh sách file untracked phải `git add` đích danh: xem cuối khối ĐỢT B bên
+dưới, **cộng thêm `server/tests/integration/phase8d-ban-dau.test.js`**.
+
+**TÀI LIỆU ĐÃ CẬP NHẬT TRONG ĐỢT NÀY:** `docs/KE-HOACH-DUYET-CAY.md` **§12 (MỚI, 5 tiểu mục)** ·
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.24 (MỚI)** · `docs/KE-HOACH-KET-QUA-FILE.md` khối **«Bổ sung
+12/09/2026» (MỚI, ở ĐẦU file)** · `docs/XSS-4.6.md` khối pin **100/978** (ở ĐẦU file) · `KE-HOACH-VPS.md`
+§13.2 (hàng mới ở TRÊN) + §13.3 (dòng «2026-09-12 (đợt B bổ sung…)» ở DƯỚI) + §13.5 (khối «Bổ sung
+12/09/2026» — **mười một bẫy** — ở TRÊN) · `docs/BAT-DAU-SESSION.md` khối này · `chay-test.bat` **chỉ sửa
+chú thích REM** (dòng 43 bỏ số buster hardcode + khối **(11)** mới) — bước `[7/7]` in buster bằng
+`findstr` nên không cần sửa logic.
+
+## Snapshot trước đợt B bổ sung — BẢN SỬA Q6/Q11 SAU ĐỢT B: tích «Gửi BLĐ phê duyệt» quyết định TP/PP có nút nào (chiều 11/09/2026)
+
+**ĐỢT B và bản sửa này CHƯA NGHIỆM THU — nghiệm thu GỘP MỘT LẦN.** Đọc khối này trước, khối
+«Snapshot trước bản sửa Q6 — ĐỢT B» bên dưới vẫn còn hiệu lực ở mọi chỗ **không mâu thuẫn** với khối này.
+
+**LỖI NGƯỜI DÙNG BẮT ĐƯỢC KHI TEST THẬT (nguyên văn):** «vừa tôi test, nhiệm vụ mà **ko tích** gửi Gửi
+BLĐ phê duyệt, nhưng khi gửi file **tp duyệt vẫn đẩy lên cho PGĐ**, CV002». Hiện trường đo trên UAT
+(read-only): `CV002-002` = `work_items.id 8`, cấp 3, `gui_bld_phe_duyet = f`, `assignee_id = 5` (Lê Thị
+Nhân, **Nhân viên**), `leader_ids = {3}` (Trần Thị Trưởng, **Trưởng phòng**), `supervisor_ids = {2}`
+(Phó GĐ Phụ trách); nhóm file **6** («Hi»): `nv1` `gui-duyet` 22:18:42 ⇒ `cho-xem` → `tp`
+`sua-truc-tuyen` 22:19:45 tạo bản 2 `uploaded_by = 3` → `tp` `tp-phe-duyet` 22:19:58 ⇒ `cho-lanh-dao`.
+
+**HAI NGUYÊN NHÂN CHỒNG NHAU — sửa một cái là vẫn tái diễn:**
+
+1. `BANG_VERDICT['tp-phe-duyet'].den` là `cho-lanh-dao` **CỐ ĐỊNH, không đọc tích**. ĐỢT B đã đọc Q6
+   thành «không đổi luồng» — chỉ **đổi tên** hành động chứ không làm nó **phụ thuộc dữ liệu**.
+2. Van chống tự duyệt canh **`uploaded_by` của bản cuối** ⇒ TP vừa «Sửa trực tuyến» là **mất** nút
+   «Hoàn thành / Duyệt». Ghép với (1): TP chỉ còn **đúng một** nút, và nút đó đẩy lên PGĐ.
+
+**HAI LỰA CHỌN NGƯỜI DÙNG ĐÃ CHỐT** (qua hộp hỏi, còn hiệu lực):
+
+| Câu hỏi | Người dùng chọn | Nghĩa là |
+|---|---|---|
+| Luồng khi tích TẮT | **«Ẩn nút, chỉ còn «Hoàn thành»»** | Tích TẮT ⇒ TP/PP chỉ thấy **«Hoàn thành / Duyệt»** + **«Đẩy về Cán bộ»**; «TP/PP phê duyệt» chỉ hiện khi tích **BẬT** hoặc khi **không được tự chốt**. Nút chốt nay có ô ghi chú **TUỲ CHỌN** |
+| Van chống tự duyệt | **«Nới: chỉ chặn khi là người thực hiện»** | `hoan-thanh` chỉ bị chặn khi tích **BẬT** hoặc khi người bấm là **`assignee`** (Q5). **BỎ** điều kiện «người lưu bản cuối» |
+
+**ĐÃ LÀM — `server/src/modules/taskFiles/service.js`:**
+
+- **`phaiTrinhLanhDao(user, item)` (dòng 785) — MỘT hàm duy nhất** = `item.gui_bld_phe_duyet === true ||
+  sameId(item.assignee_id, user.id) || giaTriHieuLuc(user,'file','approve') !== 'cho-phep'`. `verdict` và
+  `hanhDongDuocLam` đọc **CÙNG** hàm ⇒ **nút hiện trên màn hình và luật máy chủ không bao giờ lệch nhau**.
+- `BANG_VERDICT`: `tp-phe-duyet` thêm cờ **`chiKhiTrinh: true`** (831); `hoan-thanh` nay **`canDuyet: true`**
+  (845) để ghi đè ⏳ chặn được nó. `hanhDongDuocLam` (1188-1204) thêm hai bộ lọc: `(!luat.chiKhiTrinh ||
+  trinh)` (1200) và `!(ma === 'hoan-thanh' && trinh)` (1201).
+- **Ba guard trong `verdict`, đúng thứ tự:** **(5)** 924 — `hoan-thanh` + tích BẬT ⇒ **403** «Nhiệm vụ đã
+  bật Gửi BLĐ phê duyệt — phải trình Ban lãnh đạo phụ trách, không Hoàn thành tại TP/PP»; **(6)** 927-929
+  — `chiKhiTrinh` + **không** phải trình ⇒ **409** «Nhiệm vụ này KHÔNG bật «Gửi BLĐ phê duyệt» nên TP/PP
+  là chặng cuối — hãy dùng «Hoàn thành / Duyệt» để chốt, hoặc «Đẩy về Cán bộ» nếu cần sửa lại.»; **(8)**
+  942 — `canDuyet` + `file:approve` = ⏳ ⇒ **403**; **(11)** 972 — `hoan-thanh` + người bấm là `assignee`
+  ⇒ **403** «Bạn là người thực hiện nhiệm vụ này nên không được tự chốt kết quả của chính mình — hãy dùng
+  «TP/PP phê duyệt» để trình Ban lãnh đạo kiểm soát.» — **thay hẳn** guard cũ đọc `uploaded_by`.
+- `thongBaoVerdict` nhánh `default` nay **nối ghi chú** vào chuông (`Ghi chú: <lý do>`) — trước đó ghi chú
+  của `hoan-thanh` bị **nuốt**.
+- Copy trang editor (1864): «Bản này bạn không tự Hoàn thành được — phải trình Ban lãnh đạo kiểm soát. Nút
+  «TP/PP phê duyệt» sẽ lưu bản mới rồi trình lên; cần ý kiến ít nhất 10 ký tự.» **Cố ý giữ substring
+  `không tự Hoàn thành`** để hai ca UI đang assert không vỡ.
+
+**ĐÃ LÀM — `web/assets/js/app.js`:** hằng `HANH_DONG_CHOT = Object.freeze(["hoan-thanh","duyet"])` (2346);
+`xuLyVerdictFile` (3518-3549) thêm nhánh đọc ô `task-y-kien-<fileId>` cho nút chốt, `.trim().slice(0,2000)`,
+**KHÔNG bật `prompt`**; `dsVerdictFile` (3725-3732) lọc nút chốt theo `giaTriHieuLucFile(role,'approve')`
+và **cố ý là SUPERSET** (máy chủ vẫn là người quyết). **`xuLyVerdictChoDuyet` (8886-8903) CỐ Ý KHÔNG ĐỔI**
+— trang «Hàng chờ phê duyệt» không dựng sẵn ô nhập nên nút chốt ở đó **không gửi ghi chú**.
+`nutVerdictFile`/`buildNutVerdictFile` **vẫn là CODE CHẾT**, chưa dọn.
+
+**LUẬT BẢO ĐẢM — ĐÚNG MỘT đường chốt trong mọi tổ hợp:** TẮT + không phải `assignee` + quyền duyệt ✓ ⇒
+chỉ «Hoàn thành / Duyệt»; BẬT ⇒ chỉ «TP/PP phê duyệt»; TẮT + **là** `assignee` ⇒ chỉ «TP/PP phê duyệt»
+(Q5); TẮT + quyền duyệt ⏳ ⇒ chỉ «TP/PP phê duyệt». **Không ô nào ra cả hai nút hoặc mất cả hai.**
+
+**CSDL — KHÔNG CÓ MIGRATION MỚI CHO BẢN SỬA NÀY.** Vẫn ở `029`; **chỉ đổi mã máy chủ + `app.js`**, buster
+`20260911-03` → **`20260911-04`** (5 chỗ: `web/index.html` dòng 21 · 1230 · 1232 · 1233 + banner
+`console.info("[QLCV] app.js 20260911-04")` ở `app.js:9`; `api-bridge.js` vẫn ghim `?v=20260825`).
+⇒ **Người đang test chỉ cần Ctrl+F5, KHÔNG cần chạy lại `chay-test.bat`.** (Muốn chắc ăn thì `/giu /f`
+vẫn được — 029 đã lên rồi nên `migrate:up` sẽ bỏ qua.)
+
+**UAT ĐÃ LÊN `pgmigrations=029`** (đo lại trong session): lỗi `23514` do để hai câu `UPDATE` **trước**
+`DROP CONSTRAINT` đã sửa thành **`DROP → UPDATE → ADD`** + chốt `DO $$`; node-pg-migrate đã tự rollback
+nên lần nổ trước không để lại rác. **Đừng chạy `npm run migrate:up` bằng tay** — nó đọc `../deploy/.env`
+và trúng CSDL **dev** `quanlycongviec` @ 5432, không phải UAT; thứ trỏ đúng `quanlycongviec_uat` là
+`chay-test.bat`. **029 vẫn KHÔNG LÙI TỰ ĐỘNG** (DOWN = `RAISE EXCEPTION`) ⇒ sao lưu trước khi migrate.
+
+**HIỆN TRƯỜNG UAT SAU KHI 029 LÊN (đo read-only):** 8 nhiệm vụ cấp 3 đều **«Đã duyệt»** ⇒ Q1/Q2 (cấm tải
+file khi cây chưa duyệt) **không thử được trên chúng**, phải tạo nhiệm vụ mới; **4 nhiệm vụ
+`CV001-003`→`CV001-006` TRỐNG `supervisor_ids`** ⇒ không thử được ĐIỂM 12/R1(a)/`assertGuiBld` trên
+chúng; 7 nhóm file, mốc điền ngược **3/7** (nhóm 3, 4, 6 đều `tp_duyet_boi = 3` = `tp@test.local`).
+**DỮ LIỆU KHÔNG TỰ LÙI:** nhóm file **6** của `CV002-002` **đang ở `cho-lanh-dao`**, mà nút chốt của TP
+chỉ có ở `cho-xem`/`can-sua` ⇒ muốn nghiệm thu trên đúng hiện trường cũ thì `pgd@` bấm **«Đẩy về TP»**
+(`tra-ve-tp` ⇒ `can-sua`) rồi `tp@` sẽ thấy «Hoàn thành / Duyệt». Hoặc tạo nhiệm vụ mới cho sạch.
+
+**Full test 2034/2034 · 113 file · Duration 244.55s · exit 0** (mốc ĐỢT B 2027/2027; **+7 ca mới trong
+`tests/integration/phase8d-dot-b.test.js`**); focused đã chạy tuần tự trước: `task-files-api` 54/54 ·
+`phase8c-files` + `task-files-editor` 45/45 · `phase8d-dot-b` 37/37. `lint` scoped 4 file exit 0;
+`prettier --check` sạch; `tools/dem-xss.mjs` đo **100 sink / 969 giá trị — KHÔNG ĐỔI** (pin ở
+`docs/XSS-4.6.md`, mục mới «Pin sau bản sửa Q6/Q11»).
+
+**BẪY ĐÃ TRẢ GIÁ — đọc `KE-HOACH-VPS.md` §13.5 khối «Bổ sung 11/09/2026 (chiều — bản sửa Q6/Q11…)», chín
+bẫy; và `docs/KE-HOACH-DUYET-CAY.md` §11.6.4.** Ba bẫy đáng nhớ nhất: (a) đọc một quyết định về **LUỒNG**
+thành quyết định về **TÊN NÚT**; (b) **ẩn nút chỉ an toàn khi còn ít nhất một nút hợp lệ** — phải **đếm
+đường ra trước khi ẩn nút**; (c) **test «xanh oan»** khi lời gọi dựng hiện trường (`tp-phe-duyet`/
+`tra-ve-tp`/`gui-di-duyet`) không được assert — ca vẫn xanh dù guard mới từ chối chính bước dọn đó, và nó
+âm thầm đo một hiện trường **khác** với tên ca. Đã thêm assert ở TF-09, TF-10, `taoLenh`, TC-HCPD-02,
+TC-V4-09.
+
+**CÁCH BẬT TÍCH TRONG TEST — hai đường, chọn theo fixture, KHÔNG đổi lẫn nhau:** `phase8d-dot-b.test.js`
+dùng **SQL thẳng** (`batGuiBld`: `UPDATE work_items SET gui_bld_phe_duyet = true WHERE id = $1`);
+`task-files-api.test.js` và `phase8c-files.test.js` dùng **API lúc tạo** (`guiBldPheDuyet: true` +
+`supervisorIds`) vì **`assertGuiBld` (`assignments/service.js:487-518`) ném 400 «Nhiệm vụ chưa có Ban lãnh
+đạo kiểm soát để gửi phê duyệt»** khi tích BẬT mà cả nhiệm vụ lẫn công việc cha đều trống `supervisor_ids`
+— **mười ca** đỏ cùng lúc vì đúng một chỗ, sửa bằng `...(guiBld ? { supervisorIds: [pgdA.id] } : {})`.
+**Phải khai lúc TẠO chứ không `PATCH` về sau**: sửa nhiệm vụ trên cây đã duyệt thì Q9 hạ cây về `Chờ
+duyệt` và Q2 **khoá luôn cửa nộp file**.
+
+**NGƯỜI DÙNG TEST PC — `docs/HUONG-DAN-TEST-GIAO-DIEN.md` §9b.23, ĐỌC MỤC J TRƯỚC KHI BẤM LẠI.** Mục J
+(bước **36→45**) là phần mới của bản sửa này: 36 ca bạn báo nay phải khác · 37 gọi thẳng API ⇒ **409** ·
+38 tích BẬT ⇒ **403** · 39 TP vừa sửa trực tuyến **vẫn** chốt được · 40 van chỉ canh NGƯỜI THỰC HIỆN ⇒
+**403** · 41 ghi đè ⏳ vẫn thắng ⇒ **403** · 42 ghi chú nút chốt TUỲ CHỌN (trang «Hàng chờ phê duyệt» cố ý
+không có ô ghi chú) · 43 bật tích mà chưa có BLĐKS ⇒ **400** · 44 câu giải thích ở trang editor đã đổi chữ ·
+45 **mọi tổ hợp phải có ĐÚNG MỘT đường chốt**. Rồi giữ xanh **9b.15 → 9b.22**. Mục **E bước 18** và **bước
+21**, mục **I bước 34**, **§9b.17 bước 10**, **§9b.8 (3)** đều đã được sửa lại vì bản đầu ghi SAI.
+
+**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Chỉ khi nghe **OK RIÊNG ĐỢT NÀY** mới commit bằng
+**explicit paths** (không `git add .`), push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md` — **VPS
+đang ở `pgmigrations=021`, phải áp 022 → 029, backup VPS trước**. OK ngày 2026-09-08 của bản bỏ vai cũ
+**KHÔNG** áp dụng cho đợt này. Danh sách file untracked phải `git add` đích danh: xem cuối khối ĐỌT B bên dưới.
+
+**TÀI LIỆU ĐÃ CẬP NHẬT TRONG BẢN SỬA NÀY:** `docs/KE-HOACH-DUYET-CAY.md` **§11.6 (MỚI, 5 tiểu mục)** + sửa
+§11.2 hàng Điểm 7, §11.3, §11.5 · `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.23 MỤC J (MỚI)** + 6 chỗ sửa ·
+`docs/KE-HOACH-KET-QUA-FILE.md` mục **«ĐỢT B + bản sửa Q6» (MỚI, ở ĐẦU file)** + 8 chỗ cũ đánh dấu đã đổi ·
+`docs/XSS-4.6.md` mục pin mới · `KE-HOACH-VPS.md` §13.2 (hàng mới ở trên + sửa 4 chỗ cũ trong hàng ĐỢT B),
+§13.3 (dòng mới «2026-09-11 (chiều — bản sửa Q6/Q11…)»), §13.5 (khối «Bổ sung» mới) · `chay-test.bat`
+**chỉ sửa chú thích REM** (dòng 43 + khối (10) mới) — bước `[7/7]` in buster bằng `findstr` nên **không**
+hardcode, không cần sửa logic.
+
+## Snapshot trước bản sửa Q6 — ĐỢT B: «gộp hai trục» duyệt cây + duyệt file kết quả (11/09/2026)
+
+**CÓ MIGRATION MỚI `029_dot_b_gop_hai_truc.sql` và CÓ đổi cả mã máy chủ lẫn giao diện** ⇒ test PC
+**BẮT BUỘC chạy lại `chay-test.bat /giu /f`** (script tự `npm run migrate:up` rồi mới bật Node).
+**Ctrl+F5 là KHÔNG ĐỦ.** ⚠ **029 ĐÃ LÊN UAT rồi** (chiều 11/09/2026) ⇒ từ đây về sau, với **bản sửa
+Q6/Q11** thì **Ctrl+F5 là ĐỦ** vì bản đó **không có migration** — xem khối «Ưu tiên hiện tại» ở đầu file.
+
+**⚠ ĐÃ CŨ — UAT NAY ĐÃ LÊN `pgmigrations=029` (chiều 11/09/2026); đọc khối «Ưu tiên hiện tại — BẢN SỬA
+Q6/Q11» ở trên. Đoạn dưới đây giữ nguyên để nhớ LÝ DO và thứ tự đúng của 029.** ~~UAT TRÊN PC ĐANG Ở
+`pgmigrations=028` — 029 CHƯA LÊN.~~ ~~Cột `task_files.tp_duyet_boi`/`tp_duyet_luc`
+chưa có, CHECK `task_file_flow_hanh_dong_check` vẫn còn `yeu-cau-sua` + `trinh-lanh-dao`, CHECK
+`approval_changes_change_kind_check` vẫn chỉ `reviewer` + `gui-bld`.~~ **Nay cả ba đã có/đã đổi.**
+**Đừng chạy `npm run migrate:up`
+bằng tay**: `migrate` đọc `../deploy/.env` (`server/package.json`), và `DATABASE_URL` ở đó trỏ
+`quanlycongviec` @ `127.0.0.1:5432` = **CSDL DEV**, không phải UAT. Thứ trỏ đúng
+`quanlycongviec_uat` là `chay-test.bat` (dòng 60 đặt `DB`, dòng 151 đặt `DATABASE_URL`, dòng 212 gọi
+`npm run migrate:up`). **029 KHÔNG LÙI TỰ ĐỘNG ĐƯỢC** — DOWN là một `RAISE EXCEPTION` (giống 025/026),
+vì lịch sử `yeu-cau-sua` đã bị gộp nên không còn cách nào biết dòng nào từng là nút nào, và xoá đề nghị
+`ty-le` đang treo là xoá việc người dùng đang chờ ký. Lùi thật sự = khôi phục bản sao lưu ⇒ **sao lưu
+TRƯỚC khi chạy**.
+
+> **LẦN CHẠY ĐẦU NGÀY 11/09/2026 ĐÃ NỔ — VÀ ĐÃ SỬA XONG, CHỈ CẦN CHẠY LẠI.** Người dùng chọn mode 4,
+> tới bước [4/7] thì `23514 task_file_flow_hanh_dong_check` (`Failing row contains (6, 3, 1, 3, Trưởng
+> phòng, tp-phe-duyet, …)`). Nguyên nhân: 029 đặt hai câu `UPDATE` đổi tên verdict **TRƯỚC** câu
+> `ALTER TABLE … DROP CONSTRAINT`, mà CHECK cũ không biết `tp-phe-duyet` nên chính nó chặn câu lệnh
+> sinh ra để thay nó. Đã sửa thành **`DROP → UPDATE → ADD`** và thêm chốt `DO $$ … RAISE EXCEPTION` kể
+> đích danh mã lạ. node-pg-migrate **tự `Rolling back attempted migration`** nên UAT không hỏng gì, vẫn
+> sạch ở 028. Bản sửa đã được **dry-run trên BẢN SAO dữ liệu UAT thật** (nạp từ
+> `E:/quanlycongviec-backups/uat-20260911-204416` vào CSDL tạm rồi drop): `task_file_flow` **46 → 46
+> dòng**, `trinh-lanh-dao:3 → tp-phe-duyet:3`, `yeu-cau-sua:2 → tra-ve-cbo:2`, mốc điền ngược **3/16**
+> nhóm file. Vì sao 2020 test xanh mà không bắt được: `tests/global-setup.js` dựng CSDL test từ số
+> không nên `task_file_flow` **rỗng** lúc 029 chạy. Đã bịt bằng
+> **`tests/integration/migration-replay.test.js`** (mới, 7 test) — replay `022 → 029` trên CSDL riêng có
+> **gieo dữ liệu cũ**, và đã kiểm bằng mutation (trả 029 về thứ tự sai ⇒ test đỏ đúng lỗi đó).
+> Chi tiết: `KE-HOACH-DUYET-CAY.md` §11.4 bẫy (2) + (10), `KE-HOACH-VPS.md` §13.5 bẫy (10).
+> **Lần chạy lại nên chọn `/giu /f` (mode 1), ĐỪNG chọn mode 4** — xem cảnh báo `supervisor_ids` ở dưới.
+> **ĐÃ CHẠY LẠI THÀNH CÔNG: UAT nay ở `029_dot_b_gop_hai_truc`.**
+
+**⚠ Số liệu của RIÊNG ĐỢT B lúc đó — nay là 2034/2034 và buster `20260911-04`, xem khối trên.**
+**Full test 2027/2027 · 113 file · Duration 276.91s · exit 0** (đợt A: 1987/111; **+7 của
+`tests/integration/migration-replay.test.js`** thêm sau khi 029 nổ trên UAT); `lint` exit 0;
+`format:check` còn đúng
+2 nợ cũ (`workItems/tyLe.js`, `stats-parity.test.js`); `node --check` sạch; `tools/dem-xss.mjs` đo
+**100 sink / 969 giá trị**; `local-assets-check --live` **exit 0**; buster + banner **`20260911-03`**
+(bốn chỗ trong `index.html`: dòng 21 · 1230 · 1232 · 1233, cộng banner ở `app.js` dòng 9;
+`api-bridge.js` vẫn ghim `?v=20260825`). Pin XSS **100 sink / 964 → 969 nội suy**, CAN-THOAT
+**19 → 21 chỗ** (16 mục trong `CO_Y_KHONG_BOC`) — hai chỗ mới đều là ô nhập tỷ lệ đã escape sẵn.
+
+**TÁM VIỆC CỦA ĐỢT B** (số Q/R/điểm lấy từ bảng quyết định bên dưới — bảng đó vẫn là **nguồn sự thật**):
+
+1. **Q1 + Q2 + Q4 — CẤM HẲN nút tải file khi cây chưa duyệt.** Lần gửi ĐẦU chỉ có **KHAI BÁO**
+   (tên kết quả · định dạng · tỷ lệ) đi theo cây; **file thật** đi chuỗi riêng **SAU KHI** cây `Đã duyệt`.
+   Máy chủ chặn bằng `chanKhiCayChuaDuyet` (`taskFiles/service.js:282`, soi `itemsRepo.cayDaDuyet`) với
+   thông báo `LOI_CAY_CHUA_DUYET` (dòng 279). Giao diện: `buildKhungKhaiKq` (`app.js:3036`) thêm ô
+   **Tỷ lệ (%)** qua helper dùng chung `oNhapTyLeKhai` (dòng 3016), luật số ở `docTyLeKhai` (dòng 3008) —
+   **để trống = `null` = «tự chia»**, sai thì báo cho người dùng sửa chứ không âm thầm bỏ qua.
+   Chỉ «Báo cáo» mới có ô nội dung chữ (`doiDinhDangKhaiKq`); năm định dạng còn lại khai rồi nộp file sau.
+2. **Q3 — `Nháp` là nháp TẤT CẢ.** `trangThaiDuyetKhiTao` (`approvals/rules.js:41`) **BỎ** luật cũ
+   «nhiệm vụ cấp 3 LUÔN `Đã duyệt`» (điểm bất hợp lý số 2): nay chỉ còn ba nhánh — `luuNhap` ⇒ `Nháp`,
+   ghi đè `create` ⇒ `Chờ duyệt`/`Đã duyệt`, **còn lại ⇒ `Chờ duyệt`**. `v_countable_items` không mất số
+   của phần cây đã duyệt vì nó loại **đúng dòng** `Chờ duyệt` chứ không hạ cả cây.
+3. **R5 — nhiệm vụ thêm SAU vào cây đã duyệt = `Chờ duyệt` MỘT MÌNH NÓ**, duyệt riêng. Đây là hệ quả
+   trực tiếp của việc bỏ luật ở mục 2, không cần mã riêng.
+4. **R6 — BỎ TỰ DUYỆT.** `apTuDong` (`taskFiles/service.js:368`) nay **chỉ** trả `cho-lanh-dao`
+   (TP/PP nộp) hoặc `cho-xem`; **không bao giờ** trả `da-duyet`, và `duyet-tu-dong` **không được ghi
+   thêm** (mã vẫn nằm trong CHECK để dòng lịch sử cũ đọc được). `file:create = ✓` chỉ còn nghĩa
+   «được phép khai/nộp`. `batBuocDuyet` của bản cũ mất nghĩa nên bỏ — nó sinh ra chỉ để CHẶN tự duyệt.
+   **Đọc thêm mục «SÁU CÁCH DIỄN GIẢI» điểm (a) dưới đây.**
+5. **ĐIỂM 7 — thay `trinh-lanh-dao` bằng «TP/PP phê duyệt» (`tp-phe-duyet`) CÓ LƯU MỐC.** Thêm hai cột
+   `task_files.tp_duyet_boi` + `tp_duyet_luc`; 029 điền ngược cho dữ liệu cũ bằng lần `tp-phe-duyet`
+   hoặc `hoan-thanh` MUỐN NHẤT của nhóm (`hoan-thanh` cũng là một lần TP/PP ký theo Q11;
+   `duyet-tu-dong` thì KHÔNG — máy tự chốt, không có người). ~~Trạng thái đích **GIỮ NGUYÊN**
+   `cho-lanh-dao` vì Q5/Q6 không đổi luồng.~~ **CHỖ NÀY ĐỌC SAI Q6 — ĐÃ SỬA chiều 11/09/2026:** trạng
+   thái đích **vẫn** là `cho-lanh-dao`, nhưng hành động này **chỉ TỒN TẠI khi nhiệm vụ thật sự phải trình
+   BLĐKS** (tích BẬT, hoặc người bấm là `assignee`, hoặc `file:approve` ≠ ✓); tích TẮT thì TP/PP chốt bằng
+   `hoan-thanh` và gọi thẳng `tp-phe-duyet` ⇒ **409**. Cờ mới là **`chiKhiTrinh`**, đọc qua MỘT hàm
+   `phaiTrinhLanhDao` — xem khối «Ưu tiên hiện tại» ở đầu file và `KE-HOACH-DUYET-CAY.md` §11.6.
+   Cờ `laMocTpPp` trong `BANG_VERDICT` quyết định hành động nào
+   ghi mốc. **Ba tên trường cho CÙNG một mốc, đừng nhầm**: `ten_nguoi_tp_duyet` (GET `…/files`,
+   `taskFiles/repo.js:27`) · `tp_duyet_ten` (mapper tab Nhiệm vụ dạng gọn, `repo.js:519`) ·
+   `tenNguoiTpDuyet` (RPC camelCase).
+6. **ĐIỂM 9 — gộp `yeu-cau-sua` vào `tra-ve-cbo`.** Hai mã cũ cùng `den:'can-sua'`, cùng
+   `datLenhSua(...,'can-bo',...)`, khác đúng `tu` và `canNoiDung` — hai nút cho một việc. Mã sống sót lấy
+   `tu` là **HỢP** của hai bên và `canNoiDung: true`. 029 phải chạy đúng thứ tự **`DROP CONSTRAINT` →
+   `UPDATE` → `ADD CONSTRAINT`**: `UPDATE` đứng SAU `DROP` vì CHECK cũ không biết `tp-phe-duyet` (đảo
+   lại là Postgres chặn ngay câu UPDATE bằng chính cái ràng buộc chưa bị xoá — **đã nổ thật trên UAT
+   ngày 11/09/2026**), và đứng TRƯỚC `ADD` vì `ADD` soi lại mọi dòng nên một dòng `yeu-cau-sua` còn sót
+   là chết `23514`. Khuôn 015/020/025 cũng `DROP` trước `ADD`, chỉ là chúng nới danh sách chứ không
+   đổi tên giá trị nào.
+7. **R4 + R4' + R4'' — tỷ lệ đi qua `approval_changes`.** Module mới `approvals/tyLe.js` (346 dòng):
+   `proposeTyLe` **không đổi giá trị**, chỉ ghi MỘT dòng đề nghị `change_kind='ty-le'` và trả
+   `{pending:true, value: giaTriCu, nguoiNhan}` — đúng khuôn `proposeGuiBld` của 026. `decideTyLe` kiểm
+   lại quyền **SỐNG** rồi mới áp, qua đúng ba hàm chia đang có (`updateFileWeights` cho FILE ·
+   `canLaiTyLeWork` cho đầu mục · `updateChildWeights` cho cấp 3 có cha) — **không phát minh luật chia
+   mới**. `pendingTyLe` gộp vào **cùng** `GET /approvals/pending`, không mở hàng chờ thứ ba.
+   Người nhận theo `nguoiNhanTyLe`: tỷ lệ **file** và tỷ lệ **nhiệm vụ cấp 3** → **ĐÚNG 1** BLĐKS cấp 3
+   (có lùi về phần tử đầu của cấp 2 theo Q12); tỷ lệ **công việc con** → tất cả BLĐKS cấp 2.
+   **KHÔNG hạ cây về `Chờ duyệt`** nên `v_countable_items` không mất số.
+8. **ĐIỂM 12 — siết `dungNguoiDuyetFile` theo BLĐKS cấp 3, KỂ CẢ khi tích TẮT**
+   (`taskFiles/service.js:764`). Bản cũ chỉ siết khi `gui_bld_phe_duyet` BẬT và chỉ siết vai Phó Giám đốc.
+   Nay soi `supervisorFile(item)` = `supervisor_hieu_luc ?? supervisor_ids[0] ?? null` (dòng 747) cho
+   **cả Phó Giám đốc lẫn admin**, không phụ thuộc cái tích — cùng luật với R1(a) bên trục duyệt cây.
+   Hai vai TP/PP không đi qua đây (họ bị `laLanhDaoPhuTrachNhiemVu` soi theo `leader_ids`).
+
+**029 KHÔNG PHẢI REBUILD VIEW**: không có view nào dựng trên `task_files` (chỉ 024 chạm bảng này và
+không tạo view) nên thêm cột ở đây **không** nổ `countable-views.test.js` — khác hẳn 026/028. Nhưng nó
+**ĐỔI hai index unique của 023**: `approval_changes_pending_work`/`_item` nay phải theo `change_kind`
+(không có thì một đề nghị đổi tích đang treo chặn luôn đề nghị đổi tỷ lệ của cùng nhiệm vụ và ngược lại),
+và `_item` thêm `COALESCE(file_id,0)` để đề nghị tỷ lệ của **TỪNG NHÓM FILE** không đè nhau.
+Cột mới `approval_changes.file_id` là `ON DELETE CASCADE`.
+
+**SÁU CÁCH DIỄN GIẢI — NÓI VỚI NGƯỜI DÙNG KHI NGHIỆM THU, đừng để họ tự phát hiện:**
+- **(a) Bỏ hẳn `VAI_TU_DUYET` là đi XA hơn chữ của R6.** R6 chỉ nói «`apTuDong` không bao giờ trả
+  `da-duyet`», nhưng giữ `VAI_TU_DUYET` bên trục CÂY thì vẫn còn một cửa tự duyệt, trái tiêu đề
+  «**BỎ quyền tự duyệt**» và trái Q3. Việc này **đảo quyết định TC-APR-03/04** cũ. Lý do ghi ở
+  `approvals/rules.js:14-24`. **Đường gỡ tắc vẫn còn**: ghi đè `create = ✓` **VẪN** trả `Đã duyệt` —
+  đó là admin chủ động đặt luật cho một VAI ở Bảng phân quyền, không phải một vai tự duyệt việc của mình.
+- **(b) Q3 + `coSuaDuocKhiChoDuyet` ⇒ một dòng `Chờ duyệt` chỉ người tạo, `admin` hoặc Phó Giám đốc
+  sửa/xoá được.** Trước đây cấp 3 tự `Đã duyệt` nên không ai gặp; nay cấp 3 cũng `Chờ duyệt` nên TP/PP
+  sẽ thấy dòng mình vừa thêm **không sửa được nữa** cho tới khi có người duyệt. Đó là hệ quả đúng của Q3,
+  không phải lỗi.
+- **(c) KHÔNG tồn tại «tỷ lệ công việc cha»**: bảng `works` **không có cột `ty_le`**. Câu «tỷ lệ công
+  việc cha → tất cả BLĐKS cấp 1» trong phần gộp R4+R4'+R4'' chỉ áp cho **đầu mục** (cấp 2, hoặc cấp 3
+  không cha — `laDauMuc` trong `workItems/tyLe.js`).
+- **(d) `tra-ve-cbo` NAY BẮT BUỘC lý do ≥ 10 ký tự.** Trước đây nhánh `yeu-cau-sua` mới bắt, nhánh
+  `tra-ve-cbo` thì không; gộp lại là bắt cả hai. Trang đang mở từ trước khi tải bản mới mà bấm nút cũ
+  sẽ nhận **400** — Ctrl+F5 là hết.
+- **(e) `decideTyLe` có CHỐT CHỐNG CŨ**: nếu giá trị tỷ lệ hiện tại đã khác giá trị lúc lập đề nghị thì
+  ném `conflict('Tỷ lệ hiện tại đã thay đổi — hãy từ chối và lập đề nghị mới')` (**409**). Đề nghị treo
+  lâu rồi mới ký là có thể gặp; đó là chủ ý, không phải hỏng.
+- **(f) `duocSuaTyLe` CỐ Ý không bị chặn bởi `cayDaDuyet`.** Sửa tỷ lệ lúc nào cũng **lập đề nghị**
+  chứ không đổi thẳng, nên cổng thật nằm ở người ký, không nằm ở trạng thái cây. Chặn thêm ở đây là làm
+  mất luôn khả năng xin sửa tỷ lệ của cây đang `Chờ duyệt`.
+
+**SỰ CỐ PRETTIER NGÀY 11/09/2026 — ĐỌC TRƯỚC KHI CHẠM VÀO `web/`.** Trong đợt này `npx prettier
+--write` đã bị chạy nhầm lên **`web/assets/js/app.js` và `web/index.html`**, xoá sạch format gốc
+(app.js phình 10392 → 12484 dòng, `git diff --stat` cho `web/` lên 12484/4355). **`web/assets/*` và
+`web/index.html` CỐ Ý KHÔNG nằm trong phạm vi prettier** — `server/package.json` chỉ format
+`"src/**/*.js"` và `"tests/**/*.js"`; `server/.prettierrc.json` **không với tới** `web/`
+(`prettier --find-config-path ../web/assets/js/app.js` báo *Can not find configure file*) nên prettier
+dùng **mặc định thuần** (printWidth 80). HEAD của `app.js` **không phải** output prettier ở bất kỳ độ
+rộng nào (dòng dài nhất 9523, p99 283), và `getPreferredQuote` của prettier **có mất mát** — nó đảo
+`"…\"px-3\"…"` thành `'…"px-3"…'` — nên một lần reformat **KHÔNG đảo ngược được bằng máy**.
+**Cách đã cứu (áp dụng lại được):** `~/.claude/file-history/<sessionId>/<hash>@vN` là kho rewind của
+Claude Code, chứa **ảnh byte THẬT** của file qua mỗi lần Edit/Write (`d823ce53bea21388` = `app.js`,
+`590ee35bcefeae38` = `index.html`); **lệnh Bash ghi file KHÔNG tạo ảnh chụp**. Lấy ảnh `@vN` ngay trước
+lệnh gây hỏng làm nền, phát lại các sửa sau mốc đó theo đúng thứ tự thời gian trích từ
+`~/.claude/projects/<…>/<sessionId>.jsonl`, rồi **kiểm chứng bằng ORACLE**: `prettier --no-config
+--print-width 80` trên bản dựng lại phải **trùng TỪNG BYTE** với bản đã hỏng — prettier là hàm tất định
+của (AST, options) và giữ chú thích, nên trùng nhau là chứng minh nội dung giống hệt. Kết quả:
+21 sửa áp dụng, **0 thất bại**, `git diff --stat` của `web/` về **2421 dòng** cho `app.js` và **115
+dòng** cho `index.html`. **Đừng lặp lại**: chỉ `prettier --write` file dưới `server/src` và `server/tests`.
+
+**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Người dùng test PC **mục 9b.23 (ĐỢT B)** — **nay đã có
+thêm MỤC J (bước 36→45) của bản sửa Q6/Q11, ĐỌC MỤC J TRƯỚC KHI BẤM LẠI** — và giữ xanh
+**9b.15 → 9b.22**. Chỉ khi nghe **OK RIÊNG ĐỢT NÀY** mới commit explicit paths, push `vps/sua-loi-vat`,
+deploy theo `deploy/runbook.md` (**sao lưu trước**; VPS đang ở `pgmigrations=021` ⇒ cần **022 → 029**).
+**Lưu ý khi commit — các file UNTRACKED (`??`) phải `git add` đích danh, vẫn KHÔNG `git add .`:**
+migration `022`–`029`; `server/src/modules/approvals/{changes,tyLe}.js`;
+`server/src/modules/systemSettings/`; `server/src/modules/taskFiles/weights.js`;
+`server/src/modules/workItems/{canTyLe,childWeights}.js`; `server/tests/helpers/{results,uiPermissions}.js`;
+`server/tests/integration/{migration-replay,phase8b-permissions,phase8b-review,phase8c-files,phase8c-gui-bld,phase8d-dot-b,result-completion}.test.js`;
+`server/tests/unit/{file-progress,nhan-kem-vai,phase8b-permissions-ui,phase8b-review-ui,phase8c-ui,result-completion-ui,tasks-results-design}.test.js`;
+`web/assets/js/phase8b-review.js`; `docs/BAO-CAO-V1-V8.md`. **OK ngày 2026-09-08 của bản bỏ vai cũ,
+OK của đợt 3/4/5, và OK của ĐỢT A đều KHÔNG áp dụng cho đợt này.**
+
+## Snapshot trước đợt B — ĐỢT A: «Ban lãnh đạo kiểm soát» BA CẤP thành MẢNG + gửi đúng người (11/09/2026)
+
+**CÓ MIGRATION MỚI `028_supervisor_ids.sql` và CÓ đổi mã máy chủ** ⇒ test PC **BẮT BUỘC chạy lại
+`chay-test.bat /giu /f`** (script tự `npm run migrate:up` rồi mới bật Node). **Ctrl+F5 là KHÔNG ĐỦ.**
+**Full test 1987/1987 · 111 file · exit 0**; `lint` exit 0; `format:check` còn đúng 2 nợ cũ
+(`workItems/tyLe.js`, `stats-parity.test.js`) — đã `prettier --write` **chỉ 11 file** thuộc phạm vi rồi
+**chạy lại full suite lần hai**, vẫn 1987/1987; `node --check` sạch ba file JS; `tools/dem-xss.mjs` đo
+**100/964**; `local-assets-check --live` **exit 0**; buster + banner **`20260911-02`**; pin XSS
+**99 → 100 sink / 961 → 964 nội suy**, **KHÔNG** CAN-THOAT mới.
+
+**ĐÂY LÀ ĐỢT ĐẦU TIÊN TRONG LOẠT SOÁT LẠI LOGIC PHÊ DUYỆT.** Bảng 22 quyết định (Q1–Q13 + R1–R7 +
+R3/R4'/R4'') ở **mục «VIỆC KẾ TIẾP NGƯỜI DÙNG ĐÃ GIAO»** bên dưới vẫn là **nguồn sự thật**; đợt này chỉ
+làm phần **ĐỢT A** = **D2 + D3 + R1(a) + R2 + R7 + Q12**. **ĐỢT B** (Q1–Q4, R4/R4'/R4'', R5, R6, thay
+`trinh-lanh-dao` bằng «TP/PP phê duyệt», gộp `yeu-cau-sua` vào `tra-ve-cbo`, siết `dungNguoiDuyetFile`)
+**ĐÃ LÀM XONG NGAY SAU ĐÓ** — đọc khối **«Ưu tiên hiện tại — ĐỢT B»** ở đầu file. Thiết kế đầy đủ +
+**sáu bẫy** ở `docs/KE-HOACH-DUYET-CAY.md` **mục 10**; test tay ở
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md` **mục 9b.22 (28 bước)**.
+
+**R1(a) LÀ THAY ĐỔI HÀNH VI LỚN NHẤT — PHẢI NÓI VỚI NGƯỜI DÙNG TRƯỚC KHI HỌ TEST.** admin **MẤT** quyền
+duyệt mọi cây: chỉ người **có tên trong `supervisor_ids`** của mục đó mới duyệt được, **không chừa admin
+làm dự phòng** (403 `NOT_APPROVER`). **Đường gỡ tắc đã chốt và đã có test khoá**: admin vẫn **SỬA** được
+`supervisor_ids` (quyền `update`, **không phải** `approve`) để thay người, rồi người mới duyệt — admin
+**không tự duyệt thay**. **Hệ quả có chủ ý** (TC-APR-22 đã đảo 200→403): ghi đè `task:approve = cho-phep`
+cho TP/PP **vẫn không cho duyệt**, vì ghi đè cấp **HÀNH ĐỘNG** còn `supervisor_ids` là **PHẠM VI** ⇒
+TP/PP **không bao giờ** duyệt được cây. **Danh sách RỖNG thì KHÔNG bắt cổng** — van an toàn **một chiều**
+cho dòng cũ đang `Chờ duyệt` mà bước 6 của migration không điền được ai; `submit` mới là chỗ làm cho dòng
+rỗng **không sinh ra được nữa** (`NO_APPROVER_ASSIGNED`, 409).
+
+**MỘT NGOẠI LỆ CÓ CHỦ Ý, ĐỪNG «SỬA» LẠI.** `decideGuiBld` (đề nghị đổi tích «Gửi BLĐ phê duyệt»,
+`change_kind='gui-bld'`) là **trục KHÁC** với duyệt cây, luật riêng từ 023 là «admin **hoặc** đúng PGĐ
+đang kiểm soát, và **không phải** người đề nghị», và `proposeGuiBld` **chủ động** báo tới **MỌI admin**
+khi chính supervisor tự đề nghị cho mình. Nếu để `NOT_APPROVER` gạt admin ở đây thì đề nghị đó **không ai
+xử lý được**. Nên `approvals/changes.js` có helper **`coTheQuyet(user,row)`** chấp admin **chỉ khi** lý do
+từ chối đúng là `NOT_APPROVER`. TC-V7-10 + TC-V7-15 canh chỗ này. **Bài học tổng quát ở §13.5 bẫy (5):
+trước khi siết một hàm quyền dùng chung (`can()`), `grep` MỌI nơi gọi nó và hỏi từng nơi «chỗ này hỏi câu
+gì»** — nhiều chỗ mượn `can()` làm **điều kiện phụ** chứ không phải **quyết định cuối**.
+
+**BỐN ĐIỂM KỸ THUẬT DỄ LÀM SAI KHI SỬA TIẾP:**
+1. **`sqlSupervisorHieuLuc(alias)`** (xuất từ `workItems/repo.js`) là công thức **DUY NHẤT** của
+   «MỘT người quyết định kết quả của dòng này» = `COALESCE(supervisor_ids[1], parent.supervisor_ids[1])`.
+   Nó được dùng ở **bốn nơi**: `findById` · `findByRefWithWork` · `taskFiles/repo.js` (hàng chờ PGĐ) ·
+   `approvals/changes.js` (`pendingGuiBld`). **Bốn nơi phải khớp nhau** — lệch là tích bật mà file chạy
+   tới một người, còn hàng chờ của người khác thì không thấy gì. Đợt này diệt chỗ chép tay thứ 4; đừng
+   chép lại thành năm.
+2. **`nguonBanKiemSoat({level,parentRow,workRow})` trả `Set|null`**, và **tập nguồn RỖNG ⇒ `null`**
+   (không giới hạn) **chứ không phải tập rỗng**: cha chưa kịp phân công mà bắt con chọn trong «không ai»
+   là khoá cứng cả cây, không ai gỡ được. Hàm là **hàm thuần** (không đọc CSDL, không `async`) — khác
+   `validTaskLeaders` của `leader_ids` ở đúng chỗ đó, và eslint `require-await` đòi như vậy.
+3. **Form nhiệm vụ có HAI ô cùng `name="supervisorIds"`** (select `#task-supervisor-select` cho cấp 3 +
+   nhóm checkbox `#task-supervisors-box` cho cấp 2). Chỉ **MỘT** ô được gửi: ô không dùng phải `disabled`
+   (select) hoặc **không có `name`** (hidden input). Cả hai cùng gửi thì `FormData` chỉ giữ **giá trị cuối**
+   — của ô người dùng **KHÔNG nhìn thấy**. Đúng cái bẫy cặp `leaderIds` cạnh bên đã xử lý từ 005.
+4. **`CREATE OR REPLACE VIEW` chỉ cho THÊM cột Ở CUỐI**, và `ADD COLUMN` nhét cột mới xuống **cuối thứ tự
+   vật lý**. Hai điều đó hợp lại làm nổ `countable-views.test.js` — ca giả lập «view thời 019» bằng
+   **danh sách tên cột cần loại** nay có bốn cột nằm **giữa** danh sách ⇒ `cannot change name of view
+   column "supervisor_ids" to "ty_le"`. Đã sửa bằng cách **cắt tiền tố** tại cột đầu tiên sinh ra sau mốc.
+   **Migration nào vừa thêm vừa bớt cột: viết UP xong phải đọc lại DOWN và ngược lại** — 028 đã viết đúng
+   thứ tự `DROP VIEW` ở DOWN mà **quên ở UP** và chết ngay lần chạy đầu.
+
+**HÌNH DẠNG PHẢN HỒI RPC KHÔNG ĐỔI** (ràng buộc người dùng đặt ra): `[COL.P_SUP]`/`[COL.T_SUP]` vẫn là
+**một chuỗi tên nối dấu phẩy** (đúng cái `tenTrongDanhSach` của `project-details.js` đang đợi),
+`supervisorId` **vẫn còn** = phần tử đầu, và **THÊM** `supervisorIds` — thuần tuý bổ sung theo tiền lệ
+`leaderIds`. Chiều **gửi lên**: `supervisorIdsFromLegacy` nhận **cả** `supervisorIds` (client mới) **lẫn**
+`supervisorId` (trang đang mở từ trước khi tải bản mới); web vẫn `delete data.supervisorId` song song với
+khoá mới. Nhận khoá cũ là **CHỐNG MẤT DỮ LIỆU**, không phải chiều client.
+
+**CHƯA NGHIỆM THU — CHƯA COMMIT/PUSH/DEPLOY.** Người dùng test PC **mục 9b.22 (28 bước A–I)** và giữ xanh
+**9b.15 → 9b.21** (các bước **8→12 của 9b.15** đã bị 9b.22 thay: form nhiệm vụ nay có ô Ban lãnh đạo ở
+**cả ba cấp**, nhãn đổi thành «Ban lãnh đạo kiểm soát», cấp 3 **được** chọn người riêng). Chỉ khi nghe
+**OK RIÊNG ĐỢT NÀY** mới commit explicit paths, push `vps/sua-loi-vat`, deploy theo `deploy/runbook.md`
+(**sao lưu trước**; VPS đang ở `pgmigrations=021` ⇒ cần **022 → 028**; **ĐỢT B nâng thành `022 → 029`**).
+**Lưu ý khi commit: migration
+022–028, `approvals/changes.js`, `systemSettings/`, `taskFiles/weights.js`, `workItems/childWeights.js` và
+nhiều file test đang ở trạng thái UNTRACKED (`??`)** — `git add` phải liệt kê đủ đường dẫn, vẫn **KHÔNG
+`git add .`**. **OK ngày 2026-09-08 của bản bỏ vai cũ KHÔNG áp dụng cho đợt này, và OK của đợt 3/4/5 cũng
+không.**
+
+## Snapshot trước đợt A — ĐỢT 5: «Kết quả làm được» về cột Nhiệm vụ, «Ghi ý kiến» thành popup, căn giữa (11/09/2026)
+
+**CHỈ CÓ GIAO DIỆN** (`app.js`, `app.css`, `index.html`) — **không đổi một dòng mã máy chủ nào**, không migration.
+**Full test 1984/1984 · 111 file · exit 0** (+5 test mới `TCKQ-47..51`); `lint` exit 0; `format:check` còn đúng
+2 nợ cũ (`workItems/tyLe.js`, `stats-parity.test.js`); buster + banner **`20260911-01`**;
+`local-assets-check --live` **exit 0**; pin XSS **98 → 99 sink / 957 → 961 nội suy**, **KHÔNG** CAN-THOAT mới
+(`TC-SEC-10..14` vẫn xanh, đúng 19 chỗ cũ).
+
+**SỬA MỘT LỖI ĐẶT TÊN CỦA ĐỢT 4.** Đợt 4 khai `tenDayDu = file.ten_ket_qua || file.ten_goc` rồi nhét vào cột có
+tiêu đề **«Tên file»** — mà `ten_ket_qua` là **TÊN KHAI** người dùng điền ở ô ＋ (migration 016), **không phải**
+tên file vật lý (`ten_ban_cuoi`). Người dùng báo đúng chỗ đó: *«hiện tên Kết quả làm được ở cùng cột với tên
+file»*. Nay tách đôi: **`tenKetQua` VỀ CỘT NHIỆM VỤ**, nằm **ngay cạnh icon `fa-file-lines`** trong cùng khung
+`.task-file-lui`; **`tenFileThat` (= `ten_ban_cuoi`) ở CỘT «Tên file»**, chưa nộp bản nào thì ghi «Chưa có bản».
+**Màu chữ theo TIẾN ĐỘ đi theo «Kết quả làm được»** (bốn bậc của đợt 4 giữ nguyên), cột «Tên file» chữ xám đen
+trung tính — tô cả hai chỗ là rối mắt.
+
+**Ô «GHI Ý KIẾN» THÀNH CHỮ MỞ POPUP** — `moYKienKetQua(maNhiemVu, fileId, banId)` mới, dựng theo khuôn
+`moNhatKyFileKetQua` của đợt 3. Dòng cha (1., 2., 3.) truyền `banId` **RỖNG** ⇒ popup in **TẤT CẢ** ý kiến
+(*«còn bản đầu 1. đấy sẽ xem tất cả»*). Dòng bản 1.1/1.2 truyền `b.id` ⇒ popup in **ĐÚNG ý kiến của bản đó**
+(*«popup xem ý kiến của bản đấy»*) và **CHỈ ĐỌC** — máy chủ chỉ cho ghi góp ý vào **BẢN MỚI NHẤT**
+(`guiYKien` POST theo `data-ban-cuoi`), để ô nhập trong popup của bản cũ là mời người dùng viết vào một chỗ
+rồi chữ chạy sang bản khác. **Ô nhập + nút «Gửi ý kiến» dời THEO popup của dòng cha**: tách
+`buildONhapYKien(n, ma)` ra khỏi `buildYKienPanel` để popup lắp đúng phần ô nhập; nút nay gọi
+`guiYKienTuPopup` — **gửi thành công thì ĐÓNG popup**, **ô còn chữ (thất bại) thì GIỮ** để không mất chữ vừa gõ
+(`guiYKien` không trả trạng thái, nhưng nó xoá ô nhập khi thành công ⇒ lấy đúng dấu hiệu đó). **Khung «Lịch sử»
+giữ nguyên**; khung `task-kq-yk-*` bị bỏ nên `batTatKetQua(id,'yk')` nay là phép không làm gì (đã ghi chú).
+
+**CĂN GIỮA**: tiêu đề **MỌI** cột của bảng «Kết quả» (kể cả «Hành động» — đợt 4 còn `text-right`);
+**«Người thực hiện»** ở cả dòng cha lẫn dòng bản; hai ô tỷ lệ/tiến độ của dòng bản; và **bảng luồng trong khung
+«Lịch sử»** cho nhất quán cùng trang. Class Tailwind `text-center` có thật trong bản vendor nhưng **vẫn ép thêm
+trong `app.css`** (`.bang-ket-qua thead th`, `.kq-o-nguoi`) — đúng bẫy đợt 4 về bản biên dịch sẵn.
+
+**MỘT THAY ĐỔI HÀNH VI PHẢI BIẾT TRƯỚC KHI TEST** (9b.21 bước 20): `xuLyVerdictFile` vẫn đọc
+`#task-y-kien-<id>` để lấy lý do verdict, mà ô đó nay chỉ tồn tại **trong popup**. Popup **đang mở** ⇒ verdict tự
+đọc như cũ; popup **đang đóng** ⇒ rơi xuống nhánh `prompt` hỏi lý do. Đây là **hành vi dự phòng có sẵn từ
+trước**, không phải lỗi mới — nhưng phải nói để người dùng khỏi tưởng hỏng.
+
+**BẢY BẪY ở §13.5** (mục «Bổ sung 11/09/2026 (đợt 5 …)»), đáng nhớ nhất: **flex item mặc định
+`min-width:auto` nên `text-overflow:ellipsis` KHÔNG BAO GIỜ CHẠY** — phải pin
+`.task-file-lui .task-file-name { min-width: 0 }` trong CSS **và trong test**, vì thiếu nó thì mọi test khác vẫn
+xanh trong khi bảng vỡ trên dữ liệu thật; và **đếm thẻ bằng regex trên chuỗi HTML là đếm sai**
+(`/<th[^>]*>/` bắt cả `<thead>`, lại cộng thêm 5 `<th>` của bảng luồng lồng trong khung «Lịch sử») — muốn đếm
+thì đưa vào DOM rồi `querySelectorAll('.bang-ket-qua > thead > tr > th')`, muốn soi nội dung một ô thì
+**giới hạn phạm vi bằng selector**, đừng soi cả chuỗi.
+
+**Test PC theo mục 9b.21 (22 bước A–E).** **KHÔNG cần khởi động lại Node** — đợt này chỉ có giao diện, tài sản
+đọc từ đĩa; chỉ cần **Ctrl+F5** lấy buster `20260911-01`. Giữ xanh lại **9b.15 → 9b.20**, trừ **bước 7/8/11/12
+của 9b.20** và **các bước 22 → 26** đã bị 9b.21 thay — mâu thuẫn thì làm theo 9b.21.
+**Cả sáu mục trước VẪN CHƯA có OK riêng. KHÔNG commit/push/deploy khi chưa nghe OK RIÊNG ĐỢT NÀY.**
+
+**CHẠY `npx vitest` TỪ `server/`, KHÔNG từ thư mục gốc.** Còn **ba worktree cũ của subagent** nằm ở
+`.claude/worktrees/agent-*/` (mỗi cái có cả bản sao `server/tests/`); chạy từ gốc là vitest quét cả ba bản sao
+đó và báo **4 FAIL giả** cho cùng một file. Ba worktree này **không đụng tới** — xoá chúng là thao tác git phá
+hoại, phải hỏi người dùng trước.
+
+## Snapshot trước đợt 5 — ĐỢT 4: mũi tên ▼/▲, cột «Tên file» riêng, màu theo tiến độ, gộp ý kiến (10/09/2026)
+
+**CHỈ CÓ GIAO DIỆN** (`app.js`, `app.css`, `index.html`) — **không đổi một dòng mã máy chủ nào**, không migration.
+**Full test 1979/1979 · 111 file · exit 0**; `lint` exit 0; `format:check` còn đúng 2 nợ cũ (`workItems/tyLe.js`,
+`stats-parity.test.js`); buster + banner **`20260910-12`**; `local-assets-check --live` **exit 0**;
+pin XSS **98 sink / 957 nội suy** (sink không đổi, **không** CAN-THOAT mới).
+
+Bảng nhiệm vụ **10 → 11 cột**: thêm cột RIÊNG **«Tên file»**; ô đầu của hàng file chỉ còn **dấu nối └ + icon**
+thụt vào nên hàng file **LÙI VỀ PHẢI** so với tên nhiệm vụ. **Dấu tích → nút mũi tên**: đang hiện file thì **▲**
+(bấm để ẨN), đang gập thì **▼** (bấm để MỞ RỘNG) — mũi tên chỉ **hành động kế tiếp**; vẫn là `<button
+aria-expanded>`, **không phải checkbox** (`TC-KQ-UI-03`). **«Người thực hiện» CĂN GIỮA** ở cả hai loại hàng.
+**Tên nhiệm vụ 15px, tên file 13px** — đúng «to hơn 02 cỡ chữ»; KHÔNG phóng `.task-ten-chinh` vì class đó còn
+dùng cho ô người thực hiện. **Màu chữ tên file theo TIẾN ĐỘ**: ≥100 xanh lá · 50–99 xanh dương · 20–49 cam ·
+<20 đỏ (hai mốc 100% và «dưới 20%» do người dùng nêu, hai bậc giữa tự chia và đã nói rõ ở 9b.20 bước 11).
+**Bốn thẻ thống kê** (Tổng số · Đã duyệt đủ · Chưa duyệt đủ · Quá hạn) **về MỘT DÒNG**: `index.html` để
+`grid-cols-2 md:grid-cols-4` nên **dưới 768px là 2 dòng**; nay thêm `id="tasks-the-tong-ke"` và ép
+`repeat(4, minmax(0,1fr))` trong `app.css` — `minmax(0,…)` chứ không phải `1fr` trần.
+
+**Popup nhật ký**: BỎ hai tiêu đề «Ai đăng ký kết quả này» / «Ai thực hiện», gộp thành bốn dòng đúng dạng người
+dùng viết; «Lãnh đạo phòng phụ trách:» **giữ nhãn kể cả khi trống**. **SỬA MỘT LỖI THẬT CỦA ĐỢT 3**: popup đọc
+`nhom.ban` trong khi `taskFiles/service.js doc()` trả **`bans`** ⇒ chip «Số bản» luôn 0 và khối 3 luôn báo «Chưa
+có bản nào được tải lên»; `TC-TASK-DESIGN-08` **mock theo cùng cái tên sai** nên xanh trong khi tính năng chết.
+
+**«GHI Ý KIẾN» GỘP HAI NGUỒN** — lỗi có từ Vòng 14: `verdict()` chỉ gọi `repo.themLuong` (`task_file_flow`),
+**KHÔNG** gọi `repo.themGopY` (`task_file_comments`), nên lý do người duyệt gõ khi «Yêu cầu sửa» / «Trả về» /
+«Từ chối» **không bao giờ** hiện ở cột «Ghi ý kiến» — chỉ nằm trong bảng «Lịch sử» phải bấm mới ra. Nay
+`danhSachYKien()` gộp `gopY` với mọi dòng luồng có `noi_dung`, **TRỪ `gom-y`** (hành động đó ghi CẢ HAI bảng,
+lấy cả là in một câu hai lần), sắp CŨ → MỚI, mỗi ý kiến mang **nhãn hành động**. Dùng chung ở BỐN nơi: cột
+«Ghi ý kiến» của dòng cha (**nay HIỆN NGAY nội dung**), `buildYKienPanel`, dòng bản 1.1/1.2, khối 3 của popup.
+**Đây là sửa HIỂN THỊ, không sửa chỗ ghi** — lý do verdict đã lưu bền trong `task_file_flow`; ghi thêm vào
+`task_file_comments` chỉ nhân đôi dữ liệu và làm lệch mọi phép đếm góp ý. Nút «Xem ý kiến (N)» vẫn còn
+(TCKQ-03b) nhưng **N nay đếm theo danh sách gộp** nên có thể lớn hơn trước — đúng, không phải đếm sai.
+
+**Bảng «Kết quả» trong modal cân đối lại**: thêm `<colgroup>` (`COT_BANG_KET_QUA`) + `table-layout:fixed`.
+Trước đó bảng không có colgroup nên trình duyệt chia theo NỘI DUNG — hai cột chỉ chứa MỘT CON SỐ phình ra bằng
+cột chữ chỉ vì TIÊU ĐỀ dài. Nay thời gian 9 · định dạng 6 · file 13 · **tỷ lệ 8** · **tiến độ 6** · người 8 ·
+ý kiến 14 · tình trạng 11 · hành động 6 (tổng 81%) ⇒ cột tên (auto) còn 19%. Tiêu đề dài **xuống dòng trong ô**;
+ô tỷ lệ **xếp dọc** input + nút «Lưu tỷ lệ». Vẫn **MƯỜI** cột nên mọi `colspan="10"` giữ nguyên.
+
+**Test PC theo mục 9b.20 (28 bước A–G).** **KHÔNG cần khởi động lại Node** nếu đã khởi động lại theo 9b.19 —
+đợt này chỉ có giao diện, tài sản đọc từ đĩa; chỉ cần **Ctrl+F5** lấy buster `20260910-12`. Nếu **chưa** khởi
+động lại từ đợt 3 thì vẫn phải đóng cửa sổ «QLCV TEST - Node» rồi chạy `chay-test.bat /giu /f`.
+Giữ xanh lại **9b.15 → 9b.19**; ba điểm của 9b.19 đã bị 9b.20 thay (10→11 cột, dấu tích→mũi tên, khối 1/2
+của popup) — mâu thuẫn thì làm theo 9b.20. **Cả năm mục đều CHƯA có OK riêng. KHÔNG commit/push/deploy khi
+chưa nghe OK RIÊNG ĐỢT NÀY.**
+
+## VIỆC KẾ TIẾP NGƯỜI DÙNG ĐÃ GIAO — SOÁT LẠI LOGIC PHÊ DUYỆT: ĐÃ HỎI, ĐÃ CHỐT (11/09/2026)
+
+> **TRẠNG THÁI 11/09/2026: ĐỢT A ĐÃ XONG MÃ TRÊN PC — CHƯA NGHIỆM THU, CHƯA COMMIT.** Full suite
+> **1987/1987 · 111 file · exit 0**, migration `028` chạy sạch, buster `20260911-02`, pin XSS **100/964**.
+> Chi tiết ở **mục «Ưu tiên hiện tại — ĐỢT A»** trên cùng, thiết kế + sáu bẫy ở
+> `docs/KE-HOACH-DUYET-CAY.md` **mục 10**, test tay ở `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **mục 9b.22**.
+> **Bảng quyết định bên dưới GIỮ NGUYÊN GIÁ TRỊ** — nó là nguồn sự thật cho **cả ĐỢT B**, đừng sửa.
+> Hai chỗ của bảng nay đã thành mã thật và cần đọc kèm chú thích: **R1(a)** có **một ngoại lệ có chủ ý**
+> (trục `gui-bld`, xem mục trên cùng), và **«Hệ quả của R1(a)»** bên dưới đã xảy ra đúng như dự đoán —
+> đường gỡ tắc (admin **sửa** `supervisor_ids` chứ không duyệt thay) **đã có test khoá** trong
+> `approvals-api.test.js`.
+
+Người dùng (10/09/2026, sau đợt 4): «Xem lại logic phê duyệt file kết quả, tìm hiểu hết về nó, tôi đang thấy
+có cái bất hợp lý đấy / xem cái ko logic đề xuất tôi để sửa», rồi mô tả **logic đúng** muốn có:
+
+- TP/PP đăng ký **công việc cha → công việc con → nhiệm vụ → file kết quả trong nhiệm vụ**.
+- Cha đang **Lưu tạm** thì sửa thoải mái. **«Gửi đi phê duyệt» công việc cha là duyệt TRỌN GÓI** cả con,
+  nhiệm vụ và file kết quả bên trong — **không gửi phê duyệt file lẻ**.
+- Người duyệt công việc cha **có thể sửa lại cả file kết quả**.
+- **Gửi công việc cha lần đầu thì KHÔNG được up file kết quả lên.**
+- Nhiệm vụ do **lãnh đạo phòng tự làm** ⇒ file kết quả **bắt buộc lên Giám đốc / Phó Giám đốc** (theo lựa chọn
+  phê duyệt của công việc).
+- Nhiệm vụ do **cán bộ làm** ⇒ tuỳ tích **«Gửi BLĐ phê duyệt»** lúc tạo: cán bộ → **TP/PP phụ trách** phê duyệt
+  (được sửa, được trả lại) → TP/PP duyệt xong thì **lên Phó Giám đốc** → PGĐ sửa thì **đẩy lại TP/PP**, và
+  TP/PP lúc đó chọn **tự sửa rồi gửi lại phê duyệt** hoặc **đẩy về cán bộ** để cán bộ sửa rồi lặp lại quy trình.
+- **Đồng bộ «Ban lãnh đạo kiểm soát» ở CẢ BA CẤP**: cha chọn **NHIỀU** người; con chọn **nhiều nhưng chỉ trong
+  tập đã chọn ở cha**; nhiệm vụ chọn **ĐÚNG MỘT trong tập của con**.
+- Gửi phê duyệt **FILE** (kèm **tỷ lệ công việc của file**) ở cấp nhiệm vụ ⇒ **chỉ gửi MỘT người** đã chọn của
+  nhiệm vụ đó. Sửa **công việc con / công việc cha** (kèm **tỷ lệ của con và của nhiệm vụ**) ⇒ gửi **TẤT CẢ**
+  người đã chọn ở cấp tương ứng.
+
+**ĐÃ ĐỌC HẾT luồng và BÁO CÁO 13 điểm bất hợp lý** (10/09/2026). GỐC RỄ: **hai trục duyệt độc lập, hoàn toàn
+không biết nhau** — `grep approval_status` trong `server/src/modules/taskFiles/` ra **0 kết quả**, và
+`grep task_files` trong `server/src/modules/approvals/` cũng ra **0 kết quả**. Người dùng đã trả lời **13 câu
+Q1–Q13** rồi **6 câu R1–R7**. Dưới đây là **BẢN CHỐT** — mọi thiết kế và mọi dòng mã phải bám bảng này.
+
+### Bảng quyết định đã chốt
+
+| # | Quyết định |
+|---|---|
+| Q1 | Lần gửi ĐẦU chỉ có **KHAI BÁO** (tên kết quả · định dạng · tỷ lệ) đi theo cây. **File thật** đi chuỗi riêng **SAU KHI** cây `Đã duyệt` |
+| Q2 | **CẤM HẲN nút tải file** khi cây chưa duyệt — chỉ cho khai báo |
+| Q3 | `Nháp` = sửa thoải mái **MỌI thứ** (thêm/xóa nhiệm vụ, đổi người thực hiện, đổi tỷ lệ). **Nháp là nháp TẤT CẢ** — cấp 3 không còn sinh ra `Đã duyệt` riêng lẻ |
+| Q4 | Người duyệt cây chỉ sửa **KHAI BÁO**. OnlyOffice chỉ ở chuỗi sau khi đã có bản tải lên |
+| Q5 | TP/PP tự làm ⇒ lên **THẲNG** BLĐKS của nhiệm vụ, bỏ qua bước TP/PP duyệt (**giữ nguyên** `canTraLanhDao` hiện nay) |
+| Q6 | Cấp nhiệm vụ có ô chọn **ĐÚNG 1** BLĐKS, lấy trong tập BLĐKS của **công việc con**. Tích BẬT → cán bộ → TP/PP → PGĐ. Tích TẮT → **TP/PP được chốt luôn** (`hoan-thanh`) |
+| Q7 | **MỘT người duyệt là đủ** ở MỌI cấp, kể cả khi thông báo gửi cho tất cả |
+| Q8 | **KHÔNG thêm vai mới.** `admin` = Giám đốc. CHECK `users_role_valid` giữ đúng 5 vai |
+| Q9 | Sửa cây ĐÃ duyệt: **GIỮ NGUYÊN** cơ chế ghi đè `update = ⏳` của admin (`phaiChoDuyetKhiSua`), không bắt buộc luôn luôn |
+| Q10 | Sửa **tỷ lệ** CÓ phải gửi duyệt |
+| Q11 | **GIỮ** `hoan-thanh` cho nhiệm vụ **không** bật tích |
+| Q12 | Nhiệm vụ cấp 3 chưa có BLĐKS riêng ⇒ lấy **người đầu tiên của cấp 2** |
+| Q13 | **TÁCH 2 ĐỢT.** A = D2+D3 (BLĐKS 3 cấp + gửi đúng người). B = D1+D4+D5 (gộp trục, bỏ tự duyệt, gộp verdict) |
+| R1 | **(a) BÓ CHẶT** — chỉ người TRONG `supervisor_ids` mới duyệt được, **KHÔNG chừa admin làm dự phòng**; và **BẮT BUỘC phải chọn `supervisor_ids` thì mới được gửi đi duyệt** |
+| R2 | Migration **TỰ ĐỘNG ĐIỀN** từ dữ liệu đang có, không để trống |
+| R4 | **Tỷ lệ của FILE đi theo PHIẾU DUYỆT CÂY** (không theo phiếu duyệt file) — ngược với đề bài gốc, người dùng đã chốt lại |
+| R5 | Nhiệm vụ thêm SAU vào cây đã duyệt ⇒ **`Chờ duyệt` MỘT MÌNH NÓ**, duyệt riêng |
+| R6 | **BỎ quyền tự duyệt** của admin: `apTuDong` không bao giờ trả `da-duyet`. `file:create = ✓` chỉ còn nghĩa «được phép khai/nộp» |
+| R7 | **THÊM thông báo** khi sửa cây bị hạ về `Chờ duyệt` — gửi tới `supervisor_ids` cấp tương ứng |
+
+### Hai đề xuất của Claude BỊ GẠT
+
+- **D4 phần «bỏ hẳn `hoan-thanh`»** — Q11 giữ lại cho nhiệm vụ không bật tích.
+- **D6 phần «luôn luôn duyệt lại khi sửa cây»** — Q9 giữ cơ chế ghi đè `update = ⏳`.
+
+### Ba câu hỏi nốt — ĐÃ TRẢ LỜI 11/09/2026
+
+| # | Quyết định |
+|---|---|
+| R3 | **LÀM ĐỢT A NGAY, SONG SONG** — migration 028 chồng lên 022–027 chưa commit; buổi test PC sẽ gộp 9b.15 → 9b.20 + đợt A. Chấp nhận khó khoanh vùng lỗi hơn để đổi lấy tốc độ |
+| R4' | Sửa **tỷ lệ của FILE** ⇒ gửi **ĐÚNG 1 BLĐKS của NHIỆM VỤ (cấp 3)** chứa file đó — khớp đề bài gốc, không phải cấp 2 hay cấp 1 |
+| R4'' | Cơ chế: **`approval_changes`** — ghi một dòng đề nghị, **giá trị tỷ lệ CŨ vẫn giữ nguyên cho tới khi được duyệt**, đúng khuôn `proposeGuiBld` đang áp cho cái tích. **KHÔNG hạ cây về `Chờ duyệt`** nên `v_countable_items` không mất số |
+
+⇒ Gộp R4 + R4' + R4'': **mọi sửa tỷ lệ (file · nhiệm vụ · công việc con · công việc cha) đều đi qua
+`approval_changes`**, khác nhau ở **người nhận**: tỷ lệ **file** và tỷ lệ **nhiệm vụ** → 1 BLĐKS cấp 3; tỷ lệ
+**công việc con** → tất cả BLĐKS cấp 2; tỷ lệ **công việc cha** → tất cả BLĐKS cấp 1. Theo Q7 thì **một người
+đồng ý là đủ**.
+
+### PHẠM VI HAI ĐỢT (đã tách theo Q13 + R3)
+
+**ĐỢT A — «BLĐKS 3 cấp + gửi đúng người»** (D2 + D3) — ✅ **ĐÃ XONG MÃ 11/09/2026, CHƯA NGHIỆM THU**:
+`supervisor_id` → **`supervisor_ids bigint[]`** ở `works` và `work_items`; cấp 2 ⊆ cấp 1, cấp 3 **đúng 1** ⊆ cấp 2
+(nhân bản khuôn `validTaskLeaders` / `assertTaskLeader` / CHECK `task_leader_single`); migration **028** tự điền
+theo 6 bước ở trên; `submit` **bắt buộc** `supervisor_ids` khác rỗng (R1a); `approve` **chỉ** người trong
+`supervisor_ids` (R1a, bỏ `admin` khỏi `VAI_TU_DUYET` cho việc duyệt cây); người nhận thông báo duyệt cây =
+`supervisor_ids` cấp tương ứng thay vì mọi PGĐ của phòng (D3); **thêm thông báo** khi sửa cây bị hạ về
+`Chờ duyệt` (R7); viết lại các test `TC-APR-*` giả định admin duyệt được.
+
+> **MỘT CHỖ LÀM KHÁC CÂU CHỮ Ở TRÊN — CÓ LÝ DO, ĐỪNG «SỬA» LẠI.** Câu «bỏ `admin` khỏi `VAI_TU_DUYET`
+> cho việc duyệt cây» được ghi lúc **đoán** nơi quyền duyệt của admin nằm. Đọc mã thật thì
+> **`VAI_TU_DUYET` (`approvals/rules.js:26`) KHÔNG phải cổng duyệt**: nó chỉ được dùng **đúng một lần** ở
+> `rules.js:51` bên trong **`trangThaiDuyetKhiTao`** — quyết định dòng **MỚI TẠO** sinh ra ở `Đã duyệt` hay
+> `Chờ duyệt`. Quyền duyệt mọi cây của admin thật ra nằm ở **`PERMISSIONS.admin`** cộng với **`inScope`
+> luôn `return true` cho admin**, cả hai được hỏi qua **`can()`**.
+> ⇒ Bỏ admin khỏi `VAI_TU_DUYET` **sẽ không** chặn admin duyệt; nó sẽ **tắt tự duyệt lúc tạo** — tức là
+> làm hộ **R6**, mà R6 thuộc **ĐỢT B**. Nên ĐỢT A đặt cổng ở **`can()`** (một điều kiện kiểu **phạm vi**,
+> đứng **sau** nhánh `create` và **trước** `inScope`), đạt đúng ý R1(a) mà không chạm R6, và mua thêm ba
+> thứ: áp **đều** cho mọi vai · **ủy quyền vẫn chạy** · test ma trận 120 phép sinh tự động không phải sửa.
+> **`VAI_TU_DUYET` GIỮ NGUYÊN.** Chi tiết ở `docs/KE-HOACH-DUYET-CAY.md` mục 10.2 + 10.4 bẫy (4).
+
+**ĐỢT B — «gộp hai trục»** (D1 + D4 + D5 + D6, làm SAU khi A xanh):
+`Nháp` là nháp tất cả, cấp 3 không còn `Đã duyệt` riêng lẻ (Q3); nhiệm vụ thêm sau vào cây đã duyệt =
+`Chờ duyệt` một mình (R5); **cấm hẳn nút tải file** khi cây chưa duyệt, chỉ cho khai báo tên · định dạng · tỷ lệ
+(Q1 + Q2 + Q4); **bỏ tự duyệt** — `apTuDong` không bao giờ trả `da-duyet` (R6); tỷ lệ qua `approval_changes`
+(R4 + R4' + R4''); thay `trinh-lanh-dao` bằng hành động **«TP/PP phê duyệt»** có lưu mốc người duyệt và lúc
+duyệt (điểm bất hợp lý số 7); gộp `yeu-cau-sua` vào `tra-ve-cbo` (điểm số 9); siết `dungNguoiDuyetFile` theo
+BLĐKS cấp 3 kể cả khi tích TẮT (điểm số 12).
+### Hệ quả của R1(a) — PHẢI NHỚ khi code
+
+`admin` hiện duyệt được **MỌI** cây (`VAI_TU_DUYET = ['admin','Phó Giám đốc']`, `approvals/rules.js:24`, và
+`assertCan(user,'approve',target)` ở `approvals/service.js:156`). R1(a) **bỏ** quyền đó ⇒ nếu mọi người trong
+`supervisor_ids` bị khoá tài khoản hoặc chuyển đi thì cây **TẮC VĨNH VIỄN, không ai gỡ được**. Đường gỡ Claude
+sẽ dùng và sẽ nói rõ với người dùng: **admin vẫn SỬA được `supervisor_ids`** (quyền `update`, KHÔNG phải
+`approve`) để thay người, rồi người mới duyệt — admin **không tự duyệt thay**. Toàn bộ test `TC-APR-*` đang giả
+định «admin duyệt được» sẽ phải viết lại, và `docs/KE-HOACH-DUYET-CAY.md` mục «7 quyết định đã khoá» phải cập
+nhật vì quyết định cũ nay bị lật.
+
+### Thứ tự điền của migration 028 (R2 «tự động điền người trong data đang có»)
+
+1. `works.supervisor_ids` ← `ARRAY[supervisor_id]` nếu khác NULL;
+2. `work_items` **cấp 2** ← `ARRAY[supervisor_id]` của chính nó; NULL thì lấy của **công việc cha**;
+3. `work_items` **cấp 3** ← **phần tử ĐẦU** của `supervisor_ids` cấp 2 chứa nó (đúng Q12); cấp 3 treo thẳng
+   cấp 1 (`parent_id IS NULL`) thì lấy của cấp 1;
+4. Vẫn còn NULL ⇒ lấy **một Phó Giám đốc (`deputy_director`) đang hoạt động của phòng** từ `department_managers`;
+5. Phòng không có PGĐ ⇒ lấy **một tài khoản `admin` đang hoạt động**;
+6. Không có ai thật ⇒ để NULL và **in ra danh sách** các cây đó lúc chạy migration — R1(a) sẽ chặn gửi duyệt cho
+   tới khi có người vào chọn, nhưng cây **đã `Đã duyệt`** thì không bị ảnh hưởng gì.
+
+### 13 điểm bất hợp lý đã báo cáo (giữ làm bằng chứng, đừng điều tra lại từ đầu)
+
+1. Hai trục không biết nhau (`approval_status` vắng mặt trong `taskFiles/`, `task_files` vắng mặt trong `approvals/`).
+2. `trangThaiDuyetKhiTao` cho **cấp 3 luôn `Đã duyệt`** (`rules.js:50`) — thêm nhiệm vụ vào cây đã duyệt là có hiệu lực ngay, không ai ký.
+3. Người duyệt **CÂY** là mọi PGĐ của phòng (`approvals/service.js:220`) ≠ người duyệt **FILE** là 1 `supervisor_hieu_luc` (`taskFiles/service.js:678`).
+4. `supervisor_id` là **MỘT cột đơn**, không phải mảng; `supervisor_hieu_luc` tính lặp ở **4 nơi**: `workItems/repo.js:113`, `workItems/repo.js:156`, `taskFiles/repo.js:340`, `approvals/changes.js:306`.
+5. Cấp 3 hiện **BỊ CẤM** có BLĐKS riêng (`workItems/service.js:358-366` ném lỗi; `assignments/service.js:373` ghi rõ «không thêm ô/người riêng»).
+6. **Mặc định là KHÔNG duyệt file**: `apTuDong:344` trả `da-duyet` khi `file:create = ✓` ⇒ R6 chốt bỏ.
+7. TP/PP **không có hành động «Phê duyệt»** — `trinh-lanh-dao` chỉ đổi trạng thái, không lưu mốc «TP/PP đã duyệt».
+8. `hoan-thanh` là cửa TP/PP tự chốt bỏ qua PGĐ (đã có 2 chốt chặn ở `service.js:794` và `:830`) ⇒ Q11 giữ.
+9. `yeu-cau-sua` và `tra-ve-cbo` là **hai nút cho một việc** (cùng `den:'can-sua'`, cùng `datLenhSua(...,'can-bo',...)`; khác đúng `tu` và `canNoiDung`).
+10. Sửa cây đã duyệt: mặc định **không** duyệt lại, và khi có bị hạ về `Chờ duyệt` thì **không báo ai** ⇒ R7 chốt thêm thông báo. Kèm hệ quả: cấp 2 bị hạ làm **toàn bộ nhiệm vụ cấp 3 bên dưới biến mất khỏi `v_countable_items`** (migration 026 dòng 26-28).
+11. **Tỷ lệ (%) không qua duyệt ở cấp nào**: `suaTyLe:2011` ghi thẳng, không kiểm `approval_status` ⇒ Q10 + R4 chốt phải gửi duyệt.
+12. `dungNguoiDuyetFile:687` **chỉ siết PGĐ và chỉ khi bật tích**; tích TẮT thì PGĐ bất kỳ của phòng + admin đều duyệt được dù ô BLĐKS ghi người khác.
+13. Hệ thống **không có vai `Giám đốc`** — CHECK `users_role_valid` (migration 021 dòng 26-27) chốt `admin`, `Phó Giám đốc`, `Trưởng phòng`, `Phó phòng`, `Nhân viên`; tài khoản Giám đốc trong seed mang vai `admin` (`dev-vong14.sql:63-65`). Cũng không có vai `Cán bộ` — đó là `Nhân viên` ⇒ Q8 chốt giữ nguyên.
+
+**ĐIỂM THUẬN LỢI:** `leader_ids` **ĐÃ làm đúng y khuôn** thiết kế 3 cấp mà người dùng muốn — cấp 3 chỉ ≤ 1 phần
+tử (`workItems/service.js:368`) và phải nằm trong tập của cấp 2 (`validTaskLeaders` / `assertTaskLeader`,
+`assignments/service.js:165-199`, kèm CHECK `task_leader_single` trong CSDL). Chỉ cần **nhân bản khuôn đó cho
+cột supervisor** là ra đúng thiết kế, không phải phát minh lại.
+
+## Snapshot trước đợt 4 — thiết kế lại tab Nhiệm vụ + popup nhật ký từng file (ĐỢT 3), 10/09/2026
+
+Người dùng báo «tab nhiệm vụ đang không hiển thị nhiệm vụ trực thuộc công việc cha luôn» và yêu cầu thiết kế lại
+tab cho đẹp. **GỐC LỖI KHÔNG nằm ở chỗ vẽ**: `tasksXemThang` mặc định là `new Date().getMonth()+1` nên ba nhiệm vụ
+`CV002-003/004/006` (cấp 3, `parent_id IS NULL`, hạn 2026-10-01→2026-10-20) bị BỘ LỌC THÁNG loại hẳn, không một câu
+giải thích; `xepNhiemVuTheoCongViecCon` vẫn xếp nhóm «Nhiệm vụ trực thuộc công việc» đúng. Đã đổi mặc định về `0`
+= «Tất cả tháng», theo tiền lệ `projectsXemThang`. **Bài học: danh sách «không hiện» thì đọc bộ lọc trước, đừng đọc hàm render.**
+
+Bảng nhiệm vụ nay **10 cột**: Nhiệm vụ/Kết quả · Người thực hiện · Ưu tiên · Tỷ lệ (%) · Tiến độ · Bắt đầu · Hạn chót ·
+Số bản · Tình trạng kết quả · Thao tác. `<colgroup>` + `table-layout:fixed`, tiêu đề CĂN GIỮA, font đồng nhất 13px,
+cột kết quả nhỏ ép hẹp (Ưu tiên 8 · Tỷ lệ 7 · Tiến độ 7 · Bắt đầu 8 · Hạn 8 · Số bản 5 · Tình trạng 13 · Thao tác 9%).
+Hàng nhiệm vụ ngăn bằng `border-top:2px solid`, hàng file nền xám + `border-bottom:1px dashed` ⇒ nhìn là tách được
+từng nhiệm vụ / từng file. Tên file cùng một mức căn, dài thì `...`, `title` mang tên đầy đủ.
+**Dấu tích ẩn/hiện hàng file là `<button class="task-files-toggle" aria-pressed>`, KHÔNG phải checkbox** —
+`TC-KQ-UI-03` đã chốt tab này không còn checkbox nào sau đợt «bỏ checkbox Hoàn thành». Trạng thái gập nhớ trong
+`localStorage` khoá `qlcv_tasks_files_hidden`, sống qua F5 và re-render; `filterTaskRows` KHÔNG tự mở lại hàng đang gập
+(tìm theo tên file vẫn giữ nhiệm vụ + hàng kết quả đi cùng).
+
+Nút «Xem kết quả» mở **popup nhật ký riêng của file** (`moNhatKyFileKetQua`): chip tóm tắt + bốn khối đánh số —
+1 ai đăng ký kết quả này, 2 ai thực hiện (trực tiếp + lãnh đạo phòng phụ trách), 3 lịch sử các bản và ý kiến từng lần,
+4 diễn biến theo thời gian xếp TĂNG dần. Đọc lại endpoint CÓ SẴN `GET /work-items/:ref/files` ⇒ không mở REST mới.
+Dựng hoàn toàn bằng `createElement` + `textContent` ⇒ **sink XSS KHÔNG đổi (98)**, chỉ nội suy 929→952.
+Đóng bằng «Đóng» / Escape / bấm nền. Phía máy chủ `tienDoFileRows` + `demNhomFileTheoItem` thêm `so_ban` và
+`ten_nguoi_nop` vào `ket_qua_files` (thiếu là TC-KQ-DONE-06 đỏ và hai cột mới không có dữ liệu).
+
+**Full test: 1969/1969 · 111 file · exit 0** (baseline trước khi sửa là 1960/1963 · 109/111 với đúng 3 lỗi thật:
+TC-KQ-DONE-06, TC-TASK-DESIGN-01, TC-TASK-DESIGN-02 — hai test sau Codex để đỏ rồi đứt giữa chừng, đã viết lại thành
+8 test TC-TASK-DESIGN-01..08 và làm xanh hết). `lint` exit 0; `format:check` còn đúng 2 nợ cũ có chủ đích
+(`workItems/tyLe.js`, `stats-parity.test.js`). Không migration mới, không reset/seed, không đụng OnlyOffice/chuông/Zalo/cron.
+Buster + banner **20260910-11** đồng bộ bốn thẻ (`app.css`, `app.js`, `project-details.js`, `phase8b-review.js`);
+`api-bridge.js` giữ `20260825` vì không đổi. `node ../tools/local-assets-check.mjs --live` **exit 0**.
+
+**⚠ TRƯỚC KHI TEST PC PHẢI KHỞI ĐỘNG LẠI NODE UAT.** Node đang chạy là PID **35656**, bật lúc **17:59:42**, mà
+`server/src/modules/taskFiles/repo.js` sửa lúc **21:00:48** ⇒ tiến trình đang giữ bản CŨ trong bộ nhớ, API chưa trả
+`so_ban`/`ten_nguoi_nop` nên cột «Số bản» sẽ hiện 0 và hàng file thiếu tên người nộp. **ĐÓNG đúng cửa sổ «QLCV TEST - Node» đang giữ cổng 3000 rồi chạy lại `chay-test.bat /giu /f`**
+(giữ nguyên dữ liệu UAT; `/f` chỉ bỏ các lệnh pause, script CỐ Ý không tự diệt tiến trình — xem dòng 227 của
+`chay-test.bat`), xong mới mở `http://127.0.0.1:8099`. Chỉ F5 trình duyệt thì được JS/CSS mới (tài sản đọc từ đĩa) nhưng
+VẪN thiếu hai trường máy chủ. nginx 8099 (PID 26812) và DB `quanlycongviec_uat` giữ nguyên, không restart container.
+
+**Chưa nghiệm thu: checklist 9b.15, 9b.16, 9b.17, 9b.18 VÀ mục MỚI 9b.19 (21 bước A–F) — cả năm đều chưa có OK riêng.**
+Chuỗi OnlyOffice forcesave → callback → phê duyệt với Document Server thật vẫn chưa được nghiệm thu đầu-cuối.
+**Việc kế tiếp: người dùng test PC theo 9b.19 (và giữ xanh 9b.15–9b.18). KHÔNG commit/push/deploy khi chưa nghe
+OK RIÊNG ĐỢT NÀY — OK 2026-09-08 của bản bỏ vai cũ không áp dụng cho đợt này.**
+
+## Snapshot trước đợt 3 — bốn yêu cầu mới sau V1–V8, 10/09/2026
+
+Đã bỏ hoàn thành/trạng thái tay ở ba cấp; hoàn thành khi mọi nhóm có bản đã duyệt.
+Tab Nhiệm vụ có hàng file con, bỏ Link kết quả; modal 10 cột có tỷ lệ và tiến độ riêng.
+Đọc phần đầu `docs/BAO-CAO-V1-V8.md` và checklist **9b.18** trước các snapshot lịch sử bên dưới.
+**Full cuối 1961/1961, 110/110 file, exit 0; lint exit 0; cú pháp app.js exit 0.**
+Sau định dạng test UI: 8/8 xanh. Format chỉ còn nợ `workItems/tyLe.js` và `stats-parity.test.js`;
+file parity đã đổi đối chiếu theo cờ hoàn thành mới, không format nợ cũ.
+Buster/banner/nginx **20260910-10**, XSS **98/929**, live asset check exit 0.
+
+Node UAT mở **17:59:42 ngày 10/09/2026 (UTC+7)**, PID ghi nhận **35656**, cổng 3000;
+nginx 8099, DB quanlycongviec_uat:5432. Kiểm lại listener trước khi thao tác; không dùng PID cũ 6932.
+Cron/Zalo tắt; đợt mới không migration, không reset/seed hoặc restart container/VPS.
+Đã kiểm trực quan read-only bằng phiên Lê Thị Nhân: bảng file/hàng bản 10 cột, số tỷ lệ nhìn được,
+Công việc/chi tiết/Tổng quan/Gantt; không lỗi JS. Sửa thêm ba phép tính trung bình cũ trên thẻ/danh sách
+công việc về gia quyền; CV001 0%, CV002 7% ở dữ liệu lúc kiểm, không đổi trọng số để làm đẹp số.
+
+UAT có thao tác ở phiên khác trong lúc kiểm: files 8→10, flow 26→28, items vẫn 12 nhưng hash đổi;
+nhóm 10/11 do user 2 (PGĐ) tạo lúc 18:13:53/18:14:19. Không tuyên bố toàn bộ UAT không đổi;
+không khôi phục dữ liệu để ép snapshot khớp. Chi tiết và hash ở báo cáo, `result-uat-before/after.json`.
+Bằng chứng test trong `server/node_modules/.vite/vitest/result-full-final.{json,log}` và các
+`result-*-final.*`; tất cả ignored. Chưa nghiệm thu chuỗi DS thật, 9b.15–9b.18 chưa có OK riêng.
+**Việc kế tiếp: người dùng test PC theo 9b.18. Không commit/push/deploy khi chưa OK RIÊNG ĐỢT NÀY.**
+
+## Snapshot trước bốn yêu cầu mới — V1–V8, 10/09/2026
+
+Đọc `docs/BAO-CAO-V1-V8.md` và checklist **9b.17** trong `docs/HUONG-DAN-TEST-GIAO-DIEN.md`.
+Mã V1–V7 đã có; V8 chưa tái hiện lỗi NV gửi thẳng PGĐ, giữ test đối chứng và không sửa theo phỏng đoán.
+**Full 1946/1946 test, 108/108 file, exit 0; lint exit 0.** Format chỉ còn đúng hai nợ cũ:
+`server/src/modules/workItems/tyLe.js` và `server/tests/integration/stats-parity.test.js` — giữ nguyên.
+
+Buster/banner/nginx **20260910-7**, XSS **107 sink / 920 nội suy**, kiểm asset live exit 0.
+UAT cục bộ đã UP **024–027**, hai view đủ cột; dữ liệu cũ đối chiếu số dòng và dấu vân tay không đổi.
+Node UAT được mở lúc 12:22 ngày 10/09/2026 (UTC+7), PID ghi nhận **6932**, cổng **3000**;
+nginx **8099**, `/readyz` trả `ok:true, db:up`. Luôn kiểm lại listener trước khi thao tác PID cũ.
+Lịch tự động tắt, `ZALO_BOT_NHAN=tat`; không reset/seed, không restart container hay VPS.
+
+Đã kiểm bố cục OnlyOffice thật trên Chrome headless với hai context tách cookie: gd@ và tp@,
+CV002-005/bản 14; ý kiến nằm trên editor, không đè toolbar, admin nhập được và có nút duyệt bản mới.
+**Chưa kiểm trọn chuỗi sửa → forcesave → callback → duyệt trên Document Server thật.**
+Các test tích hợp dùng Postgres thật nhưng mock mạng DS; không thay cho bước nghiệm thu này.
+
+V7 dùng chung `approval_changes`; phân biệt đề nghị `gui-bld` với biên nhận `reviewer`.
+Đổi tích mặc định chưa có hiệu lực cho đến khi duyệt; người đề nghị không tự duyệt, thu hồi quyền
+vẫn bị chặn ở request ghi. Form cấu hình chỉ gửi trường đã đổi, không ghi đè Q2 từ form cũ.
+Tiếp theo: người dùng bấm **9b.17** và hoàn tất các bước còn thiếu của **9b.15/9b.16**.
+Cả ba đợt đều **chưa nghiệm thu**; phải chờ **“OK RIÊNG ĐỢT NÀY”**. Không commit/push/deploy.
+
 File này để **mở một session AI mới** mà không mất thời gian dò lại dự án đang ở đâu. Nguồn sự
 thật về tiến độ vẫn là **§13 của `KE-HOACH-VPS.md`**; file này chỉ là bàn đạp.
 
@@ -8,6 +889,84 @@ Thứ tự dùng: đọc mục 1 (đang ở đâu) → copy prompt ở mục 2 h
 ---
 
 ## 1. Đang ở đâu (cập nhật mỗi khi xong một phase)
+
+**Cập nhật 10/09/2026:** ưu tiên bốn yêu cầu mới và checklist 9b.18 ở đầu tài liệu; các đoạn
+2026-09-09 và Phase 9 phía dưới là lịch sử, không cho phép commit/deploy hay reset UAT lúc này.
+
+**Ưu tiên MỚI NHẤT 2026-09-09 (ĐỢT 2, cùng ngày) — «Cán bộ trực tiếp» nay là Trưởng phòng / Phó phòng được: mã XONG trên PC, CHƯA commit/push/deploy, CHỜ người dùng test PC và OK RIÊNG ĐỢT NÀY.**
+Người dùng yêu cầu **hỏi trước khi làm**; đã hỏi và được chốt **8 quyết định** (chép nguyên văn ở
+**§13.4 mục 27**), rồi chọn «làm ngay trên cây hiện tại». Rủi ro thật KHÔNG nằm ở duyệt nhiệm vụ
+(TP/PP vốn không có `approve` ở cấp đó) mà ở **luồng file kết quả**: TP/PP giữ `file:approve`=✓ và
+`hoan-thanh` là trạng thái kết được `tienDo.js` tính là XONG rồi cộng dồn lên cả cây theo `ty_le` ⇒
+«Đẩy về Cán bộ» → «Hoàn thành» là tự duyệt xong việc của mình trong hai lần bấm. Đã chặn ba chỗ trong
+`taskFiles/service.js`: `apTuDong` không tự `da-duyet` cho TP/PP kể cả khi `file:create`=✓ (✓ bị CHẶN
+TRẦN ở `cho-lanh-dao`; Cán bộ vẫn tự động như cũ) · `verdict` chặn `hoan-thanh` khi người gọi là
+`assignee_id` **hoặc** `uploaded_by` của bản cuối · `baoNguoiPhaiSua` lùi thông báo về Phó GĐ phụ trách
+khi người phải sửa CHÍNH là người ra lệnh (`bao()` vốn loại người hành động nên danh sách hoá rỗng).
+Điều kiện tiên quyết: `assignments.assertTaskAssignee` **không cho gán TP/PP khi phòng chưa có Phó GĐ
+phụ trách** (mã mới `ASSIGNEE_LEADER_NO_DEPUTY`, 400), kiểm ở 5 chỗ gọi + kiểm GỘP trong
+`assertTreeAssignments` nên **chuyển công việc sang phòng chưa có Phó GĐ cũng bị chặn**. Ai được gán:
+admin/Phó GĐ, hoặc TP/PP **cùng phòng** gán cho nhau. **Không migration, không cột mới.**
+Giao diện: bộ lọc vai nới thêm TP/PP (Phó GĐ/admin vẫn ẩn), option kèm «(Trưởng phòng)»/«(Phó phòng)»
+nhưng `value` VẪN là tên trơn, `coPhoGiamDocPhuTrach=false` thì vẽ lại danh sách cắt TP/PP (giữ người
+đang chọn nếu còn hợp lệ, bị cắt thì trả về RỖNG chứ không âm thầm đổi người), ai tự chọn được thì
+KHÔNG điền sẵn tên mình. Nhãn «Cán bộ trực tiếp» → **«Người thực hiện trực tiếp»** (form · popup thay
+đổi của người duyệt · nhãn cột nhật ký · hai chỗ xem nhanh), «Cán bộ thực hiện» → «Người thực hiện»
+(khối phân công · tooltip Gantt). Báo cáo: E5 + Gantt nhóm `assignee` + Excel mẫu (b) đều **kèm vai**,
+lãnh đạo xếp SAU Cán bộ, Excel thêm cột **«Vai»** ở vị trí 2 (các cột sau dời +1) — vai tra theo
+`assignee_id` bằng MỘT truy vấn mỗi nơi, KHÔNG đoán từ tên.
+
+**Kiểm cuối đợt 2 (chạy trong session):** full `npm test` từ `server/` **1869/1869 test · 104 file · exit 0**
+(+28 test, +1 file so với 1841/103 của đợt 1); pin XSS **106/903 → 107/904** (+1 sink
+`selTrucTiep.innerHTML`, +1 giá trị `escapeHtml(vai)`; `trong-the text3` 2→1) đã ghi lý do trong
+TC-SEC-11/17 + `docs/XSS-4.6.md`; `npm run lint` **exit 0**; `format:check` chỉ còn
+`workItems/tyLe.js` + `tests/integration/stats-parity.test.js` lệch — **cả hai không đổi từ commit
+trước** nên không sửa lan. `local-assets-check.mjs --live` xanh, **buster + banner `20260909-5`** cho cả
+bốn tài sản. Ba bộ fixture phải **đăng ký thêm `deputy_director`** (`phase8b-permissions`,
+`work-origin-history`, các ca `TC-LDTT`) vì luật mới đòi thế — KHÔNG nới luật để test xanh;
+`TC-LS-04` đổi kỳ vọng CÓ CHỦ Ý. **Không seed/reset/xóa dữ liệu, không migration mới, không dừng
+container dự án khác.** Việc kế tiếp: người dùng test tay theo **mục 9b.16** của
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md`; sau khi OK RIÊNG ĐỢT NÀY mới commit (explicit paths,
+`may-chu:`/`giao-dien:`, ASCII không dấu, trailer Co-Authored-By) → push `vps/sua-loi-vat` → deploy theo
+`deploy/runbook.md` (đợt này VPS **không** cần migration mới). **OK của đợt 1 (nếu có) và OK 2026-09-08
+đều KHÔNG tự áp dụng cho đợt này.**
+
+**Ưu tiên 2026-09-09 (ĐỢT 1) — PHASE 8B: mã XONG trên PC, CHƯA commit/push/deploy, CHỜ người dùng test PC và OK RIÊNG ĐỢT NÀY.**
+Nhánh `vps/sua-loi-vat`, HEAD vẫn `68d4b75`; cây làm việc có **51 file sửa + 10 file mới (+1352/-661)**, KHÔNG commit gì thêm.
+Ba việc của prompt: **A** phân quyền hệ thống thành nguồn quyết định thật (quyền mới áp dụng ở request kế tiếp, không cần
+restart Docker hay đăng nhập lại; lưu bảng quyền trong MỘT transaction; REST nhận action `ty-le`; `GET /permissions` trả
+thêm khối `phamVi`; giao diện bỏ cách quyết định bằng vai cố định, tự nạp lại quyền **mỗi 15 giây và khi tab hiện lại**
+⇒ nói đúng là «trễ nhất 15 giây», KHÔNG nói «áp dụng tức thì»). **B** nhiệm vụ trực thuộc công việc cha: tách
+`supervisor_id` = **Ban lãnh đạo phụ trách** (Phó GĐ trong phạm vi phụ trách phòng của công việc cha, hoặc Giám đốc =
+tài khoản admin) khỏi `leader_ids` = **Lãnh đạo phòng phụ trách** TP/PP — dùng trường CÓ SẴN, không migration, không nới
+validation, không nhét PGĐ/admin vào ô TP/PP. **C** khóa phạm vi phòng khi tạo: `create` ở cả ba cấp bó về phòng của
+TP/PP/Cán bộ **ngay cả khi ô quyền đặt `pham_vi='tat-ca'`**, so theo phòng ĐỌC TỪ CSDL nên sửa payload / gọi REST-RPC
+trực tiếp / truyền ID ngoài phòng đều bị chặn và không ghi dữ liệu; chưa có phòng thì báo rõ, không rơi sang toàn đơn vị;
+admin và Phó GĐ giữ phạm vi hiện hành; **giữ nguyên ngoại lệ ủy quyền** → câu hỏi mở ở **§13.4 mục 26**.
+Năm yêu cầu người dùng thêm giữa chừng: tỷ lệ nhiệm vụ TRONG công việc con (migration **022**, mặc định chia đều, sửa tay
+một dòng thì các dòng khác giữ nguyên, popup «Tổng tỷ lệ nhiệm vụ khác 100%» có **Sửa lại** / **Vẫn …**) · tạo công việc
+cha rồi «Lưu tạm» nay mở đúng chi tiết CÓ dữ liệu và có nút thêm con/nhiệm vụ · nhiệm vụ **bắt buộc** chọn Cán bộ trực tiếp ·
+`#toast-container` `z-index:2147483647` để thông báo nổi trên mọi modal · người duyệt **sửa rồi Phê duyệt / Trả để sửa lại /
+Từ chối ngay trên màn chi tiết**, «Lưu và phê duyệt» là MỘT request atomic, người gửi mở lại thấy popup thay đổi với
+**OK** (chỉ đóng lần đó) / **Đã biết** (ngừng nhắc, lưu theo tài khoản) — migration **023** + `approval_changes` +
+`web/assets/js/phase8b-review.js`.
+
+**Kiểm cuối 2026-09-09 (chạy trong session, không chép số cũ):** full `npm test` từ `server/` **1841/1841 test · 103 file ·
+458 suite · exit 0**, chạy LẠI SAU khi đổi buster/BOM; focused 4 file phase8b **86/86**; pin XSS **106 sink/903 giá trị** giữ
+nguyên; eslint scoped **exit 0**; prettier scoped sạch — chỉ `server/src/modules/workItems/tyLe.js` còn lệch nhưng KHÔNG
+thuộc phạm vi (không đổi từ 2026-09-06) nên **không sửa lan**. UAT đã lên **022+023**; sao lưu PC TRƯỚC migration ở
+`E:/quanlycongviec-backups/phase8b-20260909-1788890763839/` (dump + fingerprint trước/sau + restore-list, đã drill khôi phục).
+Máy chủ PC đang bật bằng `chay-test.bat /giu /f`: cổng 3000 nối ĐÚNG `quanlycongviec_uat`, `/healthz` + `/readyz` 200 cả
+3000 lẫn 8099, `ZALO_BOT_NHAN=tat`, log không có dòng level 50/60. **Buster + banner `20260909-4`** cho cả bốn tài sản
+(`app.js`/`project-details.js`/`phase8b-review.js`/`app.css`); `tools/local-assets-check.mjs --live` **xanh trọn**.
+Hai lỗi tự phát hiện khi kiểm lại: banner `app.js` kẹt ở `-2` trong khi `index.html` trỏ `-3`, và
+`web/assets/js/project-details.js` mang **BOM UTF-8** từ 2026-08-26 làm công cụ luôn báo «Nginx phục vụ khác file PC»
+— xem §13.5. **Không seed/reset/xóa dữ liệu, không dừng container dự án khác.**
+Việc kế tiếp: người dùng test tay theo **mục 9b.15** của `docs/HUONG-DAN-TEST-GIAO-DIEN.md`; sau khi OK RIÊNG ĐỢT NÀY mới
+commit tách từng lỗi (`may-chu:`/`giao-dien:`, ASCII không dấu, explicit paths, trailer Co-Authored-By) → push → deploy VPS
+theo `deploy/runbook.md` (backup TRƯỚC, chạy migration 022+023 trên VPS). **OK ngày 2026-09-08 KHÔNG áp dụng cho đợt này.**
+
+**Các đoạn 2026-09-08 bên dưới là LỊCH SỬ của đợt bỏ vai «Quản lý công việc» (ĐÃ phát hành VPS), không phải trạng thái đang chờ nghiệm thu.**
 
 **Ưu tiên MỚI 2026-09-08 — BỎ VAI PHÂN QUYỀN QUẢN LÝ CÔNG VIỆC, ĐÃ PHÁT HÀNH VPS.**
 Không nhầm tên trang với vai hệ thống. VPS trước đúng b03c74a/020, không lỗi kéo mã/cache:
@@ -97,7 +1056,23 @@ VIỆC CỦA SESSION NÀY: <PHASE>
 ---
 ---
 
-## 3. Prompt cho session tiếp theo — Phase 9 (nghiệm thu, chạy song song, cắt chuyển), dán nguyên khối
+## 3. Prompt cho session tiếp theo — nghiệm thu bốn yêu cầu mới trên PC
+
+```text
+Repo E:\quanlycongviec, nhánh vps/sua-loi-vat. Trả lời tiếng Việt.
+Đọc phần đầu docs/BAO-CAO-V1-V8.md, docs/BAT-DAU-SESSION.md và KE-HOACH-VPS.md §13.
+Mã bốn yêu cầu mới đã sửa: hoàn thành từ tất cả nhóm có bản được duyệt; không trạng thái tay;
+bảng file 10 cột có tỷ lệ/tiến độ riêng; tab Nhiệm vụ hiện hàng file, bỏ Link kết quả.
+Full 1961/1961 (110 file), lint 0; buster 20260910-10, XSS 98/929.
+Tiếp tục theo phản hồi PC/checklist 9b.18, giữ các luật V1–V8 và giới hạn chưa nghiệm thu DS thật.
+Cây có nhiều thay đổi chưa commit. Không reset/restore/stash/clean/add/commit/push/deploy.
+Không reset/seed UAT, không /v14 /f, không xóa volume; dữ liệu đang được người dùng cập nhật.
+Test tuần tự từ server/, chỉ CSDL _test cổng 5434. Không in bí mật hoặc đọc trọn app.js/Code.gs.moi.
+Không coi test tự động xanh là OK nghiệm thu; chờ người dùng nói OK RIÊNG ĐỢT NÀY.
+```
+
+### 3.1 Prompt Phase 9 lịch sử — chưa áp dụng khi các đợt PC còn chưa nghiệm thu
+
 
 ```text
 Dự án e:\quanlycongviec — chuyển hệ thống quản lý công việc nội bộ từ Google Apps Script + Sheets sang VPS (Node 24 + Express 5 + PostgreSQL 16 + Docker), tên miền ttdt.site. Session này làm PHASE 9: nghiệm thu, chạy song song, cắt chuyển (§7 Phase 9).
@@ -163,6 +1138,17 @@ Trả lời tiếng Việt.
 ---
 
 ## 3b. Prompt cho session SỬA LỖI VẶT (Phase 8b) — dán nguyên khối
+
+> **TRẠNG THÁI 2026-09-09 (đọc trước khi dán prompt):** đợt A/B/C + 5 yêu cầu bổ sung đã XONG MÃ trên PC,
+> **chưa commit/push/deploy**, đang CHỜ người dùng test tay theo mục **9b.15** và nói OK RIÊNG ĐỢT NÀY.
+> Session kế tiếp vào việc thì: (1) kiểm `git status` + `git log -1` (HEAD vẫn `68d4b75`, cây có 61 file chưa commit);
+> (2) KHÔNG tạo lại nhánh từ commit cũ, KHÔNG reset/seed; (3) nếu người dùng đã OK → commit tách từng lỗi
+> (`may-chu:`/`giao-dien:`, ASCII không dấu, explicit paths, trailer Co-Authored-By) rồi push + deploy theo
+> `deploy/runbook.md` (backup TRƯỚC, migration **022+023** phải chạy trên VPS); (4) nếu người dùng báo lỗi mới → sửa tiếp
+> trên chính cây làm việc này, chạy lại full suite, buster đang là **`20260909-4`** (động `web/assets/*` thì tăng lên `-5`
+> cho CẢ bốn tài sản và sửa luôn banner `console.info("[QLCV] app.js …")` ở dòng 9 của `app.js` — xem bẫy §13.5).
+> Câu hỏi còn chờ người dùng trả lời: **§13.4 mục 26** (Trưởng phòng có được tạo ngoài phòng khi có ủy quyền).
+> Lỗi số 1 trong danh sách bên dưới (menu «+ Tạo mới» kéo dài khung đầu trang) **VẪN CHƯA LÀM** — không thuộc đợt A/B/C.
 
 ```text
 Bạn tiếp tục dự án quản lý công việc bản VPS tại e:\quanlycongviec — trả lời bằng TIẾNG VIỆT.

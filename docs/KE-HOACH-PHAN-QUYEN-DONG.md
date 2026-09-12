@@ -1,5 +1,46 @@
 # KE HOẠCH — «BẢNG PHÂN QUYỀN ĐỘNG» (2026-08-29, Vòng 9)
 
+## Bổ sung 10/09/2026 — bỏ trạng thái tay, không đổi quyền duyệt
+
+Đợt checklist **9b.18** không thêm quyền/hành động/RPC/migration. Ma trận, phạm vi,
+ủy quyền và `can()` vẫn quyết mọi cửa ghi file; luật TP/PP không tự chốt được giữ nguyên.
+Nhiệm vụ chỉ hoàn thành từ **tất cả nhóm có bản đã duyệt**, không còn checkbox hoặc trạng thái tay.
+`boCotKhoaDuyet` loại thêm `status`/`completion` khỏi payload ghi ở cả ba cấp;
+không xóa cột DB/khóa RPC/nhật ký cũ. Đây không phải cấp thêm quyền duyệt cho người sửa nhiệm vụ.
+Metadata danh sách file gắn theo phạm vi đầu việc đã được lọc; chỉ tên/định dạng/trạng thái/tỷ lệ/
+tiến độ/id bản mới nhất, không đưa đường dẫn lưu, nội dung hay các phiên bản cũ vào gói này.
+Luật nháp trong hàng chờ lãnh đạo và Q2/Q3/Gửi BLĐ không thay đổi.
+Buster **20260910-10**; người dùng còn cần nghiệm thu **9b.15–9b.18**, không commit/push/deploy.
+
+## Cập nhật V2/V4/V7 — 10/09/2026, chờ nghiệm thu
+
+Hai hành động mới nằm **ngoài bốn ACTIONS gốc**: `file:submit` và `task:gui-bld`.
+- `file:submit`: ✓ gửi theo người lưu cuối; ⏳ buộc duyệt; ✕ chặn request kế tiếp.
+- `task:gui-bld`: ✓ theo cấu hình Q2; ⏳ luôn tạo đề nghị chờ; ✕ không được đổi tích.
+- Cán bộ chỉ chọn tích lúc tạo, không sửa sau tạo ngay cả khi mở quyền. TP/PP trực tiếp luôn lên
+  PGĐ nên giao diện khóa tích; API không nhận `true` trong trường hợp này.
+
+GET/PUT `/api/v1/permissions/settings`: mốc tiến độ và `guiBldChangeRequiresApproval`.
+Chỉ admin ghi; mọi vai đăng nhập được đọc. Mặc định TP/PP phải trình; bỏ chọn chỉ bỏ bước chờ
+với ✓, không đổi nghĩa ⏳ và không tự áp các đề nghị đã lập. Cấu hình lưu CSDL, đọc ở request kế tiếp.
+Phiên người khác hỏi lại trong khoảng **15 giây khi tab hiển thị**, hoặc khi quay lại tab;
+không gọi cập nhật giao diện là tức thì. Request ghi và callback editor đều kiểm quyền hiện hành.
+
+**Lỗi tìm thêm khi kiểm hồi quy:** nút lưu mốc từng gửi lại cả Q2 chưa thay đổi, có thể ghi đè
+lựa chọn vừa lưu của admin khác. Nay form ghi nhớ giá trị gốc, chỉ gửi trường thực sự đổi;
+không đổi gì thì không PUT. `TC-V2V7-UI-01` đỏ trước sửa và xanh sau sửa.
+
+V7 tái dùng `approval_changes`, thêm `change_kind` và `decision`; đề nghị `gui-bld` tách nghĩa
+với biên nhận `reviewer` trong cùng bảng. Đề nghị hiện cùng hàng chờ/pending-count; từ chối đề nghị
+**không xóa nhiệm vụ**. Lúc duyệt kiểm `can()`, người đề nghị còn hoạt động/quyền còn hiệu lực,
+giá trị và phân công chưa đổi. Không tự duyệt; PGĐ chỉ xử lý đúng người phụ trách, admin xử lý độc lập.
+Luồng trả lại/gửi lại/duyệt cây không được xóa hoặc tự áp đề nghị đổi tích.
+
+Migration 026 đã lên UAT và nới CHECK đủ ba ký hiệu; 027 lưu cấu hình. Có mặc định cứng khi đọc
+không được, chặn số ngoài 0–100 và mốc giảm theo từng nhánh. Full **1946/1946**, lint exit 0;
+`TC-V7-01..15`, test ma trận và UI đối chứng. Buster **20260910-7**, kiểm asset live exit 0.
+Checklist **9b.17** và các bước hai phiên còn phải nghiệm thu PC; không commit/push/deploy.
+
 Yêu cầu người dùng: bỏ đối tượng «Quản lý công việc» khỏi bảng; chuyển chú thích ký hiệu xuống
 dưới cùng; **admin thay đổi được Phân quyền hệ thống bằng dropdown**.
 
@@ -217,4 +258,94 @@ Bẫy mới (§13.5): **bảng phân quyền phải khoá bằng VAI CSDL** (`us
 để in. Tra bằng nhãn thì bảng vừa hiện sai vừa **âm thầm xoá ghi đè** khi bấm Lưu — không có
 thông báo lỗi nào, vì `giaTri: 'mac-dinh'` là một lệnh hợp lệ.
 
+## 11. VÒNG 8b ĐỢT 2 (2026-09-09) — bảng quyền thành NGUỒN QUYẾT ĐỊNH thật, cả server lẫn UI
 
+Người dùng báo hai hiện tượng: **Phó phòng không tạo được nhiệm vụ** và **Phó phòng không xem được
+tab «Quản lý công việc»**. Nguyên nhân KHÔNG nằm ở dữ liệu `role`/`dept_role` hay cache máy chủ —
+máy chủ đã đọc lại ghi đè ở mỗi request từ Vòng 9. Nguyên nhân là **giao diện vẫn tự quyết định
+bằng vai cố định** (nhiều nhánh `if (currentUser.role === …)`) trong khi server quyết định bằng
+bảng quyền, nên hai bên lệch nhau.
+
+Đã sửa, theo đúng yêu cầu «không hard-code Phó phòng luôn được tạo / luôn hiện tab»:
+
+1. **`GET /api/v1/permissions` trả THÊM khối `phamVi`** — vai, `departmentId`,
+   `managedDepartmentIds` và `delegations` của CHÍNH người gọi. Đây là cùng dữ liệu `can()` dùng,
+   nên UI suy ra quyền từ một nguồn duy nhất thay vì đoán theo vai. Phản hồi chỉ THÊM trường,
+   hợp đồng cũ không đổi, không mở RPC mới.
+2. **`coQuyenTaiDong(action, type, row)`** là hàm UI duy nhất để hỏi quyền; các nút tạo/sửa/xoá/duyệt
+   và việc ẩn/hiện tab đều đi qua nó.
+3. **Cơ chế cập nhật cho phiên đang mở:** UI tự nạp lại quyền **mỗi 15 giây và khi tab hiện lại**
+   (`app.js:2457-2460`, `visibilitychange`). Nói chính xác là «trễ nhất 15 giây», **KHÔNG gọi là
+   «áp dụng ngay»** — server thì áp dụng ở request kế tiếp, còn nút trên màn hình cũ cần một lượt
+   nạp hoặc một lần chuyển tab. Khi quyền bị thu hồi, `capNhatNutDuyet8b()` khoá nút đang mở, và
+   dù người dùng bấm được thì **máy chủ vẫn từ chối** nên không ghi thành công.
+4. **Lưu bảng quyền nằm trong MỘT transaction** — trước đó ghi từng dòng, lỗi giữa chừng để lại
+   bảng quyền nửa vời. Nay hoặc lưu hết, hoặc không đổi gì (có test rollback).
+5. **Action `ty-le` được REST chấp nhận.** `po_action_ok` (migration 018) và `can()` đã có
+   «Sửa tỷ lệ», nhưng `ghiDeSchema` trong `permissions/routes.js` vẫn là
+   `z.enum(['read','create','update','delete','approve'])` ⇒ admin bấm Lưu ô đó là 400. Đã thêm
+   `'ty-le'` vào enum.
+6. **Ba trạng thái giữ nguyên nghĩa, không diễn giải lại ⏳:** `cho-phep` = ✓ làm ngay ·
+   `cho-duyet` = ⏳ **làm được nhưng đầu việc vào `Chờ duyệt`** · `tu-choi` = ✕ không làm được.
+   Test chốt cả ba cho từng cấp: `✓ sửa ngay, ⏳ duyệt lại, ✕ giữ nguyên`.
+7. **Phạm vi `tat-ca` KHÔNG nới quyền TẠO.** `rbac.js:371-385` đặt nhánh khoá phòng cho `create`
+   TRƯỚC nhánh `tatCaPhong`, nên TP/PP/Cán bộ chỉ tạo được trong phòng mình kể cả khi ô quyền đặt
+   phạm vi «tất cả các phòng». `tat-ca` chỉ nới `inScope()` cho đọc/sửa. So sánh dùng
+   `department_id` của dòng/cha **đọc từ CSDL**, không tin giá trị client gửi ⇒ sửa payload, gọi
+   thẳng REST/RPC hay truyền ID ngoài phòng đều bị chặn. Tài khoản chưa có phòng nhận thông báo
+   riêng, không rơi sang toàn đơn vị. Admin và Phó Giám đốc giữ phạm vi hiện hành.
+   **Ngoại lệ ủy quyền giữ nguyên** (`tryDelegations()` chạy trước khi từ chối) — đang chờ người dùng
+   chốt ở `KE-HOACH-VPS.md` §13.4 **mục 26**.
+8. **Không mở lại vai «Quản lý công việc»** đã bỏ bằng migration 021; `po_vai_ok` trên CSDL vẫn
+   đúng 4 vai. Tên TAB/TRANG «Quản lý công việc» vẫn giữ — đó là nhãn giao diện, không phải vai.
+
+Test: `tests/integration/phase8b-permissions.test.js` (38 test — admin đổi từng trạng thái, cùng
+phiên TP/PP/Cán bộ nhận quyền mới ở request kế tiếp không cần đăng nhập lại, cho phép→thu hồi và
+thu hồi→cho phép, rollback khi bị từ chối, phạm vi cùng phòng/khác phòng/chưa phòng ở cả ba cấp kể
+cả payload giả) + `tests/unit/phase8b-permissions-ui.test.js` (tab, nút, poll 15 giây, thu hồi khi
+form đang mở, escape dữ liệu nội suy) + `tests/helpers/uiPermissions.js`. Pin XSS giữ **106/903**.
+Buster + banner **`20260909-4`** cho cả bốn tài sản.
+
+
+
+## 12. VÒNG 8b ĐỢT 2 (2026-09-09) — Trưởng/Phó phòng làm người thực hiện: bảng quyền bị CHẶN TRẦN ở một ô
+
+Đợt này không thêm ô quyền nào và không đổi ma trận §6. Nó đổi **ý nghĩa của một ô đã có**, nên phải
+ghi ở đây để session sau không tưởng là bug.
+
+**1. `file:create = ✓` KHÔNG còn tự «Đã duyệt» với Trưởng phòng / Phó phòng.**
+Trước đợt này ✓ nghĩa là «nộp lên là `da-duyet` ngay, kèm dòng luồng `duyet-tu-dong`». Nay
+`apTuDong` bỏ qua ✓ khi `user.role` là `Trưởng phòng`/`Phó phòng` và trả `cho-lanh-dao`. Lý do: từ
+2026-09-09 hai vai này **cũng là người thực hiện được**, mà họ lại là cửa duyệt ĐẦU TIÊN của phòng
+(`file:approve = ✓`) — để ✓ tự chốt là cho họ tự duyệt việc của chính mình (người dùng chốt
+«Chặn tự duyệt, buộc trình Phó GĐ», và «chặn cả người thực hiện lẫn người đã tải file lên»).
+Cán bộ vẫn tự động như cũ. **Hệ quả cần biết:** với hai vai lãnh đạo, ô «Tạo file kết quả» đặt ✓ hay
+⏳ cho kết quả GIỐNG NHAU; ✓ chỉ còn tác dụng ở chỗ nó vẫn cho phép nộp. `TC-LS-04` đã đổi kỳ vọng
+CÓ CHỦ Ý — đừng «sửa lại cho xanh như cũ».
+
+**2. Luật mới nằm NGOÀI bảng quyền, và cố ý như vậy.**
+`assertTaskAssignee` chặn gán TP/PP khi phòng chưa có Phó GĐ phụ trách (`ASSIGNEE_LEADER_NO_DEPUTY`,
+400) và chặn vai không phải admin/PGĐ/TP-PP-cùng-phòng (403). Đây là **ràng buộc nghiệp vụ về luồng
+duyệt**, không phải một quyền để admin bật/tắt: nếu đưa vào bảng quyền thì một lần bấm ✓ có thể tạo
+ra những kết quả không ai duyệt được. Vì thế nó nằm ở `assignments/service.js`, không phải ở
+`PERMISSIONS`/`permission_overrides`, và admin **không** tắt được.
+
+**3. Bảng quyền vẫn là nguồn quyết định cho phần còn lại.**
+`task:create`/`task:update` của từng vai vẫn quyết AI tạo/sửa được nhiệm vụ; luật mới chỉ siết thêm
+«gán cho AI». Thứ tự kiểm không đổi: ma trận → `inScope()` → ghi đè → ủy quyền, rồi mới tới
+`assertAssignmentActor` và `assertTaskAssignee`. Một tài khoản bị thu hồi `task:create` giữa chừng
+vẫn bị chặn ở lớp quyền trước khi tới lớp phân công (đã có `phase8b-permissions.test.js` canh).
+
+**4. Giao diện đọc máy chủ, không tự suy luận.**
+`listCandidates`/`listTaskCandidates` trả THÊM `coPhoGiamDocPhuTrach` + `lanhDaoLamTrucTiep`;
+`napUngVienPhanCong` của `app.js` nay **trả payload ra ngoài** để `createTaskModal` vẽ lại ô người
+thực hiện. Chỉ thêm trường, hình dạng phản hồi cũ giữ nguyên, không mở RPC mới.
+
+**5. Còn một câu hỏi UX chưa làm (không tự quyết):** bảng phân quyền chưa có chỗ nào NÓI cho admin
+biết rằng ✓ ở ô «Tạo file kết quả» không còn tác dụng tự duyệt với TP/PP. Admin bật ✓ rồi thấy vẫn
+«Chờ lãnh đạo» có thể tưởng là lỗi. Nếu muốn, thêm một dòng chú thích trong tab `file` của bảng
+quyền — việc nhỏ, nhưng là thay đổi giao diện nên chờ người dùng yêu cầu.
+
+Kiểm chứng: full suite **1869/1869 · 104 file**; pin XSS **107/904**; buster + banner **`20260909-5`**.
+Chi tiết mã + quyết định: `KE-HOACH-VPS.md` §13.3 dòng «2026-09-09 (đợt 2)», §13.4 mục 27, §13.5;
+luồng file: `docs/KE-HOACH-KET-QUA-FILE.md` mục 14; test tay: mục **9b.16**.

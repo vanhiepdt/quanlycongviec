@@ -1,5 +1,306 @@
 ﻿# Việc 4.6 — Soát XSS toàn bộ tầng trình duyệt
 
+## Pin sau bổ sung 12/09/2026 lượt 2 (nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt») — 12/09/2026: 101 sink / 986 nội suy
+
+So với mốc bổ sung 12/09/2026 **100/978**: **+1 sink**, tăng ròng **+8 nội suy**, **+2 CAN-THOAT**
+(danh sách **21 → 23 chỗ**). Số chốt lấy thẳng từ `node ../tools/dem-xss.mjs` chạy **từ `server/`** —
+không suy ra từ danh sách chỗ vừa thêm (bẫy cũ, xem `KE-HOACH-DUYET-CAY.md` §12.4 mục 6).
+
+- **SINK +1 — `content.innerHTML = than` ở `app.js:8808`, trong `moPopupThayDoiChoDuyet`.** Bộ soát xếp
+  sink này là **`HTML-DUNG`** (vế phải chính là HTML dựng sẵn), **không phải `PHAI-SOAT`**, vì
+  `than = daSua.slice().reverse().map(buildNhatKyDong).join("")` — **TÁI DỤNG** hàm dựng của tab «Nhật
+  ký», mọi giá trị bên trong đã qua `escapeHtml`/`escapeHtmlAttr` từ trước. Nhờ vậy **không phải thêm
+  mục nào vào `SINK_DA_SOAT_TAY`** và TC-SEC-10/11 vẫn xanh. Nếu popup tự dựng HTML riêng thì sink này
+  sẽ là `PHAI-SOAT` và phải khai báo tay — đó là lý do chọn tái dụng, không chỉ để đỡ code.
+- **+2 CAN-THOAT — hai lời gọi `nhanDuyetHtml(...)`** ở `app.js:8532` (`nhanDuyetHtml(laBanSua ? "sua" :
+  "moi")`) và `app.js:8637` (`nhanDuyetHtml("xoa")`). Đây là **hàm trả cả một đoạn HTML** nên không thể
+  bọc thoát ở chỗ gọi — cùng lớp với `oNhapTyLeKhai` của ĐỢT B. Khai vào `CO_Y_KHONG_BOC` (**21 → 23
+  chỗ**) là cách **đúng**, không phải lách: bên trong hàm, cả ba giá trị đều đã thoát.
+- **`cfg.mau` tuy là HẰNG đóng băng vẫn bọc `escapeHtmlAttr`** (`app.js:8603`). `NHAN_DUYET` là
+  `Object.freeze` do mình viết nên về lý không cần thoát — nhưng bộ soát không biết điều đó, và khai một
+  ngoại lệ CAN-THOAT cho nó là bắt người sau phải **tin lời mình**. Thoát một hằng là miễn phí; một ngoại
+  lệ là một món nợ. Hai vế còn lại: `escapeHtmlAttr(cfg.yNghia)` (8605, attr `title`) và
+  `escapeHtml(cfg.nhan)` (8607, text).
+- **+8 nội suy RÒNG = 12 chỗ mới trừ đi các chỗ cũ mất đi khi hai builder được dựng lại.** 12 chỗ mới,
+  đo bằng `tools/_dem-xss-vung.mjs` (lọc `sites` theo vùng dòng của đợt này): `data-moc-xu-ly`
+  (`escapeHtmlAttr(item.moc_xu_ly || "")`, 8530) · hai CAN-THOAT `nhanDuyetHtml(...)` (8532, 8637) · hai
+  attr `title` của nhãn đối tượng (`escapeHtmlAttr(tieuDeLoai)`, 8534 + 8639) · hai text của nhãn đối
+  tượng (`escapeHtml(loai)`, 8536 + 8641) · attr `title` của nút «Xem các thay đổi» (8552) · ba nội suy
+  trong `nhanDuyetHtml` (8603/8605/8607) · một `HTML-LONG` là `daSua.slice().reverse().map(
+  buildNhatKyDong).join("")` (8785). Phần **trừ đi** không tách riêng được vì `app.js` còn thay đổi
+  chưa commit của nhiều đợt trước — **không** so được với một bản gốc cô lập.
+- **`buildChangeApprovalRowHtml` (bảng «Phê duyệt kết quả» / đề nghị đổi tỷ lệ) KHÔNG thêm sink nào** vì
+  nó là **builder DOM**: tạo `<span>` rồi gán `textContent` (`sua.textContent = NHAN_DUYET.sua.nhan`),
+  không nối chuỗi HTML. Nó chỉ **đọc CHUNG** bảng chữ `NHAN_DUYET` (8590) để khỏi lệch chữ với hai
+  builder chuỗi — đây là mặt **tốt** của bài học §12.4 mục 7: đường DOM thì khỏi cả sink lẫn CAN-THOAT.
+- **MỚI-4 (bốn nút bé lại) là thay đổi THUẦN CSS** trong `web/assets/css/app.css` **4309–4366** ⇒
+  **không** ảnh hưởng số đếm nào ở đây. Nhưng nó kéo theo một pin mới trong `approvals-ui.test.js`: mọi
+  class màu của nhãn (`bg-emerald-100`/`text-emerald-800`, `bg-blue-100`/`text-blue-700`,
+  `bg-red-100`/`text-red-700`, `bg-gray-100`/`text-gray-600`, `bg-amber-100`/`text-amber-700`) và
+  `whitespace-nowrap` phải **có thật** trong `tailwind.min.css` (artifact đóng băng, **không** có class
+  tuỳ ý dạng `text-[11px]`). Đo bằng `readFileSync` + `toContain(".<tên>{")`.
+- **MỚI-5 và MỚI-6 là thay đổi MÁY CHỦ** (`assignments/service.js`, `workItems/service.js`,
+  `taskFiles/service.js`) ⇒ **không** đụng bộ soát XSS của `app.js`.
+- **Tên ca TC-SEC-17 vẫn ghi «79 chỗ ghi HTML, 566 giá trị nội suy» trong tiêu đề** — **nợ cũ, GIỮ
+  NGUYÊN**. Nội dung ca đã so với pin mới; sửa tiêu đề cho «đẹp» mà không sửa nội dung thì càng lệch.
+- **Buster `20260912-01 → 20260912-02`** đủ 5 chỗ (`web/index.html` dòng 21/1230/1232/1233 + banner
+  `app.js:9`); `node tools/local-assets-check.mjs` in `Ban app.js = 20260912-02 (index.html khop).` exit 0.
+## Pin sau bổ sung 12/09/2026 («Tình trạng» và «Người thực hiện» ghi Ở TỪNG BẢN · siết người nộp bản ĐẦU) — 12/09/2026: 100 sink / 978 nội suy
+
+So với mốc ĐỢT B **100/969**: **KHÔNG thêm sink**, tăng ròng **9 nội suy**, **KHÔNG thêm CAN-THOAT**
+(danh sách vẫn **16 mục / 21 chỗ**).
+
+- **SINK KHÔNG ĐỔI (100).** Hai cột mới nằm TRONG các `<tr>` mà `buildDongBanKetQua` và
+  `buildKhoiFile` đã trả từ đợt 3/đợt 5; dải chú «ai nộp được bản đầu» chỉ là một `<span>` trong
+  chuỗi dựng sẵn của `buildKhungDanhSachKetQua`. **Không một vùng chứa `innerHTML` mới.**
+- **KHÔNG có CAN-THOAT mới — nhờ tách HÀM TRẢ CHUỖI khỏi HÀM DỰNG HTML.** Sáu hàm đọc dữ liệu mới
+  (`vaiNgan`, `luongCuaBan`, `banTruocBiTraVe`, `nguoiTaoBan`, `tinhTrangMotBan`,
+  `nguoiThucHienCuaBan`) chỉ **trả về chuỗi và đối tượng nhãn**, không nối một thẻ nào; mọi nội suy
+  nằm ở chỗ gọi trong `buildDongBanKetQua` và đều qua `escapeHtml`/`escapeHtmlAttr`. Nhãn vai, nhãn
+  hành động và cặp lớp màu lấy từ ba bảng **hằng** `Object.freeze` (`NHAN_VAI_NGAN`,
+  `HANH_DONG_TAO_BAN`, `TINH_TRANG_BAN`) — dữ liệu người dùng không chảy vào thuộc tính `class`. Nếu
+  gộp việc dựng HTML vào trong `tinhTrangMotBan` thì bộ soát sẽ xếp lời gọi đó là CAN-THOAT đúng như
+  đã xảy ra với `oNhapTyLeKhai` ở ĐỢT B — **tách ra là cách khỏi phải khai báo tay, không phải lách**.
+- **+9 NỘI SUY, kể theo VÙNG chứ không cộng từng khoản** (bài học đợt 4: bộ soát đếm một `.map` ra
+  chuỗi HTML khác một `.map` ra lời gọi hàm dựng, nên tổng các khoản kể tên không khớp con số chốt):
+  ô 7 của DÒNG BẢN từ một mình `escapeHtml(b.ten_nguoi_nop)` thành **nhãn + tên + `title`** (3 giá
+  trị); ô 9 của DÒNG BẢN từ **Ô TRỐNG** thành badge tình trạng của bản mang lớp màu, `title` và chữ
+  (3); ô 7 của DÒNG CHA đổi nguồn sang `ten_nguoi_thuc_hien` và thêm `title` phân biệt «nhiệm vụ chưa
+  gán người thực hiện» (2 thay 1); `doiNguoiNop` trong ô «Hành động» khi nhóm 0 bản mà người xem
+  không phải người thực hiện (1); dải chú cùng ý ở đầu khung khi bảng RỖNG (1).
+- **TÊN NGƯỜI nay hiện ở HAI cấp (dòng cha và từng bản) thay vì một — đó là lý do chính của +9.** Mỗi
+  chỗ in tên là một nội suy phải thoát. Cả hai nguồn đều đã thoát: `n.ten_nguoi_thuc_hien` (máy chủ
+  LEFT JOIN `users` trong `listNhomByItem`) và `g.ten_nguoi` (dòng `task_file_flow` của đúng bản).
+- **Bài học giữ lại:** thêm CỘT vào một bảng đã có thì sink đứng yên nhưng nội suy tăng theo SỐ Ô, và
+  tăng thật chứ không phải «đếm cho đẹp» — con số chốt luôn lấy thẳng từ `node tools/dem-xss.mjs`.
+
+## Pin sau bản sửa Q6/Q11 (tích «Gửi BLĐ phê duyệt» quyết định nút của TP/PP) — 11/09/2026: 100 sink / 969 nội suy — **KHÔNG ĐỔI**
+
+Đo lại bằng `node tools/dem-xss.mjs` sau khi sửa: **`sink = 100 | gia_tri = 969`**, đúng bằng mốc ĐỢT B.
+**Không có mục mới, không phải sửa `CO_Y_KHONG_BOC`.** Lý do đáng ghi lại:
+
+- **`web/assets/js/app.js` chỉ thêm LUẬT, không thêm chỗ ghi HTML.** Ba chỗ đụng: hằng
+  `HANH_DONG_CHOT = Object.freeze(["hoan-thanh","duyet"])` (dòng 2346) — mảng chuỗi cố định;
+  nhánh mới trong `xuLyVerdictFile` (3533) **ĐỌC** `oYKien.value` rồi `.trim().slice(0,2000)` và đưa
+  vào **tham số JSON của lời gọi REST**, không nối vào chuỗi HTML nào; bộ lọc trong `dsVerdictFile`
+  (3725) — thuần `.filter()`. **Không một `innerHTML` mới, không một nội suy mới vào HTML.**
+- **Chuỗi ghi chú mới nằm ở MÁY CHỦ** (`taskFiles/service.js:1864`, copy trang editor) và là
+  **template literal chỉ chứa CHỮ CỐ ĐỊNH**: `${duyetMoi?.ma === 'tp-phe-duyet' ? '<div id="ghi-chu-duyet">…</div>' : ''}`.
+  Điều kiện so với một **mã hành động cố định**, nhánh đúng trả **một hằng chuỗi** — **không có dữ liệu
+  người dùng nào chảy vào**, nên không phải sink. (Nếu sau này muốn chèn tên người duyệt hay nội dung
+  ý kiến vào câu đó thì **phải** escape — ghi lại để khỏi tưởng nhầm là đã an toàn sẵn.)
+- **Ghi chú của nút chốt đi đúng đường đã có sẵn từ ĐỢT B**: ô «Ý kiến» → `noi_dung` → máy chủ lưu
+  `task_file_flow.noi_dung` → bảng luồng render bằng `escapeHtml`. **Không mở đường hiển thị mới.**
+- **Bài học giữ lại:** sửa **luật hiện nút** (ẩn/hiện, mã lỗi, điều kiện) thường **không** làm tăng pin
+  XSS, vì nó không sinh vùng chứa mới. Nhưng **sửa CÂU CHỮ giải thích luật** thì có — nếu câu đó dựng
+  ở trình duyệt. Lần này câu dựng ở máy chủ và là hằng, nên thoát.
+
+## Pin sau ĐỢT B («gộp hai trục» duyệt cây + duyệt file kết quả) — 11/09/2026: 100 sink / 969 nội suy
+
+So với mốc ĐỢT A **100/964**: **KHÔNG thêm sink**, tăng ròng **5 nội suy**.
+
+- **SINK KHÔNG ĐỔI (100).** Không có vùng chứa `innerHTML` nào mới. Hàng đề nghị tỷ lệ
+  `buildChangeApprovalRowHtml` dựng bằng **DOM** (`createElement` + `textContent`) rồi trả `outerHTML`,
+  không ghi `innerHTML` — cùng cách popup `moNhatKyFileKetQua` (đợt 3) và `moYKienKetQua` (đợt 5) đã
+  dùng. Nên dù ĐỢT B thêm hẳn **hai vùng giao diện mới** (ô tỷ lệ trong khung khai của Q1, hàng chờ đề
+  nghị tỷ lệ của R4'') số chỗ ghi vẫn đứng yên. **Đó là lý do nên dựng popup/hàng động bằng DOM chứ
+  không phải vì «cho sạch»: mỗi `innerHTML` mới là một sink phải rà lại vĩnh viễn.**
+- **+2 CAN-THOAT — LẦN ĐẦU TIÊN DANH SÁCH NÀY TĂNG.** Cả hai là lời gọi `oNhapTyLeKhai(...)` của
+  khung khai (Q1) và của dòng khai tạm. **Bộ soát KHÔNG đọc THÂN hàm**, nên nó không biết
+  `oNhapTyLeKhai` là hàm DỰNG HTML: nó thấy một lời gọi hàm ở vị trí nội suy và xếp CAN-THOAT. Đã ghi
+  lý do vào `CO_Y_KHONG_BOC`; danh sách nay **16 mục / 21 chỗ** (trước: 19 chỗ).
+- **KHAI CHỨ KHÔNG PHẢI LÁCH — và đã cân nhắc cách lách rồi bỏ.** Bên trong hàm, cả `id` lẫn class đều
+  đi qua `escapeHtmlAttr` (xem `oNhapTyLeKhai` trong `web/assets/js/app.js`), tức chỗ này **thật sự đã
+  thoát**; bộ soát chỉ không nhìn thấy. Đổi tên hàm thành `build*`/`create*`/`render*` là bộ soát tự
+  xếp HTML-LONG và **xanh ngay không cần khai** — **KHÔNG chọn cách đó**, đúng tiền lệ đợt 3 đã ghi:
+  đổi tên helper chỉ để né bộ đếm là **làm mờ danh sách chứ không làm nó chặt hơn**. Giữ tên nghiệp vụ
+  (`oNhapTyLeKhai` = «ô nhập tỷ lệ khai») + khai lý do là chặt hơn, vì lần sau ai sửa thân hàm vẫn thấy
+  chỗ này đang bị canh.
+- **+3 giá trị còn lại** là các nội suy mới trong cùng hai khung khai tỷ lệ, trong `cauTinhTrangFile`
+  (tên + lúc ký mốc «TP/PP phê duyệt» của **ĐIỂM 7** — hai trường máy chủ mới `tp_duyet_boi` /
+  `tp_duyet_luc` của migration `029`), và trong nhãn đề nghị tỷ lệ của hàng chờ. Tất cả đã qua
+  `escapeHtml`/`escapeHtmlAttr` ⇒ `TC-SEC-10` xanh.
+- **KHÔNG cộng tay thành phép tính.** Bài học đợt 5 (lệch 3 đơn vị, không giải thích được bằng đọc mã)
+  còn nguyên, và đợt B có thêm **một lý do nữa để không cộng tay**: bộ soát đếm một `.map` ra chuỗi
+  HTML **KHÁC** một `.map` ra lời gọi hàm dựng, mà Đợt B dùng cả hai. Con số chốt **lấy thẳng từ
+  `node ../tools/dem-xss.mjs` chạy từ `server/`** → in `sink = 100 | gia_tri = 969`, khớp pin ở
+  `tests/unit/xss-guard.test.js:546`.
+- **CÙNG MỘT HÀM ĐÓ ĐÃ ĐÁNH RỚT HAI BỘ SOÁT KHÁC NHAU — BÀI HỌC CHUNG.** `oNhapTyLeKhai` vừa là chỗ
+  bộ đếm XSS không thấy (+2 CAN-THOAT ở trên), vừa là chỗ `tests/unit/dom-contract.test.js` **không
+  thấy id được sinh ra** (TC-DEAD-02 đỏ vì `task-kq-khai-ty-le`). Cùng một nguyên nhân: **bộ soát tĩnh
+  đọc chuỗi, không thực thi**. Hai bộ đã được chữa theo hai cách khác nhau và **đều phải nhớ khi viết
+  helper mới**: XSS thì **khai vào `CO_Y_KHONG_BOC`**; còn `dom-contract` đã được thêm **NGUỒN SINH ID
+  THỨ TƯ** — hàm nào nhận tham số ĐẦU tên `id` và thật sự nối ` id="` trong thân thì mọi chuỗi literal
+  truyền TRỌN VẸN vào đối số đầu được coi là id có nơi sinh. Helper sau này đặt id ở chỗ khác (đối số
+  thứ hai, mảnh nối kiểu `"ban-" + id`) thì **test đỏ chứ không âm thầm lọt** — đúng hướng an toàn,
+  đừng nới để cho xanh.
+
+## Pin sau ĐỢT A («Ban lãnh đạo kiểm soát» ba cấp thành MẢNG) — 11/09/2026: 100 sink / 964 nội suy
+
+So với mốc đợt 5 **99/961**: **+1 sink**, tăng ròng **3 nội suy**.
+
+- **+1 SINK**: `supervisorsBox.innerHTML = buildSupervisorCheckboxesHtml(list, selectedIds)` trong
+  `napUngVienPhanCong`. Ô «Ban lãnh đạo kiểm soát» của **cấp 1 (công việc)** và **cấp 2 (công việc con)**
+  đổi từ `<select>` MỘT người sang **nhóm checkbox NHIỀU người** (migration `028_supervisor_ids.sql`,
+  quyết định D2). Viết theo **đúng khuôn `buildLeaderCheckboxesHtml` + `leadersBox.innerHTML`** đã chạy
+  ổn định từ migration 005 — cùng một loại dữ liệu (danh sách người do máy chủ trả), cùng một cách vẽ,
+  nên không phát minh cơ chế mới.
+- **Hàm dựng MỚI `buildSupervisorCheckboxesHtml` — cố ý KHÔNG tham số hoá tên class dùng chung với
+  `buildLeaderCheckboxesHtml`.** Lý do: tên class (`supervisor-opt` / `leader-opt`) nằm TRONG thuộc tính
+  HTML, và mọi chỗ nội suy biến vào HTML đều phải qua rà soát. Giữ nó là **chuỗi hằng viết thẳng** thì
+  chỗ này không sinh thêm điểm phải thoát, và bộ đếm cũng không phải đoán một biểu thức ba ngôi lồng.
+  Hai hàm gần trùng nhau là **cái giá chấp nhận** để đổi lấy một hằng số.
+- **KHÔNG có CAN-THOAT mới**: `TC-SEC-10` / `TC-SEC-11` vẫn xanh với đúng **19** chỗ cũ khai trong
+  `CO_Y_KHONG_BOC`; `TC-SEC-12` (on* phải dùng `escapeForInlineHandler`) xanh — đợt này không thêm
+  thuộc tính `on*` nào.
+- **Các chỗ mới, tất cả DA-THOAT**:
+  - Bên trong `buildSupervisorCheckboxesHtml`: `escapeHtmlAttr(s.id)` cho `value` + `escapeHtml(s.name)`
+    cho nhãn — **2**. (`s.id` / `s.name` là **tên người và id do máy chủ trả**, tức dữ liệu người dùng
+    nhập từ trang «Quản lý tài khoản» ⇒ KHÔNG được coi là hằng.)
+  - Hai hidden input `value="…(task.supervisorIds || []).join(",")…"` (form nhiệm vụ) và
+    `value="…(project.supervisorIds || []).join(",")…"` (form công việc) — **2**. `join(",")` trên mảng
+    id **số** nên bản thân nó không sinh ký tự HTML, nhưng giá trị nằm trong `value="…"` ⇒ bộ đếm vẫn
+    tính, và vẫn đúng: đổi sang mảng tên là lọt ngay.
+- **Các chỗ BỚT**: nhãn cũ của ô cấp 3 `escapeHtml(laCapHai ? "…" : "…")` — **−1**. Nay cả ba cấp cùng
+  một nhãn «Ban lãnh đạo kiểm soát» viết thẳng thành chuỗi hằng, không nội suy.
+- **Cộng tay: +2 + 2 − 1 = +3**, và công cụ đo **961 → 964 = +3** ⇒ **khớp**. Ghi rõ chỗ này vì bài
+  học đợt 5 còn nguyên (lệch 3 đơn vị, không giải thích được bằng đọc mã): lần này khớp là vì mọi chỗ
+  mới đều là **nội suy thẳng trong chuỗi HTML**, không có `.map` ra chuỗi HTML lẫn `.map` ra lời gọi
+  hàm dựng. **Dù khớp thì vẫn không được suy ra số**: sửa pin là **chạy lại `node tools/dem-xss.mjs`**
+  (từ `server/`, tức `node ../tools/dem-xss.mjs`), không cộng tay.
+- **Một chỗ DỄ SAI khi sửa tiếp hai ô cùng tên trường**: form nhiệm vụ có HAI ô «Ban lãnh đạo kiểm
+  soát» (select `#task-supervisor-select` cho cấp 3 và nhóm checkbox `#task-supervisors-box` cho cấp 2),
+  cả hai cùng `name="supervisorIds"`. Chỉ MỘT ô được gửi: ô không dùng phải `disabled` (select) hoặc
+  **không có `name`** (hidden input). Để cả hai cùng gửi thì `FormData` chỉ giữ giá trị cuối — mà giá
+  trị cuối là của ô người dùng KHÔNG nhìn thấy. Đúng cái bẫy cặp ô `leaderIds` cạnh bên đã phải xử lý.
+
+## Pin sau đợt 5 («Kết quả làm được» về cột Nhiệm vụ, ô «Ghi ý kiến» thành popup) — 11/09/2026: 99 sink / 961 nội suy
+
+So với mốc đợt 4 **98/957**: **+1 sink**, tăng ròng **4 nội suy**.
+
+- **+1 SINK — và đây là sink ĐẦU TIÊN sau hai đợt liền không thêm cái nào**: `content.innerHTML = than`
+  trong popup mới `moYKienKetQua`. Popup nhật ký của đợt 3 (`moNhatKyFileKetQua`) dựng **hoàn toàn**
+  bằng `createElement` + `textContent` nên không có sink nào; popup ý kiến **không làm vậy được** vì nó
+  phải **tái dùng** `buildYKienPanel` và `buildMotYKien` — hai hàm trả **CHUỖI HTML đã thoát sẵn**. Viết
+  lại chúng bằng DOM chỉ để tránh một con số trong sổ sách là **nhân đôi một chỗ thoát thành hai chỗ để
+  lệch nhau**, tệ hơn là có một sink được kiểm soát. Thân popup vì vậy có **đúng MỘT** lần `innerHTML`,
+  và mọi giá trị đi vào đó đều đã qua `escapeHtml` / `escapeHtmlAttr` / `escapeForInlineHandler` **bên
+  trong** các hàm `build*`.
+- **KHÔNG có CAN-THOAT mới**: `TC-SEC-10` / `TC-SEC-11` vẫn xanh với đúng **19** chỗ cũ khai trong
+  `CO_Y_KHONG_BOC`. `TC-SEC-12` (on* phải dùng `escapeForInlineHandler`) cũng xanh — ba đối số của
+  `moYKienKetQua(...)` nằm trong `onclick` nên đều đi qua `escapeForInlineHandler`, không phải
+  `escapeHtml`. Đây đúng là cái bẫy việc 4.6 từng trả giá: bộ phân tích HTML **giải mã thực thể trước**
+  khi JS thấy mã trong `on*`, nên `&#39;` của `escapeHtml` thành `'` và đóng chuỗi JS.
+- **Các chỗ mới, tất cả DA-THOAT hoặc HTML-LONG**:
+  - Ba đối số `moYKienKetQua(ma, fileId, banId)` trong `onclick` của **dòng cha** — **2**
+    (`banId` là chuỗi rỗng cố định, không nội suy).
+  - Ba đối số đó trong `onclick` của **dòng bản 1.1/1.2** — **3** (thêm `b.id`).
+  - Chuỗi `than` của popup với `dsY.map(buildMotYKien)` — **1** HTML-LONG.
+  - Ô «Tên file» mới `.task-file-ten-that` mang `title` + chữ của `tenFileThat` — **2**.
+- **Các chỗ BỚT** (ô «Ghi ý kiến» không in nội dung tại chỗ nữa):
+  - `dsYKien.map(buildMotYKien)` trong cột ý kiến của dòng cha — **−1** HTML-LONG.
+  - `dsY.map(buildMotYKien)` trong cột ý kiến của dòng bản — **−1** HTML-LONG.
+  - `escapeForInlineHandler(n.id)` trong `onclick="batTatKetQua(...,'yk')"` — **−1** (nút đó đã thay
+    bằng nút mở popup).
+  - `buildONhapYKien` **tách ra** từ `buildYKienPanel` chứ không viết mới: cùng chừng ấy giá trị, chỉ
+    khác chỗ gọi ⇒ **ròng 0**. Tách là cần để popup lắp đúng phần ô nhập mà không phải in lại cả thread.
+- **Con số chốt lấy THẲNG từ `tools/dem-xss.mjs`, không cộng tay.** Tổng các khoản kể tên ở trên là
+  **+4 mới − 3 bớt = +1**, trong khi công cụ đo **+4**. Lệch **3** đơn vị, và **cố ý không đi giải
+  thích cho tròn số**: bài học đợt 4 còn nguyên — bộ soát đếm một `.map` ra **chuỗi HTML** khác một
+  `.map` ra **lời gọi hàm dựng**, và đếm một biểu thức ba ngôi lồng khác đếm từng nhánh; đọc mã không
+  thấy được sự khác nhau đó. **Sửa pin thì chạy lại công cụ**, đừng suy từ danh sách trên. Danh sách
+  chỉ để giải thích **bản chất** chỗ nào mới và vì sao nó an toàn.
+
+## Pin sau đợt 4 (mũi tên ▼/▲, cột «Tên file» riêng, gộp ý kiến verdict) — 10/09/2026: 98 sink / 957 nội suy
+
+So với mốc đợt 3 **98/952**: **giữ nguyên sink**, tăng ròng **5 nội suy**.
+- **Sink vẫn 98**: đợt này không thêm chỗ ghi `innerHTML` nào. Popup nhật ký chỉ đổi **câu chữ**
+  (bỏ hai tiêu đề «Ai đăng ký kết quả này» / «Ai thực hiện», gộp thành bốn dòng đánh số) và vẫn dựng
+  hoàn toàn bằng `createElement` + `textContent` — tên người, tên file, nội dung ý kiến không đi qua
+  chuỗi HTML ở đó.
+- **KHÔNG có CAN-THOAT mới**: vẫn đúng **19** chỗ cũ khai trong `CO_Y_KHONG_BOC`. Hai chỗ nằm ngay
+  trong hàng nhiệm vụ (`pendingApprovalBadge`, `nhapBadge`) là của các đợt trước, không phải của đợt này.
+- **Các chỗ mới, tất cả DA-THOAT hoặc HTML-LONG**:
+  - `buildMotYKien` (mới) — **6** giá trị: `ten_nguoi`, `vai`, **`nhan` (nhãn hành động)**,
+    `formatDateForDisplay(created_at)`, `version_no`, `noi_dung`. Hàm này **thay** cho 4 giá trị của
+    thread cũ trong `buildYKienPanel` và 3 giá trị của ô ý kiến cũ trong `buildDongBanKetQua` — nay cả
+    hai gọi chung một hàm nên **thoát ở MỘT chỗ thay vì ba**. Đó chính là chỗ sửa yêu cầu «Ghi ý kiến
+    là các ý kiến mỗi lần sửa hoặc từ chối»: thêm nhãn hành động là bắt buộc, vì nội dung nay đến từ
+    **hai nguồn** (`task_file_comments` và `task_file_flow`) và phải đọc ra câu nào của lần «Yêu cầu sửa».
+  - `buildColgroupKetQua` (mới) — **2**: lời gọi `.map` ra chuỗi `<col>` (HTML-LONG) và `escapeHtmlAttr(c)`.
+    Cùng khuôn với `buildColgroupNhiemVu` của đợt 3.
+  - Bảng nhiệm vụ **10 → 11 cột** — **2** HTML-LONG: ô «Tên file» để trống của hàng nhiệm vụ và ô dấu
+    nối `task-file-lui` của hàng file.
+  - `escapeHtmlAttr(mauTienDoFile(tienDo))` cho **màu chữ theo tiến độ** — **1**; bù lại **−1**
+    `escapeHtml(file.ten_nguoi_nop)` đã bỏ ở dòng phụ dưới tên file (người nộp nay có cột riêng).
+    `mauTienDoFile` chỉ trả về **một trong bốn chuỗi cố định** (`td-mau-xanh-la` / `-xanh-duong` /
+    `-cam` / `-do`) nên bản thân nó không mang dữ liệu người dùng; vẫn bọc `escapeHtmlAttr` cho chặt.
+  - `dsYKien.map(buildMotYKien)` trong cột «Ghi ý kiến» của dòng cha — **1** HTML-LONG.
+  - Nút mũi tên tách từ biểu thức nội tuyến thành `buildNutMoRongFile` — **4** giá trị, **đúng bằng 4**
+    của biểu thức cũ (`data-an-file`, `data-so-file`, `title`, `aria-label`) ⇒ ròng **0**.
+- **Con số chốt lấy THẲNG từ `tools/dem-xss.mjs`, không cộng tay.** Tổng các khoản kể tên ở trên không
+  bằng đúng +5: bộ soát đếm `.map(c => "<div …>")` (ra chuỗi HTML) khác với `.map(y => buildMotYKien(y))`
+  (ra lời gọi hàm dựng), nên khi thay một `.map` chuỗi bằng một `.map` hàm dựng thì sổ sách dịch một chỗ
+  mà mắt đọc mã không thấy. **Bài học: sửa pin thì chạy lại công cụ, đừng suy ra từ danh sách.**
+  Bài học đợt 3 vẫn còn nguyên giá trị: **đổi tên hàm dựng ra khỏi `build*`/`create*`/`render*` là đổi
+  phân loại XSS** — `buildMotYKien`, `buildColgroupKetQua`, `buildNutMoRongFile` đều cố ý mang tiền tố `build`.
+## Pin sau thiết kế lại tab Nhiệm vụ — 10/09/2026 (đợt 3): 98 sink / 952 nội suy
+
+So với mốc bốn yêu cầu mới **98/929**: **giữ nguyên sink**, tăng ròng **23 nội suy**.
+- **Sink không tăng vì popup nhật ký file dựng hoàn toàn bằng `createElement` + `textContent`**
+  (`moNhatKyFileKetQua`). Bốn mục của nó — ai đăng ký, ai thực hiện, lịch sử các bản + ý kiến,
+  diễn biến theo thời gian — đều là tên người, tên file và nội dung ý kiến, tức đúng ba thứ do
+  người khác gõ vào. Cùng cách với `hopThoai8b` của `phase8b-review.js` và dùng lại khung
+  `.qlcv-dialog` sẵn có, không phát minh hộp thoại thứ hai.
+- **+23 nội suy, tất cả DA-THOAT hoặc HTML-LONG**, không mục nào phải khai vào `CO_Y_KHONG_BOC`:
+  bảng nhiệm vụ 8 → 10 cột ở **cả** hàng nhiệm vụ **lẫn** hàng file (+4); các ô mới của hàng file —
+  tên đầy đủ cho cả `title` lẫn chữ, người nộp bản cuối, số bản, nhãn + màu trạng thái, hai `data-*`
+  của nút «Xem kết quả» (+13); `<colgroup>` và tiêu đề cột dựng bằng `.map` nên mỗi cái góp 1 (+2);
+  dấu tích ẩn/hiện mang mã nhiệm vụ + số file + tên nhiệm vụ trong `title`/`aria-label` (+3);
+  cột «Tình trạng kết quả» của hàng nhiệm vụ (+1).
+- **Bài học đáng ghi: tên hàm quyết định phân loại.** Helper dựng ô tế bào từng tên
+  `buildTaskCellHtml`; đổi sang `o()` cho ngắn là **20 ô vốn đã escape rớt xuống CAN-THOAT**, vì bộ
+  soát xếp hàm trả HTML theo `BUILDER = /^(create|build|render|wrap|describe|linkify|get.*Html$)/`
+  (`server/tests/helpers/xss-audit.js:29`). Hai đường ra: khai tay 20 mục vào danh sách «cố ý không
+  bọc» — làm **mờ** danh sách đó, không làm nó chặt hơn — hoặc trả tên về họ `build*`. Đã chọn cách
+  sau. Đổi tên helper builder ở file này thì kiểm lại phân loại trước khi nghĩ là có lỗ mới.
+- Hai chỗ không phải dữ liệu người dùng cũng thoát cho nhất quán: class của `<col>` (lấy từ hằng
+  đông cứng `COT_BANG_NHIEM_VU`) qua `escapeHtmlAttr`, và `colspan` dùng thẳng
+  `COT_BANG_NHIEM_VU.length` (bộ soát xếp `.length` là SO) thay vì một hàm trả số — hàm trả số không
+  khớp `BUILDER` nên bị tính là CAN-THOAT dù không thể chứa thẻ.
+- Dấu tích ẩn/hiện là `<button>`, **không phải** `<input type="checkbox">`: `TC-KQ-UI-03` chốt tab
+  Nhiệm vụ không còn checkbox nào sau đợt bỏ checkbox «Hoàn thành». Không liên quan XSS nhưng hai
+  đợt sửa cùng một bảng thì phải giữ cam kết của nhau.
+- Pin `xss-guard.test.js` khóa đúng **98/952**. Buster cuối **20260910-11**.
+Các số 98/929 bên dưới giữ làm lịch sử trước đợt thiết kế lại, không phải pin hiện hành.
+
+## Pin sau bốn yêu cầu mới — 10/09/2026: 98 sink / 929 nội suy
+
+So với mốc V1–V8 **107/920**: giảm **9 sink**, tăng ròng **9 nội suy**.
+- Bốn thẻ số nhiệm vụ và năm thẻ số công việc chuyển từ `innerHTML` sang `textContent`:
+  không còn 9 điểm ghi HTML động. Không xóa kiểm tra an toàn để làm nhỏ số đếm.
+- Hàng file con trong tab Nhiệm vụ, hai cột tỷ lệ/tiến độ riêng và metadata duyệt kết quả
+  thay đổi các builder; tổng nội suy ròng tăng 9. Tên nhóm/tên bản/thuộc tính đi qua hàm thoát.
+- `nhapBadge(task)` được ghi nhận đúng một chỗ gọi mới cho builder HTML đã tự thoát sẵn;
+  `buildTaskCellHtml` chỉ nhận HTML đã thoát tại các chỗ gọi. Không nới quy tắc scanner.
+- Test dùng tên file chứa thẻ `img/onerror`, kiểm không sinh thẻ thực; pin `xss-guard.test.js`
+  khóa đúng **98/929**. CSS chống ô số bị ép hẹp, nhãn Ngày báo cáo và sửa phép tính gia quyền
+  không thêm nội suy. Buster cuối **20260910-10**.
+Các số 107/920 bên dưới giữ làm lịch sử trước bốn yêu cầu mới, không phải pin hiện hành.
+
+## Pin V1–V8 ngày 10/09/2026 — 107 sink / 920 nội suy
+
+Baseline Phần A: **107/904**. Sau V2/V4: **107/918** (+14 nội suy cho tỷ lệ file, cấu hình
+và menu gửi duyệt, không thêm sink). V7: **107/920** (+2 lời gọi builder vào form/cấu hình có sẵn).
+V5 tái dùng chỗ escape câu kể, không cộng giả số tăng. V7 dựng tên/nhãn bằng DOM và `textContent`
+rồi serialize, không đưa tên người trực tiếp vào HTML.
+
+V6 là HTML máy chủ, ngoài phạm vi phép đếm này. JSON cấu hình thoát dấu `<`, phần chữ đi qua
+`escapeHtmlServer`, có test jsdom. Bản sửa tránh ghi đè Q2 (buster **20260910-7**) không thêm sink
+hoặc nội suy HTML, pin giữ **107/920**. Đã đo lại bằng `node tools/dem-xss.mjs`, test XSS nằm
+trong full **1946/1946** xanh. `local-assets-check.mjs --live` exit 0 với buster/banner/nginx khớp.
+Đây là kết quả tự động, không thay cho nghiệm thu người dùng.
+
 Bản ghi kết quả soát của `web/assets/js/app.js` (Phase 4, nhánh `vps/phase-4-frontend`).
 Bản Apps Script cũ chạy trong iframe sandbox của Google; bản VPS chạy trên tên miền của mình, nên
 một lỗ XSS ở đây là chiếm được phiên đăng nhập thật. Kế hoạch §7 nói rõ: **rủi ro lớn nhất của
@@ -75,6 +376,8 @@ Kế hoạch §7 ghi "53 chỗ innerHTML": đó là đếm dòng trên `js.clean
 > `text4` cùng một nội suy `escapeHtml(text4)` ⇒ **78 chỗ / 550 giá trị** (TC-SEC-17, −1 giá trị).
 > Nhãn ô đổi thành «Cán bộ trực tiếp», danh sách ứng viên lọc chỉ role `Nhân viên` — không thêm
 > HTML mới nào, mọi chuỗi tiếng Việt trong nhãn là hằng số chương trình.
+> *(Đã đổi tiếp ngày 2026-09-09: nhãn thành «Người thực hiện trực tiếp», ứng viên nhận thêm
+> Trưởng/Phó phòng — xem mục «Ô «NGƯỜI THỰC HIỆN TRỰC TIẾP»…» ở cuối § này.)*
 >
 > **Cập nhật 2026-08-26 (vòng lần 3 — modal chi tiết cấp 1).** Gộp thông tin phân công thành
 > MỘT hàng flex (`buildPhanCongNhomHtml`, builder tự escape MỘT lần, nhận văn bản thô), tên công
@@ -702,6 +1005,21 @@ mọi giá trị bên trong nó đã tính ở §3. "soát tay" = sáu chỗ ở
     chưa tin». TC trong `zalo-lien-ket-ui.test.js` bắn `<img onerror>` vào `code` và `<script>` vào
     `huongDan`, khẳng định hiện thành chữ.
   - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 106 | gia_tri = 903`) và TC-SEC-17.
+- **Ô «NGƯỜI THỰC HIỆN TRỰC TIẾP» NHẬN THÊM TRƯỞNG/PHÓ PHÒNG (2026-09-09)**: pin
+  **106/903 → 107/904** (+1 chỗ ghi HTML, +1 giá trị).
+  - Sink mới: `selTrucTiep.innerHTML = buildUngVienTrucTiepHtml(list, dangChon, …)` trong
+    `createTaskModal` — vẽ lại ô người thực hiện SAU khi máy chủ trả `coPhoGiamDocPhuTrach`
+    (`GET /departments/assignment-options`); phòng chưa có Phó GĐ phụ trách thì cắt Trưởng/Phó phòng
+    khỏi danh sách. HTML-LONG, builder tự thoát bên trong ⇒ chỗ gọi tính là SINK, builder không bị
+    tính trùng — cùng lệ đã chốt cho CHUÔNG THÔNG BÁO và khối Zalo.
+  - +1 giá trị: option cũ escape `escapeHtml(list2[COL.S_NAME])` ×2 (value + text); nay
+    `buildUngVienTrucTiepHtml` escape `escapeHtmlAttr(ten)` + `escapeHtml(ten)` và THÊM
+    `escapeHtml(vai)` cho nhãn kèm vai «(Trưởng phòng)»/«(Phó phòng)» ⇒ 3 − 2 = **+1**, tất cả
+    DA-THOAT. `value` vẫn là TÊN trơn (không đổi sang id, không nhét nhãn vào) nên luồng lưu/sửa và
+    dữ liệu cũ không xê dịch.
+  - `CO_Y_KHONG_BOC` nhóm `trong-the` giảm `text3` **2 → 1**: option của ô này dọn về builder, cờ
+    `selected` ở đó viết thẳng `(… ? " selected" : "")` chứ không qua biến trung gian nữa.
+  - Kiểm chứng bằng `tools/dem-xss.mjs` (`sink = 107 | gia_tri = 904`) và TC-SEC-11/17.
 
 
 

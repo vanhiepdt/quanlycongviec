@@ -1,5 +1,270 @@
 # KE HOẠCH — «KẾT QUẢ NHIỆM VỤ LÀ FILE»: NỘP → GÓP Ý → DUYỆT (2026-09-01, nhánh `vps/ket-qua-file`)
 
+## Bổ sung 12/09/2026 lượt 2 — TP/PP HẾT NÚT «GỬI ĐI DUYỆT» KHI NHIỆM VỤ KHÔNG TRÌNH BLĐ · «HOÀN THÀNH» MỞ THÊM Ở `luu-tam` (checklist 9b.25)
+
+Người dùng chỉ đạo nguyên văn: «Khi trưởng phòng/phó phòng duyệt file kết quả vẫn còn hiển thị gửi đi
+duyệt đối với file không phải gửi lên ban lãnh đạo duyệt, tức là ko tích ô Gửi BLĐ phê duyệt đấy». Đây là
+lần **THỨ HAI** họ gặp cùng một bệnh trên cùng một nhiệm vụ (**CV002**) — lần trước là «file bị đẩy lên
+PGĐ dù không tích», đã sửa ở bản Q6/Q11 chiều 11/09; lần này là **nút vẫn còn đó** ở chiều ngược lại.
+Một việc, **KHÔNG có migration** (CSDL giữ `029`), buster **`20260912-02`** ⇒ người đang test chỉ cần
+**Ctrl+F5**. Bấm thử: `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.25 mục D (bước 75 → 78)**.
+
+### 1. Lỗ hổng gốc: `apTuDong` quyết chặng kế tiếp CHỈ BẰNG CÁCH NHÌN VAI
+
+Bản cũ của `apTuDong` (`taskFiles/service.js:410`) là:
+
+```js
+// CŨ — sai
+if (['Trưởng phòng', 'Phó phòng'].includes(user.role)) return 'cho-lanh-dao';
+```
+
+Nó **không đọc** ô `gui_bld_phe_duyet` của nhiệm vụ, nên mọi bản TP/PP đụng vào đều bị đẩy lên
+`cho-lanh-dao` — trái **Q6** (tích TẮT ⇒ TP/PP chốt luôn bằng `hoan-thanh`) và **Q11** (giữ `hoan-thanh`
+cho nhiệm vụ không bật tích). Hệ quả kép: bản đi **sai chặng**, và hàng nút của TP/PP vẫn hiện «Gửi đi
+duyệt» cho một việc mà chính họ là **chặng cuối**.
+
+### 2. Luật mới: theo đúng BA lý do của `phaiTrinhLanhDao`
+
+`apTuDong` nay dựng một «người nộp giả lập» rồi hỏi đúng hàm mà mọi chỗ khác vẫn hỏi
+(`phaiTrinhLanhDao`, dòng **864**) — hàm này có **đúng ba** lý do, không thêm không bớt:
+
+1. `item.gui_bld_phe_duyet === true` — nhiệm vụ **có** tích «Gửi BLĐ phê duyệt»;
+2. người bấm **chính là** `assignee_id` — chống tự duyệt (Q5, van nay chỉ canh NGƯỜI THỰC HIỆN);
+3. `giaTriHieuLuc(user, 'file', 'approve') !== 'cho-phep'` — vai đó **không** có quyền duyệt file.
+
+Có một trong ba ⇒ `cho-lanh-dao`; không có lý do nào ⇒ **`cho-xem`**. `cho-xem` chính là **hàng chờ của
+TP/PP**: bản nằm đó để họ đọc và **tự chốt**.
+
+> **⚠ Bẫy đã trả giá: `ghiDe` phải ĐỌC LẠI.** `nguoiNop` được dựng từ dòng `users` do
+> `repo.nguoiTheoId` lấy ra, **không phải `req.user`** ⇒ dòng đó **không có** `ghiDe`. Nếu chuyển thẳng
+> vào `phaiTrinhLanhDao` thì lý do (3) **luôn đúng** (vì `giaTriHieuLuc` rơi về mặc định) và bản lại bị
+> đẩy lên `cho-lanh-dao` **y như lỗi cũ, chỉ khác lý do**. Nay `apTuDong` nạp lại qua
+> `permissionsRepo.listByVai(user.role)` rồi gán vào `nguoiNop.ghiDe`.
+
+> **⚠ R6 KHÔNG bị nới theo.** Sửa chỗ này rất dễ trượt thành «TP/PP là chặng cuối ⇒ cho `da-duyet`
+> luôn». **Không**: `apTuDong` **không bao giờ** trả `'da-duyet'`. Chặng cuối nghĩa là họ **bấm tay**
+> nút «Hoàn thành» / «Duyệt», có lưu mốc người duyệt và lúc duyệt (điểm bất hợp lý số 7 của ĐỢT B).
+
+### 3. Hàng nút: tách `laChuBanNhom` để phân biệt 403 và 409
+
+`duocGuiBanLuu(user, nhom, item, ban)` (**433**) nay là **hai điều kiện tách rời**:
+
+```js
+return laChuBanNhom(user, nhom, item, ban) && !tpPpLaChanhCuoi(user, item);
+```
+
+- `laChuBanNhom` (**442**) — nhóm `luu-tam`, có bản, `can(user,'submit','file')`, `duocGhiTheoPhanCong`,
+  và người bấm là `admin` / chủ nhóm / `assignee` / người up bản đó. **Đây là vế QUYỀN.**
+- `tpPpLaChanhCuoi` (**456**) — người bấm là Trưởng/Phó phòng **và** `!phaiTrinhLanhDao(user, item)`.
+  **Đây là vế KHÔNG CÒN AI ĐỂ GỬI** (chính là luật mới của mục 2).
+
+Tách ra là để `guiDiDuyet` **báo đúng lý do**: mất quyền ⇒ **403**; có quyền nhưng không còn chặng trên
+⇒ **409** «không còn ai để gửi». Gộp một hàm thì chỉ còn biết «không gửi được» và chọn bừa một mã — đã
+trả giá một lần khi **TC-V4-02** nhận 409 thay vì 403. **Ẩn nút chỉ là lớp một; máy chủ vẫn chặn.**
+
+### 4. «Hoàn thành» mở thêm ở `luu-tam` — và rào «phải có ít nhất MỘT bản»
+
+Ẩn «Gửi đi duyệt» mà không mở lối ra là **tạo thế kẹt**: bản nháp do chính TP/PP tạo sẽ không còn đường
+nào ra. Người dùng đã chọn phương án **«Ẩn nút, chỉ còn «Hoàn thành»»**, nên:
+
+- `BANG_VERDICT['hoan-thanh']` (**920–926**): `tu: ['luu-tam', 'cho-xem', 'can-sua']` — **thêm
+  `luu-tam`**; `vai` vẫn đúng `['Trưởng phòng', 'Phó phòng']`.
+- **Q1 vẫn giữ nguyên:** `luu-tam` là trạng thái của nhóm **vừa mới KHAI** (tên · định dạng · tỷ lệ),
+  chưa chắc đã có file. Chốt một nhóm **0 bản** là cho tiến độ lên 100% mà chưa có kết quả nào để đọc ⇒
+  `verdict` ném **409** nguyên văn **«Nhóm kết quả này chưa có bản nào được lưu — không có gì để chốt»**
+  (**1035–1038**), và `hanhDongDuocLam` cắt nút bằng **cùng một luật** (`coBan = nhom.trang_thai !==
+  'luu-tam' || Number(soBan) > 0`, **1280–1282**) để **hàng nút không bao giờ lệch rào chặn**.
+- Đường «Sửa trực tuyến» (OnlyOffice) truyền `soBan = 1` (**1702–1704**) vì đang mở MỘT bản cụ thể thì
+  nhóm chắc chắn có bản — nếu không, luật MỚI-6 sẽ cắt mất hàng nút của chính màn hình đó.
+
+### 5. Test và những gì KHÔNG đổi
+
+- `server/tests/integration/phase8c-files.test.js`: **TC-V8-01b** (nhiệm vụ **không** tích ⇒ `apTuDong` trả
+  `cho-xem`, `duocGuiBanLuu === false`, gọi thẳng API ⇒ **409**) và **TC-V8-01c** (**có** tích ⇒
+  `cho-lanh-dao`). **Mọi** ca đều khẳng định `apTuDong` **không bao giờ** trả `da-duyet`. Ba file
+  integration của đợt (`assignments` + `phase8c-files` + `approvals-pending-da-sua`) chạy cùng nhau:
+  **84 passed**. Full `npm test`: **2076/2076 · 115 file · exit 0**.
+- **KHÔNG đổi:** ba lý do của `phaiTrinhLanhDao`, van chống tự duyệt (Q5 — chỉ chặn khi là NGƯỜI THỰC
+  HIỆN), luật «một người duyệt là đủ ở mọi cấp» (Q7), `approval_changes` của tỷ lệ (R4/R4'/R4''), chuông
+  thông báo, OnlyOffice, lịch đẩy Zalo, và **hình dạng phản hồi RPC/REST**.
+- Các mục cũ của tài liệu này (bảng «Kết quả», «Tình trạng» và «Người thực hiện» ghi ở từng bản, bản đầu
+  chỉ người thực hiện trực tiếp nộp — khối «Bổ sung 12/09/2026» ngay bên dưới) **giữ nguyên hiệu lực**;
+  đợt này chỉ đổi **chặng kế tiếp** và **hàng nút** của TP/PP.
+## Bổ sung 12/09/2026 — «TÌNH TRẠNG» VÀ «NGƯỜI THỰC HIỆN» GHI Ở TỪNG BẢN · BẢN ĐẦU CHỈ NGƯỜI THỰC HIỆN TRỰC TIẾP NỘP (checklist 9b.24)
+
+Người dùng chỉ đạo nguyên văn: «Sửa lại, người thực hiện trực tiếp mới được upfile đầu tiên, hiện tại
+đang cho Tp up file đầu tiên / ở cột Tình trạng fiel kết quả, ghi ở từng bản tình trạng, ví dụ bị trả
+về hoặc tp/pp sửa trực tiếp, PGĐ/GĐ sửa trực tiếp, lưu ý thêm tên vào nhé, phần Người thực hiện sẽ là
+người duyệt hoặc người sửa đối với các bản sau, chỉ hiển thị Người thực hiện trực tiếp nếu trực tiếp
+sửa lại bản bị trả về hoặc tải lên lần đầu». Hai việc, **KHÔNG có migration** (CSDL giữ `029`), buster
+**`20260912-01`** ⇒ người đang test chỉ cần **Ctrl+F5**.
+
+### 1. Bản ĐẦU của một nhóm kết quả chỉ người thực hiện trực tiếp nộp được
+
+- **Luật mới** (`assertNguoiNopBanDau`, `taskFiles/service.js:371`): `version_no === 1` ⇒ bắt buộc đúng
+  `work_items.assignee_id`. **Mọi bản sau** (sửa, nộp lại sau khi bị trả về, bản do người duyệt sửa
+  trực tuyến) **vẫn theo luật cũ** — TP/PP và PGĐ/GĐ vào được.
+- **Lỗ hổng cũ:** `duocGhiTheoPhanCong` mở cửa cho TP/PP **là lãnh đạo phụ trách** của nhiệm vụ, nên
+  TP up được bản 1 thay cán bộ — kết quả của một nhiệm vụ mang chữ của người không làm ra nó.
+- **Điều kiện viết theo SỐ BẢN, không theo «`fileId == null`»**, vì Q1 tách KHAI BÁO khỏi NỘP FILE:
+  `khaiKetQua` tạo nhóm **0 bản**, nên một nhóm đã khai sẵn **vẫn sinh bản số 1** khi có người nộp
+  file đầu tiên vào nó. TP khai được (nút ＋ đọc `phuTrach` + `can(create,'file')`) nhưng nộp file vào
+  nhóm đó thì **403**.
+- **Cả hai đường sinh bản đều bị gác:** `nop` (tải file) và `nopBaoCao` (bản chữ). Đường thứ ba,
+  `luuTuCallback` của OnlyOffice, đòi một `ban` có sẵn ⇒ **luôn từ bản 2 trở đi**, không cần gác.
+- **Mã lỗi:** `403 FORBIDDEN` kèm **TÊN** người thực hiện; nhiệm vụ **chưa gán** người thực hiện
+  (`assignee_id` NULL — cột cho phép) ⇒ `409 CONFLICT` chứ không phải 403: thiếu dữ kiện để quyết,
+  không phải thiếu quyền.
+- **Giao diện nói trước thay vì để bấm rồi ăn lỗi:** `quyenFile()` trả thêm `duocNop`,
+  `tenNguoiThucHien`, `thieuNguoiThucHien`; `doc()` tắt `duocSua` của nhóm 0 bản với người không phải
+  `assignee` ⇒ **mục «Tải lên» biến mất**, và ô «Hành động» in câu «Bản kết quả ĐẦU TIÊN chỉ «Tên» nộp
+  được». Khi bảng RỖNG hẳn thì dải chú cùng ý nằm ngay dưới đầu bảng.
+- **Bẫy đã trả giá:** `tenNguoiThucHien` bản đầu đọc cột gộp `work_items.assignee_name` — cột đó chỉ
+  được điền khi form gửi kèm tên, còn REST ánh xạ thẳng `assigneeId` → `assignee_id`
+  (`workItems/routes.js:84`) nên nó **rỗng**; và nó thành **MỒ CÔI** khi người dùng bị xoá (FK
+  `ON DELETE SET NULL` hạ `assignee_id` mà không đụng `assignee_name`). Nay tra `users` bằng
+  `repo.nguoiTheoId(item.assignee_id)`, giữ `assignee_name` làm dự phòng cho dòng cũ đã thôi người
+  dùng — cùng nguồn với `listNhomByItem` LEFT JOIN `users`.
+
+### 2. Cột «Tình trạng» — ghi tình trạng CỦA BẢN, luôn kèm TÊN
+
+Ô 9 của dòng bản 1.1/1.2 **trước đây để TRỐNG**; dòng cha kể tình trạng của CẢ NHÓM
+(`cauTinhTrangFile`) nên đọc bảng không biết bản nào bị trả về, ai trả, ai sửa. Nay mỗi bản tự kể, lấy
+dòng luồng **CÓ Ý NGHĨA mới nhất** của đúng bản đó (`n.luong` lọc theo `version_id` — máy chủ đã gửi
+kèm nhóm nên **không gọi thêm API nào**):
+
+| Hành động của bản | Nhãn «Tình trạng» in ra | Màu |
+|---|---|---|
+| `tra-ve-cbo` | Bị trả về — *Tên* | đỏ |
+| `tra-ve-tp` | Bị trả về TP/PP — *Tên* | đỏ |
+| `sua-truc-tuyen` | TP/PP sửa trực tiếp — *Tên* · PGĐ/GĐ sửa trực tiếp — *Tên* (ghép vai) | vàng |
+| `tp-phe-duyet` | TP/PP phê duyệt — *Tên* · PGĐ phê duyệt — *Tên* (ghép vai) | tím |
+| `duyet` | PGĐ đã duyệt — *Tên* (ghép vai) | xanh lá |
+| `hoan-thanh` | TP/PP chốt hoàn thành — *Tên* (ghép vai) | xanh lá |
+| `huy-lenh-sua` | Hủy lệnh sửa — *Tên* | xám |
+
+Bản chưa có dòng luồng nào (vừa tải lên, chưa ai đụng) thì kể đúng việc vừa xảy ra: **«Tải lên lần đầu
+— Tên»** (bản 1), **«Sửa lại bản bị trả về — Tên»** (bản ngay trước có `tra-ve-cbo`/`tra-ve-tp`), còn
+lại **«Nộp lại — Tên»**. Nhãn ghép vai theo `NHAN_VAI_NGAN`: TP/PP · PGĐ · GĐ · Cán bộ.
+
+`gom-y` **cố ý KHÔNG** là tình trạng của bản: góp ý là ý kiến bên lề, đã có cột «Ghi ý kiến» đếm; để
+nó vào đây thì một câu góp ý đến sau **che mất** «Bị trả về».
+
+### 3. Cột «Người thực hiện» — bản sau là NGƯỜI DUYỆT hoặc NGƯỜI SỬA
+
+Ô 7 của dòng bản trước đây in cứng `ten_nguoi_nop`. Nay:
+
+- **«Người thực hiện trực tiếp» CHỈ hiện** khi đúng người được giao nhiệm vụ (`n.assignee_id` =
+  `b.uploaded_by`) **và** đó là **bản 1** hoặc **bản nộp lại sau khi bản trước bị trả về**. Dòng phụ:
+  «Tải lên bản đầu tiên» / «Trực tiếp sửa lại bản bị trả về».
+- **Mọi trường hợp còn lại** là người duyệt hoặc người sửa, kèm **vai viết tắt** để phân biệt: «TP/PP
+  sửa trực tiếp», «PGĐ sửa», «Cán bộ sửa»…
+- **Dòng dữ liệu cũ** (bản 1 do người không được giao nhiệm vụ nộp — nay máy chủ không cho nữa) vẫn
+  phải đọc được, nên in **«TP/PP nộp thay»** và giải thích trong `title`: «Dữ liệu cũ: bản đầu do người
+  không được giao nhiệm vụ nộp. Nay máy chủ chỉ cho chính người thực hiện nộp bản đầu.»
+- **Ô 7 của DÒNG CHA** đổi nguồn sang `ten_nguoi_thuc_hien`, lùi về `ten_nguoi_tao` khi nhiệm vụ chưa
+  gán người thực hiện — `title` nói rõ đó là người khai báo.
+- Tên đầy đủ đẩy vào **`title`** của ô để cột không phình khi tên dài; bảng mười cột vốn đã hẹp.
+
+### 4. Test
+
+- **MỚI `server/tests/integration/phase8d-ban-dau.test.js` — 9 ca**: người thực hiện nộp bản 1 = 200;
+  TP/PP là lãnh đạo phụ trách nộp bản 1 = 403 **và không để lại vết** (`task_files`,
+  `task_file_versions`, `task_file_flow` đều 0); PGĐ/GĐ cũng 403; chưa gán người thực hiện = 409; từ
+  bản 2 thì TP/PP/PGĐ/GĐ nộp như cũ; nhóm KHAI trước 0 bản vẫn là bản 1; đường «Báo cáo» bị gác y như
+  đường tải file; hai cờ giao diện `doc().duocSua` và `quyenFile()`.
+- **Ba ca cũ phải vá** trong `phase8c-files.test.js` — chúng dựng hiện trường bằng cách cho TP/admin
+  nộp bản 1: `TC-V2-04` («TP nộp hộ») nay bắt đầu bằng khẳng định **403** rồi cho cán bộ nộp bản 1, TP
+  nộp hộ **bản 2** — cặp tiến độ 50 → 80 **giữ nguyên**, vì `lanh_dao_tu_lam` đọc vai của người nộp
+  **BẢN CUỐI**; `TC-V5-03` ×2 cho chính TP/PP (vừa là `assigneeId` của nhiệm vụ) nộp bản 1, giữ
+  `adminApi` ở bước `gui-di-duyet` vì `duocGuiBanLuu` tha `user.role === 'admin'`.
+- **Pin XSS 100 sink / 969 → 978 nội suy**, KHÔNG thêm sink và KHÔNG thêm CAN-THOAT — chi tiết ở
+  `docs/XSS-4.6.md` khối trên cùng.
+
+## ĐỢT B + bản sửa Q6 — bổ sung 11/09/2026, checklist 9b.23 (mục J)
+
+**Mọi bảng dưới mục này là thiết kế của vòng 2026-09-01. ĐỢT B đã ĐỔI TÊN HÀNH ĐỘNG và đổi LUẬT NÚT
+của TP/PP — phần này thay đúng hai chỗ đó, các phần còn lại vẫn đúng.**
+
+- **Đổi tên hành động** (ĐIỂM 7 + ĐIỂM 9 của `KE-HOACH-DUYET-CAY.md`): `trinh-lanh-dao` →
+  **`tp-phe-duyet`** (nhãn **«TP/PP phê duyệt»**, CÓ lưu mốc người duyệt `tp_duyet_boi` / `tp_duyet_luc`);
+  `yeu-cau-sua` **gộp vào** `tra-ve-cbo` (nhãn **«Đẩy về Cán bộ»**). Nhật ký `task_file_flow` cũ **không
+  viết lại** ⇒ đọc lịch sử vẫn thấy tên cũ, đó là cố ý.
+- **Tích «Gửi BLĐ phê duyệt» (`work_items.gui_bld_phe_duyet`) NAY QUYẾT ĐỊNH TP/PP CÓ NÚT NÀO (Q6 +
+  Q11).** MỘT hàm `phaiTrinhLanhDao(user, item)` (`taskFiles/service.js:785`) trả lời «nhóm này **có
+  phải** trình BLĐKS không» = tích **BẬT** *hoặc* người bấm là `assignee` (Q5) *hoặc* `file:approve` của
+  họ **không** phải ✓. `verdict` và `hanhDongDuocLam` đọc **CÙNG** hàm ⇒ nút trên màn hình và luật máy
+  chủ không bao giờ lệch nhau:
+  - **tích TẮT** + không phải `assignee` + `file:approve` ✓ ⇒ TP/PP **chỉ** thấy **«Hoàn thành / Duyệt»**
+    + **«Đẩy về Cán bộ»**; gọi thẳng API `tp-phe-duyet` ⇒ **409**.
+  - **tích BẬT** ⇒ **chỉ** thấy **«TP/PP phê duyệt»**; `hoan-thanh` ⇒ **403**.
+  - **tích TẮT nhưng người bấm là `assignee`** (Q5) ⇒ **chỉ** «TP/PP phê duyệt»; `hoan-thanh` ⇒ **403**
+    «Bạn là người thực hiện nhiệm vụ này nên không được tự chốt kết quả của chính mình…».
+  - **ghi đè ⏳** ở «Duyệt kết quả (file nhiệm vụ)» ⇒ nút chốt bị ẩn và `hoan-thanh` ⇒ **403** (Q9 giữ).
+  - **Luật bảo đảm: ĐÚNG MỘT đường chốt trong cả bốn tổ hợp** — không ô nào ra cả hai nút hoặc mất cả hai.
+- **Van chống tự duyệt đã NỚI**: bỏ hẳn điều kiện «người lưu bản cuối» (`uploaded_by` của bản mới nhất).
+  TP «Sửa trực tuyến» xong **vẫn chốt được** khi tích TẮT và họ không phải `assignee`. Lý do nới: van cũ
+  biến TP thành người **không còn đường kết thúc file trong phòng** — chính là lỗi người dùng bắt được
+  trên nhiệm vụ `CV002-002`.
+- **Nút chốt nay CÓ ô ghi chú, nhưng TUỲ CHỌN** — đọc đúng ô «Ý kiến» sẵn có của khối file, không bật hộp
+  thoại hỏi thêm; máy chủ lưu vào `task_file_flow.noi_dung` và nối vào thông báo chuông (`Ghi chú: …`).
+  Trang **«Hàng chờ phê duyệt»** cố ý **không** có ô này ⇒ nút chốt ở đó không gửi ghi chú.
+- **Bật tích đòi BLĐKS**: `assertGuiBld` (`assignments/service.js:487`) ném **400** «Nhiệm vụ chưa có Ban
+  lãnh đạo kiểm soát để gửi phê duyệt» khi tích BẬT mà cả nhiệm vụ lẫn công việc cha đều trống
+  `supervisor_ids` ⇒ phải khai BLĐKS **cùng lúc** với tích, và khai lúc **TẠO** (sửa nhiệm vụ trên cây đã
+  duyệt thì Q9 hạ cây về `Chờ duyệt` và Q2 **khoá luôn cửa nộp file**).
+- **KHÔNG có migration cho bản sửa này.** Chỉ mã máy chủ + `app.js`, buster **`20260911-04`** ⇒ người đang
+  test chỉ cần **Ctrl+F5**. Test tự động **2034/2034 · 113 file · exit 0**. Chi tiết đầy đủ:
+  `KE-HOACH-DUYET-CAY.md` **§11.6**; bấm thử: `HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.23 mục J**.
+
+## Hoàn thành theo kết quả đã duyệt — bổ sung 10/09/2026, checklist 9b.18
+
+- Nhiệm vụ hoàn thành khi **có ít nhất một nhóm kết quả**, mọi nhóm **có bản** và đều kết thúc
+  ở `hoan-thanh` hoặc `da-duyet`. Bản “Báo cáo” cũng là một bản kết quả hợp lệ.
+- Chưa có nhóm/chưa có bản/chưa duyệt đủ thì chưa hoàn thành. Trọng số 0 không miễn yêu cầu duyệt.
+  Không suy hoàn thành từ `tien_do === 100`: mốc cấu hình và làm tròn có thể cho 100 khi chưa chốt.
+- Tiến độ vẫn gia quyền theo NHÓM, không đếm phiên bản. Cấp 2 gia quyền nhiệm vụ con;
+  cấp 1 gia quyền đầu mục. Cấp cha hoàn thành chỉ khi có con và tất cả con hoàn thành.
+- `ganTienDo` thêm `hoan_thanh`, `hoan_thanh_luc`, `ket_qua_files`; cây/statistics/Gantt/export/cron
+  không còn lấy `status`/`completion` tay làm nguồn hoàn thành. Ngày thống kê lấy lần duyệt bản mới nhất.
+- `tong/xong` giữ nghĩa bộ đếm cũ; thêm `daDuyetCoBan` cho luật hoàn thành. Không migration mới.
+- Bỏ checkbox hoàn thành, bộ lọc và trường chọn trạng thái tay ở cả ba cấp. Trạng thái phê duyệt
+  công việc và luồng file vẫn giữ. `status`/`completion` trong DB/RPC chỉ giữ tương thích/lịch sử,
+  payload hợp lệ từ client cũ không còn ghi đè chúng. Các khóa RPC cũ không bị xóa.
+- Tab Nhiệm vụ có hàng file dưới từng nhiệm vụ, bỏ cột Link kết quả. Bảng modal từ **8 lên 10 cột**:
+  Thời gian / Kết quả làm được / Định dạng / File đã tải lên / **Tỷ lệ công việc (%) / Tiến độ** /
+  Người thực hiện / Ghi ý kiến / Tình trạng / Hành động. Phiên bản và panel thẳng cùng lưới.
+- Ô ngày nhập tay đổi nhãn **Ngày báo cáo**; giữ khóa legacy “Ngày hoàn thành”, không dùng để chốt việc.
+- Sửa thêm tiến độ thẻ Công việc/danh sách thống kê/modal fallback còn trung bình cả cấp 2+3:
+  dùng chung `tienDoDauMucKhach`; số 25×40 + 75×80 chia 100 phải bằng 70%, không phải 40%.
+- Bản giao diện **20260910-10**, XSS **98/929**. Checklist nghiệm thu mới: **9b.18**.
+  Các mục bên dưới là thiết kế/kiểm chứng lịch sử; phần này thay quy tắc hoàn thành và bố cục cũ.
+
+## Cập nhật V1–V8 — 10/09/2026 (chờ nghiệm thu)
+
+Quy trình mới: tải file/báo cáo → **Lưu tạm (mặc định 0%)** → **Gửi đi duyệt**.
+Bản nháp chỉ người tạo nhóm/admin thấy ở hàng chờ, không báo lãnh đạo. Bản đáp ứng lệnh sửa
+được gửi thẳng theo lệnh. Mỗi nhóm có tỷ lệ; tiến độ gia quyền theo nhóm, không theo số phiên bản.
+Mốc mặc định 0/20/40/50/80/100 lưu trong `system_settings`, admin sửa được ở Phân quyền hệ thống.
+
+Định dạng nhận bản mới: Word (.doc/.docx), Excel (.xls/.xlsx), PPT (.ppt/.pptx), PDF (.pdf, chỉ xem),
+Ảnh (.jpg/.jpeg/.png/.gif/.webp), Báo cáo (chữ nhập trực tiếp). Kiểm tại mọi cửa ghi máy chủ;
+bản lịch sử sai định dạng vẫn xem/tải được. Xem bảng chi tiết và giả định trong báo cáo V1–V8.
+
+V5 trả tên người nhận kèm vai và số lần trả lại; TP/PP là người thực hiện khác lãnh đạo phụ trách
+vẫn sửa/gửi theo lệnh, nhưng không được tự Hoàn thành. V6 đặt ý kiến **trước editor**;
+forcesave → callback ghi bản → receipt → verdict đúng `versionId`. TP sửa chỉ trình PGĐ.
+Callback nạp quyền hiện hành trước khi ghi; không thông báo nháp.
+
+V7: Cán bộ chọn Gửi BLĐ lúc tạo. Bật: TP/PP xem ở 40% → trình đúng `supervisor_id` ở 80% → 100%.
+Tắt: TP/PP xem ở 50% → có thể chốt 100%. TP/PP trực tiếp luôn lên PGĐ nên khóa tích.
+Đổi tích mặc định chờ đề nghị trong `approval_changes`; admin tắt Q2 thì ✓ áp ngay, ⏳ vẫn chờ.
+Không thêm ô chọn người hoặc cột người mới.
+
+Full **1946/1946**, lint exit 0; UAT đã UP 024–027, buster **20260910-7**, live check exit 0.
+Đã thấy tài liệu thật trong OnlyOffice, không còn ý kiến đè toolbar; **chưa kiểm đủ chuỗi lưu/duyệt
+với DS thật**, chưa nghiệm thu. Bấm checklist **9b.17**; không reset/seed hoặc commit/push/deploy.
+
 Yêu cầu người dùng (tóm tắt nguyên văn từ prompt session): kết quả của **nhiệm vụ (cấp 3)** thường là
 file **Word/PDF**. **Cán bộ** nộp bản 1 → **Trưởng phòng/Phó phòng** (phòng của công việc) xem, góp
 ý, chọn (a) **Yêu cầu sửa lại** (kèm góp ý) → cán bộ nộp bản mới, lặp tới khi ưng; (b) **Trình Phó
@@ -22,7 +287,7 @@ xem bằng iframe trình duyệt, DOCX tải về + góp ý trong app (§7 trả
 
 | Câu hỏi | Người dùng chốt |
 |---|---|
-| Nút chốt «Hoàn thành / Duyệt» của TP/PP (khi `file:approve` = ✓) ghi **trạng thái nào**? | **Ghi `hoan-thanh` + dòng flow `hoan-thanh`** — TP/PP hoàn thành luôn, không cần trình ai; **`da-duyet` (xanh đậm) chỉ do Phó GĐ/GĐ bấm «Duyệt» hoặc TỰ ĐỘNG theo phân quyền ✓**. Đúng nghĩa «Hoàn thành luôn» mục 2(c), dùng đủ 5 trạng thái |
+| Nút chốt «Hoàn thành / Duyệt» của TP/PP (khi `file:approve` = ✓) ghi **trạng thái nào**? | **Ghi `hoan-thanh` + dòng flow `hoan-thanh`** — TP/PP hoàn thành luôn, không cần trình ai; **`da-duyet` (xanh đậm) chỉ do Phó GĐ/GĐ bấm «Duyệt» hoặc TỰ ĐỘNG theo phân quyền ✓**. Đúng nghĩa «Hoàn thành luôn» mục 2(c), dùng đủ 5 trạng thái. **Bổ sung 11/09/2026 (Q6/Q11):** nút này nay **chỉ tồn tại khi nhiệm vụ KHÔNG bật tích «Gửi BLĐ phê duyệt»** và người bấm không phải `assignee` — xem mục **ĐỢT B + bản sửa Q6** ở đầu tài liệu |
 | Bổ sung 2026-09-01 (trả lời §13.4 mục 21–24) | **(21)** «Trình» = TP/PP **tự chọn** thời điểm — đúng cách đã làm; **(22)** 20 MB OK; **(23)** CÓ editor trực tuyến — session sau theo OnlyOffice (§7), **mọi lần sửa file phải LƯU LẠI thành bản mới trong cùng nhóm để xem được**; **(24)** các dạng Word (.doc VÀ .docx) đều cho sửa + xem trực tuyến |
 | Bổ sung 2026-09-01 («cho thêm phần Ý kiến vào») | Khối file có ô **«Ý kiến»** riêng: nhập ý kiến → «Gửi ý kiến» ghi vào **BẢN MỚI NHẤT** của nhóm; các nút Yêu cầu sửa / Trình / Trả về đọc ô này trước (đủ 10 ký tự thì không hỏi lại) |
 
@@ -41,21 +306,26 @@ xem bằng iframe trình duyệt, DOCX tải về + góp ý trong app (§7 trả
    hoan-thanh / da-duyet = TRẠNG THÁI KẾT — không nộp thêm (409), không verdict (409)
 ```
 
+> **Sơ đồ trên vẽ vòng 2026-09-01, nay phải đọc thêm một điều kiện (Q6, 11/09/2026):** mũi tên
+> «Trình (TP/PP)» → `cho-lanh-dao` (nay là **«TP/PP phê duyệt»**) **chỉ có** khi nhiệm vụ **bật** tích
+> «Gửi BLĐ phê duyệt»; khi tích **tắt** và người bấm không phải `assignee`, TP/PP đi thẳng mũi tên
+> «Hoàn thành / Duyệt» → `hoan-thanh` và **không còn** đường lên `cho-lanh-dao`.
+
 | Trạng thái | Nghĩa | Ai đang giữ file | Nhãn / màu badge |
 |---|---|---|---|
 | `cho-xem` | Chờ TP/PP xem (mặc định sau nộp của Cán bộ) | TP/PP phòng của công việc | vàng |
 | `can-sua` | Lệnh sửa cho đúng chủ; lưu nội dung chưa phải gửi duyệt | `lenh_sua_cho=can-bo`: người được giao; `lanh-dao`: TP/PP trong `leader_ids` | hổ phách ở tab Yêu cầu sửa; badge modal cũ giữ nguyên |
 | `cho-lanh-dao` | Chờ Phó GĐ phụ trách / GĐ xử | PGD phụ trách (fallback GĐ) | tím |
-| `hoan-thanh` | TP/PP chốt «Hoàn thành / Duyệt» | — (kết thúc) | xanh |
+| `hoan-thanh` | TP/PP chốt «Hoàn thành / Duyệt» — **chỉ khi tích «Gửi BLĐ phê duyệt» TẮT** và người chốt không phải `assignee` (Q6/Q11) | — (kết thúc) | xanh |
 | `da-duyet` | PGD/GĐ bấm «Duyệt» hoặc TỰ ĐỘNG theo phân quyền | — (kết thúc) | xanh đậm |
 
 | Từ | Hành động | Ai (điều kiện) | Đến | Flow ghi | Thông báo tới |
 |---|---|---|---|---|---|
 | — | nộp bản mới | người được giao nhiệm vụ / TP/PP / PGD / GĐ theo trạng thái (§2, §4) | `cho-xem` (Cán bộ ⏳) · `cho-lanh-dao` (TP/PP ⏳) · `da-duyet` (✓) | `nop` (+ `duyet-tu-dong` nếu ✓) | TP/PP phòng (`cho-xem`) · PGD phụ trách (`cho-lanh-dao`) · người nộp + TP/PP (tự động) |
 | `cho-xem`/`can-sua` | góp ý | TP/PP + PGD phụ trách + GĐ/admin | giữ nguyên | `gom-y` | — (thread hiện tại chỗ) |
-| `cho-xem`/`can-sua` | Yêu cầu sửa (nội dung ≥ 10 ký tự) | TP/PP | `can-sua`, lệnh `can-bo` | `yeu-cau-sua` | người được giao nhiệm vụ |
-| `cho-xem`/`can-sua` | Trình Phó giám đốc (nội dung ≥ 10 ký tự) | TP/PP | `cho-lanh-dao` | `trinh-lanh-dao` | PGD phụ trách phòng |
-| `cho-xem`/`can-sua` | Hoàn thành / Duyệt (không cần nội dung) | TP/PP khi giá trị hiệu lực `file:approve` = ✓ | `hoan-thanh` | `hoan-thanh` | người nộp + TP/PP phòng |
+| `cho-xem`/`can-sua` | Yêu cầu sửa (nội dung ≥ 10 ký tự) — **ĐỢT B gộp vào «Đẩy về Cán bộ», không còn hành động riêng** | TP/PP | `can-sua`, lệnh `can-bo` | `yeu-cau-sua` (cũ) / `tra-ve-cbo` (nay) | người được giao nhiệm vụ |
+| `cho-xem`/`can-sua` | **TP/PP phê duyệt** (nội dung ≥ 10 ký tự) — tên cũ «Trình Phó giám đốc», **ĐỢT B đổi tên `trinh-lanh-dao` → `tp-phe-duyet` và lưu mốc người duyệt**; **chỉ tồn tại khi nhiệm vụ PHẢI trình BLĐKS** (tích BẬT, hoặc người bấm là `assignee`, hoặc `file:approve` ≠ ✓) | TP/PP | `cho-lanh-dao` | `tp-phe-duyet` | PGD phụ trách phòng |
+| `cho-xem`/`can-sua` | Hoàn thành / Duyệt (**ghi chú TUỲ CHỌN** từ 11/09/2026 — để trống vẫn chốt được) | TP/PP khi `file:approve` = ✓ **VÀ nhiệm vụ KHÔNG bật tích «Gửi BLĐ phê duyệt» VÀ người bấm không phải `assignee`** (Q5/Q6/Q11) | `hoan-thanh` | `hoan-thanh` | người nộp + TP/PP phòng |
 | `cho-xem`/`cho-lanh-dao`/`can-sua` | Đẩy về Cán bộ (nội dung không bắt buộc) | TP/PP phụ trách | `can-sua`, lệnh `can-bo` | `tra-ve-cbo` | người được giao nhiệm vụ |
 | `cho-lanh-dao` | Trả về TP/PP (nội dung ≥ 10 ký tự) | PGD phụ trách / GĐ/admin | `can-sua`, lệnh `lanh-dao` | `tra-ve-tp` | TP/PP trong `leader_ids` |
 | `cho-lanh-dao` | Duyệt (không cần nội dung) | PGD phụ trách / GĐ/admin khi `file:approve` = ✓ | `da-duyet` — KHÓA | `duyet` | người nộp + TP/PP phòng |
@@ -70,8 +340,8 @@ Nghĩa của giá trị **cho vai người ở ô đó**, đọc lúc hành đ�
 | «Nộp kết quả (file nhiệm vụ)» `file:create` | `⏳ Chờ duyệt` — **mặc định Cán bộ, TP/PP** | phải gửi đi duyệt | Nộp xong: Cán bộ → `cho-xem`; TP/PP → `cho-lanh-dao` (lãnh đạo của họ là PGD/GĐ) |
 | | `✓ Cho phép` | phê duyệt luôn | Nộp xong nhóm chuyển thẳng `da-duyet` + dòng flow `duyet-tu-dong` «Tự động — phân quyền không yêu cầu duyệt». KHÔNG gửi TP/PP/PGD |
 | | `✕ Tắt` | không nộp được | 403 kèm câu rõ |
-| «Duyệt kết quả (file nhiệm vụ)» `file:approve` | `✓ Cho phép` — **mặc định admin (GĐ), PGD, TP/PP** | nút «Duyệt kết quả»/«Hoàn thành / Duyệt» là chốt luôn | TP/PP có nút «Hoàn thành / Duyệt» (→ `hoan-thanh`); PGD/GĐ có nút «Duyệt» (→ `da-duyet`) |
-| | `⏳ Chờ duyệt` (TP/PP) | bắt buộc qua cấp trên | Nút «Hoàn thành / Duyệt» của TP/PP **ẨN** — chỉ còn «Yêu cầu sửa» + «Trình Phó giám đốc/GĐ» |
+| «Duyệt kết quả (file nhiệm vụ)» `file:approve` | `✓ Cho phép` — **mặc định admin (GĐ), PGD, TP/PP** | nút «Duyệt kết quả»/«Hoàn thành / Duyệt» là chốt luôn | TP/PP có nút «Hoàn thành / Duyệt» (→ `hoan-thanh`) **nhưng chỉ khi nhiệm vụ KHÔNG bật tích «Gửi BLĐ phê duyệt» và họ không phải `assignee`** (Q6/Q11); ngược lại chỉ còn «TP/PP phê duyệt» (→ `cho-lanh-dao`). PGD/GĐ có nút «Duyệt» (→ `da-duyet`) |
+| | `⏳ Chờ duyệt` (TP/PP) | bắt buộc qua cấp trên | Nút «Hoàn thành / Duyệt» của TP/PP **ẨN** và gọi API ⇒ **403** «Quản trị đã đặt «⏳ Chờ duyệt» ở ô «Duyệt kết quả (file nhiệm vụ)» cho vai của bạn — hãy dùng «TP/PP phê duyệt» hoặc «Đẩy về Cán bộ».» — chỉ còn **«Đẩy về Cán bộ»** + **«TP/PP phê duyệt»** (tên cũ «Yêu cầu sửa» + «Trình Phó giám đốc/GĐ»; ⏳ là **một trong ba** lý do phải trình, hai lý do kia là tích BẬT và người bấm là `assignee`) |
 | | `✕ Tắt` | vai đó không duyệt được | Nút ẩn; gọi API → 403 |
 
 - **`⏳` chỉ hợp lệ ở**: `file:create` × (Cán bộ `Nhân viên`, Trưởng phòng, Phó phòng) và
@@ -141,8 +411,9 @@ Endpoint (máy chủ là rào chặn cuối; mọi ghi chạy `withTransaction`)
   **GÓP Ý** (thread theo bản), **BẢNG LUỒNG** `<table>` cột Thời điểm · Người (vai) · Hành động ·
   Bản · Nội dung, mới nhất trên đầu; dòng «Tự động — phân quyền không yêu cầu duyệt» hiện được.
 - Nút verdict hiển thị THEO VAI + GIÁ TRỊ HIỆU LỰC (client đọc `user.ghiDe` + ma trận từ
-  `GET /api/v1/permissions` — khuôn `oPhanQuyenHieuLuc`): TP/PP thấy «Yêu cầu sửa» + («Trình»
-  và/hoặc «Hoàn thành / Duyệt» + «Đẩy về Cán bộ» tùy `file:approve` của họ và trạng thái); PGD/GĐ
+  `GET /api/v1/permissions` — khuôn `oPhanQuyenHieuLuc`): TP/PP thấy «Đẩy về Cán bộ» + **ĐÚNG MỘT** trong
+  hai nút «TP/PP phê duyệt» / «Hoàn thành / Duyệt» — chọn nút nào do `phaiTrinhLanhDao` quyết (tích «Gửi
+  BLĐ phê duyệt», có phải `assignee`, `file:approve`) và trạng thái; PGD/GĐ
   thấy «Trả về TP/PP» + «Duyệt» ở `cho-lanh-dao`; người phải sửa thấy «Nộp bản mới».
 - Upload qua `restUpload()` (FormData) kế thừa CSRF của `restPost` (đọc token từ cookie `_csrf`,
   header `X-CSRF-Token`); toast lỗi rõ; sau upload nạp lại tab. Nhãn tiếng Việt, KHÔNG kèm mã
@@ -166,6 +437,13 @@ trình PGD ⇒ thông báo PGD phụ trách · 08 PGD trả về TP (nội dung 
 chính mình (`⏳`) ⇒ `cho-lanh-dao` · 10 TP đẩy về Cán bộ ⇒ `can-sua` · 11 TP `file:approve` = ✓ ⇒
 «Hoàn thành / Duyệt» chốt `hoan-thanh`; = ⏳ ⇒ 403 · 12 PGD Duyệt ⇒ `da-duyet` khóa (nộp tiếp 409)
 · 13 Cán bộ không verdict ⇒ 403; vai ngoài phòng 403 · 14 sai loại file/quá 20MB ⇒ 400.
+
+> **Cập nhật 11/09/2026 (Q6/Q11) — bốn ca trên nay chạy với `guiBldPheDuyet: true`:** TC-TF-07, 09, 11
+> (nhánh ⏳) và TC-V4-09 phải **bật tích** lúc tạo nhiệm vụ (kèm `supervisorIds`, vì `assertGuiBld` đòi
+> BLĐKS) thì mới còn đường `tp-phe-duyet` / mới đúng lý do 403. TC-TF-11 nhánh ✓ nay đo trên nhiệm vụ
+> **tắt** tích. Lý do 403 của `hoan-thanh` **đã đổi**: không còn «người lưu bản cuối» mà là **guard Q6**
+> (tích BẬT) hoặc **guard Q5** (người bấm là `assignee`) hoặc **ghi đè ⏳**. Chi tiết ở
+> `KE-HOACH-DUYET-CAY.md` §11.6.3–11.6.4.
 
 ## 7. § ĐÁP NEXTCLOUD AIO — trả lời bằng tài liệu (người dùng hỏi trước khi bật editor trực tuyến)
 
@@ -461,7 +739,54 @@ Kiểm thử: `task-files-api.test.js` TC-LS-01..10, `task-files-editor.test.js`
 Nghiệm thu tay **trên PC trước commit/push/deploy**: mục **9b.13** của
 `docs/HUONG-DAN-TEST-GIAO-DIEN.md`. OK phát hành đợt trước không áp dụng đợt này.
 
-## 10. Test thủ công cho người dùng (lịch sử; đợt mới xem mục 13)
+## 14. TRƯỞNG/PHÓ PHÒNG LÀM NGƯỜI THỰC HIỆN TRỰC TIẾP — CHẶN TỰ DUYỆT (2026-09-09, đợt 2)
+
+Từ đợt này ô «Người thực hiện trực tiếp» của nhiệm vụ nhận thêm **Trưởng phòng** và **Phó phòng**
+(Phó GĐ/Giám đốc thì KHÔNG — họ ở lớp `supervisor_id`). Người dùng yêu cầu tìm hiểu ảnh hưởng trước
+khi làm, và đây là ảnh hưởng thật:
+
+**Vì sao luồng file là chỗ nguy hiểm, không phải luồng duyệt nhiệm vụ.** TP/PP vốn **không** có
+`approve` trên `task` nên việc duyệt cây không đổi. Nhưng ở luồng file thì họ giữ
+`file:approve = ✓` (họ là cửa duyệt ĐẦU TIÊN của phòng), mà `hoan-thanh` là **trạng thái kết** được
+`tienDo.js` tính là XONG và cộng dồn lên cả cây theo `ty_le`. Theo `BANG_VERDICT`, `tra-ve-cbo` đi
+từ `cho-lanh-dao` → `can-sua`, và `hoan-thanh` đi từ `can-sua` → `hoan-thanh`. Vậy nếu TP vừa là người
+thực hiện vừa được tự chốt thì **hai lần bấm** là tự duyệt xong việc của chính mình, tiến độ lên 100%
+và không ai nhìn thấy. Người dùng chốt: **«Chặn tự duyệt, buộc trình Phó GĐ»** và **«chặn cả người
+thực hiện lẫn người đã tải file lên»**.
+
+**Ba chỗ đã sửa trong `taskFiles/service.js`:**
+
+1. `apTuDong` — `giaTri === 'cho-phep'` (✓ ở ô «Tạo file kết quả») **không còn** tự `da-duyet` khi
+   `user.role` là `Trưởng phòng`/`Phó phòng`; trả `cho-lanh-dao`. Nghĩa là với hai vai này **✓ bị
+   CHẶN TRẦN**: bản của họ luôn phải lên Phó GĐ phụ trách. Cán bộ giữ nguyên hành vi cũ (mục 2 ·
+   TC-TF-05). Đây là thay đổi có chủ ý, `TC-LS-04` đã đổi kỳ vọng theo — ai «sửa lại cho xanh như
+   cũ» là mở lại lỗ tự duyệt.
+2. `verdict` — ngay sau khi lấy `banCuoi`, chặn `hoan-thanh` khi `sameId(item.assignee_id, user.id)`
+   **hoặc** `sameId(banCuoi?.uploaded_by, user.id)`, trả 403 kèm câu chỉ đường
+   «hãy dùng «Trình Phó giám đốc»». Chặn theo CẶP điều kiện chứ không chặn từng hành động, vì
+   `tra-ve-cbo` rồi `hoan-thanh` mới là đường vòng thật.
+3. `baoNguoiPhaiSua` (mới) — `bao()` LOẠI chính người hành động khỏi danh sách nhận, nên khi TP vừa
+   là người thực hiện vừa tự ra lệnh sửa thì danh sách hoá **rỗng** và đầu việc nằm im không ai được
+   báo. Nay lùi về `phoGiamDocPhuTrach(item.department_id)`. Dùng cho cả `yeu-cau-sua` và `tra-ve-cbo`.
+
+**Điều kiện tiên quyết ở tầng phân công** (`assignments/service.js`): `assertTaskAssignee` **không cho
+gán TP/PP khi phòng chưa có Phó Giám đốc phụ trách đang hoạt động** — mã lỗi mới
+`ASSIGNEE_LEADER_NO_DEPUTY` (400), vì kết quả của họ sẽ không ai duyệt được. Kiểm ở 5 chỗ gọi (tạo
+nhiệm vụ · sửa nhiệm vụ · hai nhánh sao chép · đổi phòng cấp1) và kiểm GỘP một truy vấn trong
+`assertTreeAssignments` để **chuyển** công việc sang phòng chưa có Phó GĐ cũng bị chặn. Ai được gán:
+admin/Phó GĐ, hoặc TP/PP **cùng phòng** gán cho nhau; vai khác 403. `listCandidates` /
+`listTaskCandidates` trả THÊM `lanhDaoLamTrucTiep` + `coPhoGiamDocPhuTrach` để giao diện đọc quyết
+định của máy chủ thay vì tự suy luận (chỉ thêm trường, không đổi hình dạng cũ, không mở RPC mới).
+
+**Không migration, không cột mới** — dùng `assignee_id`/`leader_ids`/`supervisor_id` có sẵn.
+
+Kiểm thử: `task-files-api.test.js` **TC-LDTT-01..05** (không tự `da-duyet` · `hoan-thanh` 403 · thông
+báo lùi về PGĐ · PGĐ duyệt được · TP duyệt hộ Cán bộ vẫn được), `assignments.test.js` **TC-LDTT-A**
+10 ca, `nhan-kem-vai.test.js`, `TC-STAT-17`, một ca `gantt-api` và một ca `export-xlsx`.
+Nghiệm thu tay: mục **9b.16** của `docs/HUONG-DAN-TEST-GIAO-DIEN.md`. Buster + banner **`20260909-5`**.
+**OK của các đợt trước KHÔNG áp dụng cho đợt này.**
+
+## 10. Test thủ công cho người dùng (lịch sử; đợt mới xem mục 13–14)
 
 `Ctrl+Shift+R` → Console phải thấy banner `[QLCV] app.js 20260901-3` → mở modal một nhiệm vụ có gán
 cho mình → tab **«Kết quả & Luồng»**:
