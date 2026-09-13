@@ -2487,6 +2487,110 @@ mới trong `cron-due-soon.test.js`, TC-ZL-10 viết lại thành 5 loại tin).
 Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
 đừng tự sửa mã.
 
+### 9b.27 «Lưu chờ» + nút «Gửi duyệt» có popup tick thay đổi (12/09/2026, đợt S1–S4) — bấm để tự nghiệm
+
+**Nghiệm thu mới nhất 20260912-07 (13/09/2026), chưa kiểm trình duyệt thật:**
+chạy `chay-test.bat /giu /f` rồi Ctrl+F5; Network bốn asset app.css/app.js/project-details.js/phase8b-review.js
+và console app.js phải cùng `20260912-07`. Giữ kiểm Lưu chờ/Gửi duyệt của bản 06 bên dưới.
+- Desktop: tên nhiệm vụ 16px; người thực hiện, hạn và Tiến độ N% + thanh nằm cùng hàng; nút thao tác vẫn trên phải.
+- Mở hai nhiệm vụ: cả hai ẩn file ban đầu; mở/đóng từng nút ▼/▲ độc lập, ẩn cả tiêu đề cột lẫn hàng file.
+- Khi mở: Tên kết quả / Tỷ lệ công việc (%) / Tiến độ / Tình trạng; tỷ lệ thiếu là —, số 0 là 0%; chưa có bản là Chưa nộp.
+- Tên dài cắt …, di chuột có tên đầy đủ; màu tên theo tiến độ; không có nút nộp/duyệt/xoá file.
+- Thu cửa sổ 640px rồi 375px/320px: meta xuống hàng, file có nhãn riêng, không đè tên hay tràn ngang.
+- Compact/Kanban và tab Nhiệm vụ giữ giao diện cũ; kiểm quyền copy/xoá và badge đang chờ bằng các vai đang dùng.
+Bản 07, số tự đo trong session: focused **184/184 · 10 file · exit 0** (mọi file test bị đụng đợt
+06 + 07), rồi full **2159/2159 · 118 file · 652.11s · exit 0**, chạy tuần tự không chồng nhau.
+Syntax ba file web, local-assets exit 0; XSS **101/996**.
+Chờ OK riêng PC đợt 06 + 07 trước commit/push/deploy; không coi jsdom là nghiệm thu bố cục thật.
+
+**Snapshot nghiệm thu 20260912-06 (13/09/2026):** chạy `chay-test.bat /giu /f`, Ctrl+F5,
+kiểm Network app.js `v=20260912-06` và console cùng số. Mở Chi tiết công việc: file trong từng
+thẻ nhiệm vụ ẩn sẵn, bấm ▼ thấy tên/%/trạng thái, bấm ▲ ẩn; đóng mở lại vẫn ẩn. Không có thao tác file.
+Sửa nhiệm vụ Đã duyệt bằng TP/PP/Nhân viên: Lưu chờ không đóng; đóng mở lại giữ nội dung vừa lưu,
+kể cả phân công/tỷ lệ/ngày. Gửi duyệt mở popup, Hủy không gửi; bỏ một tick rồi xác nhận chỉ gửi
+ô được tick, ô bỏ tick ở giỏ. Từ cây thấy cả cây; từ nhiệm vụ chỉ thấy nhiệm vụ.
+Admin/Phó GĐ ghi thẳng vẫn một nút Cập nhật. Tab Nhiệm vụ không có số file/nhãn hoàn thành cạnh tên;
+4 thẻ Tổng số, Đã xong, Đang làm, Quá hạn còn đủ, cột Tình trạng kết quả giữ nguyên.
+Tự động bản 06: focused 135/135 (8 file), full 2147/2147 (118 file), exit 0; sau lint-fix stub
+14/14. Logout/đổi tài khoản không hiện giỏ tài khoản cũ; full submit đóng form, partial/cancel/lỗi giữ ô sửa.
+
+
+**CÓ migration `030_luu_cho_sua.sql` — CSDL phải lên `030`.** Ctrl+F5 **không đủ**. **BẮT BUỘC**
+`chay-test.bat /giu /f` (script tự migrate trên `quanlycongviec_uat`; bước `[7/7]` phải in
+`[OK] approval_changes.change_kind nhan 'luu-cho'`). **CẤM** `npm run migrate:up` tay không set
+`DATABASE_URL` — lệnh đó đọc `deploy/.env` và trúng database **dev**. Buster **`20260912-04` →
+`20260912-05`**. Pin XSS **`101 sink / 1004 nội suy`**. Test tự động trước nghiệm thu PC:
+**2140/2140 · 118 file · exit 0** (+27 ca `luu-cho-gio.test.js`, +8 ca `luu-cho-ui.test.js`,
++1 ca danh sách file trong Chi tiết công việc). Thiết kế + bẫy: `docs/KE-HOACH-DUYET-CAY.md` **§14**.
+
+> **⚠ MỤC NÀY TEST TRÊN PC BẰNG `chay-test.bat /giu /f`.** Đợt này **chưa** được lệnh lên VPS: bấm thử
+> trên máy trước, báo kết quả, rồi mới commit / push / deploy. Network phải thấy
+> `assets/js/app.js?v=20260912-05` và Console in `[QLCV] app.js 20260912-05`; nếu vẫn `20260912-04`
+> thì **tắt hẳn tab rồi mở lại**.
+
+> **⚠ HAI GIẢ ĐỊNH ĐÃ LÀM THEO.** (1) `admin@` (và mọi vai **ghi thẳng**) vẫn thấy nút **«Cập nhật»**
+> — không có giỏ. (2) Bấm «Lưu chờ» **không** hiện cảnh báo tên người thực hiện ngay; cảnh báo hiện
+> lúc bấm **«Gửi duyệt»** trong popup.
+
+**A. Nút trên form (bước 96 → 100)**
+
+96. **Chuẩn bị.** Chạy `chay-test.bat /giu /f`. Ở `[7/7]` phải thấy `[OK] … nhan 'luu-cho'` **và**
+    `[OK] … nhan 'ty-le'`. Ctrl+F5. Đăng nhập `tp@`. Cần **một công việc con cấp 2 đang «Đã duyệt»**
+    (nếu chưa có: tạo cây → gửi duyệt → `pgd@` duyệt xong).
+97. **`tp@` sửa công việc con Đã duyệt.** Mở form sửa cấp 2: **hai nút** «Lưu chờ» (`data-nhap`) và
+    «Gửi duyệt» (`data-gui-duyet`). **Không còn** nút «Cập nhật». Form nhiệm vụ cấp 3 Đã duyệt **của cùng phòng** cũng có **hai nút** «Lưu chờ» (`data-nhap`) và
+    «Gửi duyệt» (`data-gui-duyet`), không còn «Cập nhật»; không cần ghi đè `task:update='cho-duyet'`.
+98. **`admin@` sửa cùng mục Đã duyệt.** Đổi sang `admin@`, mở form sửa: **một nút «Cập nhật»**, không
+    có «Lưu chờ». Bấm Cập nhật ⇒ cột đổi **ngay**, không giỏ, không badge «có sửa chờ».
+99. **`tp@` sửa công việc cha cấp 1 Đã duyệt (không ghi đè).** Vẫn **«Cập nhật»** — giỏ chỉ tự mở với
+    **công việc con** (luật cứng TP/PP + cấp 2) hoặc khi admin ghi đè `update='cho-duyet'`.
+100. **Nháp / Chờ duyệt / Từ chối không đổi.** Mở một mục **Nháp** của chính `tp@`: vẫn «Lưu nháp» /
+    «Gửi đi duyệt» như cũ, **không** hiện «Lưu chờ».
+
+**B. Giỏ giữ cột cũ (bước 101 → 104)**
+
+101. **Lưu chờ không đổi cột đang chạy.** `tp@`, mở công việc con Đã duyệt, đổi **tên** thành một chuỗi
+    dễ nhận (ví dụ thêm ` (chờ)`), bấm **«Lưu chờ»**. Toast dạng **«Đã lưu chờ N thay đổi — cột đang
+    chạy chưa đổi…»**. Form **không đóng**. Lưới vẫn **«Đã duyệt»** + badge tím nét đứt **«có sửa chờ»**.
+    Tên trên lưới **vẫn là tên cũ**.
+102. **Sửa tiếp = MERGE.** Đổi tiếp **mô tả / ghi chú**, bấm «Lưu chờ» lần nữa. Vẫn một badge, không
+    sinh dòng chờ duyệt mới, chuông «Chờ duyệt» **không** tăng.
+103. **Sửa vòng về gốc thì giỏ trống.** Đổi tên **về đúng chữ cũ**, bấm «Lưu chờ». Toast **«Không còn
+    thay đổi chờ — giỏ đã trống.»**, badge biến mất, cột vẫn giá trị cũ.
+104. **Đổi chỗ trên cây bị chặn.** Nếu form gửi `parentRef`/`workRef` khác chỗ hiện tại ⇒ **409** nguyên
+    văn có chữ **«Đổi chỗ trên cây … không nằm trong chế độ «lưu chờ»»**. Đúng chỗ hiện tại thì 200.
+
+**C. Popup tick rồi gửi (bước 105 → 109)**
+
+105. **Gửi duyệt mở popup, không gửi ngay.** Cất lại vài thay đổi (tên + ghi chú), bấm **«Gửi duyệt»**.
+    Form hiện tại được cất vào giỏ trước, rồi popup **«Gửi duyệt các thay đổi chờ»** liệt kê từng mục /
+    từng ô, **mỗi ô một tick** (mặc định **đã tick**). Nút form **không** kẹt trạng thái loading.
+106. **Chữ độc không thành thẻ.** Nếu tên/ghi chú có `<img src=x onerror=alert(1)>` thì popup hiện
+    **đúng chuỗi đó** (chữ), **không** có thẻ `img`/`script` trong DOM popup.
+107. **Bỏ tick thì ở lại giỏ.** Bỏ tick ô ghi chú, giữ tick tên, bấm OK. Toast kể số đã gửi. Mục hạ về
+    **«Chờ duyệt»** vì đã gửi ít nhất một ô. Badge **còn** nếu vẫn còn ô trong giỏ. Mở lại «Gửi duyệt»:
+    popup chỉ còn ô **chưa** gửi.
+108. **Màn công việc con gửi cả cây (S3).** Từ **chi tiết công việc con** (hoặc chân
+    `.project-luu-cho-footer` trên modal chi tiết cây Đã duyệt), bấm «Gửi duyệt»: popup gồm **cả**
+    thay đổi của nhiệm vụ bên dưới đã lưu chờ. Từ **form chỉ sửa một nhiệm vụ**: popup **chỉ** nhiệm
+    vụ đó. Footer nháp `.project-draft-footer` **không đổi**.
+109. **Hồi quy đúng màn người dùng báo.** Tab **Quản lý công việc** → mở một công việc → màn
+    **Chi tiết công việc** → dưới một công việc con, bấm sửa **nhiệm vụ cấp 3 Đã duyệt**. Đổi lần lượt
+    tên, mô tả, ngày, tiến độ và ghi chú, bấm «Lưu chờ» sau mỗi lượt: modal giữ nguyên để sửa tiếp,
+    mở lại vẫn thấy badge «có sửa chờ»; bấm «Gửi duyệt» phải hiện popup tick các ô đã đổi. Bỏ tick một
+    ô rồi xác nhận: ô đã tick hạ Chờ duyệt, ô bỏ tick còn trong giỏ.
+110. **File kết quả ngay trong thẻ nhiệm vụ.** Cũng tại màn **Chi tiết công việc**, nhiệm vụ nào đã
+    khai báo file kết quả phải có khối **«File kết quả (N)»** ngay dưới tên/badge nhiệm vụ: từng dòng
+    hiện tên kết quả, phần trăm và nhãn tình trạng (ví dụ **«50% · Chờ TP/PP xem»**). Tên dài bị rút
+    gọn bằng dấu `…`, không vỡ thẻ. Khối này **chỉ xem**: không có nút tải/nộp/duyệt/xoá hay thao tác
+    OnlyOffice; các thao tác file vẫn ở tab/form Nhiệm vụ.
+111. **9b.15 → 9b.26 KHÔNG đổi luật.** Đợt này chỉ thêm giỏ trên mục **Đã duyệt** của vai phải duyệt
+    lại. Chuông, OnlyOffice, tỷ lệ, `gui-bld`, nhật ký, Zalo **không đụng**. `GET /pending-count` **không**
+    cộng giỏ. «Trả lại để sửa» **dọn** giỏ sót.
+
+Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
+đừng tự sửa mã.
+
 ## 10. Dọn dẹp sau buổi test
 
 > **Cảnh báo đợt V1–V8 (10/09/2026):** các cách reset/seed bên dưới là hướng dẫn lịch sử.
@@ -2581,6 +2685,10 @@ sạch thì xoá thư mục đó.
 | **GỘP HAI TRỤC: nháp là nháp tất cả · nhiệm vụ thêm sau chờ duyệt một mình · CẤM HẲN nút tải file khi cây chưa duyệt · bỏ tự duyệt · tỷ lệ qua `approval_changes` · «TP/PP phê duyệt» có lưu mốc · gộp «Yêu cầu sửa» · tích «Gửi BLĐ» quyết định nút của TP/PP** | ⏳ **đang nghiệm thu** | mục **9b.23** — **BẮT BUỘC sao lưu rồi `chay-test.bat /giu /f`** (migration **029 KHÔNG LÙI TỰ ĐỘNG ĐƯỢC**); bản sửa Q6 chiều 11/09 **không cần** migration, chỉ **Ctrl+F5**. Buster **nay là `20260912-01`** (đợt bổ sung 12/09). Test tự động: **2043/114 xanh** |
 | **Bản kết quả ĐẦU TIÊN chỉ người thực hiện trực tiếp nộp được · cột «Tình trạng» và «Người thực hiện» ghi Ở TỪNG BẢN kèm tên** | ⏳ **đang nghiệm thu** | mục **9b.24** (bước 46 → 60) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-01` và Console in `[QLCV] app.js 20260912-01`. Test tự động: **2043/114 xanh** (+9 ca `phase8d-ban-dau.test.js`), pin XSS **100/978** |
 | **Bảng «Chờ duyệt» nói rõ «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · cán bộ lập mới cấp 3 chọn được BLĐKS và người thực hiện · TP/PP hết «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ** | ⏳ **đang nghiệm thu** | mục **9b.25** (bước 61 → 79) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-02` và Console in `[QLCV] app.js 20260912-02`. Test tự động: **2076/2076 · 115 file · exit 0** (+11 ca `approvals-pending-da-sua.test.js`), pin XSS **101/986** |
+| **«Hoạt động gần đây» hết tên máy và hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin** | ⏳ **chờ test PC** | mục **9b.26** (bước 80 → 95) — **không** migration, CSDL giữ `029` lúc đợt đó, buster `20260912-03`. Test tự động lúc commit: **2096/2096 · 116 file**. Pin XSS lúc đó **101/986** |
+| **Tách «Cập nhật» thành «Lưu chờ» + «Gửi duyệt» có popup tick · giỏ giữ cột cũ · gửi cả cây từ màn công việc con** | ⏳ **chờ test PC** | mục **9b.27** (bước 96 → 109) — **BẮT BUỘC `chay-test.bat /giu /f`** (migration **030**), buster `20260912-04`. Test tự động: **2138/2138 · 118 file · exit 0**. Pin XSS **101/996** |
+
+
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
 | Trang Tổng quan: 6 biểu đồ, hoạt động gần đây | ⏳ | cần `chartData`/`recentActivities` của `getDataForUser` — việc **5.10** |
 | Đăng nhập xong tự có dữ liệu, không phải gõ Console | ⏳ | `getDataForUser` + `getInitialDataWithAuth` còn `501` — việc **5.10** |

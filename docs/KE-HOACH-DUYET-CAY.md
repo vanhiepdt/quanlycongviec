@@ -811,3 +811,109 @@ trên **CV002**: nhiệm vụ không tích mà file vẫn lên PGĐ, và ở chi
   app 0 lỗi. **Việc còn nợ duy nhất: bấm 9b.15 → 9b.25 ngay trên `https://ttdt.site`** với **Ctrl+F5** —
   đây là dữ liệu thật, đừng tạo nhiệm vụ thử bừa; nếu bắt được lỗi thì ghi nguyên văn câu thông báo,
   **không tự sửa mã trên VPS**.
+
+## 14. ĐỢT LƯU CHỜ (2026-09-12): tách «Cập nhật» thành giỏ «Lưu chờ» + nút «Gửi duyệt» có popup tick
+
+**Bổ sung 13/09/2026 — bản 20260912-07:** chỉ thẻ nhiệm vụ không compact: meta người/hạn/tiến độ
+chung hàng desktop, responsive mobile; tên 16px. File chỉ xem dùng grid bốn cột Tên kết quả /
+Tỷ lệ công việc (%) / Tiến độ / Tình trạng, ratio thiếu → —, 0 → 0%, `co_ban=false` → Chưa nộp.
+Wrapper `.task-detail-results-body.hidden` chứa cả header và ul; toggle scoped riêng từng thẻ,
+không display grid trên wrapper để tránh ghi đè hidden. Tên/title/class/status escape, số ép 0..100;
+không thay compact, quyền thao tác, badge chờ, backend/RPC hay listener project-details.js.
+Số tự đo trong session: focused **184/184 · 10 file · exit 0** (mọi file test bị đụng đợt 06 + 07),
+rồi full **2159/2159 · 118 file · 652.11s · exit 0**, chạy tuần tự không chồng nhau.
+Syntax ba file web + local-assets exit 0; XSS **101/996** (+4 nội suy, 0 sink).
+Bốn URL index + một banner tăng 06→07. Chưa kiểm browser; chờ PC `/giu /f`, Ctrl+F5 và OK riêng theo §9b.27.
+
+**Snapshot 13/09/2026 — bản 20260912-06:** khôi phục UI đã thiếu trong app.js bản 03.
+Lưu chờ giữ form mở, Gửi duyệt cất form trước rồi popup checkbox, chỉ POST `{chon}` sau xác nhận.
+GET giỏ bổ sung `valueTo` để mở lại form giữ đúng số, ngày, mảng phân công và chuỗi rỗng;
+không suy dữ liệu form từ nhãn `to`. Quyền đọc/phạm vi GET giữ nguyên; giá trị áp khi submit vẫn
+lấy từ giỏ server, không nhận raw values từ popup. RPC giữ nguyên các khóa cũ.
+File trong thẻ chi tiết ẩn mặc định, nút riêng `.task-detail-files-toggle`; không nhớ localStorage.
+Bốn thẻ tab Nhiệm vụ giữ ID, đổi nhãn Đã xong / Đang làm; bỏ nhãn số file/hoàn thành cạnh tên.
+Bản 06: focused 135/135 (8 file), full 2147/2147 (118 file), exit 0; sau full chỉ lint-fix stub test,
+focused 14/14 và scoped lint 0. Full đầu 4 lỗi/2142 đã sửa; các số khác phía dưới là lịch sử.
+Cache giỏ xoá khi logout/đổi tài khoản, chặn response cũ. Full submit đóng form cũ tránh gửi lặp;
+partial/cancel/failure giữ nội dung. Kiểm tay PC vẫn chưa nghiệm thu.
+
+
+**CÓ migration `030_luu_cho_sua.sql`** — CSDL phải lên `030`. Ctrl+F5 **không đủ**. Bấm thử:
+`docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.27 (bước 96 → 111)**; pin XSS: `docs/XSS-4.6.md` khối
+**101/1004**. Buster **`20260912-04` → `20260912-05`**. Full suite trước nghiệm thu PC:
+**2140/2140 · 118 file**.
+
+Chỉ đạo người dùng, nguyên văn:
+
+> «Khi sửa công việc, nhiệm vụ, trên giao diện của công việc con, và giao diện của tab nhiệm vụ cũng
+> đang chưa hợp lý. tôi muốn khi sửa thông tin gì cũng có chế độ lưu chờ (tức là cho sửa tiếp), rồi nút
+> ấn gửi duyệt thay gì gửi duyệt luôn khi ấn cập nhật như bây giờ, và trước khi ấn nút gửi duyệt thì
+> phải hiển thị popup những cái thay đổi, chắc chắc rồi ấn ok để gửi đi duyệt. Nếu trong màn hình công
+> việc con thì cho sửa cả nhiệm vụ cùng lưu tạm đấy, còn nếu màn hình chỉ có sửa nhiệm vụ thì chỉ nhiệm
+> vụ thôi»
+
+### 14.1 Bốn quyết định đã chốt (S1–S4) — không đảo
+
+| # | Chốt | Nghĩa kỹ thuật |
+|---|---|---|
+| **S1** | «Lưu chờ» = **GIỎ CHỜ**, cột thật **GIỮ giá trị cũ**. Lưới vẫn «Đã duyệt» + badge «có sửa chờ» | Một dòng `approval_changes` `change_kind = 'luu-cho'`. `valueFrom`/`valueTo` nằm trong JSON `changes`. Cây **không** hạ nên `v_countable_items` không mất số. |
+| **S2** | Phạm vi = **CHỈ mục đang «Đã duyệt»**. Nháp / Chờ duyệt / Từ chối giữ hành vi cũ | `oCheDoLuuCho = phaiDuyetLaiKhiGuiGio && can(update).ok`; hàm giỏ tự `false` khi không phải `Đã duyệt`, còn PATCH cũ giữ `phaiDuyetLaiKhiSua`. |
+| **S3** | Màn công việc con: «Gửi duyệt» = **GỬI CẢ CÂY MỘT LẦN**. Màn chỉ sửa nhiệm vụ thì chỉ nhiệm vụ | `phamViCay`: cấp 1 = dòng `works` + mọi `work_items`; cấp 2 = bản thân + nhiệm vụ con; cấp 3 = đúng một mình (`listDescendants` rỗng). |
+| **S4** | Popup liệt kê thay đổi **CÓ Ô TICK**. Bỏ tick ⇒ ở lại giỏ | `chon` vắng/`null` = gửi HẾT; phần tử không có trong `chon` = bỏ cả mục; `Set` rỗng = không ô nào ⇒ 409 «Chưa tích thay đổi nào để gửi duyệt». Client popup **luôn gửi `chon`** từ checkbox. |
+
+**Hai giả định đã làm theo, chưa hỏi lại:** (i) vai **ghi thẳng** (admin, hay Phó GĐ không bị ghi đè
+`update='cho-duyet'`) thì nút vẫn **«Cập nhật»**, không có giỏ. (ii) «Lưu chờ» **không** báo warning tên
+người thực hiện ngay (`warnings: []` cố ý); warning hiện lúc **GỬI** (`guiGio.canhBao`).
+
+### 14.2 Đã làm
+
+| Thành phần | Nội dung |
+|---|---|
+| **Migration 030** `server/src/db/migrations/030_luu_cho_sua.sql` | Nới CHECK `change_kind IN ('reviewer','gui-bld','ty-le','luu-cho')`. Down **KIỂM** còn giỏ treo (`approved_at IS NULL`) rồi mới lùi — không âm thầm xoá việc người dùng đang soạn. Không đụng index: hai unique của 029 đã khoá đúng một giỏ đang chờ trên mỗi dòng, nên «sửa tiếp» = MERGE. |
+| **`approvals/luuCho.js`** — 11 export, **không** import service | `LUU_CHO` · `phamViCay` · `gioTrongCay` · `timGio` (`FOR UPDATE`) · `thayDoiTu` (lọc `patch` **trước** `tronThayDoi` để sửa vòng về gốc xoá ô) · `ghiGio` (rỗng thì XOÁ) · `catGio` · `dongGio` (`approved_at`, `decision` NULL) · `xoaGioId` · `xoaGioCay` · `gioCuaToi`. `recipient_id = editor_id = người sửa`. Giỏ item **phải** treo `work_id` = id công việc gốc (`NOT NULL` từ 023). |
+| **`approvals/rules.js`** | `phaiChoDuyetKhiSua` chỉ khi **ghiDe** `update='cho-duyet'` (không dùng mặc định ma trận). `phaiDuyetLaiKhiSua` giữ hợp đồng PATCH cũ: TP/PP + `subwork` + Đã duyệt + không ghiDe `subwork:update`, hoặc ghi đè. Riêng `phaiDuyetLaiKhiGuiGio` mở giỏ cho TP/PP/Nhân viên + `task` cấp 3 Đã duyệt; lúc submit, `itemsService.update(..., {tuGuiGio:true})` dùng đúng luật này để hạ Chờ duyệt mà không phá các luồng tỷ lệ/Gửi BLĐ PATCH cũ. Admin/Phó GĐ vẫn ghi thẳng mặc định. |
+| **`approvals/service.js`** | `oCheDoLuuCho` · `docGio` · `luuGio` (409 nếu `!oCheDoLuuCho`; đổi chỗ cây 409 `parentRef`/`workRef`) · `boGio` · `guiGio` gọi `worksService.update`/`itemsService.update` với `{client}` — **không** tái dùng `submit()` · `gioChoCuaToi`. `pendingCount` cố ý **không** cộng giỏ. `duyetCaCay` cố ý **không** đóng giỏ. `traLaiDeSua` **có** `xoaGioCay`. |
+| **5 route REST** `approvals/routes.js` | `GET /pending-edits` → `gioChoCuaToi` (**TRƯỚC** `/:entity/:id`). `GET /:entity/:id/pending-edits` → `docGio`. `POST …/pending-edits` → `luuGio`, `skipAudit`. `POST …/drop` → `boGio`, `skipAudit`. `POST …/submit` body `{chon?}` → `guiGio`; audit `approvals.pendingEditSubmit` details `{code,count,changed}`. `:entity` nhận `work\|works\|work-item\|work-items\|item`. Ref = **mã** (code). |
+| **Cầu RPC** `rpc/table.js` + `legacyFields.js` | Đọc cờ `data.luuCho===true` **TRƯỚC** `taskFromLegacy`/`projectFromLegacy` → POST pending-edits. Phản hồi `{success, projectId\|taskId, luuCho: saved, warnings: []}` — **thêm** khoá, không đổi khoá cũ. |
+| **Giao diện** `web/assets/js/app.js` | Banner `20260912-05`. Cache `gioChoCuaToiMuc` / `maGioCho`; `napGioChoCuaToi` sau login. `oCheDoLuuChoForm(row)` khớp luật server (không dùng `!laQuanTriTrongPhamVi()`): TP/PP cấp 2 và TP/PP/Nhân viên ở nhiệm vụ cấp 3 Đã duyệt đều vào giỏ. Form sửa Đã duyệt: «Lưu chờ» (`data-nhap`) + «Gửi duyệt» (`data-gui-duyet`). `handleEdit` **không** đóng modal / **không** optimistic khi vào giỏ. `guiGioChoDuyet`: **gỡ `setButtonLoading` trước** `hopThoai8b`; popup tick `textContent` (`hopThoai8b`/`taoNut8b`); `.qlcv-dialog-content` phải `whiteSpace = "normal"` vì CSS `pre-wrap`. Badge khớp theo **`code`** (client rows không có id số). |
+| **`project-details.js`** | `luuChoBadge(sw)` cạnh `nhanDuyetCon`. Footer `.project-luu-cho-footer` nếu Đã duyệt **và** (`oCheDoLuuChoForm(project)` **hoặc** `luuChoBadge(project)`). Footer nháp `.project-draft-footer` **giữ**. |
+| **Chi tiết công việc** `web/assets/js/app.js` + `web/assets/css/app.css` | `buildKetQuaTrongChiTietNhiemVu(task)` đọc `ketQuaFiles` vốn có từ bootstrap, hiện khối «File kết quả (N)» trong thẻ nhiệm vụ bằng tên, % và nhãn trạng thái chuẩn; thoát tên/thuộc tính, tên dài ellipsis. **Không** thêm nút nộp/duyệt/xoá/OnlyOffice để không nhân đôi luồng file. |
+| **CSS** `web/assets/css/app.css` | `.status-pending-edit` — badge tím nét đứt «có sửa chờ»; `.task-detail-results*` trình bày danh sách file gọn trong thẻ nhiệm vụ. |
+
+`dinhDangGio` trả `{id, entity, itemId, workId, code, name, thayDoi:[{field,label,from,to}]}` — **không** lộ
+`valueFrom`/`valueTo`. `guiGio` trả `{muc, daGui, canhBao, conLai, tongSoThayDoiConLai}`. Nhãn nhật ký
+client: «Gửi sửa chờ đi duyệt» / `fa-paper-plane` / `text-blue-600`. `showToast` chỉ nhận `success|error|info`.
+
+### 14.3 Test
+
+| File | Nội dung |
+|---|---|
+| `server/tests/integration/luu-cho-gio.test.js` — **MỚI, 27 ca** | S1–S4, drop, đổi chỗ, pending-edits của tôi, return dọn giỏ, audit, cầu RPC, pending-count không cộng giỏ. Ca S4 gộp hai cây phải tách 2 `it` (unique `PH01`). |
+| `server/tests/unit/luu-cho-ui.test.js` — **MỚI, 8 ca** jsdom | Nút form (bao gồm TP sửa nhiệm vụ cấp 3 Đã duyệt), popup tick, badge, footer. `eslint.config.js` thêm file vào nhóm jsdom. |
+| `server/tests/unit/tasks-results-design.test.js` | TC-TASK-DESIGN-02b pin danh sách file kết quả trong thẻ Chi tiết công việc: tên thoát, % + nhãn chuẩn và ellipsis CSS. |
+| `pending-badge` · `task-form-candidate` · `hoat-dong-ui` · `xss-guard` · `project-details-phan-cong` | CAN-THOAT `luuChoBadge(task)` so:3 / `luuChoBadge(project)` so:2; `buildLuuNhapNutHtml(isEdit, row)` so:0; TC-HD-07 nhãn `pendingEditSubmit`; TC-LUU-CHO-FOOTER (mock `vi.fn().mockResolvedValue(true)` — không `async () => true` kẻo eslint `require-await`). Pin XSS **`{sink:101, gia_tri:1004}`**. |
+| **Full** `npm test` từ `server/` | **2140/2140 · 118 file · exit 0**. Banner stdout `[QLCV] app.js 20260912-05`. eslint + prettier scoped sạch. |
+
+### 14.4 Bẫy gặp phải (đừng phát hiện lại)
+
+1. **`approval_changes.work_id` NOT NULL (023).** Giỏ item mà `workId: null` là 23502. Phải `Number(before.work_id)`.
+2. **Không tái dùng `submit()` lúc gửi giỏ.** `submit()` là «gửi cây Nháp đi duyệt lần đầu»; giỏ là «áp giá trị mới rồi hạ về Chờ duyệt». Gọi `worksService.update`/`itemsService.update` với `{client}` thì còn chuông R7 và cân tỷ lệ anh em.
+3. **`pendingCount` không cộng giỏ.** Giỏ là việc riêng của người đang soạn; cộng vào chuông «Chờ duyệt» thì người duyệt mở hộp ra thấy rỗng.
+4. **`duyetCaCay` không đóng giỏ; `traLaiDeSua` có `xoaGioCay`.** Giỏ sót trên cây vừa duyệt là nháp cho lượt sau. Giỏ sót trên cây vừa trả về Nháp sẽ đè lên bản người tạo đang soạn lại.
+5. **Gỡ loading nút trước `hopThoai8b`.** Không gỡ thì nút form kẹt spinner khi popup mở.
+6. **`.qlcv-dialog-content { white-space: pre-wrap }`.** Popup tick phải gán `content.style.whiteSpace = "normal"` kẻo mỗi checkbox một dòng vỡ.
+7. **Badge khớp theo `code`, không theo id số.** Dòng legacy chỉ có `COL.P_ID`/`COL.T_ID` = `row.code`. Thẻ cấp 1 hiện badge nếu `maGioCho.has(P_ID)` **hoặc** task con `T_PID === P_ID` mà `maGioCho.has(T_ID)`.
+8. **`oCheDoLuuChoForm` không được dùng `!laQuanTriTrongPhamVi()`.** Bản đó đẩy Phó GĐ vào giỏ dù họ ghi thẳng. Khớp server: Đã duyệt + `coQuyenTaiDong("update")` + (ghi đè `update="cho-duyet"` **hoặc** `subwork` + TP/PP **hoặc** `task` + TP/PP/Nhân viên).
+9. **Footer cây cấp 1:** TP không ghiDe ⇒ `oCheDoLuuChoForm(project)` false. Footer vẫn hiện nếu `luuChoBadge(project)` (cần `maGioCho`) — ca test phải `datGio(['CV001'])`.
+10. **`chon` vắng = gửi hết; phần tử vắng = bỏ cả mục.** Client popup **luôn gửi `chon`** từ checkbox, không dựa vào mặc định server.
+11. **`warnings` lúc lưu cố ý rỗng.** Cột chưa đổi nên không có «sai tên người thực hiện» lúc Lưu chờ; `guiGio.canhBao` mới nói.
+12. **`thayDoiTu` phải lọc `patch` trước `tronThayDoi`.** Ô không gửi và ô gửi đúng giá trị cũ trông giống hệt (`before[field] === after[field]`); không lọc thì sửa vòng về gốc **giữ** prior — đúng trục người duyệt, **sai** giỏ.
+13. **Cầu RPC đọc `data.luuCho` TRƯỚC mapper legacy.** Mapper nuốt khoá lạ; đọc sau là cờ mất, lượt «Lưu chờ» thành «Cập nhật» ghi thẳng.
+14. **`npm run migrate:up` tay không set `DATABASE_URL` trúng DEV.** Script đọc `deploy/.env`. Test PC **bắt buộc** `chay-test.bat /giu /f`. `chay-test.bat` bước `[7/7]` kiểm `strpos(...,'luu-cho')` **sau** 6 dấu hiệu 029.
+
+### 14.5 Còn nợ
+
+- **Chưa commit / chưa push / chưa deploy.** Chờ người dùng test PC §9b.27 rồi mới commit bằng explicit paths. Ba commit nhật ký local (`8295de0` / `1fcd66b` / `0ecbd03`) cũng chưa push.
+- **VPS đang `pgmigrations = 029`, buster `20260912-02`.** Deploy đợt này SẼ có 030 — backup VPS trước. Bản PC cần cache buster `20260912-05`.
+- **Nghiệm thu §9b.25 trên production** (`https://ttdt.site`) và kiểm tin Zalo 10:15:18 — nợ cũ, không đụng đợt này.
+- **Badge file class chết** (`bg-slate-100`…) + 11 chỗ `text-[11px]` — ngoài phạm vi, **không tự sửa**.

@@ -4,6 +4,9 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 REM =========================================================
+REM  20260912-07: /giu /f + Ctrl+F5; meta cung hang, file grid, toggle rieng tung the.
+REM  Focused 184/184 (10 files), full 2159/2159 (118 files), XSS 101/996; chua nghiem thu browser. Xem 9b.27.
+REM  Giu test luu cho/popup tick ban 06; cho OK PC truoc commit/push/deploy.
 REM  QLCV - MAY CHU TEST TAY  (CSDL quanlycongviec_uat)
 REM  Khac chay.bat: KHONG xoa CSDL, KHONG seed lai -> giu du lieu.
 REM  Goi san che do neu muon:  chay-test.bat /giu | /seed | /v14 | /reset
@@ -139,6 +142,22 @@ REM       Thiet ke + bay: KE-HOACH-DUYET-CAY.md muc 13. Test: 2076/2076 - 115 fi
 REM       Pin XSS: 101 sink / 986 noi suy, CAN-THOAT 21 -> 23 cho.
 REM       KHONG can chay lai script nay - Ctrl+F5 la du. Neu van chay thi buoc [7/7] se
 REM       in dung buster moi vi findstr doc truc tiep web\index.html.
+REM
+REM  2026-09-12 (DOT LUU CHO S1-S4 - CO migration 030, Ctrl+F5 KHONG du):
+REM   (13) Tach "Cap nhat" thanh "Luu cho" (gio, cot that GIU gia tri cu) + nut "Gui duyet"
+REM       mo popup tick roi moi ha ve "Cho duyet". Chi muc Dang "Da duyet" cua vai phai
+REM       duyet lai (TP/PP sua cap 2; TP/PP/Nhan vien sua nhiem vu cap 3, hoac ghi de
+REM       update='cho-duyet'). Admin / vai ghi thang van "Cap nhat". Man cong viec con:
+REM       nut Gui duyet gui CA CAY mot lan. The nhiem vu trong Chi tiet cong viec hien
+REM       them danh sach file ket qua CHI XEM (ten + %% + trang thai), KHONG lap nut file.
+REM       Migration 030 noi CHECK change_kind them 'luu-cho' (down KIEM gio treo roi
+REM       moi lui). Buoc [7/7] kiem them strpos(...,'luu-cho') SAU khi 6 dau hieu 029
+REM       da OK - thieu 030 thi DUNG, khong cho test dot nay. Buster 20260912-04 ->
+REM       20260912-05 (5 cho). Huong dan bam: muc 9b.27 (96 -> 111). Thiet ke + bay:
+REM       KE-HOACH-DUYET-CAY.md muc 14. Test: 2140/2140 - 118 file. Pin XSS: 101 sink /
+REM       1004 noi suy, CAN-THOAT 23 -> 28 cho. BAT BUOC chay lai script nay (/giu /f)
+REM       de [4/7] migrate 030 len quanlycongviec_uat. TUYET DOI khong chay
+REM       "npm run migrate:up" bang tay - no doc deploy\.env va trung database DEV.
 REM =========================================================
 
 set "DB=quanlycongviec_uat"
@@ -562,14 +581,15 @@ echo       docker exec qlcv-dev-db pg_restore -U !PGU! -d %DB% --clean --if-exis
 exit /b 0
 
 REM =========================================================
-REM  :kiem_dot_b - xac nhan migration 029 that su da len %DB%, va in ra nhung gi
-REM  nguoi test can biet TRUOC khi bam.
+REM  :kiem_dot_b - xac nhan migration 029 ROI 030 that su da len %DB%, va in ra
+REM  nhung gi nguoi test can biet TRUOC khi bam.
 REM
 REM  Vi sao phai kiem rieng: 029 doi ca DU LIEU lan RANG BUOC (gop yeu-cau-sua vao
 REM  tra-ve-cbo, doi trinh-lanh-dao thanh tp-phe-duyet, them change_kind 'ty-le').
-REM  Neu no chua len thi giao dien da la ban DOT B con CSDL thi van la ban cu -
-REM  moi hanh dong deu loi ma nhin nhu loi cua nguoi test. Nen thieu mot dau hieu
-REM  la DUNG lai, khong de nguoi dung test mat 35 buoc roi moi phat hien.
+REM  030 chi noi CHECK them 'luu-cho' - nho hon, nhung neu chua len thi nut "Luu cho"
+REM  nhem 23514 / 500 ma nhin nhu loi cua nguoi test. Thieu mot dau hieu 029 HOAC
+REM  thieu 'luu-cho' la DUNG lai. Khong pha 6 dau hieu 029: 030 chi chay SAU khi
+REM  029 da OK.
 REM
 REM  Khong dung LIKE '%...%' o day: dau %% trong file .bat phai viet %%%%, de sai la
 REM  am tham thanh rong. Dung strpos() va boc dau ^> vi cmd hieu > la chuyen huong.
@@ -608,13 +628,39 @@ set "DONGCU=0"
 for /f %%c in ('docker exec qlcv-dev-db psql -U !PGU! -d %DB% -tAc "SELECT count(*) FROM task_file_flow WHERE hanh_dong IN ('yeu-cau-sua','trinh-lanh-dao')" 2^>nul') do set "DONGCU=%%c"
 if "!DONGCU!"=="0" (echo     [OK]    khong con dong lich su nao dung ma verdict cu) else (echo     [THIEU] van con !DONGCU! dong lich su dung 'yeu-cau-sua'/'trinh-lanh-dao' & set /a LOI029+=1)
 
-if "!LOI029!"=="0" goto :kb_buster
+if not "!LOI029!"=="0" (
+  echo.
+  echo   *** 029 CHUA LEN DAY DU: !LOI029! dau hieu thieu. KHONG test DOT B luc nay. ***
+  echo   Cach xu ly: dong cua so "QLCV TEST - Node" roi chay lai  chay-test.bat /giu /f
+  echo   Neu van loi: doc loi cua buoc [4/7]. TUYET DOI khong chay "npm run migrate:up"
+  echo   bang tay - no doc deploy\.env va trung database DEV, khong phai %DB%.
+  exit /b 1
+)
+
 echo.
-echo   *** 029 CHUA LEN DAY DU: !LOI029! dau hieu thieu. KHONG test DOT B luc nay. ***
-echo   Cach xu ly: dong cua so "QLCV TEST - Node" roi chay lai  chay-test.bat /giu /f
-echo   Neu van loi: doc loi cua buoc [4/7]. TUYET DOI khong chay "npm run migrate:up"
-echo   bang tay - no doc deploy\.env va trung database DEV, khong phai %DB%.
-exit /b 1
+echo   --- Dau hieu cua migration 030 ^(DOT LUU CHO: gio sua Da duyet^) ---
+set "KINDLUUCHO="
+for /f %%c in ('docker exec qlcv-dev-db psql -U !PGU! -d %DB% -tAc "SELECT strpos(pg_get_constraintdef(oid),'luu-cho') FROM pg_constraint WHERE conname='approval_changes_change_kind_check'" 2^>nul') do set "KINDLUUCHO=%%c"
+if not defined KINDLUUCHO (
+  echo     [THIEU] khong tim thay CHECK approval_changes_change_kind_check
+  echo.
+  echo   *** 030 CHUA LEN: CHECK change_kind khong doc duoc. KHONG test DOT LUU CHO luc nay. ***
+  echo   Cach xu ly: dong cua so "QLCV TEST - Node" roi chay lai  chay-test.bat /giu /f
+  echo   TUYET DOI khong chay "npm run migrate:up" bang tay - no doc deploy\.env va trung DEV.
+  exit /b 1
+)
+if "!KINDLUUCHO!"=="0" (
+  echo     [THIEU] approval_changes.change_kind CHUA nhan 'luu-cho'
+  echo.
+  echo   *** 030 CHUA LEN: CHECK van dung ba gia tri cu ^(reviewer/gui-bld/ty-le^). ***
+  echo   Nut "Luu cho" se loi 23514/500. KHONG test DOT LUU CHO luc nay.
+  echo   Cach xu ly: dong cua so "QLCV TEST - Node" roi chay lai  chay-test.bat /giu /f
+  echo   TUYET DOI khong chay "npm run migrate:up" bang tay - no doc deploy\.env va trung DEV.
+  exit /b 1
+)
+echo     [OK]    approval_changes.change_kind nhan 'luu-cho'
+
+goto :kb_buster
 
 :kb_buster
 echo   --- Cache buster: Console trinh duyet phai in DUNG ban nay ---
@@ -623,7 +669,7 @@ findstr /c:"assets/js/app.js?v=" "%~dp0web\index.html"
 echo   --- Du lieu san co de test DOT B ---
 echo   Nhiem vu cap 3 theo trang thai duyet cay ^(Q1/Q2 can it nhat mot cay CHUA "Da duyet"^):
 docker exec qlcv-dev-db psql -U !PGU! -d %DB% -c "SELECT approval_status, count(*) FROM work_items WHERE level=3 GROUP BY 1 ORDER BY 2 DESC;"
-echo   De nghi dang cho trong approval_changes ^("ty-le" la cua DOT B, "gui-bld" cua DOT A^):
+echo   De nghi dang cho trong approval_changes ^("ty-le" DOT B, "gui-bld" DOT A, "luu-cho" DOT LUU CHO^):
 docker exec qlcv-dev-db psql -U !PGU! -d %DB% -c "SELECT change_kind, count(*) FROM approval_changes WHERE approved_at IS NULL GROUP BY 1 ORDER BY 1;"
 set "SUPRONG=0"
 for /f %%c in ('docker exec qlcv-dev-db psql -U !PGU! -d %DB% -tAc "SELECT count(*) FROM work_items WHERE level=3 AND cardinality(supervisor_ids) = 0" 2^>nul') do set "SUPRONG=%%c"

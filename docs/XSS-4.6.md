@@ -1,5 +1,60 @@
 ﻿# Việc 4.6 — Soát XSS toàn bộ tầng trình duyệt
 
+## Pin mới nhất bản 20260912-07 — 13/09/2026: 101 sink / 996 nội suy
+
+Đã chạy `node tools/dem-xss.mjs`: **101/996**, log `E:/quanlycongviec-xss-07.log`.
+So với working tree bản 06 (101/992), tăng **4 nội suy**, **0 sink mới**: tỷ lệ file, class màu
+file, class badge tình trạng, title người thực hiện. Tất cả qua escapeHtml/escapeHtmlAttr;
+tỷ lệ được kiểm hữu hạn và chặn 0..100, tiến độ ép số chặn 0..100. Nhãn chưa có bản dùng Chưa nộp.
+Không sửa auditor/allowlist. Pin test cập nhật sau số đo; `xss-guard` chạy riêng **11/11 · exit 0**,
+nằm trong lượt focused tự đo **184/184 · 10 file · exit 0**.
+Test jsdom kiểm chuỗi chứa dấu nháy/thẻ ở tên, title, trạng thái, tỷ lệ và tiến độ không tạo phần tử HTML.
+Không phải tuyên bố kiểm an toàn toàn ứng dụng hay kiểm browser thật.
+
+## Snapshot pin thực tế bản 20260912-06 — 13/09/2026: 101 sink / 992 nội suy
+
+Đếm bằng `node tools/dem-xss.mjs`. Soát AST **HEAD thực tế** (app.js bản 03) là **101/986**;
+con số 1004 bên dưới là snapshot mô tả UI 05 đã bị mất, không phải baseline mã đầu session.
+Vì vậy không suy diễn “đã xoá 12 lỗ”: thay đổi so với mã thật là **+6 nội suy**, 0 sink mới.
+Diff AST: thêm tên/title/%/trạng thái đã escape và map/builder danh sách file; thêm builder nút
+Lưu chờ cho form sửa; bỏ nội suy nhãn hoàn thành ở cột tên nhiệm vụ. Bộ đếm file chuyển vào
+builder chi tiết. Badge dùng chung fallback `pendingApprovalBadge` thay vì nhân năm callsite;
+test pending-badge kiểm thẻ công việc, con trong giỏ, dòng và thẻ nhiệm vụ.
+Popup dựng bằng textContent; auditor giữ nguyên; allowlist chỉ đổi hai callsite luuChoBadge trực tiếp đã không còn thành so: 0
+(có lý do), không làm yếu các ca tự kiểm guard.
+Các số lịch sử bên dưới không thay thế số đo này.
+
+
+## Pin sau bổ sung Chi tiết công việc (nhiệm vụ cấp 3 lưu chờ mặc định · danh sách file kết quả) — 12/09/2026: 101 sink / 1004 nội suy
+
+So với pin S1–S4 **101/996**: **0 sink mới**, tăng ròng **+8 nội suy**, **không thêm CAN-THOAT** (vẫn
+**28 chỗ**). Số chốt lấy thẳng từ `node ../tools/dem-xss.mjs` chạy từ `server/`; không suy số bằng mắt.
+
+- **Không có sink mới.** `buildKetQuaTrongChiTietNhiemVu` trả HTML vào chuỗi thẻ nhiệm vụ đã có; mọi tên
+  file/kết quả đi qua `escapeHtml` (text) và `escapeHtmlAttr` (`class`/`title`), còn phần trăm bị ép số,
+  chặn trong 0–100; nhãn tình trạng và màu chỉ lấy từ bảng/hàm nội bộ. Không dùng `innerHTML` với dữ liệu
+  file, không thêm thao tác nộp/duyệt/OnlyOffice tại màn Chi tiết công việc.
+- **+8 nội suy là danh sách file gọn.** Con số bao gồm nhãn/thuộc tính tên kết quả, phần trăm, trạng thái,
+  lớp màu và bộ đếm nhóm file trong builder mới; eligibility «lưu chờ» chỉ đổi luật, không tạo vùng HTML.
+- **Buster `20260912-04` → `20260912-05`** đủ 5 chỗ (`web/index.html` dòng 21/1230/1232/1233 + banner
+  `app.js:9`).
+
+## Pin sau đợt lưu chờ S1–S4 (giỏ sửa Đã duyệt · popup tick · badge «có sửa chờ») — 12/09/2026: 101 sink / 996 nội suy
+
+So với mốc bổ sung 12/09/2026 lượt 2 **101/986**: **0 sink mới**, tăng ròng **+10 nội suy**, **+5 CAN-THOAT**
+(`luuChoBadge(task)` `so: 3` + `luuChoBadge(project)` `so: 2` — danh sách **23 → 28 chỗ**). Số chốt lấy thẳng
+từ `node ../tools/dem-xss.mjs` chạy **từ `server/`**. TC-SEC-11 so đúng `so` từng mục trong
+`CO_Y_KHONG_BOC`; **đừng cộng số mục** (2 hàm) thành «+2 chỗ» — `so` mới là số chỗ gọi.
+
+- **Không thêm chỗ ghi HTML.** Popup tick dựng DOM bằng `textContent` (`hopThoai8b` / `taoNut8b`); tên /
+  `from` / `to` độc không thành thẻ. Badge «có sửa chờ» là hàm **trả HTML đã thoát** (`escapeHtml` /
+  `escapeHtmlAttr` bên trong) nên bộ soát xếp CAN-THOAT — cùng lớp với `pendingApprovalBadge` /
+  `nhapBadge`.
+- **`buildLuuNhapNutHtml(isEdit, row)`** giữ `so: 0` trong `CO_Y_KHONG_BOC` (chữ ký mới có `row`; bộ soát
+  không tính nó là lỗ riêng vì nằm trong biểu thức chuỗi lớn của form).
+- **Buster `20260912-03` → `20260912-04`** đủ 5 chỗ (`web/index.html` dòng 21/1230/1232/1233 + banner
+  `app.js:9`).
+
 ## Pin sau bổ sung 12/09/2026 lượt 2 (nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt») — 12/09/2026: 101 sink / 986 nội suy
 
 So với mốc bổ sung 12/09/2026 **100/978**: **+1 sink**, tăng ròng **+8 nội suy**, **+2 CAN-THOAT**

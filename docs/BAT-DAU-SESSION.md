@@ -1,6 +1,103 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
-## Ưu tiên hiện tại — ĐỢT NHÃN NHẬT KÝ 12/09/2026: «Hoạt động gần đây» chuẩn hoá tên + hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin — VÀ CHỈ ĐẠO MỚI CHƯA LÀM: tách «Cập nhật» thành LƯU CHỜ + nút GỬI DUYỆT có popup thay đổi
+## Ưu tiên hiện tại — thẻ nhiệm vụ Chi tiết công việc bản 20260912-07 (13/09/2026)
+
+Đã thực hiện kế hoạch được duyệt: thẻ không compact có meta người/hạn/tiến độ chung hàng desktop,
+chữ lớn hơn và grid file Tên kết quả / Tỷ lệ công việc (%) / Tiến độ / Tình trạng; responsive mobile.
+Toggle độc lập ẩn cả header và rows. Compact, quyền, badge chờ, backend/RPC giữ nguyên.
+Bốn URL index và một banner hiện `20260912-07`; syntax/local-assets/scoped ESLint exit 0.
+Focused đo lại trên toàn bộ 10 file test bị đụng đợt 06 + 07: **184/184 · 10 file · exit 0**
+(`tasks-results-design` 24/24, `xss-guard` 11/11, `luu-cho-ui` 14/14, 7 file còn lại 135/135).
+XSS đo lại **101/996**, +4 nội suy escaped, 0 sink; syntax ba file web và local-assets exit 0.
+Full suite chạy lại và tự xác minh trong session này: **2159/2159 · 118 file · 652.11s · exit 0**
+(log `C:/Users/HANAPH~1/AppData/Local/Temp/claude/e--quanlycongviec/.../bmz0si9cu.output`).
+Focused chạy TUẦN TỰ trước full, không chồng nhau.
+Chưa kiểm browser thật. Không commit/push/deploy/reset/seed. Chờ người dùng chạy
+`chay-test.bat /giu /f`, Ctrl+F5 và nghiệm thu §9b.27 cho cả bản 06 + 07.
+Prompt tiếp tục: đọc khối này và §13 KE-HOACH-VPS.md; đối chiếu asset -07, nhận kết quả PC,
+chỉ sửa lỗi người dùng báo; không phát hành khi chưa có OK riêng. Migration 030 của đợt cũ vẫn cần.
+
+## Snapshot — khôi phục UI bản 20260912-06 (13/09/2026)
+
+Đã khôi phục Lưu chờ / Gửi duyệt có popup tick; mở lại form lấy giá trị giỏ từ máy chủ.
+File kết quả trong thẻ Chi tiết công việc mặc định ẩn, nút ▼/▲; tab Nhiệm vụ bỏ hai nhãn cạnh tên,
+giữ cột Tình trạng kết quả và bốn thẻ Tổng số / Đã xong / Đang làm / Quá hạn.
+Buster/banner thực tế `20260912-06`; `local-assets-check.mjs` exit 0.
+Kết quả thật: focused cuối **135/135 · 8 file · exit 0**; full cuối **2147/2147 · 118 file · exit 0**,
+671.24s, log `E:/quanlycongviec-full-final.log`, task `b1icruajo`. Full đầu **2138 pass / 4 fail**
+(118 file, 532.14s, `E:/quanlycongviec-full.log`): đã sửa nhãn activity thiếu, nhãn thống kê cũ,
+test CSS CRLF và đếm callsite XSS. Sau full xanh chỉ sửa stub test `async json` thành
+`Promise.resolve`: scoped ESLint **0 lỗi**, focused riêng **14/14 · exit 0**; không đổi mã chạy.
+JS syntax và local-assets-check exit 0; web JS ngoài phạm vi ESLint server nên không tuyên bố lint web.
+XSS đo **101/992**, auditor giữ nguyên. Không còn test thất bại trong các lượt kiểm cuối.
+Các số 05 / 1004 / full xanh bên dưới là snapshot cũ, không phải xác nhận bản đang chạy.
+Không commit/push/deploy. Chờ `chay-test.bat /giu /f`, Ctrl+F5 và OK riêng đợt này. CSDL UAT cần migration 030.
+
+
+## Ưu tiên hiện tại — BỔ SUNG ĐỢT LƯU CHỜ 12/09/2026: nhiệm vụ cấp 3 trong cây cũng LƯU CHỜ + hiện file kết quả trong Chi tiết công việc
+
+**MÃ ĐỢT NÀY ĐÃ XONG, TEST XANH — CHƯA COMMIT, CHƯA PUSH, CHƯA DEPLOY VPS.** Bổ sung lần này vá
+đúng hồi quy người dùng bắt được trong **Quản lý công việc → Chi tiết công việc**: nhiệm vụ cấp 3
+Đã duyệt của TP/PP/Nhân viên nay vào giỏ «Lưu chờ» mặc định và thẻ nhiệm vụ hiện danh sách file kết
+quả chỉ xem. Đọc khối này trước; khối «Snapshot trước đợt lưu chờ — ĐỢT NHÃN NHẬT KÝ» ngay dưới (ba
+commit nhật ký **đã commit local, chưa push**) và mọi khối bên dưới vẫn còn hiệu lực ở mọi chỗ **không
+mâu thuẫn** với khối này.
+
+**CÓ MIGRATION `030_luu_cho_sua.sql` — CSDL PHẢI LÊN `030`.** Ctrl+F5 **không đủ**. Test PC **BẮT BUỘC**
+`chay-test.bat /giu /f` (script tự `npm run migrate:up` trên `quanlycongviec_uat` rồi mới bật Node; bước
+`[7/7]` kiểm `strpos(...,'luu-cho')` trên CHECK `approval_changes_change_kind_check`). **CẤM**
+`npm run migrate:up` tay không set `DATABASE_URL` — lệnh đó đọc `deploy/.env` và trúng database **dev**.
+Buster + banner **`20260912-04` → `20260912-05`** (5 chỗ: `web/index.html` dòng 21/1230/1232/1233 +
+`app.js:9`). Pin XSS **`101 sink / 1004 nội suy`** (từ 996; **+8 nội suy**, 0 sink mới — danh sách
+file trong thẻ nhiệm vụ đều escape; danh sách CAN-THOAT vẫn **28 chỗ**).
+
+**CHỈ ĐẠO (nguyên văn):**
+
+> «Khi sửa công việc, nhiệm vụ, trên giao diện của công việc con, và giao diện của tab nhiệm vụ cũng
+> đang chưa hợp lý. tôi muốn khi sửa thông tin gì cũng có chế độ lưu chờ (tức là cho sửa tiếp), rồi nút
+> ấn gửi duyệt thay gì gửi duyệt luôn khi ấn cập nhật như bây giờ, và trước khi ấn nút gửi duyệt thì
+> phải hiển thị popup những cái thay đổi, chắc chắc rồi ấn ok để gửi đi duyệt. Nếu trong màn hình công
+> việc con thì cho sửa cả nhiệm vụ cùng lưu tạm đấy, còn nếu màn hình chỉ có sửa nhiệm vụ thì chỉ nhiệm
+> vụ thôi»
+
+**BỐN QUYẾT ĐỊNH ĐÃ CHỐT (S1–S4) — không đảo:**
+
+| # | Chốt |
+|---|---|
+| **S1** | «Lưu chờ» = **GIỎ CHỜ**, cột thật **GIỮ giá trị cũ**. Loại `luu-cho` trong `approval_changes` (migration 030). Lưới vẫn «Đã duyệt» + badge «có sửa chờ». |
+| **S2** | Phạm vi = **CHỈ mục đang «Đã duyệt»**. Nháp / Chờ duyệt / Từ chối giữ hành vi cũ. |
+| **S3** | Màn công việc con: nút «Gửi duyệt» = **GỬI CẢ CÂY MỘT LẦN**. Màn chỉ sửa nhiệm vụ thì chỉ nhiệm vụ. |
+| **S4** | Popup liệt kê thay đổi **CÓ Ô TICK** (bỏ tick ⇒ ở lại giỏ). |
+
+**HAI GIẢ ĐỊNH ĐÃ LÀM THEO, CHƯA HỎI LẠI:** (i) vai **ghi thẳng** (admin, hay Phó GĐ không bị ghi đè
+`update='cho-duyet'`) thì nút vẫn **«Cập nhật»**, không có giỏ — bắt người vốn được ghi thẳng tự gửi
+cho chính mình duyệt là thêm một bước không ai ký. (ii) «Lưu chờ» **không** báo warning tên người thực
+hiện ngay (`warnings: []` cố ý, vì chưa ghi cột); warning hiện lúc **GỬI** (`guiGio.canhBao`).
+
+**ĐÃ LÀM.** Migration 030 nới CHECK `change_kind IN ('reviewer','gui-bld','ty-le','luu-cho')` — down
+KIỂM giỏ treo rồi mới lùi, không âm thầm xoá. Module `approvals/luuCho.js` (11 export) + 5 hàm nghiệp
+vụ `docGio`/`luuGio`/`boGio`/`guiGio`/`gioChoCuaToi` + 5 route REST (`GET /pending-edits` **trước**
+`/:entity/:id`). Cầu RPC `data.luuCho===true` → POST pending-edits, hình dạng phản hồi **thêm** khoá
+`luuCho`, không đổi khoá cũ. Giao diện: form sửa Đã duyệt hiện «Lưu chờ» + «Gửi duyệt»; popup tick
+`textContent`; badge lưới «có sửa chờ»; footer `.project-luu-cho-footer` trên màn chi tiết cây Đã duyệt
+(không phá `.project-draft-footer`). `guiGio` gọi `worksService.update`/`itemsService.update` với
+`{client, tuGuiGio:true}` cho nhiệm vụ: luật rộng cấp 3 **chỉ** có hiệu lực lúc áp giỏ, không phá PATCH
+cũ của tỷ lệ/Gửi BLĐ. **Không** tái dùng `submit()`. `pendingCount` cố ý **không** cộng giỏ; `duyetCaCay` cố ý
+**không** đóng giỏ; `traLaiDeSua` **có** `xoaGioCay`.
+
+**TEST.** `luu-cho-gio.test.js` **27 ca**; `luu-cho-ui.test.js` **8 ca**; `tasks-results-design.test.js`
+**12 ca**. Focused hồi quy **47/47 · 3 file · exit 0**. Full suite chờ chạy sau khi format. Pin XSS
+**101/1004**.
+
+**NGƯỜI DÙNG TEST TRÊN PC:** `chay-test.bat /giu /f` → Ctrl+F5, Network `assets/js/app.js?v=20260912-05`,
+Console `[QLCV] app.js 20260912-05`, rồi bấm `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.27 (bước 96–111)**.
+Thiết kế + bẫy: `docs/KE-HOACH-DUYET-CAY.md` **§14**. **OK rồi mới commit / push / deploy.** Ba commit
+nhật ký local (`8295de0` / `1fcd66b` / `0ecbd03`) **cũng chưa push** — đợi cùng lúc hoặc đợi OK đợt này.
+
+**NỢ CŨ GIỮ NGUYÊN:** nghiệm thu §9b.25 trên production `https://ttdt.site`; kiểm tin Zalo 10:15:18;
+badge file class chết (`bg-slate-100`…) + 11 chỗ `text-[11px]` — **không tự sửa**.
+
+## Snapshot trước đợt lưu chờ — ĐỢT NHÃN NHẬT KÝ 12/09/2026: «Hoạt động gần đây» chuẩn hoá tên + hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin
 
 **MÃ ĐỢT NÀY ĐÃ XONG, TEST XANH, ĐÃ COMMIT LOCAL — CHƯA PUSH, CHƯA DEPLOY VPS.** Đọc khối này trước;
 các khối «Snapshot trước đợt nhãn nhật ký …» (đợt B bổ sung lượt 2) và mọi khối bên dưới vẫn còn hiệu
@@ -80,7 +177,8 @@ màu: `bg-slate-100 text-slate-600` (`luu-tam`), `bg-yellow-100 text-yellow-700`
 `bg-green-800 text-white` (`da-duyet`); `app.js` còn **11 chỗ `text-[11px]`** nợ cũ. Đã báo người dùng,
 chờ quyết định có làm đợt riêng.
 
-**CHỈ ĐẠO MỚI NHẬN CUỐI PHIÊN 12/09 — CHƯA LÀM GÌ, CẦN KHẢO SÁT + CÓ THỂ PHẢI HỎI THÊM (nguyên văn):**
+**CHỈ ĐẠO «LƯU CHỜ» — ĐÃ LÀM XONG Ở ĐỢT NGAY TRÊN (S1–S4 đã chốt, mã + test xanh, chờ nghiệm thu PC §9b.27).**
+Khối dưới đây giữ nguyên văn để đối chiếu; **đừng** khảo sát lại hay hỏi lại S1–S4.
 
 > «Khi sửa công việc, nhiệm vụ, trên giao diện của công việc con, và giao diện của tab nhiệm vụ cũng
 > đang chưa hợp lý. tôi muốn khi sửa thông tin gì cũng có chế độ lưu chờ (tức là cho sửa tiếp), rồi nút
@@ -88,18 +186,6 @@ chờ quyết định có làm đợt riêng.
 > phải hiển thị popup những cái thay đổi, chắc chắc rồi ấn ok để gửi đi duyệt. Nếu trong màn hình công
 > việc con thì cho sửa cả nhiệm vụ cùng lưu tạm đấy, còn nếu màn hình chỉ có sửa nhiệm vụ thì chỉ nhiệm
 > vụ thôi»
-
-Diễn giải bốn ý: (a) bấm **«Cập nhật»** khi sửa công việc/nhiệm vụ **KHÔNG** gửi duyệt nữa mà chỉ
-**LƯU CHỜ** (nháp sửa, cho sửa tiếp nhiều lượt); (b) thêm nút **«Gửi duyệt»** riêng; (c) trước khi gửi
-phải **popup liệt kê những thay đổi**, người dùng **OK** mới thật sự gửi đi duyệt; (d) phạm vi lưu tạm
-theo màn hình — **màn hình công việc con** thì sửa **cả nhiệm vụ** trong đó và lưu tạm **chung**,
-**màn hình chỉ có nhiệm vụ** thì chỉ nhiệm vụ. **Đụng trực tiếp Q9** («GIỮ cơ chế ghi đè
-`update = ⏳`» — hiện sửa việc `Đã duyệt` là hạ về `Chờ duyệt` NGAY khi bấm Cập nhật) và **R4''**
-(`approval_changes`, giá trị CŨ giữ nguyên tới khi duyệt) ⇒ phải khảo sát `works/service.js`,
-`workItems/service.js`, `approvals/*`, hai modal trong `app.js` rồi **hỏi lại người dùng** về trạng
-thái trung gian (cây `Đã duyệt` đang có sửa chờ thì hiện gì trên lưới, có bị chặn gửi duyệt lần nữa
-không, ai được bấm «Gửi duyệt», «lưu chờ» có cần tên trạng thái mới trong `approval_status` hay chỉ là
-dòng `approval_changes` chưa gửi) **TRƯỚC KHI** viết mã.
 
 ## Snapshot trước đợt nhãn nhật ký — ĐỢT B BỔ SUNG LƯỢT 2 12/09/2026: nhãn «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · mở hai ô phân công khi lập mới cấp 3 · ẩn «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ
 
