@@ -564,12 +564,13 @@ async function lamMoiChiTiet8b(ref, host) {
 }
 let lanMoSua8b = 0;
 async function moSuaMoiNhat8b(type, ref) {
+  const phien = phienGioCho;
   const lan = ++lanMoSua8b;
   if (!(await napDuLieuDauViec8b())) {
     showToast("Chưa tải được thông tin mới nhất. Vui lòng mở lại.", "error");
     return;
   }
-  if (lan !== lanMoSua8b) return;
+  if (lan !== lanMoSua8b || phien !== phienGioCho || !isAuthenticated) return;
   const key = type === "project" ? COL.P_ID : COL.T_ID;
   const row = (type === "project" ? allProjects : allTasks).find(
     (r) => String(r[key]) === String(ref),
@@ -581,5 +582,12 @@ async function moSuaMoiNhat8b(type, ref) {
     );
     return;
   }
-  openModal(type, row);
+  let draft = row;
+  if (oCheDoLuuChoForm(row)) {
+    const basket = await restGetIm(duongGio(type, row));
+    if (lan !== lanMoSua8b || phien !== phienGioCho || !isAuthenticated) return;
+    if (!basket) { showToast("Chưa tải được sửa chờ. Vui lòng mở lại.", "error"); return; }
+    draft = dongKemGiaTriLuuCho(type, row, basket);
+  }
+  openModal(type, draft);
 }

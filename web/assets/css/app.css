@@ -4364,3 +4364,44 @@
    `white-space:pre-wrap` của `.qlcv-dialog-content` cũng đã bị `.yk-noi-dung { white-space:normal }`
    chặn sẵn, vì nhật ký dựng bằng thẻ HTML chứ không phải văn bản thô. */
 #thay-doi-cho-duyet-dialog > section { width: min(760px, 100%); }
+
+/* Read-only results in project detail task cards. */
+.task-detail-card { background: #fff; border: 1px solid #e5e7eb; }
+.task-detail-card.border-l-4 { border-left-width: 4px; border-left-color: #ef4444; }
+.task-detail-heading { min-width: 0; }
+.task-detail-heading + div { align-self: flex-start; flex-shrink: 0; }
+.task-detail-name { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.task-detail-meta { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(180px, 1fr); gap: 16px; align-items: center; margin-top: 12px; font-size: 14px; color: #4b5563; }
+.task-detail-assignee, .task-detail-due, .task-detail-progress { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.task-detail-assignee span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-detail-due, .task-detail-progress > span { white-space: nowrap; }
+.task-detail-progress-track { flex: 1; min-width: 48px; height: 8px; border-radius: 999px; overflow: hidden; }
+.task-detail-results { margin-top: 12px; }
+.task-detail-files-toggle { font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px 0; }
+.task-detail-results-body.hidden { display: none; }
+.task-detail-results-list { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.task-detail-file-header, .task-detail-file-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px 70px minmax(110px, 160px); align-items: center; gap: 12px; padding: 8px 0; }
+.task-detail-file-header { font-size: 13px; font-weight: 600; color: #4b5563; border-bottom: 1px solid #e5e7eb; }
+.task-detail-file-row { border-bottom: 1px dashed #e5e7eb; }
+.task-detail-file-title { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
+.task-detail-result-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-detail-result-name.td-mau-xanh-la { color: #16a34a; }
+.task-detail-result-name.td-mau-xanh-duong { color: #2563eb; }
+.task-detail-result-name.td-mau-cam { color: #ea580c; }
+.task-detail-result-name.td-mau-do { color: #dc2626; }
+.task-detail-file-ratio, .task-detail-file-progress { text-align: center; }
+.task-detail-file-status { min-width: 0; overflow-wrap: anywhere; }
+.task-detail-file-status .status-badge { font-size: 13px; white-space: normal; }
+@media (max-width: 640px) {
+    .task-detail-meta { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+    .task-detail-progress { grid-column: 1 / -1; }
+    .task-detail-file-header { display: none; }
+    .task-detail-file-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; }
+    .task-detail-file-title, .task-detail-file-status { grid-column: 1 / -1; }
+    .task-detail-file-ratio, .task-detail-file-progress { text-align: left; }
+    .task-detail-file-row [data-label]::before { content: attr(data-label) ": "; font-size: 13px; color: #4b5563; }
+}
+@media (max-width: 380px) {
+    .task-detail-meta { grid-template-columns: minmax(0, 1fr); }
+    .task-detail-file-row { grid-template-columns: minmax(0, 1fr); }
+}

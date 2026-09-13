@@ -278,6 +278,7 @@ function createSubworkDetailHtml(sw, tatCaNV) {
     nvTrong.length +
     " nhiệm vụ</span>" +
     nhanDuyetCon +
+    (typeof luuChoBadge === "function" ? luuChoBadge(sw) : "") +
     "</div>" +
     '<div class="text-xs text-gray-500 whitespace-nowrap">Tiến độ ' +
     escapeHtml(sw[COL.T_COMPLETION] || 0) +
@@ -411,6 +412,13 @@ function showProjectDetailsModal(projectId, projectName, { receiptsChecked, daLa
         '<button type="button" class="btn-secondary draft-close-btn">Lưu tạm</button>' +
         '<button type="button" class="btn-primary draft-submit-btn">Gửi đi phê duyệt</button></footer>'
       : "") +
+    (!chiDocDuyet() &&
+    project[COL.P_APPROVAL] === "Đã duyệt" &&
+    ((typeof oCheDoLuuChoForm === "function" && oCheDoLuuChoForm(project)) ||
+      (typeof luuChoBadge === "function" && luuChoBadge(project)))
+      ? '<footer class="project-luu-cho-footer flex justify-end gap-3 px-5 py-4 border-t bg-white flex-shrink-0">' +
+        '<button type="button" class="btn-primary luu-cho-submit-btn"><i class="fas fa-paper-plane mr-2"></i>Gửi duyệt các sửa chờ</button></footer>'
+      : "") +
     "    </div>\n" +
     "</div>\n";
 
@@ -449,6 +457,23 @@ function showProjectDetailsModal(projectId, projectName, { receiptsChecked, daLa
     } finally {
       controls.forEach(control => { control.disabled = false; });
       button.textContent = "Gửi đi phê duyệt";
+    }
+  });
+  modalEl.querySelector(".luu-cho-submit-btn")?.addEventListener("click", async event => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
+    const chuCu = button.textContent;
+    button.textContent = "Đang gửi…";
+    try {
+      if (typeof guiGioChoDuyet === "function") {
+        await guiGioChoDuyet("project", project);
+      }
+    } catch (_) {
+      showToast("Không gửi được sửa chờ. Vui lòng thử lại.", "error");
+    } finally {
+      button.disabled = false;
+      button.textContent = chuCu;
     }
   });
   modalEl.querySelectorAll(".close-modal").forEach(closeButton => {
