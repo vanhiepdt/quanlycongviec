@@ -34,7 +34,7 @@ beforeEach(() => {
     src +
       QUYEN_UI +
       `;Object.assign(window, {COL,renderTasks,createTaskTableRowSimple,filterTaskRows,
-    moNhatKyFileKetQua,doiTrangThaiAnFile,COT_BANG_NHIEM_VU,mauTienDoFile,
+    moNhatKyFileKetQua,doiTrangThaiAnFile,COT_BANG_NHIEM_VU,mauTienDoFile,buildKetQuaTrongChiTietNhiemVu,createTaskListItem,batTatFileTrongChiTiet,
     __setup:(rows)=>{allTasks=rows;allProjects=[{[COL.P_ID]:'CV1',[COL.P_NAME]:'Công việc cha'}];currentUser={id:1,name:'Admin',role:'admin'};},
     __defaultMonth:()=>tasksXemThang,
     __anFile:()=>[...tasksAnFile],
@@ -102,6 +102,93 @@ it('TC-TASK-DESIGN-02: bảng 11 cột — «Kết quả làm được» ở C�
   expect(tenFile?.textContent).toBe('bản cuối.pdf');
   expect(hangFile.querySelector('td:nth-child(2) .task-file-name')).toBeNull();
   expect(hangFile.textContent).toContain('3');
+  expect(document.querySelector('.task-ten .task-nhan, .task-ten .task-so-file')).toBeNull();
+});
+
+it('TC-TASK-DESIGN-02b: Chi tiết công việc hiện danh sách file kết quả ngay trong thẻ nhiệm vụ', () => {
+  const hop = document.createElement('div');
+  hop.innerHTML = window.createTaskListItem(task());
+  const ds = hop.querySelector('.task-detail-results');
+  expect(ds).not.toBeNull();
+  expect(ds.textContent).toContain('File kết quả (1)');
+  expect(ds.querySelector('.task-detail-result-name')?.title).toBe(
+    task().ketQuaFiles[0].ten_ket_qua
+  );
+  expect(ds.querySelector('.task-detail-file-ratio').textContent).toBe('100%');
+  expect(ds.querySelector('.task-detail-file-progress').textContent).toBe('50%');
+  expect(ds.querySelector('.task-detail-file-status').textContent).toBe('Chờ TP/PP xem');
+  const list = ds.querySelector('.task-detail-results-body'), button = ds.querySelector('button');
+  expect(list.contains(ds.querySelector('.task-detail-file-header'))).toBe(true);
+  expect(list.contains(ds.querySelector('ul'))).toBe(true);
+  expect(list.classList.contains('hidden')).toBe(true);
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  window.batTatFileTrongChiTiet(button);
+  expect(list.classList.contains('hidden')).toBe(false);
+  expect(button.textContent).toContain('▲');
+  window.batTatFileTrongChiTiet(button);
+  expect(list.classList.contains('hidden')).toBe(true);
+  expect(window.createTaskListItem(task(), true)).not.toContain('task-detail-results');
+  expect(window.buildKetQuaTrongChiTietNhiemVu({...task(), ketQuaFiles: []})).toBe('');
+  expect(css).toMatch(/\.task-detail-results\s*\{/);
+  expect(css).toMatch(/\.task-detail-result-name\s*\{[^}]*text-overflow:\s*ellipsis/);
+});
+
+it('TC-TASK-DETAIL-01: independent toggles hide header and rows together', () => {
+  document.body.innerHTML = window.createTaskListItem(task()) + window.createTaskListItem(task('NV2'));
+  const buttons = [...document.querySelectorAll('.task-detail-files-toggle')];
+  const bodies = [...document.querySelectorAll('.task-detail-results-body')];
+  window.batTatFileTrongChiTiet(buttons[0]);
+  expect(bodies.map((b) => b.classList.contains('hidden'))).toEqual([false, true]);
+  window.batTatFileTrongChiTiet(buttons[1]);
+  window.batTatFileTrongChiTiet(buttons[0]);
+  expect(bodies.map((b) => b.classList.contains('hidden'))).toEqual([true, false]);
+  expect(buttons.map((b) => b.getAttribute('aria-expanded'))).toEqual(['false', 'true']);
+  expect(css).toMatch(/\.task-detail-results-body\.hidden\s*\{\s*display:\s*none/);
+});
+
+it('TC-TASK-DETAIL-02: assignee, due and progress share one desktop meta row; compact stays separate', () => {
+  const t = { ...task(), [window.COL.T_COMPLETION]: 45 };
+  document.body.innerHTML = window.createTaskListItem(t);
+  const meta = document.querySelector('.task-detail-meta');
+  expect([...meta.children].map((el) => el.className.trim())).toEqual([
+    'task-detail-assignee', 'task-detail-due', 'task-detail-progress',
+  ]);
+  expect(meta.textContent).toContain('Lê Thị Nhân');
+  expect(meta.textContent).toContain('31/10/2026');
+  expect(meta.textContent).toContain('Tiến độ 45%');
+  expect(meta.querySelector('.task-detail-progress-track > div').style.width).toBe('45%');
+  expect(meta.querySelector('button')).toBeNull();
+  expect(css).toMatch(/\.task-detail-meta\s*\{[^}]*grid-template-columns:/);
+  expect(css).toMatch(/\.task-detail-file-header, \.task-detail-file-row\s*\{[^}]*display:\s*grid/);
+  expect(css).toMatch(/\.task-detail-results-list\s*\{[^}]*font-size:\s*13px/);
+  expect(css).toMatch(/@media \(max-width: 640px\)/);
+  expect(window.createTaskListItem(t, true)).not.toContain('task-detail-');
+});
+
+it.each([
+  [undefined, '—'], [null, '—'], ['', '—'], [0, '0%'], ['0', '0%'],
+  [35.5, '35.5%'], [-5, '0%'], [120, '100%'], ['invalid', '—'],
+])('TC-TASK-DETAIL-03: ratio %s becomes %s', (value, expected) => {
+  const t = task(); t.ketQuaFiles[0].ty_le = value;
+  document.body.innerHTML = window.buildKetQuaTrongChiTietNhiemVu(t);
+  expect(document.querySelector('.task-detail-file-ratio').textContent).toBe(expected);
+});
+
+it('TC-TASK-DETAIL-04: unsubmitted status and escaped names/status/numeric fields', () => {
+  const text = '<b data-test="unsafe">test</b>';
+  const t = { ...task(), [window.COL.T_NAME]: text, [window.COL.T_ASSIGNEE]: text,
+    [window.COL.T_COMPLETION]: text };
+  t.ketQuaFiles[0] = { ten_ket_qua: text, trang_thai: text, co_ban: true, ty_le: text, tienDo: text };
+  document.body.innerHTML = window.createTaskListItem(t);
+  expect(document.querySelector('[data-test="unsafe"]')).toBeNull();
+  expect(document.querySelector('.task-detail-result-name').title).toBe(text);
+  expect(document.querySelector('.task-detail-file-status').textContent).toBe(text);
+  expect(document.querySelector('.task-detail-file-ratio').textContent).toBe('—');
+  expect(document.querySelector('.task-detail-file-progress').textContent).toBe('0%');
+  expect(document.querySelector('.task-detail-progress-track > div').style.width).toBe('0%');
+  t.ketQuaFiles[0].co_ban = false;
+  document.body.innerHTML = window.buildKetQuaTrongChiTietNhiemVu(t);
+  expect(document.querySelector('.task-detail-file-status').textContent).toBe('Chưa nộp');
 });
 
 it('TC-TASK-DESIGN-03: tiêu đề cột CĂN GIỮA và cột ít chữ thì HẸP — pin thẳng vào app.css', () => {
@@ -462,7 +549,7 @@ it('TC-TASK-DESIGN-11: bốn thẻ thống kê của tab Nhiệm vụ nằm trê
   ]) {
     expect(khoi).toContain(id);
   }
-  for (const nhan of ['Tổng số', 'Đã duyệt đủ kết quả', 'Chưa duyệt đủ kết quả', 'Quá hạn']) {
+  for (const nhan of ['Tổng số', 'Đã xong', 'Đang làm', 'Quá hạn']) {
     expect(khoi).toContain(nhan);
   }
   expect(khoi.match(/glass-card p-3 text-center/g) || []).toHaveLength(4);

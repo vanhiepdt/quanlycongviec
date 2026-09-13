@@ -11,7 +11,11 @@ import * as worksRepo from '../works/repo.js';
 import * as itemsRepo from '../workItems/repo.js';
 import { thayDuocNhap } from './rules.js';
 
-const LABELS = {
+/**
+ * Bản đồ nhãn cột → chữ người đọc. `luuCho.js` cũng dùng (giỏ «lưu chờ» hiện đúng nhãn này trong
+ * popup tick), nên nó là `export`: hai trục diff mà mỗi trục một bộ nhãn thì người duyệt đọc hai giọng.
+ */
+export const LABELS = {
   work_id: 'Công việc cha',
   parent_id: 'Công việc con',
   name: 'Tên',
@@ -39,8 +43,49 @@ const LABELS = {
   ty_le: 'Tỷ lệ công việc (%)',
   gui_bld_phe_duyet: 'Gửi BLĐ phê duyệt',
 };
-const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-async function display(field, value, client) {
+
+/**
+ * Bộ nhãn của GIỎ «LƯU CHỜ» (S1, 12/09/2026) = `LABELS` cộng hai cột TÊN GÕ TAY, trừ một cột đã
+ * có trục duyệt riêng.
+ *
+ * CỘNG `assignee_name`/`manager_name` — vì sao hai cột này không nằm trong `LABELS`: form sửa việc
+ * gửi `assignee`/`manager` là CHUỖI TÊN (`taskFromLegacy` → `assignee_name`, `projectFromLegacy` →
+ * `manager_name`), còn `assignee_id`/`manager_id` do service SUY RA từ tên (`resolveAssignee`, ba
+ * nhánh ở `workItems/service.js:119`). Trục người duyệt chỉ diff hai cột id vì người duyệt chọn từ
+ * danh sách; giỏ lưu chờ phải diff cả tên vì đó đúng là chữ người dùng vừa gõ — thiếu nó thì sửa ô
+ * «Người thực hiện» là một thay đổi KHÔNG AI THẤY trong popup. Nhãn giữ nguyên chữ của cột id để
+ * popup chỉ có một giọng.
+ *
+ * TRỪ `gui_bld_phe_duyet` — cột này đã là «lưu chờ» sẵn từ 026: `proposeGuiBld` không ghi cột, nó
+ * mở một dòng `approval_changes` kind `gui-bld` chờ đúng người đó ký. Bỏ nó vào giỏ là hai trục
+ * duyệt cho một ô, tức đúng cái mà 029 gộp lại để bỏ.
+ *
+ * Không gộp thẳng hai cột tên vào `LABELS` là có chủ đích: gộp vào thì trục người duyệt cũng bắt
+ * đầu diff tên gõ tay, đổi hành vi của popup «Xem ý kiến» đang chạy — ngoài phạm vi đợt này.
+ */
+export const LABELS_GIO = Object.freeze(
+  Object.fromEntries(
+    Object.entries(LABELS)
+      .filter(([field]) => field !== 'gui_bld_phe_duyet')
+      .concat([
+        ['assignee_name', LABELS.assignee_id],
+        ['manager_name', LABELS.manager_id],
+      ])
+  )
+);
+
+/**
+ * So sánh «có đổi không» theo JSON — `export` để giỏ «lưu chờ» so ĐÚNG cách trục người duyệt đang so.
+ * Hai cách so khác nhau thì cùng một lượt sửa có thể là «không đổi» ở trục này và «có đổi» ở trục kia.
+ */
+export const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * Giá trị thô → CHUỖI NGƯỜI ĐỌC (tên người, tên phòng, «Bật»/«Tắt»…). `export` vì giỏ «lưu chờ»
+ * phải hiện đúng chữ này trong popup tick, và vì phần tử giỏ vừa giữ chuỗi (`from`/`to`) vừa giữ giá
+ * trị thô (`valueFrom`/`valueTo`) — cùng khuôn `proposeTyLe` của `tyLe.js`.
+ */
+export async function display(field, value, client) {
   if (value == null) return '';
   if (field === 'gui_bld_phe_duyet') return value ? 'Bật' : 'Tắt';
   if (field === 'work_id' || field === 'parent_id') {
@@ -67,6 +112,46 @@ async function display(field, value, client) {
   }
   return Array.isArray(value) ? value.join(', ') : String(value);
 }
+/**
+ * Gộp lượt diff MỚI vào giỏ CŨ theo từng field — «cho sửa tiếp nhiều lượt» nghĩa là thế này:
+ *   • field chưa có trong giỏ → thêm, `from` là giá trị đang nằm trong CSDL;
+ *   • field đã có → GIỮ `from` của lần đầu và chỉ đổi `to`: người duyệt phải thấy GỐC → MỚI NHẤT,
+ *     không phải gốc → giá trị trung gian của lượt sửa trước;
+ *   • sửa vòng về đúng giá trị gốc (`from === to`) → BỎ field khỏi giỏ, vì không còn gì để duyệt.
+ *
+ * `extra(field, prior)` là các khoá riêng của từng trục: giỏ «lưu chờ» (`luuCho.js`) cần `valueFrom`/
+ * `valueTo` là GIÁ TRỊ THÔ để áp vào cột thật lúc gửi, còn trục `reviewer` không cần vì người duyệt
+ * đã ghi thẳng vào cột rồi. Tách ra đây để hai trục gộp giỏ BẰNG NHAU — mỗi trục một vòng lặp riêng
+ * là hai chỗ để lệch luật «giữ from lần đầu», và lệch ở đây thì người duyệt đọc sai gốc.
+ *
+ * `nhan` là bộ nhãn của trục: mặc định `LABELS`, giỏ «lưu chờ» truyền `LABELS_GIO` (xem chú thích ở
+ * đó). Thứ tự field trong popup = thứ tự khoá của bộ nhãn này.
+ *
+ * @returns {Promise<Array<object>>} mảng thay đổi mới, theo thứ tự field của bộ nhãn
+ */
+export async function tronThayDoi(
+  gioCu,
+  before,
+  after,
+  client,
+  { extra = null, nhan = LABELS } = {}
+) {
+  const byField = new Map((gioCu ?? []).map((c) => [c.field, c]));
+  for (const field of Object.keys(nhan)) {
+    if (same(before[field], after[field])) continue;
+    const prior = byField.get(field);
+    const change = {
+      field,
+      label: nhan[field],
+      from: prior?.from ?? (await display(field, before[field], client)),
+      to: await display(field, after[field], client),
+    };
+    if (change.from === change.to) byField.delete(field);
+    else byField.set(field, extra ? { ...change, ...extra(field, prior) } : change);
+  }
+  return [...byField.values()];
+}
+
 export async function recordReviewerChanges(user, kind, before, after, client) {
   const entity = kind === 'work' ? 'work' : Number(before.level) === 2 ? 'subwork' : 'task';
   if (before.approval_status !== 'Chờ duyệt' || !can(user, 'approve', entity, before).ok) return;
@@ -95,20 +180,7 @@ export async function recordReviewerChanges(user, kind, before, after, client) {
     throw conflict(
       'Nhiệm vụ đang có đề nghị đổi tích chờ xử lý — hãy xử lý đề nghị trước khi sửa kèm duyệt'
     );
-  const byField = new Map((old?.changes ?? []).map((c) => [c.field, c]));
-  for (const field of Object.keys(LABELS)) {
-    if (same(before[field], after[field])) continue;
-    const prior = byField.get(field);
-    const change = {
-      field,
-      label: LABELS[field],
-      from: prior?.from ?? (await display(field, before[field], client)),
-      to: await display(field, after[field], client),
-    };
-    if (change.from === change.to) byField.delete(field);
-    else byField.set(field, change);
-  }
-  const changes = [...byField.values()];
+  const changes = await tronThayDoi(old?.changes, before, after, client);
   if (old) {
     await client.query(
       'UPDATE approval_changes SET changes = $2::jsonb, editor_id = $3, entity_name = $4, work_id = $5 WHERE id = $1',
@@ -300,7 +372,14 @@ export async function proposeGuiBld(user, before, after, value, client) {
   await assignments.assertGuiBld({ ...after, gui_bld_phe_duyet: value }, {}, client);
   const old = (
     await client.query(
-      'SELECT id FROM approval_changes WHERE item_id=$1 AND approved_at IS NULL FOR UPDATE',
+      // 12/09 — LOẠI TRỪ giỏ «lưu chờ» (`luu-cho`). Câu này trước đây bắt MỌI dòng đang chờ, vì
+      // lúc đó chỉ có `reviewer` và `gui-bld`: cả hai đều là «đã gửi cho người khác duyệt». Giỏ
+      // `luu-cho` (S1) khác hẳn về bản chất — `recipient_id = editor_id = CHÍNH NGƯỜI SỬA`, tức là
+      // bản nháp chưa gửi của lượt duyệt sắp tới, chưa ai ngoài người soạn nhìn thấy. Để nó chặn
+      // ở đây thì một Trưởng phòng vừa bấm «Lưu chờ» là không còn bật/tắt được tích Gửi BLĐ nữa,
+      // mà câu thông báo lại nói «đang chờ duyệt» — sai, chưa gửi cho ai cả. Các kind khác vẫn
+      // chặn như cũ: `ty-le` và `gui-bld` đều đang nằm trên bàn một người duyệt độc lập.
+      "SELECT id FROM approval_changes WHERE item_id=$1 AND approved_at IS NULL AND change_kind <> 'luu-cho' FOR UPDATE",
       [before.id]
     )
   ).rows[0];

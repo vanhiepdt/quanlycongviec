@@ -33,6 +33,34 @@ const approveSchema = z.object({
   edit: z.record(z.unknown()).optional(),
 });
 
+/**
+ * Thân của `…/pending-edits/submit` — S4: tick ô nào thì gửi ô đó.
+ *
+ * `chon` vắng mặt ⇒ gửi HẾT giỏ trong phạm vi (nút «Gửi tất cả», và cũng là hành vi của một client
+ * chưa có ô tick). `fields` vắng mặt trong một phần tử ⇒ gửi hết giỏ đó. Ba mức chứ không phải một
+ * vì popup có ba chỗ bấm: chân popup, dấu ✕ cạnh mỗi mục, dấu ✕ cạnh mỗi dòng thay đổi.
+ *
+ * `id`/`fields` chỉ kiểm HÌNH DẠNG ở đây; còn «số này có thật trong giỏ không» và «cột này có thật
+ * trong giỏ không» là việc của `locTheoTich` bên service, vì phải đọc giỏ mới biết. Chặn tên cột ở
+ * đây thì phải chép danh sách cột vào route — đúng cái «nguồn sự thật thứ hai» mà §6 cấm.
+ */
+const chonSchema = z.object({
+  chon: z
+    .array(
+      z.object({
+        id: z.coerce.number().int().positive(),
+        fields: z.array(z.string().min(1).max(60)).optional(),
+      })
+    )
+    .optional(),
+});
+
+/** Thân của `…/pending-edits/drop` — vắng cả hai khoá nghĩa là bỏ CẢ phạm vi. */
+const dropSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  fields: z.array(z.string().min(1).max(60)).optional(),
+});
+
 function parseApproveEdit(entity, rawEdit) {
   if (rawEdit === undefined) return undefined;
   const name = String(entity ?? '').toLowerCase();
@@ -41,6 +69,37 @@ function parseApproveEdit(entity, rawEdit) {
   if (!isWork && !isItem) return undefined;
   const converted = isWork ? projectFromLegacy(rawEdit) : taskFromLegacy(rawEdit);
   const checked = (isWork ? workUpdateSchema : itemUpdateSchema).safeParse(converted);
+  if (!checked.success) {
+    const issue = checked.error.issues[0];
+    throw new AppError('VALIDATION_ERROR', issue.message, {
+      field: issue.path.join('.') || undefined,
+    });
+  }
+  return {
+    patch: (isWork ? workToRow : itemToRow)(checked.data),
+    targetWorkRef: isItem ? checked.data.workRef : undefined,
+  };
+}
+
+/**
+ * Thân của `POST /:entity/:id/pending-edits` → patch tên CỘT. Cùng khuôn `parseApproveEdit` bên trên
+ * nhưng KHÔNG qua bước đổi tên legacy.
+ *
+ * Vì sao không qua legacy: đường này là REST và thân nó là thân của `PATCH /works/:id` /
+ * `PATCH /work-items/:id`. Dùng lại đúng hai `updateSchema` + hai `toRow` đó để một form sửa trên
+ * giao diện chỉ phải đổi CHỖ GỬI tuỳ theo mục đang «Đã duyệt» hay không, không đổi tên trường. Đặt
+ * một schema thứ hai ở đây là đặt thêm một chỗ phải sửa mỗi lần thêm một cột.
+ *
+ * Entity lạ trả `undefined` chứ không ném: `mustFind` bên service sẽ ném BAD_REQUEST bằng đúng câu mà
+ * mọi đường `/approvals/:entity/...` khác vẫn ném. Ném ở đây là một câu thông báo thứ hai cho cùng
+ * một lỗi, và hai câu thì sẽ có ngày lệch nhau.
+ */
+function parsePendingEditBody(entity, body) {
+  const name = String(entity ?? '').toLowerCase();
+  const isWork = name === 'work' || name === 'works';
+  const isItem = name === 'item' || name === 'work-item' || name === 'work-items';
+  if (!isWork && !isItem) return undefined;
+  const checked = (isWork ? workUpdateSchema : itemUpdateSchema).safeParse(body ?? {});
   if (!checked.success) {
     const issue = checked.error.issues[0];
     throw new AppError('VALIDATION_ERROR', issue.message, {
@@ -128,6 +187,24 @@ approvalsRouter.get('/pending-deletes', validate(listSchema, 'query'), async (re
   try {
     const items = await service.pendingDeleteList(req.user, { limit: req.validatedQuery?.limit });
     return ok(res, { items, total: items.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * GIỎ «LƯU CHỜ» CỦA TÔI (S1, 12/09/2026) — nguồn của badge «có sửa chờ» trên lưới.
+ *
+ * Khai TRƯỚC `/:entity/:id/...` vì cùng lý do với `/pending-count` ở đầu file: Express xét theo thứ
+ * tự, đặt sau thì `pending-edits` bị bắt làm `:entity`.
+ *
+ * Không gộp vào `/pending-count`: số đó là «bao nhiêu mục đang chờ BẠN DUYỆT», còn số này là «bao
+ * nhiêu mục BẠN đang soạn dở». Cộng chung thì chuông «Chờ duyệt» rung cho một thứ chưa gửi cho ai,
+ * và người duyệt mở hộp ra thấy rỗng.
+ */
+approvalsRouter.get('/pending-edits', async (req, res, next) => {
+  try {
+    return ok(res, await service.gioChoCuaToi(req.user));
   } catch (err) {
     return next(err);
   }
@@ -324,4 +401,111 @@ approvalsRouter.post(
     }
   }
 );
+
+// ---------------------------------------------------------------------------------------------
+// GIỎ «LƯU CHỜ» (S1–S4, 12/09/2026) — người dùng: «khi sửa thông tin gì cũng có chế độ lưu chờ (tức
+// là cho sửa tiếp), rồi nút ấn gửi duyệt thay vì gửi duyệt luôn khi ấn cập nhật như bây giờ, và trước
+// khi ấn nút gửi duyệt thì phải hiển thị popup những cái thay đổi».
+//
+// Bốn đường dưới cùng một tài nguyên `/:entity/:id/pending-edits` thay vì rải bốn chỗ: đọc giỏ, cất
+// vào giỏ, bỏ khỏi giỏ, gửi giỏ. `drop` và `submit` là POST con chứ không phải DELETE/PUT vì giao
+// diện chỉ có hai helper `restGet`/`restPost` — thêm một động từ HTTP là thêm một hàm fetch nữa trong
+// `app.js`. Khuôn `POST /changes/:id/:action` ở đầu file là tiền lệ.
+//
+// `:entity` nhận cả `work|works|work-item|work-items|item` (`LOAI_THUC_THE` bên service), nên đường
+// này không cần biết client gọi theo số ít hay số nhiều.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * ĐỌC giỏ của phạm vi — nội dung popup «Gửi duyệt» + cờ `phaiLuuCho` để giao diện đổi nhãn nút
+ * «Cập nhật» thành «Lưu chờ».
+ *
+ * Cờ do SERVER tính, không để client tự suy từ bản sao ma trận quyền của nó: nút hiện sai thì người
+ * dùng bấm «Cập nhật» và nhận 409, hoặc ngược lại — sửa mất hút vào giỏ mà không ai nói.
+ */
+approvalsRouter.get('/:entity/:id/pending-edits', async (req, res, next) => {
+  try {
+    return ok(res, await service.docGio(req.user, req.params.entity, req.params.id));
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * CẤT một lượt sửa vào giỏ (nút «Cập nhật» khi mục đang «Đã duyệt» và vai này phải qua duyệt lại).
+ *
+ * `skipAudit`: lượt này KHÔNG đổi một cột nghiệp vụ nào — giỏ là bản nháp của riêng người soạn, và
+ * «cho sửa tiếp» nghĩa là một lượt sửa bấm «Lưu chờ» nhiều lần được. Ghi nhật ký thì mỗi lần bấm là
+ * một dòng tên người trong «Hoạt động gần đây» cho một việc chưa thành; đúng tiền lệ của
+ * `POST /changes/:id/acknowledge` bên trên. Không mất dấu ai: giỏ có `editor_id`, và lúc GỬI thì
+ * `update` của hai service ghi như một lượt sửa thường.
+ */
+approvalsRouter.post('/:entity/:id/pending-edits', async (req, res, next) => {
+  try {
+    res.locals.skipAudit = true;
+    const day = parsePendingEditBody(req.params.entity, req.body) ?? {};
+    return ok(
+      res,
+      await service.luuGio(req.user, req.params.entity, req.params.id, day.patch, {
+        targetWorkRef: day.targetWorkRef,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/** BỎ giỏ — cả phạm vi (thân rỗng), một giỏ (`{id}`), hoặc đúng vài ô trong một giỏ (`{id, fields}`). */
+approvalsRouter.post(
+  '/:entity/:id/pending-edits/drop',
+  validate(dropSchema),
+  async (req, res, next) => {
+    try {
+      // `skipAudit` như trên: bỏ một bản nháp chưa từng công bố thì không có gì để kể lại.
+      res.locals.skipAudit = true;
+      return ok(
+        res,
+        await service.boGio(req.user, req.params.entity, req.params.id, req.body ?? {})
+      );
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+/** GỬI giỏ đi duyệt, sau khi đã tick trong popup (S3 gửi cả cây một lần · S4 tick ô nào gửi ô đó). */
+approvalsRouter.post(
+  '/:entity/:id/pending-edits/submit',
+  validate(chonSchema),
+  async (req, res, next) => {
+    try {
+      const result = await service.guiGio(
+        req.user,
+        req.params.entity,
+        req.params.id,
+        req.body?.chon ?? null
+      );
+      // CÓ nhật ký, khác hai đường trên: đây là lúc giỏ thành thật — các dòng hạ về `Chờ duyệt`,
+      // chuông R7 rung, người duyệt có việc. Hai hàm `update` được gọi như HÀM chứ không qua route
+      // của chúng nên không tự ghi dòng nào; thiếu dòng này thì một lượt gửi cả cây mất dấu.
+      // `code`/`count`/`changed` là ba khoá `dichKhoa` bên `rpc/legacyFields.js` đã dịch sẵn thành
+      // «Cập nhật N trường» / «N mục» / «N thay đổi» — không phải thêm nhãn mới ở hai bản dịch.
+      res.locals.audit = {
+        action: 'approvals.pendingEditSubmit',
+        entityType: result.muc.entityType,
+        entityId: result.muc.entityId,
+        workId: result.muc.workId,
+        details: {
+          code: result.muc.code,
+          count: result.daGui.length,
+          changed: result.daGui.reduce((n, g) => n + g.thayDoi.length, 0),
+        },
+      };
+      return ok(res, result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 export default approvalsRouter;

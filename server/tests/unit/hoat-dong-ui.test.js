@@ -116,6 +116,7 @@ describe('TC-HD — «Hoạt động gần đây» đọc được bằng tiến
       ['zalo.tao-ma', 'Lấy mã liên kết Zalo', 'fa-qrcode'],
       ['zalo.lien-ket', 'Liên kết Zalo', 'fa-link'],
       ['zalo.bo-lien-ket', 'Bỏ liên kết Zalo', 'fa-link-slash'],
+      ['approvals.pendingEditSubmit', 'Gửi sửa chờ đi duyệt', 'fa-paper-plane'],
       ['approvals.return', 'Trả lại để sửa', 'fa-rotate-left'],
       ['approvals.requestDelete', 'Đề nghị xoá', 'fa-trash-arrow-up'],
       ['approvals.approveDelete', 'Duyệt xoá', 'fa-trash-can'],

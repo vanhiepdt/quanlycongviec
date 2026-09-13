@@ -38,7 +38,10 @@ const EXPORTS = `;Object.assign(window, {
   moChiTietCheDoDuyet,
   mockRefresh: (fn) => { refreshData = fn; },
   mockSubmit: (fn) => { restPost = fn; napLaiSauDuyet = async () => {}; },
+  mockGio: (fn) => { guiGioChoDuyet = fn; },
+  datGio: (codes) => { maGioCho = new Set(codes); },
   guiDuyetCaCay,
+  guiGioChoDuyet,
 });`;
 
 /** Nạp app.js + project-details.js trong MỘT lời gọi (mọi biến chia sẻ cùng phạm vi hàm). */
@@ -84,6 +87,50 @@ describe('TC-DRAFT-FOOTER: chân modal nháp', () => {
     button.click();
     finish({ row: { code: 'CV001' } });
     await vi.waitFor(() => expect(document.querySelector('.project-draft-footer')).toBeNull());
+  });
+});
+
+describe('TC-LUU-CHO-FOOTER: chân modal Đã duyệt — gửi giỏ, không gửi nháp', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="modals-container"></div>';
+    khoiDong();
+    window.dangNhapTen('Trưởng phòng A', 'Trưởng phòng');
+    const { cv, tasks } = duLieu(window.COL);
+    cv[0][window.COL.P_APPROVAL] = 'Đã duyệt';
+    window.datDuLieu(cv, tasks);
+  });
+
+  it('admin Đã duyệt không hiện chân giỏ khi không có mã trong giỏ', () => {
+    window.dangNhapTen('admin', 'Quản trị Hệ thống');
+    window.datGio([]);
+    window.moChiTiet('CV001', 'Hội nghị');
+    expect(document.querySelector('.project-luu-cho-footer')).toBeNull();
+    expect(document.querySelector('.project-draft-footer')).toBeNull();
+  });
+
+  it('Trưởng phòng + Đã duyệt hiện chân giỏ; bấm gọi guiGioChoDuyet, không POST nháp', async () => {
+    window.datGio(['CV001']);
+    const post = vi.fn();
+    window.mockSubmit(post);
+    const gio = vi.fn().mockResolvedValue(true);
+    window.mockGio(gio);
+    window.moChiTiet('CV001', 'Hội nghị');
+    const footer = document.querySelector('.project-luu-cho-footer');
+    expect(footer).not.toBeNull();
+    expect(footer.closest('.overflow-y-auto')).toBeNull();
+    expect(document.querySelector('.project-draft-footer')).toBeNull();
+    document.querySelector('.luu-cho-submit-btn').click();
+    await vi.waitFor(() => expect(gio).toHaveBeenCalledTimes(1));
+    expect(gio.mock.calls[0][0]).toBe('project');
+    expect(gio.mock.calls[0][1][window.COL.P_ID]).toBe('CV001');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('Đã duyệt + có con trong giỏ thì vẫn hiện chân dù admin', () => {
+    window.dangNhapTen('admin', 'Quản trị Hệ thống');
+    window.datGio(['CV001-01']);
+    window.moChiTiet('CV001', 'Hội nghị');
+    expect(document.querySelector('.project-luu-cho-footer')).not.toBeNull();
   });
 });
 

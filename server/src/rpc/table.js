@@ -217,9 +217,18 @@ export const RPC_TABLE = Object.freeze({
     rest: 'PATCH /works/:idOrCode',
     async handler([id, data], ctx) {
       required(id, 'Mã dự án');
-      const updated = await ctx.call('PATCH', `/works/${encodeURIComponent(id)}`, {
-        ...projectFromLegacy(data ?? {}),
-      });
+      const body = projectFromLegacy(data ?? {});
+      // «LƯU CHỜ» (S1, 12/09) — xem chú thích cùng tên ở `updateTaskWithAuth` bên dưới; hai nhánh
+      // giống hệt nhau, chỉ khác bảng và khác tên khoá trả về (`projectId` thay `taskId`).
+      if (data?.luuCho === true) {
+        const saved = await ctx.call(
+          'POST',
+          `/approvals/works/${encodeURIComponent(id)}/pending-edits`,
+          body
+        );
+        return { success: true, projectId: saved.code, luuCho: saved, warnings: [] };
+      }
+      const updated = await ctx.call('PATCH', `/works/${encodeURIComponent(id)}`, body);
       return { success: true, projectId: updated.work.code, warnings: updated.warnings ?? [] };
     },
   },
@@ -284,12 +293,41 @@ export const RPC_TABLE = Object.freeze({
   },
 
   updateTaskWithAuth: {
-    rest: 'PATCH /work-items/:idOrCode',
+    rest: 'PATCH /work-items/:idOrCode · POST /approvals/work-items/:idOrCode/pending-edits',
     async handler([id, data], ctx) {
       required(id, 'Mã nhiệm vụ');
-      const updated = await ctx.call('PATCH', `/work-items/${encodeURIComponent(id)}`, {
-        ...taskFromLegacy(data ?? {}),
-      });
+      const body = taskFromLegacy(data ?? {});
+      // «LƯU CHỜ» (S1–S4, 12/09/2026) — `data.luuCho` là CỜ Ý ĐỊNH của nút bấm, không phải lời khai
+      // quyền: `luuGio` bên service tự kiểm lại `oCheDoLuuCho` và trả 409 kèm câu giải thích nếu mục
+      // không ở chế độ đó. Hai đường đi qua CÙNG một `body` (cùng `taskFromLegacy`) nên một form sửa
+      // chỉ đổi chỗ gửi, không đổi tên trường.
+      //
+      // Đọc cờ TRƯỚC khi `taskFromLegacy` nuốt nó — hàm đó chỉ nhặt những khoá nó biết. Và phải đọc từ
+      // `data` chứ không từ `body`: rơi mất cờ ở đây nghĩa là lượt sửa đi thẳng vào PATCH, hạ mục về
+      // `Chờ duyệt` (Q9) thay vì cất vào giỏ — tức là đúng cái hành vi người dùng yêu cầu bỏ.
+      if (data?.luuCho === true) {
+        const saved = await ctx.call(
+          'POST',
+          `/approvals/work-items/${encodeURIComponent(id)}/pending-edits`,
+          body
+        );
+        return {
+          success: true,
+          taskId: saved.code,
+          moved: false,
+          guiBldChange: saved.guiBldChange,
+          // Khoá MỚI, thêm vào chứ không đổi khoá cũ — cùng tiền lệ `tyLeChange` bên dưới. Giao diện
+          // cũ không đọc `luuCho` thì vẫn thấy `success: true` và `taskId` như mọi lần.
+          luuCho: saved,
+          // `warnings` RỖNG là đúng, không phải sót: cảnh báo của một lượt sửa (`ASSIGNEE_NOT_FOUND`,
+          // hết hạn trước ngày bắt đầu, ngoài khoảng công việc) do `resolveAssignee` và hai hàm `warn*`
+          // sinh ra lúc GHI, mà «lưu chờ» chưa ghi gì cả. Chúng sẽ về ở `canhBao` của lượt «Gửi duyệt».
+          // Cái giá phải trả: gõ sai tên người thực hiện thì lúc «Lưu chờ» chưa ai kêu — popup gửi
+          // duyệt phải hiện `canhBao` thì người dùng mới biết.
+          warnings: [],
+        };
+      }
+      const updated = await ctx.call('PATCH', `/work-items/${encodeURIComponent(id)}`, body);
       return {
         success: true,
         taskId: updated.item.code,

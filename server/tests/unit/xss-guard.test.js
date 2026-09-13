@@ -72,9 +72,21 @@ const CO_Y_KHONG_BOC = [
   // thành một lỗ thật thì TC-SEC-11 đỏ ngay, chứ không lặng lẽ lọt.
   {
     ctx: 'text',
-    ma: 'buildLuuNhapNutHtml(isEdit)',
+    ma: 'buildLuuNhapNutHtml(isEdit, row)',
     so: 0,
-    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu',
+    ly_do: 'trả HTML đã thoát sẵn, không phải dữ liệu — chữ ký (isEdit, row) từ đợt lưu chờ 12/09',
+  },
+  {
+    ctx: 'text',
+    ma: 'luuChoBadge(task)',
+    so: 0,
+    ly_do: 'Bản 06 dùng fallback trong pendingApprovalBadge; không còn callsite trực tiếp',
+  },
+  {
+    ctx: 'text',
+    ma: 'luuChoBadge(project)',
+    so: 0,
+    ly_do: 'Bản 06 dùng fallback trong pendingApprovalBadge; project-details được kiểm riêng',
   },
   {
     ctx: 'text',
@@ -600,7 +612,17 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     //    thuộc tính nên phải thoát); tiêu đề và `title` của nút «Xem các thay đổi». Tất cả đều đã qua
     //    `escapeHtml`/`escapeHtmlAttr` — TC-SEC-10 xanh. KHÔNG kể từng khoản thành phép cộng: con số
     //    chốt **lấy thẳng từ `tools/dem-xss.mjs`** (`node ../tools/dem-xss.mjs` chạy từ `server/`).
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 986 });
+    // 2026-09-12 (đợt lưu chờ S1–S4 — giỏ sửa Đã duyệt, buster 20260912-04): **986 → 996 giá trị**,
+    // sink giữ **101**. Không thêm chỗ ghi HTML: popup tick dựng DOM bằng textContent; `luuChoBadge`
+    // là CAN-THOAT (trả HTML đã thoát, 3 chỗ task + 2 chỗ project). Con số lấy thẳng từ
+    // `node ../tools/dem-xss.mjs` chạy từ `server/`.
+    // 2026-09-12 (bổ sung thẻ file Chi tiết công việc, buster 20260912-05): **996 → 1004 giá trị**,
+    // sink vẫn **101**. Tên file/kết quả có text + title đều qua escape; % bị ép số, nên không thêm
+    // sink hay CAN-THOAT.
+    // 20260912-06: restored pending UI and collapsed details; measured with dem-xss.mjs.
+    // 20260912-07 measured 101/996: +ratio, file color/status classes, assignee title;
+    // all escaped, numeric ratio sanitized. No sink or auditor change.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 996 });
   });
 });
 

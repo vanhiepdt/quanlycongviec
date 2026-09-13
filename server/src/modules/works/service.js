@@ -28,7 +28,7 @@ import {
   coSuaDuocKhiChoDuyet,
   thayDuocNhap,
   trangThaiDuyetKhiTao,
-  phaiChoDuyetKhiSua,
+  phaiDuyetLaiKhiSua,
   xoaPhaiQuaDuyet,
 } from '../approvals/rules.js';
 import { demNhomFileTheoItem } from '../taskFiles/repo.js';
@@ -224,8 +224,9 @@ export function update(user, ref, patch, { client: transactionClient } = {}) {
       : null;
     // Sửa việc KHÔNG đổi được khoá duyệt: đường duy nhất là ba hành động của `approvals/service.js`.
     // Ghi đè «Chờ duyệt» cho Sửa (011): vai có ghi đè update = 'cho-duyet' sửa mục «Đã duyệt» ⇒
-    // quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — cùng luồng với TP/PP sửa CV con.
-    const phaiDuyetLai = phaiChoDuyetKhiSua(user, 'work', current.approval_status);
+    // quay về «Chờ duyệt» chờ Phó GĐ duyệt lại — cùng luồng với TP/PP sửa CV con. Hỏi `rules.js`
+    // (Q9) để giỏ «lưu chờ» và đường ghi này luôn ra cùng một câu trả lời cho cùng một dòng.
+    const phaiDuyetLai = phaiDuyetLaiKhiSua(user, 'work', current);
     const work = await withPgErrors(() =>
       repo.update(
         current.id,

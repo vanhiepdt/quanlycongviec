@@ -338,8 +338,10 @@ describe('TC-TP-UI: Trưởng phòng / Phó phòng được THÊM công việc (
       'add-project-standalone',
       'add-task-standalone',
     ]) {
-      expect(APP_SRC).toContain(
-        `document.getElementById("${id}")?.addEventListener("click", (event) => {`
+      expect(APP_SRC).toMatch(
+        new RegExp(
+          `document\\.getElementById\\(["']${id}["']\\)\\?\\.addEventListener\\(["']click["'], \\(event\\) => \\{`
+        )
       );
     }
   });

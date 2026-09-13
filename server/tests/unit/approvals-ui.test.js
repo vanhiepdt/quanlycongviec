@@ -493,7 +493,8 @@ describe('khung «Yêu cầu XOÁ chờ duyệt» (013)', () => {
 // ĐÓNG BĂNG nên class tuỳ ý không tồn tại, và app.css nạp SAU tailwind.min.css — ai dời cỡ chữ sang
 // class Tailwind là luật chết lặng lẽ, chỉ bộ pin này bắt được.
 describe('MỚI-3 + MỚI-4 — hình dáng trong app.css', () => {
-  const css = readFileSync(resolve(process.cwd(), '../web/assets/css/app.css'), 'utf8');
+  // Source checkout may use CRLF; retain all selector/specificity/style assertions.
+  const css = readFileSync(resolve(process.cwd(), '../web/assets/css/app.css'), 'utf8').replace(/\r\n/g, '\n');
   const luat = (selector) => {
     const i = css.indexOf(selector);
     if (i < 0) return null;

@@ -247,22 +247,22 @@ describe('TC-TASKUI-07..10 — gom theo CÔNG VIỆC CON, tổng hợp đúng lu
       tong: 2,
       xong: 1,
       tienDo: 50,
-      trangThai: 'Chưa duyệt đủ kết quả',
+      trangThai: 'Đang làm',
       lop: 'status-pending',
     });
     expect(window.tinhTongHopNhiemVu([xong('A'), xong('B')])).toMatchObject({
       tienDo: 100,
-      trangThai: 'Đã duyệt đủ kết quả',
+      trangThai: 'Đã xong',
       lop: 'status-completed',
     });
     expect(window.tinhTongHopNhiemVu([xong('A'), tre('B'), dang('C')])).toMatchObject({
       tienDo: 33,
-      trangThai: 'Quá hạn · Chưa duyệt đủ kết quả',
+      trangThai: 'Quá hạn · Đang làm',
       lop: 'status-overdue',
     });
     // Nhiệm vụ quá hạn nhưng ĐÃ hoàn thành thì không kéo khối thành «Trễ hạn».
     const treXong = nhiemVu('D', 'CV1', 'CVC1', '2026-01-01', '2026-01-05', 'Hoàn thành');
-    expect(window.tinhTongHopNhiemVu([treXong]).trangThai).toBe('Đã duyệt đủ kết quả');
+    expect(window.tinhTongHopNhiemVu([treXong]).trangThai).toBe('Đã xong');
   });
 
   it('TC-TASKUI-10: đầu khối có thư mục ĐỎ, mã công việc con, số nhiệm vụ và tiến độ', () => {

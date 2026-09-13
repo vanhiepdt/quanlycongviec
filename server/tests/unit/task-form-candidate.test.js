@@ -404,4 +404,23 @@ describe('chân form tạo — chỉ «Lưu tạm» và «Gửi đi duyệt», m
     expect(nut[0].hasAttribute('data-nhap')).toBe(false);
     expect(nut[0].hasAttribute('data-gui-duyet')).toBe(false);
   });
+
+  it('SỬA Đã duyệt + Trưởng phòng + cấp 2: Lưu chờ + Gửi duyệt, không còn «Cập nhật»', () => {
+    const C = window.COL;
+    window.datNhanSu(nhansu(C));
+    window.datCongViec(CONG_VIEC_MAU(C));
+    window.dangNhap('Lê Trưởng Phòng', 'Trưởng phòng');
+    const task = {
+      ...NHIEM_VU_MAU(C, 'Nguyễn Văn An'),
+      [C.T_LEVEL]: 2,
+      [C.T_APPROVAL]: 'Đã duyệt',
+    };
+    const tai = new DOMParser().parseFromString(window.createTaskModal(true, task), 'text/html');
+    expect(tai.querySelector('.chan-form-tao')).toBeNull();
+    const nut = Array.from(tai.querySelectorAll('button[type="submit"]'));
+    expect(nut).toHaveLength(2);
+    expect(nut.find((b) => b.hasAttribute('data-nhap')).textContent).toContain('Lưu chờ');
+    expect(nut.find((b) => b.hasAttribute('data-gui-duyet')).textContent).toContain('Gửi duyệt');
+    expect(tai.body.textContent).not.toContain('Cập nhật');
+  });
 });

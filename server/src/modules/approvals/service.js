@@ -39,9 +39,23 @@ import * as itemsRepo from '../workItems/repo.js';
 import * as worksService from '../works/service.js';
 import * as itemsService from '../workItems/service.js';
 import * as repo from './repo.js';
-import { startSubmission, clearPending, publishChanges, pendingGuiBld } from './changes.js';
+import {
+  startSubmission,
+  clearPending,
+  publishChanges,
+  pendingGuiBld,
+  proposeGuiBld,
+} from './changes.js';
+import * as luuCho from './luuCho.js';
 import { pendingTyLe } from './tyLe.js';
-import { CHO_DUYET, DA_DUYET, NHAP, TU_CHOI } from './rules.js';
+import {
+  CHO_DUYET,
+  DA_DUYET,
+  NHAP,
+  TU_CHOI,
+  boCotKhoaDuyet,
+  phaiDuyetLaiKhiGuiGio,
+} from './rules.js';
 
 /** Độ dài tối thiểu của lý do từ chối (§7 việc 5.2). "Không đạt" là 8 ký tự — cố ý chưa đủ. */
 export const DO_DAI_LY_DO_TOI_THIEU = 10;
@@ -599,6 +613,12 @@ export function traLaiDeSua(user, entity, ref, ghiChu) {
     }
 
     await clearPending(target, client);
+    // Giỏ «lưu chờ» (S1) cũng phải dọn, và dọn ở ĐÂY chứ không phải lúc người tạo sửa lại bản nháp:
+    // điều kiện mở giỏ là dòng đang `Đã duyệt`, mà cả cây vừa bị kéo về `Nháp`. Để giỏ còn treo thì
+    // nút «Gửi duyệt» vẫn hiện, và bấm nó là ghi đè giá trị cũ lên bản nháp người tạo đang soạn lại
+    // — mất công soạn mà không một câu thông báo. `clearPending` bên trên không đụng tới giỏ vì nó
+    // lọc cứng `change_kind = 'reviewer'`.
+    await luuCho.xoaGioCay(await luuCho.phamViCay(target, client), client);
     const { row, soCon } = await ghiKhoaDuyetCaCay(
       target,
       {
@@ -698,4 +718,459 @@ export async function pendingList(user, { limit = 50 } = {}) {
 /** Danh sách YÊU CẦU XOÁ đang chờ duyệt trong phạm vi người đang xem (013). */
 export function pendingDeleteList(user, { limit = 50 } = {}) {
   return repo.listPendingDeletes(phamViBadge(user), { limit });
+}
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// GIỎ «LƯU CHỜ» (S1–S4, 12/09/2026) — «sửa → lưu chờ → popup tick → gửi duyệt»
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+//
+// Chỉ đạo người dùng nguyên văn: «tôi muốn khi sửa thông tin gì cũng có chế độ lưu chờ (tức là cho
+// sửa tiếp), rồi nút ấn gửi duyệt thay vì gửi duyệt luôn khi ấn cập nhật như bây giờ, và trước khi ấn
+// nút gửi duyệt thì phải hiển thị popup những cái thay đổi, chắc chắn rồi ấn ok để gửi đi duyệt. Nếu
+// trong màn hình công việc con thì cho sửa cả nhiệm vụ cùng lưu tạm đấy, còn nếu màn hình chỉ có sửa
+// nhiệm vụ thì chỉ nhiệm vụ thôi.» Bốn câu đã chốt:
+//   S1 — «Lưu chờ» là GIỎ, cột thật GIỮ giá trị cũ; lưới vẫn «Đã duyệt» kèm badge «có sửa chờ».
+//   S2 — CHỈ mục đang «Đã duyệt»; «Nháp»/«Chờ duyệt»/«Từ chối» giữ nguyên hành vi cũ.
+//   S3 — ở màn hình công việc con, «Gửi duyệt» gửi CẢ CÂY một lần.
+//   S4 — popup CÓ Ô TICK: bỏ tick thì thay đổi đó ở lại giỏ, chưa gửi.
+//
+// Vì sao bốn hàm nghiệp vụ nằm Ở ĐÂY còn `luuCho.js` chỉ giữ nguyên ngữ SQL: chúng cần `mustFind`
+// (khoá dòng + xét quyền theo phạm vi), `moTa`, `entityOf`, và cần gọi `worksService.update` /
+// `itemsService.update` để ÁP giỏ. Bốn thứ đó đều ở file này. `luuCho.js` đứng cùng chỗ trong đồ thị
+// import với `changes.js` và `tyLe.js` nên thêm nó không tạo vòng; kéo nghiệp vụ xuống đó thì có.
+//
+// Vì sao ÁP giỏ bằng hai hàm `update` chứ không `repo.update` thẳng: lượt ghi phải đi qua đúng những
+// cửa một lượt sửa bình thường đi qua — cân lại tỷ lệ anh em (`canLaiTyLeWork`), suy `assignee_id`
+// từ `assignee_name` (`resolveAssignee`), kiểm phân công ba lớp, hạ về `Chờ duyệt` kèm `submitted_by`
+// và chuông R7 (`baoKhiHaVeChoDuyet`). Tự ghi ở đây là nhân bản năm đoạn luật ra chỗ thứ sáu, và chỗ
+// lệch sẽ KHÔNG nổ lỗi — nó chỉ lặng lẽ cho một ô tỷ lệ đổi mà anh em không được cân.
+//
+// Hai chỗ cố ý KHÔNG đụng:
+//   • `pendingCount` — giỏ là việc riêng của người đang soạn, người duyệt chưa có gì phải làm; cộng
+//     nó vào `total` là làm chuông «Chờ duyệt» rung cho một thứ chưa ai được gửi. Badge đi đường
+//     riêng (`gioChoCuaToi`).
+//   • `duyetCaCay` — giỏ còn sót khi cây được duyệt thì GIỮ. Đó đúng là chữ «cho sửa tiếp»: người
+//     dùng cất nháp cho lượt duyệt sau, không ai có quyền vứt bản nháp của họ khi ký lượt này.
+
+/** Câu trả lời cho S2, và cũng là cờ giao diện dùng để đổi nhãn nút «Cập nhật» thành «Lưu chờ». */
+function oCheDoLuuCho(user, target) {
+  // `phaiDuyetLaiKhiSua` đã tự trả `false` cho mọi trạng thái khác `Đã duyệt` (cả hai nhánh của nó
+  // đều bắt đầu từ `DA_DUYET`), nên S2 không cần viết lại thành một điều kiện thứ hai ở đây — viết
+  // hai lần là hai chỗ để lệch, đúng cái kiểu hỏng mà đầu `rules.js` nói tới.
+  //
+  // `can(update)` đứng sau vì đó là câu hỏi khác: «có được ghi không», không phải «ghi thì có phải
+  // qua duyệt lại không». Một vai ghi THẲNG (admin, hay Phó GĐ sửa mục phòng mình khi không bị ghi
+  // đè) thì nút «Cập nhật» giữ nguyên hành vi cũ và không có giỏ nào cả. Đó là cố ý: bắt người vốn
+  // được ghi thẳng phải tự gửi cho chính mình duyệt là thêm một bước không ai ký.
+  return (
+    phaiDuyetLaiKhiGuiGio(user, target.entityType, target.row) &&
+    can(user, 'update', target.entityType, target.row).ok
+  );
+}
+
+/**
+ * Đổi chỗ trên cây KHÔNG nằm trong giỏ — và thà nói thẳng còn hơn im lặng bỏ qua.
+ *
+ * Giỏ giữ cặp `field → valueTo` của những CỘT trong `LABELS_GIO`; còn chuyển cha / chuyển sang công
+ * việc khác là việc của `itemsRepo.updateStructure` kèm một loạt kiểm tra chu trình và cân lại tỷ lệ
+ * của CẢ HAI công việc. Cất nó vào giỏ là phải nhân bản số kiểm tra đó ra một chỗ thứ hai.
+ *
+ * Nút này gần như không nổ với modal hiện tại, và lý do đáng ghi lại vì hai khoá đi hai đường khác
+ * nhau: `#task-form` chỉ vẽ ô ẩn `name="parent"` ở chế độ TẠO MỚI (`createTaskModal` nhánh
+ * `!isEdit`), nên lượt SỬA không gửi `parentRef` lên đây — `taskFromLegacy` chỉ đặt khoá đó khi thân
+ * có `parent`/`parentRef`. Còn `workRef` thì NGƯỢC LẠI, có trong MỌI lượt sửa: `select[name=
+ * "projectId"]` bị `disabled` khi sửa nhưng `handleEdit` nhặt lại giá trị của select disabled bỏ vào
+ * `data`. Vậy nên phải SO SÁNH chứ không được thấy khoá là chặn (chặn mù thì mọi lượt «Lưu chờ» đều
+ * 409), và phải chặn chứ không được bỏ qua (bỏ qua là một lượt chuyển cây mất hút không một câu thông
+ * báo).
+ */
+const DOI_CHO =
+  'Đổi chỗ trên cây (chuyển sang công việc / công việc con khác) không nằm trong chế độ «lưu chờ» — giỏ chỉ giữ giá trị cột. Hãy gửi các thay đổi đang chờ rồi đổi chỗ sau.';
+
+async function assertKhongDoiCho(target, dayDu, targetWorkRef, client) {
+  if (target.kind === 'work') return;
+  const before = target.row;
+  if (Object.hasOwn(dayDu, 'parentRef')) {
+    const raw =
+      dayDu.parentRef == null || String(dayDu.parentRef).trim() === '' ? null : dayDu.parentRef;
+    const cha = raw == null ? null : await itemsRepo.findByRef(raw, client);
+    if ((cha?.id ?? null) !== before.parent_id) throw conflict(DOI_CHO, 'parentRef');
+  }
+  if (targetWorkRef !== undefined) {
+    const viec = await worksRepo.findByRef(targetWorkRef, client);
+    if ((viec?.id ?? null) !== before.work_id) throw conflict(DOI_CHO, 'workRef');
+  }
+}
+
+/**
+ * Giỏ thô từ CSDL → hình dạng popup.
+ *
+ * `entity` suy từ `level` đọc SỐNG chứ không cất trong giỏ: giỏ treo được qua nhiều ngày, mà cấp của
+ * một dòng thì đổi được. Popup hiện sai nhãn «Nhiệm vụ» cho một công việc con là chuyện nhỏ, nhưng
+ * chính nhãn đó quyết định đường gửi (`/works/…` hay `/work-items/…`) và loại thực thể trong nhật ký.
+ */
+async function dinhDangGio(gio, client) {
+  const ids = [...new Set(gio.filter((g) => g.item_id != null).map((g) => Number(g.item_id)))];
+  const cap = new Map();
+  if (ids.length) {
+    const { rows } = await client.query(
+      'SELECT id, level FROM work_items WHERE id = ANY($1::bigint[])',
+      [ids]
+    );
+    for (const r of rows) cap.set(Number(r.id), Number(r.level));
+  }
+  return gio.map((g) => {
+    const itemId = g.item_id == null ? null : Number(g.item_id);
+    return {
+      id: Number(g.id),
+      entity: itemId == null ? 'work' : entityOf(cap.get(itemId)),
+      itemId,
+      workId: Number(g.work_id),
+      code: g.entity_code,
+      name: g.entity_name,
+      // Raw draft values are read-only form defaults; submit still accepts only ids/fields.
+      thayDoi: g.changes.map((c) => ({ field: c.field, label: c.label, from: c.from, to: c.to, valueTo: c.valueTo })),
+    };
+  });
+}
+
+/**
+ * ĐỌC giỏ của một phạm vi — nội dung popup «Gửi duyệt» + cờ cho nút «Cập nhật».
+ *
+ * S3 nằm ở `luuCho.phamViCay`: mở popup từ CÔNG VIỆC CON thì thấy giỏ của cả cây bên dưới (nên
+ * «cho sửa cả nhiệm vụ cùng lưu tạm»), mở từ một NHIỆM VỤ thì chỉ thấy giỏ của chính nó vì cấp 3
+ * không có con cháu. Cùng một hàm, không một nhánh nào ở đây phải biết cấp.
+ */
+export function docGio(user, entity, ref) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'read', target);
+    const gio = await luuCho.gioTrongCay(await luuCho.phamViCay(target, client), client);
+    return {
+      kind: target.kind,
+      code: target.row.code,
+      name: target.row.name,
+      approvalStatus: target.row.approval_status,
+      // Server tính, KHÔNG để client tự suy: giao diện có một bản sao của ma trận quyền
+      // (`giaTriHieuLucQuyen` trong `app.js`) và bản sao đó đã từng lệch. Nút hiện sai thì người
+      // dùng bấm «Cập nhật» và nhận 409, hoặc ngược lại mất lượt sửa vào giỏ mà không biết.
+      phaiLuuCho: oCheDoLuuCho(user, target),
+      gio: await dinhDangGio(gio, client),
+      tongSoThayDoi: gio.reduce((n, g) => n + g.changes.length, 0),
+    };
+  });
+}
+
+/**
+ * CẤT một lượt sửa vào giỏ (nút «Cập nhật» khi `phaiLuuCho`).
+ *
+ * `patch` là thân request ĐÃ đổi sang tên cột CSDL — route chạy nó qua đúng `toRow` của
+ * `works/routes.js` và `workItems/routes.js`, nên hai đường (PATCH cũ và giỏ mới) nhìn thấy cùng một
+ * hình dạng và cùng một bộ khoá hợp lệ.
+ *
+ * Ghi ĐÈ chứ không thêm dòng: hai unique index của 029 đã chốt «một đề nghị đang chờ trên mỗi dòng
+ * cho mỗi `change_kind`», và đó cũng đúng ý người dùng — «lưu chờ (tức là cho sửa tiếp)». Lượt thứ
+ * hai sửa cùng một ô thì giữ `from` của lượt ĐẦU và chỉ đổi `to` (`tronThayDoi`), nên popup luôn kể
+ * «từ giá trị đang chạy trong CSDL → giá trị sắp gửi», không phải chuỗi các lần sửa vụn.
+ */
+export function luuGio(user, entity, ref, patch = {}, { targetWorkRef = undefined } = {}) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'update', target);
+    if (!oCheDoLuuCho(user, target)) {
+      throw conflict(
+        `${moTa(target)} không ở chế độ «lưu chờ». Chỉ mục đang "${DA_DUYET}" và lượt sửa của vai bạn phải qua duyệt lại thì mới cất vào giỏ — hãy dùng nút «Cập nhật» như cũ.`,
+        'approvalStatus'
+      );
+    }
+    const dayDu = boCotKhoaDuyet(patch);
+    await assertKhongDoiCho(target, dayDu, targetWorkRef, client);
+
+    // Tích «Gửi BLĐ phê duyệt» KHÔNG vào giỏ: 026 đã cấp cho nó một trục duyệt RIÊNG
+    // (`change_kind = 'gui-bld'`, đúng MỘT người của Ban lãnh đạo kiểm soát nhiệm vụ ký), và trục đó
+    // vẫn chạy y như cũ. Nhét nó vào giỏ là hai trục cho một ô — đúng thứ 029 gộp lại để bỏ.
+    // Gọi ở ĐÂY thay vì để client gọi PATCH riêng, vì PATCH sẽ hạ dòng về `Chờ duyệt` (Q9) và phá S1.
+    let guiBldChange;
+    if (target.kind === 'item' && typeof dayDu.gui_bld_phe_duyet === 'boolean') {
+      guiBldChange = await proposeGuiBld(
+        user,
+        target.row,
+        // `after` = bản nháp SAU khi giỏ được áp: `proposeGuiBld` cần `supervisor_ids` sắp tới để
+        // kiểm «tích bật thì phải có người nhận» và để tìm đúng một người ký. Riêng `assignee_id`
+        // vẫn là giá trị CŨ khi lượt này đổi luôn ô «Người thực hiện» — giỏ chỉ giữ `assignee_name`
+        // thô, id do `resolveAssignee` suy ra lúc ÁP. Lệch đó AN TOÀN vì nó rơi đúng vào chốt chống
+        // cũ của `decideGuiBld`: «Phân công hoặc tích hiện tại đã thay đổi — hãy từ chối và lập đề
+        // nghị mới». Tức là đề nghị bị từ chối để lập lại, chứ không âm thầm ký trên phân công đã đổi.
+        { ...target.row, ...dayDu },
+        dayDu.gui_bld_phe_duyet,
+        client
+      );
+    }
+
+    const before = target.row;
+    const isWork = target.kind === 'work';
+    const cu = await luuCho.timGio(isWork ? before.id : null, isWork ? null : before.id, client);
+    const changes = await luuCho.thayDoiTu(cu?.changes, before, { ...before, ...dayDu }, client, {
+      patch: dayDu,
+    });
+    const id = await luuCho.ghiGio({
+      // `approval_changes.work_id` là NOT NULL (023) nên giỏ của MỘT DÒNG vẫn phải treo dưới công
+      // việc gốc — khác với `phamViCay`, nơi `workId: null` là cờ «phạm vi là cây con, không phải cả
+      // công việc». Hai chỗ cùng tên biến nhưng khác nghĩa, và chính chỗ này đã từng là lỗi: ghi NULL
+      // cho giỏ nhiệm vụ là vỡ ràng buộc.
+      workId: isWork ? Number(before.id) : Number(before.work_id),
+      itemId: isWork ? null : Number(before.id),
+      user,
+      code: before.code,
+      // Tên lấy từ BẢN NHÁP: lượt này có thể đổi luôn ô «Tên», và popup phải gọi đúng cái tên người
+      // dùng vừa đặt chứ không phải tên cũ trong CSDL.
+      name: dayDu.name ?? before.name ?? '',
+      changes,
+      client,
+    });
+
+    const gio = await luuCho.gioTrongCay(await luuCho.phamViCay(target, client), client);
+    return {
+      luuCho: id != null,
+      // `id` là SỐ CỦA GIỎ, không phải số của mục — đây là cái mà ô tick của popup gửi ngược lại
+      // trong `chon[].id`. `code`/`name` đi kèm để cầu RPC giữ đúng hình dạng cũ (`taskId`/`projectId`
+      // của `updateTaskWithAuth` là MÃ) mà không phải đọc lại dòng.
+      id: id == null ? null : Number(id),
+      code: before.code,
+      name: dayDu.name ?? before.name ?? '',
+      // Vẫn `Đã duyệt` — đó chính là nội dung của S1. Trả ra để giao diện vẽ lại badge mà không phải
+      // đoán: giỏ không đổi trạng thái, nên ai đọc `approvalStatus` sau lượt này vẫn thấy mục đã duyệt.
+      approvalStatus: before.approval_status,
+      // `changes` rỗng nghĩa là lượt sửa này đưa mọi ô VỀ GIÁ TRỊ CŨ (`tronThayDoi` tự bỏ field khi
+      // `from === to`), giỏ cũ nếu có cũng vừa bị xoá. Nói rõ để giao diện biết đây không phải lỗi.
+      soThayDoi: changes.length,
+      thayDoi: changes.map((c) => ({ field: c.field, label: c.label, from: c.from, to: c.to })),
+      guiBldChange,
+      // Đủ số để vẽ lại popup/badge ngay, khỏi một lượt đọc thứ hai: theo S3 giỏ ở màn công việc con
+      // là giỏ của CẢ CÂY, nên một lượt «lưu chờ» trên nhiệm vụ làm đổi cả số của popup cấp trên.
+      tongSoThayDoi: gio.reduce((n, g) => n + g.changes.length, 0),
+      soMucCoGio: gio.length,
+    };
+  });
+}
+
+/**
+ * BỎ giỏ — hoặc cả phạm vi (không `id`), hoặc một giỏ, hoặc đúng vài ô trong một giỏ (`fields`).
+ *
+ * Ba mức vì popup có ba chỗ bấm: «Bỏ tất cả» ở chân popup, dấu ✕ cạnh mỗi mục, dấu ✕ cạnh mỗi dòng
+ * thay đổi. Thiếu mức thứ ba thì người dùng lỡ tay sửa một ô chỉ còn cách bỏ cả mục rồi sửa lại.
+ */
+export function boGio(user, entity, ref, { id = null, fields = null } = {}) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'update', target);
+    const phamVi = await luuCho.phamViCay(target, client);
+    const truoc = await luuCho.gioTrongCay(phamVi, client);
+    if (id == null) {
+      const daBo = await luuCho.xoaGioId(
+        truoc.map((g) => g.id),
+        client
+      );
+      return { daBo, gio: [], tongSoThayDoi: 0 };
+    }
+    const g = truoc.find((x) => Number(x.id) === Number(id));
+    if (!g) throw notFound(`Không có thay đổi chờ nào mang số ${id} trong phạm vi này`);
+
+    let conLai = [];
+    if (fields != null) {
+      if (!Array.isArray(fields)) {
+        throw new AppError('VALIDATION_ERROR', '«fields» phải là danh sách tên cột', {
+          field: 'fields',
+        });
+      }
+      const trongGio = new Set(g.changes.map((c) => c.field));
+      for (const f of fields) {
+        if (!trongGio.has(f)) {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            `«${f}» không nằm trong giỏ chờ của ${g.entity_code}`,
+            {
+              field: 'fields',
+            }
+          );
+        }
+      }
+      const bo = new Set(fields);
+      conLai = g.changes.filter((c) => !bo.has(c.field));
+    }
+    if (conLai.length) await luuCho.catGio(g.id, conLai, client);
+    else await luuCho.xoaGioId([g.id], client);
+
+    const gio = await luuCho.gioTrongCay(phamVi, client);
+    return {
+      daBo: 1,
+      gio: await dinhDangGio(gio, client),
+      tongSoThayDoi: gio.reduce((n, x) => n + x.changes.length, 0),
+    };
+  });
+}
+
+/**
+ * S4 — dịch `chon` của client thành «giỏ nào gửi ô nào».
+ *
+ * `chon` vắng mặt / `null` ⇒ gửi HẾT (nút «Gửi tất cả», và cũng là hành vi khi client cũ chưa có ô
+ * tick). `fields` vắng mặt trong một phần tử ⇒ gửi hết giỏ đó. Trả `Map<id, Set<field>|null>`, trong
+ * đó `null` nghĩa là «cả giỏ» — phân biệt với `Set` rỗng, là «giỏ này không gửi».
+ *
+ * Kiểm TỪNG tên cột có thật trong giỏ: một `field` lạ mà lọt qua thì `Object.fromEntries` bên dưới
+ * dựng ra một patch có khoá không nằm trong `WRITABLE`, và `repo.update` sẽ im lặng bỏ nó — người
+ * dùng tưởng đã gửi, thực ra không có gì được ghi.
+ */
+function locTheoTich(chon, gio) {
+  if (chon == null) return new Map(gio.map((g) => [Number(g.id), null]));
+  if (!Array.isArray(chon)) {
+    throw new AppError('VALIDATION_ERROR', '«chon» phải là danh sách {id, fields}', {
+      field: 'chon',
+    });
+  }
+  const ra = new Map();
+  for (const c of chon) {
+    const id = Number(c?.id);
+    const g = gio.find((x) => Number(x.id) === id);
+    if (!g) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Không có thay đổi chờ nào mang số ${c?.id} trong phạm vi này`,
+        { field: 'chon' }
+      );
+    }
+    if (ra.has(id)) {
+      throw new AppError('VALIDATION_ERROR', `Mục số ${id} bị lặp trong «chon»`, { field: 'chon' });
+    }
+    if (c.fields == null) {
+      ra.set(id, null);
+      continue;
+    }
+    if (!Array.isArray(c.fields)) {
+      throw new AppError('VALIDATION_ERROR', '«fields» phải là danh sách tên cột', {
+        field: 'chon',
+      });
+    }
+    const trongGio = new Set(g.changes.map((x) => x.field));
+    for (const f of c.fields) {
+      if (!trongGio.has(f)) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          `«${f}» không nằm trong giỏ chờ của ${g.entity_code}`,
+          { field: 'chon' }
+        );
+      }
+    }
+    ra.set(id, new Set(c.fields));
+  }
+  return ra;
+}
+
+/**
+ * GỬI giỏ đi duyệt (nút «Gửi duyệt» sau khi đã tick trong popup).
+ *
+ * MỘT giao dịch cho CẢ CÂY (S3): hoặc mọi mục được tick đều ghi xong và hạ về `Chờ duyệt`, hoặc
+ * không có gì thay đổi. Nửa vời ở đây là tệ nhất — người dùng thấy «đã gửi» cho ba mục mà một mục
+ * lăn ra lỗi thì mục đó vẫn `Đã duyệt` với giỏ còn treo, và không câu thông báo nào nói cho họ biết
+ * mục nào.
+ *
+ * KHÔNG tái dùng `submit()`: hàm đó ném 409 «đang chờ duyệt rồi» và, với nhiệm vụ cấp 3, ném 409
+ * «không qua bước duyệt» (`assertCoBuocDuyet`). Cả hai đều sai ở đây — giỏ tự hạ dòng về `Chờ duyệt`
+ * qua `phaiDuyetLaiKhiSua` bên trong hai hàm `update`, không cần ai bấm submit.
+ */
+export function guiGio(user, entity, ref, chon = null) {
+  return withTransaction(async (client) => {
+    const target = await mustFind(entity, ref, client);
+    assertCan(user, 'update', target);
+    const phamVi = await luuCho.phamViCay(target, client);
+    const gio = await luuCho.gioTrongCay(phamVi, client);
+    if (!gio.length) {
+      throw conflict(`${moTa(target)} không có thay đổi nào đang chờ gửi`, 'approvalStatus');
+    }
+    const tich = locTheoTich(chon, gio);
+
+    const daGui = [];
+    const canhBao = [];
+    for (const g of gio) {
+      const chonCuaGio = tich.get(Number(g.id));
+      // `undefined` = giỏ không có trong `chon` (bỏ tick cả mục); `Set` rỗng = có tên nhưng không ô
+      // nào được tick. Cả hai đều nghĩa là «ở lại giỏ», khác `null` = gửi hết.
+      if (chonCuaGio === undefined) continue;
+      const gui =
+        chonCuaGio === null ? g.changes : g.changes.filter((c) => chonCuaGio.has(c.field));
+      if (!gui.length) continue;
+      const oLai = chonCuaGio === null ? [] : g.changes.filter((c) => !chonCuaGio.has(c.field));
+
+      const patch = Object.fromEntries(gui.map((c) => [c.field, c.valueTo]));
+      const ketQua =
+        g.item_id == null
+          ? await worksService.update(user, g.entity_code, patch, { client })
+          : await itemsService.update(user, g.entity_code, patch, { client, tuGuiGio: true });
+      canhBao.push(...(ketQua.warnings ?? []));
+
+      // Áp XONG mới đóng/cắt giỏ: `update` ném thì giao dịch lăn lại, giỏ còn nguyên — người dùng
+      // sửa lại rồi gửi tiếp, không mất bản nháp.
+      if (oLai.length) await luuCho.catGio(g.id, oLai, client);
+      else await luuCho.dongGio([g.id], client);
+
+      daGui.push({
+        entity: g.item_id == null ? 'work' : 'work-item',
+        code: g.entity_code,
+        name: g.entity_name,
+        choDuyetLai: Boolean(ketQua.choDuyetLai),
+        thayDoi: gui.map((c) => ({ field: c.field, label: c.label, from: c.from, to: c.to })),
+      });
+    }
+    if (!daGui.length) {
+      throw conflict('Chưa tích thay đổi nào để gửi duyệt', 'chon');
+    }
+
+    const conLai = await luuCho.gioTrongCay(phamVi, client);
+    return {
+      kind: target.kind,
+      // Dòng GỐC của phạm vi, để route viết nhật ký (`auditFor` bên đó cần `row`, mà giỏ áp cho cả
+      // cây nên không có một `row` nào là "kết quả"). `approvalStatus` cố ý không kèm: giá trị đọc
+      // được là TRƯỚC khi áp, mà áp xong thì chính dòng này có thể đã hạ về `Chờ duyệt` — đưa ra là
+      // mời giao diện tin một trạng thái đã cũ. `daGui[].choDuyetLai` nói đúng chuyện đó theo từng dòng.
+      muc: {
+        entityType: target.entityType,
+        entityId: Number(target.row.id),
+        workId: Number(target.row.work_id ?? target.row.id),
+        code: target.row.code,
+        name: target.row.name ?? '',
+      },
+      daGui,
+      canhBao,
+      conLai: await dinhDangGio(conLai, client),
+      tongSoThayDoiConLai: conLai.reduce((n, x) => n + x.changes.length, 0),
+    };
+  });
+}
+
+/**
+ * Giỏ của CHÍNH NGƯỜI ĐANG XEM trên TOÀN hệ thống — nguồn của badge «có sửa chờ» trên lưới.
+ *
+ * Tách khỏi `docGio` vì hai câu hỏi khác nhau: lưới cần biết «mục nào của tôi đang có nháp», popup
+ * cần biết «trong mục này nháp viết gì». Gộp lại thì mỗi lần vẽ lưới phải xét phạm vi đọc cho từng
+ * dòng một.
+ *
+ * Câu truy vấn không có index riêng (ba index của 023/029 đều theo `work_id`/`item_id`, không theo
+ * `recipient_id`), nhưng số giỏ đang treo của một người tính bằng đơn vị — đây không phải chỗ cần
+ * index, và thêm một index cho nó thì mỗi lượt ghi `approval_changes` phải nuôi thêm một cây.
+ */
+export async function gioChoCuaToi(user) {
+  const rows = await luuCho.gioCuaToi(user.id);
+  return {
+    tongSoThayDoi: rows.reduce((n, g) => n + g.changes.length, 0),
+    muc: rows.map((g) => ({
+      id: Number(g.id),
+      entity: g.item_id == null ? 'work' : 'work-item',
+      itemId: g.item_id == null ? null : Number(g.item_id),
+      workId: Number(g.work_id),
+      code: g.entity_code,
+      name: g.entity_name,
+      soThayDoi: g.changes.length,
+      fields: g.changes.map((c) => c.field),
+    })),
+  };
 }

@@ -13,8 +13,12 @@
 // THÊM MỘT MỐC: migration nào ĐỔI TÊN hoặc XOÁ một giá trị đang có dữ liệu thì phải có mốc ở đây.
 // Nhân bản cặp `MOC_029` + `gieo029` và đổi `nguong` thành số thứ tự của migration mới; nhiều mốc
 // thì chạy tuần tự, mỗi mốc một thư mục tạm chứa các migration đứng trước nó, gieo dữ liệu cũ, rồi
-// `chayMigrate` với thư mục thật để node-pg-migrate chỉ chạy đúng migration đang thử.
-// Migration chỉ thêm bảng/cột thì KHÔNG cần mốc: CSDL rỗng của global-setup đã là phép thử đủ.
+// `chayMigrate` với thư mục thật. LƯU Ý: lượt chạy đó KHÔNG chỉ chạy migration đang thử —
+// node-pg-migrate chạy hết file chưa có trong `pgmigrations`, nên các migration MỚI HƠN mốc cũng
+// chạy luôn (đã làm đỏ oan một assert «mới nhất = 029» khi 030 ra đời). Assert vì thế phải hỏi
+// «mốc đã chạy chưa», đừng hỏi «mốc có phải cái cuối không».
+// Migration chỉ thêm bảng/cột, hoặc chỉ NỚI một CHECK (030 thêm `'luu-cho'` vào `change_kind`) thì
+// KHÔNG cần mốc: CSDL rỗng của global-setup đã là phép thử đủ.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -198,8 +202,18 @@ describe('MIG-REPLAY-029 — đổi tên verdict trên CSDL có dữ liệu cũ'
   });
 
   it('đã ghi 029 vào pgmigrations', async () => {
-    const { rows } = await client.query('SELECT name FROM pgmigrations ORDER BY name DESC LIMIT 1');
-    expect(rows[0].name).toBe(MOC_029);
+    // Không được so với «migration MỚI NHẤT»: `chayMigrate(MIGRATIONS_DIR, …)` chạy HẾT các file
+    // trong thư mục thật, nên mỗi lần thêm một migration là cái tên mới nhất đổi — mốc 029 này sẽ
+    // đỏ oan (đã đỏ thật khi thêm 030 ngày 12/09/2026). Điều cần chốt là 029 ĐÃ CHẠY, và mạnh hơn
+    // cả câu cũ: KHÔNG migration nào trong thư mục bị bỏ sót.
+    const { rows } = await client.query('SELECT name FROM pgmigrations');
+    const daChay = new Set(rows.map((r) => r.name));
+    const trongThuMuc = fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((ten) => ten.endsWith('.sql'))
+      .map((ten) => ten.replace(/\.sql$/, ''));
+    expect(daChay.has(MOC_029)).toBe(true);
+    expect([...daChay].sort()).toEqual(trongThuMuc.sort());
   });
 
   it('đổi tên hết dữ liệu cũ, không mất dòng nào', async () => {

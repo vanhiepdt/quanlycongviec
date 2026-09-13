@@ -15,11 +15,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 const APP_SRC = readFileSync(resolve(process.cwd(), '../web/assets/js/app.js'), 'utf8');
 const EXPORTS = `;Object.assign(window, {
-  escapeHtml, isPendingApproval, pendingApprovalBadge, createProjectCard, createTaskTableRowSimple,
+  escapeHtml, isPendingApproval, pendingApprovalBadge, luuChoBadge, createProjectCard, createTaskTableRowSimple,
   createTaskListItem, COL,
   __dat: (ten, giaTri) => { ({ allTasks: () => { allTasks = giaTri; },
     allProjects: () => { allProjects = giaTri; },
-    currentUser: () => { currentUser = giaTri; } })[ten](); }
+    currentUser: () => { currentUser = giaTri; },
+    maGioCho: () => { maGioCho = new Set(giaTri); } })[ten](); }
 });`;
 
 const DON = '<img src=x onerror="window.BI_CHIEM=1">';
@@ -146,5 +147,38 @@ describe('Nhãn vàng không mở thêm lỗ XSS', () => {
     const hop = dung(window.createTaskTableRowSimple(nhiemVu(DON)));
     expect(hop.querySelector('img')).toBeNull();
     expect(hop.querySelector('.status-awaiting')).toBeNull();
+  });
+});
+
+describe('luuChoBadge — nhãn «có sửa chờ» theo mã giỏ', () => {
+  it('Đã duyệt không có giỏ thì không hiện nhãn', () => {
+    expect(window.luuChoBadge(duAn('Đã duyệt'))).toBe('');
+    expect(
+      dung(window.createProjectCard(duAn('Đã duyệt'))).querySelector('.status-pending-edit')
+    ).toBeNull();
+  });
+
+  it('có mã trong giỏ thì hiện nhãn trên thẻ công việc và dòng nhiệm vụ', () => {
+    window.__dat('maGioCho', ['CV001', 'CV001-01']);
+    const the = dung(window.createProjectCard(duAn('Đã duyệt')));
+    expect(the.querySelector('.status-pending-edit').textContent).toContain('có sửa chờ');
+    const dong = dung(window.createTaskTableRowSimple(nhiemVu('Đã duyệt')));
+    expect(dong.querySelector('.status-pending-edit')).not.toBeNull();
+  });
+
+  it('thẻ công việc cấp 1 hiện nhãn khi CON nằm trong giỏ', () => {
+    window.__dat('allTasks', [nhiemVu('Đã duyệt')]);
+    window.__dat('maGioCho', ['CV001-01']);
+    const the = dung(window.createProjectCard(duAn('Đã duyệt')));
+    expect(the.querySelector('.status-pending-edit')).not.toBeNull();
+  });
+
+  it('tên độc không dựng được thẻ khi có badge giỏ', () => {
+    window.__dat('maGioCho', ['CV001']);
+    const hop = dung(window.createProjectCard(duAn('Đã duyệt', DON)));
+    document.getElementById('thu').appendChild(hop);
+    expect(hop.querySelector('img')).toBeNull();
+    expect(window.BI_CHIEM).toBeUndefined();
+    expect(hop.textContent).toContain('onerror');
   });
 });

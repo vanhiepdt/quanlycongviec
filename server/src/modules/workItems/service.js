@@ -26,7 +26,8 @@ import {
   NHAP,
   thayDuocNhap,
   trangThaiDuyetKhiTao,
-  phaiChoDuyetKhiSua,
+  phaiDuyetLaiKhiGuiGio,
+  phaiDuyetLaiKhiSua,
   xoaPhaiQuaDuyet,
 } from '../approvals/rules.js';
 import { demNhomFileTheoItem } from '../taskFiles/repo.js';
@@ -591,7 +592,7 @@ export function update(
   user,
   ref,
   patch = {},
-  { targetWorkRef = undefined, client: transactionClient } = {}
+  { targetWorkRef = undefined, client: transactionClient, tuGuiGio = false } = {}
 ) {
   const transact = transactionClient ? (fn) => fn(transactionClient) : withTransaction;
   return transact(async (client) => {
@@ -731,13 +732,11 @@ export function update(
     // Ghi đè «Chờ duyệt» cho Sửa (011): MỌI vai bị admin ghi đè update = 'cho-duyet' đều rơi vào
     // luồng này, cho cả cấp 2 lẫn cấp 3 (mở rộng từ TP/PP × cấp 2 ban đầu).
     const entityType = Number(current.level) === repo.LEVEL_SUBWORK ? 'subwork' : 'task';
-    const coGhiDeSua = user.ghiDe?.[entityType + ':update'] != null;
-    const phaiDuyetLai =
-      (Number(current.level) === repo.LEVEL_SUBWORK &&
-        !coGhiDeSua &&
-        (user.role === 'Trưởng phòng' || user.role === 'Phó phòng') &&
-        current.approval_status === DA_DUYET) ||
-      phaiChoDuyetKhiSua(user, entityType, current.approval_status);
+    // Q9 — hỏi `rules.js`, KHÔNG tính lại ở đây: giỏ «lưu chờ» (S1) hỏi đúng hàm này để quyết hiện
+    // nút «Cập nhật = lưu chờ», nên hai đường phải ra cùng một câu trả lời cho cùng một dòng.
+    const phaiDuyetLai = tuGuiGio
+      ? phaiDuyetLaiKhiGuiGio(user, entityType, current)
+      : phaiDuyetLaiKhiSua(user, entityType, current);
 
     // R4'' (ĐỢT B, 11/09/2026) — SỬA TỶ LỆ TRÊN CÂY ĐÃ DUYỆT THÌ PHẢI GỬI DUYỆT (Q10).
     //

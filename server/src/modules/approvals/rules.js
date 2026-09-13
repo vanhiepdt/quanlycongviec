@@ -72,6 +72,53 @@ export function phaiChoDuyetKhiSua(user, entityType, trangThaiHienTai) {
 }
 
 /**
+ * Vai không ghi thẳng: sửa nội dung cây đã duyệt phải quay lại một lượt duyệt.
+ *
+ * Trưởng/Phó phòng vốn đã có luật cứng cho công việc con từ 28/08. Đợt «Lưu chờ» mở rộng cùng
+ * nguyên tắc cho NHIỆM VỤ cấp 3 của cả TP/PP lẫn cán bộ: thay vì PATCH thẳng rồi làm mất lượt
+ * chỉnh sửa khi modal Chi tiết công việc đóng, bản vá được cất vào giỏ và chỉ áp khi người dùng
+ * bấm Gửi duyệt. admin và Phó Giám đốc vẫn là vai ghi thẳng nếu không có ghi đè quyền.
+ */
+const VAI_TP_PP = Object.freeze(['Trưởng phòng', 'Phó phòng']);
+const VAI_SUA_NHIEM_VU_QUA_DUYET = Object.freeze([...VAI_TP_PP, 'Nhân viên']);
+
+/**
+ * Luật PATCH thẳng Q9: TP/PP sửa công việc con đã duyệt phải duyệt lại; mọi cấp cũng phải chờ khi
+ * admin ghi đè `update='cho-duyet'`. Giữ nguyên hợp đồng này cho REST/RPC cũ (đổi tỷ lệ, đổi tích
+ * Gửi BLĐ…): chúng có luồng duyệt riêng và không được vô tình biến thành «lưu chờ».
+ */
+export function phaiDuyetLaiKhiSua(user, entityType, row) {
+  const ghiDeKhoa = entityType + ':update';
+  if (
+    row?.approval_status === DA_DUYET &&
+    user?.ghiDe?.[ghiDeKhoa] == null &&
+    entityType === 'subwork' &&
+    VAI_TP_PP.includes(user?.role)
+  ) {
+    return true;
+  }
+  return phaiChoDuyetKhiSua(user, entityType, row?.approval_status);
+}
+
+/**
+ * Luật RIÊNG của giỏ «Lưu chờ»: ngoài cấp 2 TP/PP, form sửa nhiệm vụ cấp 3 Đã duyệt của TP/PP/Cán
+ * bộ cũng vào giỏ để người sửa tiếp trong modal rồi chủ động gửi popup tick. Khi áp giỏ, service
+ * truyền cờ riêng vào `workItems.update`; không nới PATCH thẳng vốn phục vụ các luồng nghiệp vụ cũ.
+ */
+export function phaiDuyetLaiKhiGuiGio(user, entityType, row) {
+  const ghiDeKhoa = entityType + ':update';
+  if (
+    row?.approval_status === DA_DUYET &&
+    user?.ghiDe?.[ghiDeKhoa] == null &&
+    ((entityType === 'subwork' && VAI_TP_PP.includes(user?.role)) ||
+      (entityType === 'task' && VAI_SUA_NHIEM_VU_QUA_DUYET.includes(user?.role)))
+  ) {
+    return true;
+  }
+  return phaiChoDuyetKhiSua(user, entityType, row?.approval_status);
+}
+
+/**
  * Vai này có phải ĐI QUA YÊU CẦU XOÁ thay vì xoá trực tiếp? (ghi đè `delete = 'cho-duyet'`, 011)
  *
  * Tách riêng khỏi `xoaPhaiQuaDuyet` để client và server hỏi CÙNG một câu bằng cùng một hàm: giao

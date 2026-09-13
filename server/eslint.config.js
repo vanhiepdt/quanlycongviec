@@ -116,6 +116,8 @@ export default [
       // khối, luồng lấy mã/bỏ liên kết, thoát dữ liệu máy chủ trong buildZaloMaHtml (Phase 8 việc
       // 1e, 2026-09-06) — app.js thật trong jsdom, fetch giả.
       'tests/unit/zalo-lien-ket-ui.test.js',
+      // luu-cho-ui.test.js: giỏ lưu chờ — nút Lưu chờ/Gửi duyệt, popup tick, badge, footer cây (S1–S4).
+      'tests/unit/luu-cho-ui.test.js',
     ],
     languageOptions: {
       globals: {
