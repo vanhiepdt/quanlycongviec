@@ -2489,9 +2489,12 @@ Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã
 
 ### 9b.27 «Lưu chờ» + nút «Gửi duyệt» có popup tick thay đổi (12/09/2026, đợt S1–S4) — bấm để tự nghiệm
 
-**Nghiệm thu mới nhất 20260912-07 (13/09/2026), chưa kiểm trình duyệt thật:**
-chạy `chay-test.bat /giu /f` rồi Ctrl+F5; Network bốn asset app.css/app.js/project-details.js/phase8b-review.js
-và console app.js phải cùng `20260912-07`. Giữ kiểm Lưu chờ/Gửi duyệt của bản 06 bên dưới.
+**ĐÃ PHÁT HÀNH VPS 13/09/2026 THEO LỆNH NGƯỜI DÙNG «deloy lên vps» — CHƯA AI BẤM THỬ.**
+Lệnh đó thay cho bước nghiệm thu PC, nên bản 06 + 07 đang chạy trên dữ liệu thật mà chưa nghiệm thu
+giao diện. Nay bấm các bước dưới **trực tiếp trên `https://ttdt.site`** với Ctrl+F5 (không cần
+`chay-test.bat`, production đã ở `pgmigrations=030`); Network bốn asset
+app.css/app.js/project-details.js/phase8b-review.js và console app.js phải cùng `20260912-07`.
+Giữ kiểm Lưu chờ/Gửi duyệt của bản 06 bên dưới. Muốn thử trên PC thì vẫn `chay-test.bat /giu /f`.
 - Desktop: tên nhiệm vụ 16px; người thực hiện, hạn và Tiến độ N% + thanh nằm cùng hàng; nút thao tác vẫn trên phải.
 - Mở hai nhiệm vụ: cả hai ẩn file ban đầu; mở/đóng từng nút ▼/▲ độc lập, ẩn cả tiêu đề cột lẫn hàng file.
 - Khi mở: Tên kết quả / Tỷ lệ công việc (%) / Tiến độ / Tình trạng; tỷ lệ thiếu là —, số 0 là 0%; chưa có bản là Chưa nộp.
@@ -2686,7 +2689,7 @@ sạch thì xoá thư mục đó.
 | **Bản kết quả ĐẦU TIÊN chỉ người thực hiện trực tiếp nộp được · cột «Tình trạng» và «Người thực hiện» ghi Ở TỪNG BẢN kèm tên** | ⏳ **đang nghiệm thu** | mục **9b.24** (bước 46 → 60) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-01` và Console in `[QLCV] app.js 20260912-01`. Test tự động: **2043/114 xanh** (+9 ca `phase8d-ban-dau.test.js`), pin XSS **100/978** |
 | **Bảng «Chờ duyệt» nói rõ «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · cán bộ lập mới cấp 3 chọn được BLĐKS và người thực hiện · TP/PP hết «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ** | ⏳ **đang nghiệm thu** | mục **9b.25** (bước 61 → 79) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-02` và Console in `[QLCV] app.js 20260912-02`. Test tự động: **2076/2076 · 115 file · exit 0** (+11 ca `approvals-pending-da-sua.test.js`), pin XSS **101/986** |
 | **«Hoạt động gần đây» hết tên máy và hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin** | ⏳ **chờ test PC** | mục **9b.26** (bước 80 → 95) — **không** migration, CSDL giữ `029` lúc đợt đó, buster `20260912-03`. Test tự động lúc commit: **2096/2096 · 116 file**. Pin XSS lúc đó **101/986** |
-| **Tách «Cập nhật» thành «Lưu chờ» + «Gửi duyệt» có popup tick · giỏ giữ cột cũ · gửi cả cây từ màn công việc con** | ⏳ **chờ test PC** | mục **9b.27** (bước 96 → 109) — **BẮT BUỘC `chay-test.bat /giu /f`** (migration **030**), buster `20260912-04`. Test tự động: **2138/2138 · 118 file · exit 0**. Pin XSS **101/996** |
+| **Tách «Cập nhật» thành «Lưu chờ» + «Gửi duyệt» có popup tick · giỏ giữ cột cũ · gửi cả cây từ màn công việc con · thẻ nhiệm vụ Chi tiết thiết kế lại** | 🚀 **ĐÃ PHÁT HÀNH VPS 13/09/2026, CHƯA NGHIỆM THU GIAO DIỆN** | mục **9b.27** — nay bấm thử **trực tiếp trên `https://ttdt.site`** với Ctrl+F5. VPS ở `bc331b5`, `pgmigrations` = **030**, buster `20260912-07` cả bốn asset. Test tự động trước phát hành: focused **184/184 · 10 file**, full **2159/2159 · 118 file · exit 0**. Pin XSS **101/996** |
 
 
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |

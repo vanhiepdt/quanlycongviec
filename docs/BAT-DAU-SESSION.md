@@ -12,10 +12,18 @@ XSS đo lại **101/996**, +4 nội suy escaped, 0 sink; syntax ba file web và 
 Full suite chạy lại và tự xác minh trong session này: **2159/2159 · 118 file · 652.11s · exit 0**
 (log `C:/Users/HANAPH~1/AppData/Local/Temp/claude/e--quanlycongviec/.../bmz0si9cu.output`).
 Focused chạy TUẦN TỰ trước full, không chồng nhau.
-Chưa kiểm browser thật. Không commit/push/deploy/reset/seed. Chờ người dùng chạy
-`chay-test.bat /giu /f`, Ctrl+F5 và nghiệm thu §9b.27 cho cả bản 06 + 07.
-Prompt tiếp tục: đọc khối này và §13 KE-HOACH-VPS.md; đối chiếu asset -07, nhận kết quả PC,
-chỉ sửa lỗi người dùng báo; không phát hành khi chưa có OK riêng. Migration 030 của đợt cũ vẫn cần.
+
+**ĐÃ PHÁT HÀNH VPS 13/09/2026 theo lệnh người dùng «deloy lên vps» — CHƯA AI BẤM THỬ TRÊN TRÌNH DUYỆT.**
+Ba commit explicit paths `87992b3` (máy chủ, 22 file) · `f9d9e45` (giao diện, 5 file) · `bc331b5` (tài liệu, 6 file);
+push `47d495a..bc331b5`, kèm ba commit nhật ký cũ `8295de0`/`1fcd66b`/`0ecbd03` nay mới lên remote.
+VPS: `backup.sh` (dump `qlcv-2026-09-13.dump` 118K + storage) → `git pull --ff-only` → `restart.sh` exit 0.
+CSDL `quanlycongviec` nay **`pgmigrations` = 30**, CHECK `approval_changes_change_kind_check` có `luu-cho` = `t`.
+`readyz` `{"ok":true,"db":"up"}`; ba container `healthy`; bốn URL qua nginx + banner console `20260912-07`;
+`docker logs qlcv-app` **0** dòng error/fatal; ba lịch cron (quá hạn 07:00, dọn chat, Zalo `*/2`) đều bật.
+
+**NỢ DUY NHẤT: NGHIỆM THU GIAO DIỆN TRÊN PRODUCTION** — bấm §9b.27 ngay trên `https://ttdt.site`
+với Ctrl+F5, giữ gìn dữ liệu thật. Hỏng thì rollback theo `deploy/runbook.md` §2 nhưng **hỏi người dùng trước**.
+Prompt tiếp tục: đọc khối này và §13 KE-HOACH-VPS.md; nhận kết quả bấm thử, chỉ sửa lỗi người dùng báo.
 
 ## Snapshot — khôi phục UI bản 20260912-06 (13/09/2026)
 
