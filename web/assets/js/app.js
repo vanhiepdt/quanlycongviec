@@ -6,7 +6,7 @@
 // thoát ký tự chống XSS (4.6) và bỏ listener chết (4.7). CẤM đổi tên hàm, đổi id DOM, dọn code —
 // để phase sau.
 // Dấu phiên bản: mở DevTools Console phải thấy dòng này — thiếu/lẻ là trình duyệt đang chạy file cũ.
-console.info("[QLCV] app.js 20260912-07");
+console.info("[QLCV] app.js 20260912-08");
 let chartInstance = null,
   projectProgressChart = null,
   staffPerformanceChart = null,
@@ -2410,6 +2410,23 @@ const NHAN_VAI_NGAN = Object.freeze({
  * là biết vai, khỏi thêm cột vào `BAN` (hằng dùng chung, thêm cột là đổi hình dạng phản hồi).
  */
 const HANH_DONG_TAO_BAN = Object.freeze(["sua-truc-tuyen", "nop", "luu-tam", "gui-duyet"]);
+const HANH_DONG_KHOA_BAN_CHO = Object.freeze([
+  "duyet", "hoan-thanh", "tp-phe-duyet", "gui-duyet", "tra-ve-cbo", "tra-ve-tp",
+]);
+/** Bản `sua-truc-tuyen` mới nhất chưa gửi/duyệt — nút «Sửa bản vừa lưu» mở đúng bản này. */
+function banChoSuaCuaNhom(n) {
+  const bans = Array.isArray(n && n.bans) ? n.bans : [];
+  const ketThuc = ["hoan-thanh", "da-duyet"].includes(String((n && n.trang_thai) || ""));
+  if (ketThuc) return null;
+  for (let i = bans.length - 1; i >= 0; i--) {
+    const b = bans[i];
+    const luong = luongCuaBan(n, b);
+    if (!luong.some((g) => g.hanh_dong === "sua-truc-tuyen")) continue;
+    if (luong.some((g) => HANH_DONG_KHOA_BAN_CHO.includes(g.hanh_dong))) continue;
+    return b;
+  }
+  return null;
+}
 /**
  * Hành động là MỘT TÌNH TRẠNG của bản. `vai: true` ⇒ nhãn ghép vai của người làm (`sua-truc-tuyen`
  * phải ra «TP/PP sửa trực tiếp» hay «PGĐ/GĐ sửa trực tiếp» đúng như người dùng dặn). `gom-y` cố ý
@@ -4266,6 +4283,13 @@ function buildDongBanKetQua(n, b, chiSo, soCha, ma = "") {
   if (!laBanBaoCaoKq(b) && xemInlineDuoc(b)) {
     muc.push(buildMucMenuKq("fa-eye", "Xem trên trình duyệt", "xemFileKetQua('" + escapeForInlineHandler(b.id) + "')"));
   }
+  const choSua = banChoSuaCuaNhom(n);
+  if (dsBat && choSua && String(choSua.id) === String(b.id) && suaTrucTuyenDuoc(b.ten_goc || n.ten_goc)) {
+    muc.push(
+      "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + b.id)) +
+      "/editor\" target=\"_blank\" class=\"kq-menu-muc\" title=\"Sửa bản vừa lưu — Lưu bản cuối lần nữa sẽ thay bản này\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>Sửa bản vừa lưu</a>"
+    );
+  }
   // «Sửa lần N»: bản 1 là bản đầu tiên nên không phải lần sửa nào.
   const nhanSua = chiSo === 0 ? "" : " — Sửa lần " + chiSo;
   // Hai cột theo TỪNG BẢN (12/09/2026) — xem `tinhTrangMotBan` / `nguoiThucHienCuaBan` ở trên.
@@ -4380,11 +4404,15 @@ function buildKhoiFile(n, ma, soCha) {
     if (xemInlineDuoc(banCuoi)) {
       muc.push(buildMucMenuKq("fa-eye", "Xem ngay trong trình duyệt (PDF và ảnh)", "xemFileKetQua('" + escapeForInlineHandler(banCuoi.id) + "')"));
     }
-    // ✎ sửa trực tuyến (ONLYOFFICE) — mỗi lần lưu ở editor thành BẢN MỚI của nhóm này. Ảnh không
-    // có bộ soạn thảo nào trong DS nên ẩn mục, khỏi mở ra một trang editor lỗi.
+    // ✎ sửa trực tuyến (ONLYOFFICE). Lưu tạm không tạo bản; Lưu bản cuối mới thành 1 bản chưa duyệt.
     if (dsBat && suaTrucTuyenDuoc(banCuoi.ten_goc || n.ten_goc)) {
+      const banMo = banChoSuaCuaNhom(n) || banCuoi;
+      const laBanCho = Boolean(banChoSuaCuaNhom(n));
       muc.push(
-        "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + banCuoi.id)) + "/editor\" target=\"_blank\" title=\"Sửa trực tuyến (ONLYOFFICE) — lưu là thành bản mới\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>Sửa trực tuyến</a>"
+        "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + banMo.id)) + "/editor\" target=\"_blank\" title=\"" +
+        escapeHtmlAttr(laBanCho ? "Sửa bản vừa lưu — Lưu bản cuối lần nữa sẽ thay bản chưa duyệt" : "Sửa trực tuyến (ONLYOFFICE) — Lưu tạm trong phiên, Lưu bản cuối mới thành 1 bản") +
+        "\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>" +
+        escapeHtml(laBanCho ? "Sửa bản vừa lưu" : "Sửa trực tuyến") + "</a>"
       );
     }
   }
@@ -9461,9 +9489,12 @@ function buildDongChoDuyetKetQua(n) {
     );
   }
   if (dsBat && n.ban_cuoi_id && !laBaoCao && suaTrucTuyenDuoc(n.ban_cuoi_ten || n.ten_goc)) {
+    const laBanCho = n.ban_cuoi_hanh_dong === "sua-truc-tuyen" ||
+      (Array.isArray(n.luong) && n.luong.some((g) => g.hanh_dong === "sua-truc-tuyen" && String(g.version_id) === String(n.ban_cuoi_id)));
     muc.push(
       "<a href=\"" + escapeHtmlAttr(safeUrl("/api/v1/task-file-versions/" + n.ban_cuoi_id)) +
-      "/editor\" target=\"_blank\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>Sửa trực tuyến</a>"
+      "/editor\" target=\"_blank\" class=\"kq-menu-muc\"><i class=\"fas fa-pen-to-square mr-2 w-4 text-center\"></i>" +
+      escapeHtml(laBanCho ? "Sửa bản vừa lưu" : "Sửa trực tuyến") + "</a>"
     );
   }
   // «Nộp bản mới» ngay trong hàng chờ — người dùng chốt: người sửa file được up bản mới của nó.
