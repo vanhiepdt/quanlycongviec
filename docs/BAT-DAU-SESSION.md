@@ -1,6 +1,41 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
-## Ưu tiên hiện tại — thẻ nhiệm vụ Chi tiết công việc bản 20260912-07 (13/09/2026)
+## Ưu tiên hiện tại — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08 (13/09/2026)
+
+**MÃ ĐỢT NÀY ĐÃ XONG, TEST XANH — CHƯA COMMIT, CHƯA PUSH, CHƯA DEPLOY VPS.** Người dùng báo:
+mỗi lần Save trên Office thành 1 bản mới. Đã tách thành 3 chức năng; GĐ/PGĐ/TP/PP đều dùng 3 nút;
+**bỏ** nút «Phê duyệt bản mới vừa chỉnh sửa» trên tab editor. Đóng tab khi chưa Lưu bản cuối =
+**bỏ nháp** (không tạo bản, không ghi đè file). `/verdict` giữ nguyên trên giao diện chính.
+
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `030`.** Ctrl+F5 là đủ. Buster + banner **`20260912-07` → `20260912-08`**
+(5 chỗ: `web/index.html` 4 URL + banner `app.js`). Pin XSS **`101 sink / 1000 nội suy`** (từ 996;
+**+4 nội suy**, 0 sink — menu «Sửa bản vừa lưu» qua `escapeHtml`/`escapeHtmlAttr`).
+
+**BA NÚT:**
+1. **Lưu tạm** = Save trong phiên đang mở, không gửi đi, không tính 1 bản (`forcesave: false`;
+   userdata `luu-tam`; callback status 6 không `ban-cuoi:` **bỏ qua**).
+2. **Lưu bản cuối** = confirm «Chắc chắn lưu bản này không?» → userdata `ban-cuoi:<uuid>` + status 6
+   → tạo/thay **1 bản chưa duyệt** → đóng tab về giao diện chính. Người duyệt duyệt trên giao diện chính.
+3. **Sửa bản vừa lưu** = mở lại bản chờ; lưu lần nữa **xóa bản chờ cùng người** rồi thêm 1 bản
+   (`timBanChoSua` / `xoaBan` rồi `themBan` — `so_ban` không tăng).
+
+Callback DS: **chỉ** `status=6` + userdata bắt đầu `ban-cuoi:` mới `luuTuCallback`. Status 2
+(đóng tab) và status 6 khác (Ctrl+S / Lưu tạm) trả `{"error":0}` không tạo bản.
+
+**TEST (số tự đo session này, chạy tuần tự từ `server/`):**
+- unit editor **15/15** · UI **68/68** · xss-guard **11/11** · phase8c **35/35** · API file **54/54**
+- full **2162/2162 · 118 file · 321.79s · exit 0**
+- `node ../tools/dem-xss.mjs` từ `server/` → **101/1000**
+
+**KHÔNG commit / push / deploy** cho đến khi bạn test PC (`chay-test.bat /giu /f` → Ctrl+F5,
+Network `app.js?v=20260912-08`, Console `[QLCV] app.js 20260912-08`) và nói OK.
+Bấm `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.28**. HEAD vẫn `e7f5732` trên `vps/sua-loi-vat`.
+Hai file rác untracked `goi` / `phai` **để ngoài** mọi commit.
+
+**NỢ CŨ GIỮ NGUYÊN:** nghiệm thu §9b.27 trên production `https://ttdt.site` (bản 07 đã phát hành,
+chưa ai bấm thử). Không tự rollback VPS.
+
+## Snapshot — thẻ nhiệm vụ Chi tiết công việc bản 20260912-07 (13/09/2026)
 
 Đã thực hiện kế hoạch được duyệt: thẻ không compact có meta người/hạn/tiến độ chung hàng desktop,
 chữ lớn hơn và grid file Tên kết quả / Tỷ lệ công việc (%) / Tiến độ / Tình trạng; responsive mobile.
@@ -1264,19 +1299,17 @@ VIỆC CỦA SESSION NÀY: <PHASE>
 ---
 ---
 
-## 3. Prompt cho session tiếp theo — nghiệm thu bốn yêu cầu mới trên PC
+## 3. Prompt cho session tiếp theo — OnlyOffice 3 nút, chờ OK PC
 
 ```text
 Repo E:\quanlycongviec, nhánh vps/sua-loi-vat. Trả lời tiếng Việt.
-Đọc phần đầu docs/BAO-CAO-V1-V8.md, docs/BAT-DAU-SESSION.md và KE-HOACH-VPS.md §13.
-Mã bốn yêu cầu mới đã sửa: hoàn thành từ tất cả nhóm có bản được duyệt; không trạng thái tay;
-bảng file 10 cột có tỷ lệ/tiến độ riêng; tab Nhiệm vụ hiện hàng file, bỏ Link kết quả.
-Full 1961/1961 (110 file), lint 0; buster 20260910-10, XSS 98/929.
-Tiếp tục theo phản hồi PC/checklist 9b.18, giữ các luật V1–V8 và giới hạn chưa nghiệm thu DS thật.
-Cây có nhiều thay đổi chưa commit. Không reset/restore/stash/clean/add/commit/push/deploy.
-Không reset/seed UAT, không /v14 /f, không xóa volume; dữ liệu đang được người dùng cập nhật.
-Test tuần tự từ server/, chỉ CSDL _test cổng 5434. Không in bí mật hoặc đọc trọn app.js/Code.gs.moi.
-Không coi test tự động xanh là OK nghiệm thu; chờ người dùng nói OK RIÊNG ĐỢT NÀY.
+Đọc khối đầu docs/BAT-DAU-SESSION.md và KE-HOACH-VPS.md §13 (đợt OnlyOffice 20260912-08).
+Mã xong, test xanh: full 2162/2162 · 118 file · exit 0; XSS 101/1000; buster 20260912-08.
+Không migration, CSDL giữ 030. HEAD e7f5732. Cây dirty OnlyOffice chưa commit.
+Nếu người dùng đã test PC §9b.28 và nói OK → commit explicit paths (không git add ., để ngoài goi/phai)
+rồi mới hỏi trước khi push/deploy. Nếu báo lỗi → sửa trên cây này, chạy focused tuần tự rồi full từ server/.
+Không reset/restore/stash/clean; không reset/seed UAT; không đọc trọn app.js/Code.gs.moi; không in bí mật.
+Không coi test tự động xanh là OK nghiệm thu. Nợ cũ: §9b.27 trên https://ttdt.site chưa ai bấm thử.
 ```
 
 ### 3.1 Prompt Phase 9 lịch sử — chưa áp dụng khi các đợt PC còn chưa nghiệm thu

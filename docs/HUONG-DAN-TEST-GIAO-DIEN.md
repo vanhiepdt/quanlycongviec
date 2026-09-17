@@ -1,6 +1,8 @@
 # Hướng dẫn tự tay test giao diện (Phase 4)
 
 Viết ngày 2026-08-25, cho nhánh `vps/phase-4-frontend`.
+Bổ sung **mục 9b.28** (OnlyOffice tách 3 nút: Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) ngày
+**2026-09-13** trên nhánh `vps/sua-loi-vat`, buster `20260912-08`.
 Bổ sung **mục 1.0** (script `chay-test.bat`) và **mục 9b** (kết quả nhiệm vụ là file, ONLYOFFICE,
 trang «Hàng chờ phê duyệt») ngày **2026-09-02**, thêm **mục 9b.6** (8 việc: phân công của Trưởng
 phòng, cập nhật tại chỗ, siết lãnh đạo phụ trách, bảng cây hàng chờ, nộp bản mới, thanh tải lên,
@@ -705,11 +707,18 @@ nút riêng gọi *command service* `forcesave` của Document Server.
 biến `ONLYOFFICE_URL` / `ONLYOFFICE_JWT_SECRET` thì nút sửa **biến mất lặng lẽ**, không báo lỗi.
 
 1. Đăng nhập `tp@test.local`, mở NV-01, bấm nút **bút chì** (✎) trên bản bạn vừa nộp ở 9b.1.
-2. Tab mới mở ra. **Thanh trên** phải có đủ: tên nhiệm vụ · tên file · nút **«Lưu thành bản mới»** ·
-   nút **«Đóng»**, và một dòng trạng thái bên dưới.
-3. Sửa vài chữ trong tài liệu → bấm **«Lưu thành bản mới»**. Dòng trạng thái báo đã lưu.
-4. Đóng tab, quay lại nhiệm vụ, bấm **«Lịch sử»**: phải có **bản 2**, người nộp ghi **Trần Thị Trưởng**
-   (chính người vừa sửa), hành động **«sửa trực tuyến»**.
+2. Tab mới mở ra. **Thanh trên** phải có đủ: tên nhiệm vụ · tên file · nút **«Lưu tạm»** ·
+   nút **«Lưu bản cuối»** · nút **«Đóng»**, và một dòng trạng thái bên dưới.
+   **KHÔNG** còn nút «Lưu thành bản mới» hay «Phê duyệt bản mới vừa chỉnh sửa».
+3. Sửa vài chữ → bấm **«Lưu tạm»**. Dòng trạng thái báo đã lưu tạm. **Đóng tab, quay lại Lịch sử:
+   KHÔNG thêm bản.** Mở lại editor, chữ vừa sửa **không còn** (đóng tab = bỏ nháp).
+4. Sửa lại → bấm **«Lưu bản cuối»**. Phải hỏi «Chắc chắn lưu bản này không?». **Không** thì ở lại tab.
+   **Có** thì tab đóng, Lịch sử có **đúng 1 bản mới** «sửa trực tuyến», người nộp là người vừa sửa.
+   Bản đó vào **chưa duyệt** — duyệt trên giao diện chính, **không** duyệt trên tab editor.
+5. Menu nhóm / dòng bản phải hiện **«Sửa bản vừa lưu»** (không phải «Sửa trực tuyến») khi còn bản chờ
+   của chính người đó. Mở lại, sửa, Lưu bản cuối lần nữa: **số bản không tăng** (thay bản chờ).
+
+> Chi tiết 3 nút + ca GĐ/PGĐ/TP/PP + đóng tab: **mục 9b.28**. Ca dưới đây giữ làm bằng chứng lỗi cũ.
 
 Bốn điểm đáng để ý ở bước này, đều là lỗi đã sửa hôm nay:
 
@@ -763,7 +772,7 @@ fetch('/api/v1/task-files/cho-duyet', { credentials: 'include' })
 chay-test.bat /v14 /f
 nv1@test.local  → NV-01 → «Tải file lên» một .docx tên có dấu    (9b.1)
 tp@test.local   → «Hàng chờ phê duyệt» → tab «Phê duyệt kết quả» (9b.4)
-                → bấm ✎ → sửa → «Lưu thành bản mới» → «Lịch sử»  (9b.3)
+                → bấm ✎ → sửa → «Lưu bản cuối» (Có) → «Lịch sử»  (9b.3 / 9b.28)
 ```
 
 ### 9b.6 Tám việc của vòng 2026-09-03 — bấm để tự nghiệm
@@ -2594,6 +2603,52 @@ Tự động bản 06: focused 135/135 (8 file), full 2147/2147 (118 file), exit
 Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
 đừng tự sửa mã.
 
+### 9b.28 OnlyOffice tách 3 nút: Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu (13/09/2026) — bấm để tự nghiệm
+
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `030`.** Chỉ mã máy chủ + editor + `app.js`, buster **`20260912-08`**.
+Ctrl+F5 là đủ. **CHƯA COMMIT / PUSH / DEPLOY** — test trên PC trước, không bấm trên `https://ttdt.site`
+(production còn bản 07). Test tự động: **2162/2162 · 118 file · exit 0**. Pin XSS **101/1000**.
+
+> **⚠ Ctrl+F5.** Network phải thấy `assets/js/app.js?v=20260912-08` và Console in `[QLCV] app.js 20260912-08`.
+> Nếu còn `20260912-07` thì tắt hẳn tab rồi mở lại. Dòng `[7/7]` của `chay-test.bat /giu /f` phải in
+> `ONLYOFFICE: BAT` **và** Document Server sống — thiếu thì nút ✎ biến mất, không phải lỗi đợt này.
+
+> **⚠ ĐỔI LUẬT, KHÔNG CHỈ ĐỔI CHỮ.** Trước đây Ctrl+S / Save Office / đóng tab đều thành **1 bản mới**.
+> Nay **chỉ** «Lưu bản cuối» (Có) mới tính 1 bản. GĐ/PGĐ/TP/PP cùng 3 nút; **không** duyệt trên tab.
+> Đóng tab khi chưa Lưu bản cuối = **bỏ nháp**.
+
+112. **Ba nút, không nút duyệt.** `tp@` mở NV-01 (đã có Word) → ✎. Thanh trên có **«Lưu tạm»** +
+    **«Lưu bản cuối»** + **«Đóng»**. **KHÔNG** có «Lưu thành bản mới», **KHÔNG** có «Phê duyệt bản mới
+    vừa chỉnh sửa». Lặp với `pgd@` / `gd@` / `pp@` trên file họ được sửa — cùng 3 nút.
+113. **Lưu tạm không thành bản.** Sửa vài chữ → **Lưu tạm**. Dòng trạng thái báo đã lưu tạm.
+    Đóng tab → Lịch sử **không thêm bản**. Mở lại editor: chữ vừa sửa **không còn**.
+114. **Ctrl+S trong Office không thành bản.** Mở lại, sửa, Ctrl+S (hoặc Save của Office). Đóng tab.
+    Lịch sử vẫn không thêm bản. (Máy chủ tắt `forcesave`; callback status 6 không có `ban-cuoi:` bỏ qua.)
+115. **Đóng tab khi đang bẩn = bỏ nháp.** Sửa vài chữ, **không** bấm Lưu bản cuối, bấm **Đóng**.
+    Phải hỏi đại ý «Còn thay đổi nháp chưa Lưu bản cuối. Đóng sẽ bỏ nháp.» **Không** thì ở lại.
+    **Có** thì tab đóng, Lịch sử không thêm bản, file trên đĩa không bị ghi đè.
+116. **Lưu bản cuối hỏi rồi đóng.** Sửa → **Lưu bản cuối**. Hỏi «Chắc chắn lưu bản này không?».
+    **Không** → ở lại tab, chưa có bản mới. **Có** → tab **tự đóng**, Lịch sử **đúng 1 bản mới**
+    hành động «sửa trực tuyến», người nộp = người vừa sửa. Bản vào **chưa duyệt**.
+117. **Duyệt trên giao diện chính, không trên tab.** Sau bước 116, mở lại editor: **vẫn không** có nút
+    duyệt. Quay về modal nhiệm vụ / hàng chờ: đúng nút verdict của vai (Hoàn thành, TP/PP phê duyệt,
+    Duyệt…). Bấm verdict trên giao diện chính vẫn chạy như 9b.23.
+118. **Sửa bản vừa lưu thay, không nhân.** Menu ⋯ của nhóm (và dòng bản chờ, hàng chờ) hiện
+    **«Sửa bản vừa lưu»** — không còn «Sửa trực tuyến» khi còn bản chờ của chính mình. Mở, sửa,
+    Lưu bản cuối (Có): **số bản không tăng** (bản chờ bị thay). Lặp lần nữa vẫn 1 bản chờ.
+119. **Được duyệt rồi thì lần sau tính bản mới.** Để người có quyền duyệt bản chờ trên giao diện chính
+    (không trên tab). Sau khi đã duyệt / hoàn thành: menu trở lại **«Sửa trực tuyến»**; Lưu bản cuối
+    lần sau **thêm** 1 bản mới, không xoá bản đã duyệt.
+120. **Cán bộ gửi đi duyệt.** `nv1@` mở editor trên bản đang `luu-tam` / `can-sua`: vẫn có nút **Gửi**.
+    Nếu đang bẩn thì Gửi phải đi qua Lưu bản cuối trước (hỏi confirm). Gửi xong không tự duyệt.
+121. **Chỉ xem.** Mở bản đã duyệt / người không được sửa: chỗ 3 nút hiện **«Chỉ xem»**, không Lưu tạm /
+    Lưu bản cuối / Sửa bản vừa lưu.
+122. **9b.15 → 9b.27 không đổi luật khác.** Chuông, Zalo, Lưu chờ, thẻ Chi tiết, `/verdict` máy chủ,
+    JWT OnlyOffice **không đụng**. Chỉ đổi *khi nào* callback tạo bản và *chỗ nào* bấm duyệt.
+
+Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã nhiệm vụ + câu thông báo nguyên văn**,
+đừng tự sửa mã.
+
 ## 10. Dọn dẹp sau buổi test
 
 > **Cảnh báo đợt V1–V8 (10/09/2026):** các cách reset/seed bên dưới là hướng dẫn lịch sử.
@@ -2667,7 +2722,7 @@ sạch thì xoá thư mục đó.
 | Chống XSS ở tên, mô tả, link | ✅ | mục 8 |
 | **Nộp file kết quả nhiệm vụ, tên tiếng Việt đúng dấu** | ✅ | mục **9b.1** — bộ seed Vòng 14 |
 | **Lãnh đạo phòng phụ trách xem/sửa/duyệt + nhận thông báo** | ✅ | mục **9b.2** |
-| **Sửa trực tuyến ONLYOFFICE + «Lưu thành bản mới»** | ✅ | mục **9b.3** — cần `ONLYOFFICE_*` trong `deploy/.env` |
+| **Sửa trực tuyến ONLYOFFICE — 3 nút Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu** | ⏳ **chờ test PC** | mục **9b.3** (lịch sử) + **9b.28** (bước 112 → 122) — buster `20260912-08`, **không** migration. Test tự động: **2162/2162 · 118 file**. Pin XSS **101/1000**. **CHƯA commit/push/deploy** |
 | **Trang «Hàng chờ phê duyệt» hai tab con** | ✅ | mục **9b.4** |
 | **Trưởng phòng chọn được cán bộ khi tạo nhiệm vụ** | ✅ | mục **9b.6** (1) |
 | **Tạo công việc con hiện ngay, không phải tắt-mở modal** | ✅ | mục **9b.6** (2) |
@@ -2690,6 +2745,7 @@ sạch thì xoá thư mục đó.
 | **Bảng «Chờ duyệt» nói rõ «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · cán bộ lập mới cấp 3 chọn được BLĐKS và người thực hiện · TP/PP hết «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ** | ⏳ **đang nghiệm thu** | mục **9b.25** (bước 61 → 79) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-02` và Console in `[QLCV] app.js 20260912-02`. Test tự động: **2076/2076 · 115 file · exit 0** (+11 ca `approvals-pending-da-sua.test.js`), pin XSS **101/986** |
 | **«Hoạt động gần đây» hết tên máy và hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin** | ⏳ **chờ test PC** | mục **9b.26** (bước 80 → 95) — **không** migration, CSDL giữ `029` lúc đợt đó, buster `20260912-03`. Test tự động lúc commit: **2096/2096 · 116 file**. Pin XSS lúc đó **101/986** |
 | **Tách «Cập nhật» thành «Lưu chờ» + «Gửi duyệt» có popup tick · giỏ giữ cột cũ · gửi cả cây từ màn công việc con · thẻ nhiệm vụ Chi tiết thiết kế lại** | 🚀 **ĐÃ PHÁT HÀNH VPS 13/09/2026, CHƯA NGHIỆM THU GIAO DIỆN** | mục **9b.27** — nay bấm thử **trực tiếp trên `https://ttdt.site`** với Ctrl+F5. VPS ở `bc331b5`, `pgmigrations` = **030**, buster `20260912-07` cả bốn asset. Test tự động trước phát hành: focused **184/184 · 10 file**, full **2159/2159 · 118 file · exit 0**. Pin XSS **101/996** |
+| **OnlyOffice: Lưu tạm không thành bản · Lưu bản cuối hỏi rồi đóng tab · Sửa bản vừa lưu thay bản chờ · bỏ nút duyệt trên tab** | ⏳ **chờ test PC — CHƯA COMMIT/PUSH/DEPLOY** | mục **9b.28** (bước 112 → 122) — **không** migration, CSDL giữ `030`, **chỉ Ctrl+F5**. Network `app.js?v=20260912-08`. Test tự động: **2162/2162 · 118 file · 321.79s · exit 0**. Pin XSS **101/1000** (+4, 0 sink) |
 
 
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |

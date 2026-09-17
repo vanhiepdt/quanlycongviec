@@ -1,6 +1,14 @@
 ﻿# Việc 4.6 — Soát XSS toàn bộ tầng trình duyệt
 
-## Pin mới nhất bản 20260912-07 — 13/09/2026: 101 sink / 996 nội suy
+## Pin mới nhất bản 20260912-08 — 13/09/2026: 101 sink / 1000 nội suy
+
+Đã chạy `node ../tools/dem-xss.mjs` từ `server/`: **101/1000**.
+So với pin 07 (101/996): tăng **4 nội suy**, **0 sink mới**. Menu nhóm + dòng bản + hàng chờ
+thêm nhãn/title «Sửa bản vừa lưu» — tất cả qua `escapeHtml` / `escapeHtmlAttr`. Không sửa
+auditor/allowlist. Pin test TC-SEC-17 khớp số đo; `xss-guard` **11/11 · exit 0**.
+Không phải tuyên bố kiểm an toàn toàn ứng dụng hay kiểm browser thật.
+
+## Snapshot pin bản 20260912-07 — 13/09/2026: 101 sink / 996 nội suy
 
 Đã chạy `node tools/dem-xss.mjs`: **101/996**, log `E:/quanlycongviec-xss-07.log`.
 So với working tree bản 06 (101/992), tăng **4 nội suy**, **0 sink mới**: tỷ lệ file, class màu
