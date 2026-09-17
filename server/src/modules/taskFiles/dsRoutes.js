@@ -1,7 +1,7 @@
 // Router máy-đối-máy với ONLYOFFICE Document Server (Vòng 14) — MOUNT TRƯỚC `verifyCsrf` trong
 // app.js (DS không có cookie phiên/CSRF); bảo vệ bằng token HMAC của service (tokenDs/kiemTokenDs).
 //   GET  /raw/:id?token=…      DS tải file gốc để mở editor
-//   POST /callback/:id?token=… DS trả bản đã sửa (status=2/6) ⇒ app lưu thành BẢN MỚI
+//   POST /callback/:id?token=… DS trả bản đã sửa; chỉ status=6 + userdata ban-cuoi: mới thành BẢN
 import { createReadStream, constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { Router } from 'express';
@@ -50,7 +50,8 @@ taskFilesDsRouter.get('/raw/:id', async (req, res, next) => {
 });
 
 /**
- * POST /callback/:id?token=… — DS gửi {status, url, users, actions}; status 2/6 = có bản đã sửa.
+ * POST /callback/:id?token=… — DS gửi {status, url, users, actions}. Chỉ status=6 kèm userdata
+ * bắt đầu `ban-cuoi:` mới lưu thành BẢN. Ctrl+S / Lưu tạm / đóng tab không tạo bản.
  *
  * HỢP ĐỒNG CỦA DS (tài liệu «Callback handler»): thân phản hồi phải là **ĐÚNG** `{"error":0}` ở
  * CẤP CAO NHẤT. Trước đây route này trả qua `ok()` của §5.3 ⇒ `{"ok":true,"data":{"error":0}}`,
@@ -71,9 +72,12 @@ taskFilesDsRouter.post('/callback/:id', async (req, res, next) => {
     }
     const { status, url, users, actions, userdata } = req.body ?? {};
     // status: 1 = đang cùng sửa, 2 = đã đóng và sẵn sàng lưu, 3 = lỗi khi lưu, 4 = đóng mà không
-    // đổi gì, 6 = force-save (Ctrl+S / nút Lưu / lệnh forcesave), 7 = lỗi khi force-save.
-    // Chỉ 2 và 6 mới có `url` bản đã sửa; các status khác chỉ cần xác nhận đã nhận.
-    if (Number(status) !== 2 && Number(status) !== 6) return res.status(200).json({ error: 0 });
+    // đổi gì, 6 = force-save (Ctrl+S / nút Lưu tạm / lệnh forcesave), 7 = lỗi khi force-save.
+    // Lưu bản cuối gửi userdata `ban-cuoi:<uuid>` kèm status=6. Mọi status khác — kể cả đóng tab
+    // (2) và Lưu tạm / Ctrl+S (6 không có tiền tố) — chỉ xác nhận đã nhận, không tạo bản.
+    const st = Number(status);
+    const laBanCuoi = st === 6 && String(userdata ?? '').startsWith('ban-cuoi:');
+    if (!laBanCuoi) return res.status(200).json({ error: 0 });
     // Ai vừa sửa: DS gửi `users` (mảng id người còn/đã mở) hoặc `actions[].userid`. Config của
     // `moEditor` đặt `editorConfig.user.id = String(user.id)` nên đây chính là id trong `users`.
     const nguoiSua =

@@ -105,6 +105,43 @@ export async function xoaNhom(id, client) {
   await db(client).query('DELETE FROM task_files WHERE id = $1', [id]);
 }
 
+/**
+ * Xoá MỘT BẢN. Góp ý CASCADE theo 014; dòng luồng của bản xoá tay rồi version_id của dòng khác
+ * SET NULL. Không đụng nhóm. Dùng khi «Lưu bản cuối» lần nữa thay bản `sua-truc-tuyen` chưa duyệt.
+ */
+export async function xoaBan(id, client) {
+  await db(client).query('DELETE FROM task_file_flow WHERE version_id = $1', [id]);
+  await db(client).query('DELETE FROM task_file_versions WHERE id = $1', [id]);
+}
+
+/**
+ * Bản `sua-truc-tuyen` mới nhất chưa bị gửi/duyệt/trả về — «Sửa bản vừa lưu» mở đúng bản này,
+ * «Lưu bản cuối» lần sau xoá nó rồi thêm 1 bản (count không tăng).
+ */
+export async function timBanChoSua(fileId, client = null) {
+  const { rows } = await db(client).query(
+    `SELECT ${BAN}
+       FROM task_file_versions v
+       JOIN users uu ON uu.id = v.uploaded_by
+      WHERE v.file_id = $1
+        AND EXISTS (
+          SELECT 1 FROM task_file_flow g
+           WHERE g.version_id = v.id AND g.hanh_dong = 'sua-truc-tuyen'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM task_file_flow g2
+           WHERE g2.version_id = v.id
+             AND g2.hanh_dong IN (
+               'duyet', 'hoan-thanh', 'tp-phe-duyet', 'gui-duyet', 'tra-ve-cbo', 'tra-ve-tp'
+             )
+        )
+      ORDER BY v.version_no DESC
+      LIMIT 1`,
+    [fileId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function soBanCaoNhat(fileId, client) {
   const { rows } = await db(client).query(
     'SELECT COALESCE(MAX(version_no), 0)::int AS n FROM task_file_versions WHERE file_id = $1',

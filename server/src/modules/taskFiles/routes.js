@@ -315,15 +315,16 @@ taskFilesRouter.get('/task-files/cho-duyet', async (req, res, next) => {
   }
 });
 
-/** POST /task-file-versions/:id/save — bấm «Lưu thành bản mới» trên trang editor (forcesave). */
+/** POST /task-file-versions/:id/save — Lưu tạm (cheDo=luu-tam) hoặc Lưu bản cuối (mặc định). */
 taskFilesRouter.post('/task-file-versions/:id/save', async (req, res, next) => {
   try {
-    const ketQua = await service.luuNgay(req.user, req.params.id);
+    const cheDo = req.body?.cheDo === 'luu-tam' ? 'luu-tam' : 'ban-cuoi';
+    const ketQua = await service.luuNgay(req.user, req.params.id, { cheDo });
     res.locals.audit = {
       action: 'taskFiles.luu-ngay',
       entityType: 'task',
       entityId: Number(req.params.id),
-      details: { versionId: Number(req.params.id), daLuu: ketQua.daLuu === true },
+      details: { versionId: Number(req.params.id), daLuu: ketQua.daLuu === true, cheDo },
     };
     return ok(res, ketQua);
   } catch (err) {

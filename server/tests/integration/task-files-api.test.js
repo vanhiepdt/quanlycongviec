@@ -829,11 +829,19 @@ describe('TC-TF — luồng file kết quả + phân quyền động (014)', () 
     expect(r1.body).toEqual({ error: 0 });
     expect(r1.body.ok).toBeUndefined();
 
-    // status=2 nhưng `url` rác ⇒ vẫn 200 với `error: 1` (DS đọc mã này để gọi lại), KHÔNG phải §5.3.
+    // status=2 (đóng tab) không tạo bản — kể cả `url` rác cũng chỉ xác nhận, không gọi lưu.
     const r2 = await apiNv.agent.post(duong).send({ status: 2, url: 'khong-phai-url' });
     expect(r2.status).toBe(200);
-    expect(r2.body.error).toBe(1);
-    expect(typeof r2.body.message).toBe('string');
+    expect(r2.body).toEqual({ error: 0 });
+
+    // Lưu bản cuối (`status=6` + userdata `ban-cuoi:`) nhưng `url` rác ⇒ vẫn 200 với `error: 1`
+    // (DS đọc mã này để gọi lại), KHÔNG phải §5.3.
+    const r2b = await apiNv.agent
+      .post(duong)
+      .send({ status: 6, userdata: 'ban-cuoi:test', url: 'khong-phai-url' });
+    expect(r2b.status).toBe(200);
+    expect(r2b.body.error).toBe(1);
+    expect(typeof r2b.body.message).toBe('string');
 
     // Token sai ⇒ vẫn 200 + error:1 (đường máy-đối-máy không trả thân lỗi §5.3 cho DS).
     const r3 = await apiNv.agent
@@ -1015,7 +1023,12 @@ describe('TC-LS — lệnh sửa đúng chủ, không làm mất file', () => {
     try {
       const res = await apiNv.agent
         .post(`/api/v1/task-files-ds/callback/${ban.id}?token=${tokenDs('callback', ban.id)}`)
-        .send({ status: 6, users: [String(nv.id)], url: 'http://onlyoffice.test/edited.docx' });
+        .send({
+          status: 6,
+          userdata: 'ban-cuoi:test',
+          users: [String(nv.id)],
+          url: 'http://onlyoffice.test/edited.docx',
+        });
       expect(res.body).toEqual({ error: 0 });
     } finally {
       fetchMock.mockRestore();

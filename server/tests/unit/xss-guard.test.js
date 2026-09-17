@@ -622,7 +622,10 @@ describe('soát XSS tĩnh app.js — không còn lỗ nào ngoài danh sách đ�
     // 20260912-06: restored pending UI and collapsed details; measured with dem-xss.mjs.
     // 20260912-07 measured 101/996: +ratio, file color/status classes, assignee title;
     // all escaped, numeric ratio sanitized. No sink or auditor change.
-    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 996 });
+    // 20260912-08 (OnlyOffice Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu): **996 → 1000 giá trị**,
+    // sink giữ **101**. Menu nhóm + dòng bản + hàng chờ thêm nhãn/title «Sửa bản vừa lưu»
+    // (escapeHtml / escapeHtmlAttr). Con số lấy thẳng từ `node ../tools/dem-xss.mjs`.
+    expect({ sink: sinks.length, gia_tri: sites.length }).toEqual({ sink: 101, gia_tri: 1000 });
   });
 });
 

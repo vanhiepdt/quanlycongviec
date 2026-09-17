@@ -875,12 +875,12 @@ async function wordChoDuyet(denPgd = false, item = task) {
     ).toBe(200);
   return { nhom, ban };
 }
-async function callbackWord(ban, user, maLuu = null) {
+async function callbackWord(ban, user, maLuu = 'ban-cuoi:test', status = 6) {
   const { tokenDs } = await import('../../src/modules/taskFiles/service.js');
   return nvApi.agent
     .post('/api/v1/task-files-ds/callback/' + ban.id + '?token=' + tokenDs('callback', ban.id))
     .send({
-      status: 6,
+      status,
       users: [String(user.id)],
       userdata: maLuu,
       url: 'http://onlyoffice.test/edited.docx',
@@ -928,20 +928,20 @@ it('TC-V6-01: verdict gắn bản đã thấy; có callback mới thì bản sta
     ).rows[0].version_id
   ).toBe(moi.id);
 });
-it('TC-V6-02: trang duyệt nhận quyền thật; TP sửa phải trình, PGĐ có nút duyệt bản mới', async () => {
-  // Q6 (ĐỢT B): chạy ca này trên nhiệm vụ BẬT tích «Gửi BLĐ phê duyệt» — đó là trường hợp TP bắt buộc
-  // phải trình, và cũng là trường hợp trang editor còn nút «Phê duyệt bản mới vừa chỉnh sửa».
-  // (Van chống tự duyệt nay NỚI: chỉ chặn khi người bấm là NGƯỜI THỰC HIỆN, nên «TP vừa lưu bản cuối»
-  // một mình nó không còn làm mất nút chốt khi tích TẮT — ca đó có ở `phase8d-dot-b.test.js`.)
+it('TC-V6-02: trang editor GĐ/PGĐ/TP cùng 3 nút lưu; không duyệt trên tab; TP sửa phải trình trên giao diện chính', async () => {
   const trinh = await taskCreate({ guiBldPheDuyet: true });
   const { nhom, ban } = await wordChoDuyet(false, trinh);
   const tpPage = await tpApi.get('/api/v1/task-file-versions/' + ban.id + '/editor');
   expect(tpPage.status).toBe(200);
-  expect(tpPage.text.includes('id="duyet-moi"')).toBe(true);
-  expect(tpPage.text.includes('không tự Hoàn thành')).toBe(true);
+  expect(tpPage.text.includes('id="duyet-moi"')).toBe(false);
+  expect(tpPage.text.includes('id="luu"')).toBe(true);
+  expect(tpPage.text.includes('id="luu-ban-cuoi"')).toBe(true);
+  expect(tpPage.text.includes('Lưu tạm')).toBe(true);
+  expect(tpPage.text.includes('Lưu bản cuối')).toBe(true);
+  expect(tpPage.text.includes('không tự Hoàn thành')).toBe(false);
+  expect(tpPage.text).toContain('"forcesave":false');
   mockWord();
   expect((await callbackWord(ban, tp)).body).toEqual({ error: 0 });
-  // Tích BẬT ⇒ «Hoàn thành / Duyệt» bị chặn ở máy chủ (403), bất kể ai vừa lưu bản nào.
   expect(
     (await tpApi.post('/api/v1/task-files/' + nhom.id + '/verdict', { hanhDong: 'hoan-thanh' }))
       .status
@@ -955,13 +955,14 @@ it('TC-V6-02: trang duyệt nhận quyền thật; TP sửa phải trình, PGĐ 
     ).status
   ).toBe(200);
   const pgdPage = await pgdApi.get('/api/v1/task-file-versions/' + ban.id + '/editor');
-  expect(pgdPage.text.includes('id="duyet-moi"')).toBe(true);
+  expect(pgdPage.text.includes('id="duyet-moi"')).toBe(false);
+  expect(pgdPage.text.includes('id="luu-ban-cuoi"')).toBe(true);
   await override('Phó Giám đốc', 'file', 'approve', 'tu-choi');
   expect(
     (await pgdApi.get('/api/v1/task-file-versions/' + ban.id + '/editor')).text.includes(
-      'id="duyet-moi"'
+      'id="luu-ban-cuoi"'
     )
-  ).toBe(false);
+  ).toBe(true);
   expect(
     (await pgdApi.post('/api/v1/task-files/' + nhom.id + '/verdict', { hanhDong: 'duyet' })).status
   ).toBe(403);
@@ -1036,4 +1037,35 @@ it('TC-V6-05: save đợi callback thật, duyệt đúng receipt; quyền thu h
       })
     ).status
   ).toBe(200);
+});
+it('TC-V6-06: status 6 không ban-cuoi và status 2 không tạo bản; ban-cuoi lần 2 thay bản cũ', async () => {
+  const { nhom, ban } = await wordChoDuyet();
+  mockWord();
+  expect((await callbackWord(ban, tp, 'luu-tam')).body).toEqual({ error: 0 });
+  expect((await callbackWord(ban, tp, null, 2)).body).toEqual({ error: 0 });
+  expect(
+    (await pool.query('SELECT count(*)::int n FROM task_file_versions WHERE file_id=$1', [nhom.id]))
+      .rows[0].n
+  ).toBe(1);
+  expect((await callbackWord(ban, tp, 'ban-cuoi:lan-1')).body).toEqual({ error: 0 });
+  const lan1 = (
+    await pool.query(
+      'SELECT id, version_no FROM task_file_versions WHERE file_id=$1 ORDER BY version_no DESC',
+      [nhom.id]
+    )
+  ).rows;
+  expect(lan1).toHaveLength(2);
+  const idCho = lan1[0].id;
+  expect((await callbackWord(ban, tp, 'ban-cuoi:lan-2')).body).toEqual({ error: 0 });
+  const lan2 = (
+    await pool.query(
+      'SELECT id, version_no FROM task_file_versions WHERE file_id=$1 ORDER BY version_no',
+      [nhom.id]
+    )
+  ).rows;
+  expect(lan2).toHaveLength(2);
+  expect(lan2.map((r) => r.id)).not.toContain(idCho);
+  expect(
+    (await pool.query('SELECT id FROM task_file_versions WHERE id=$1', [idCho])).rows
+  ).toHaveLength(0);
 });
