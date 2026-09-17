@@ -6,7 +6,7 @@ cd /d "%~dp0"
 REM =========================================================
 REM  20260912-08: OnlyOffice 3 nut Luu tam / Luu ban cuoi / Sua ban vua luu.
 REM  Full 2162/2162 (118 files), XSS 101/1000; KHONG migration, CSDL giu 030. Xem 9b.28.
-REM  CHUA commit/push/deploy — cho OK PC. Ban 07 da phat hanh VPS, no 9b.27 tren ttdt.site.
+REM  DA PHAT HANH VPS 17/09/2026 HEAD 70e1cab. Nghiem thu 9b.28 + no 9b.27 tren ttdt.site.
 REM  QLCV - MAY CHU TEST TAY  (CSDL quanlycongviec_uat)
 REM  Khac chay.bat: KHONG xoa CSDL, KHONG seed lai -> giu du lieu.
 REM  Goi san che do neu muon:  chay-test.bat /giu | /seed | /v14 | /reset

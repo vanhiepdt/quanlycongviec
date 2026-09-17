@@ -1,17 +1,20 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
-## Ưu tiên hiện tại — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08 (13/09/2026)
+## Ưu tiên hiện tại — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08
 
-**MÃ ĐỢT NÀY ĐÃ XONG, TEST XANH — CHƯA COMMIT, CHƯA PUSH, CHƯA DEPLOY VPS.** Người dùng báo:
-mỗi lần Save trên Office thành 1 bản mới. Đã tách thành 3 chức năng; GĐ/PGĐ/TP/PP đều dùng 3 nút;
-**bỏ** nút «Phê duyệt bản mới vừa chỉnh sửa» trên tab editor. Đóng tab khi chưa Lưu bản cuối =
-**bỏ nháp** (không tạo bản, không ghi đè file). `/verdict` giữ nguyên trên giao diện chính.
+**ĐÃ PHÁT HÀNH VPS 17/09/2026 THEO LỆNH «được rồi up push lên github và deloy».** Người dùng OK PC
+rồi ra lệnh commit/push/deploy. Ba commit explicit paths `430518f` (máy chủ) · `1eb6dfb` (giao diện) ·
+`70e1cab` (tài liệu lúc mã xanh) → push `e7f5732..70e1cab` → VPS `backup.sh` + `git pull --ff-only`
+(`e7f5732..70e1cab`, 15 file, mode 644) + `restart.sh` **exit 0**. HEAD PC = VPS = **`70e1cab`**.
+CSDL giữ **`pgmigrations` = 30** (không migration mới). `readyz` `{"ok":true,"db":"up"}`;
+OnlyOffice `healthcheck=true`; bốn asset nginx + banner **`20260912-08`**; log app **0** error/fatal;
+ba container healthy; ba lịch trong app (quá hạn `0 7 * * *` `sapDenHanNgay:3`, dọn chat `30 3 * * 0`,
+Zalo `*/2`) đều bật. Backup restart: `/var/backups/qlcv/restart-20260917-223156-VthGuJ`.
+Hai file rác `goi` / `phai` **để ngoài**. Untracked VPS `deploy/.env.save` không commit.
 
-**KHÔNG CÓ MIGRATION — CSDL GIỮ `030`.** Ctrl+F5 là đủ. Buster + banner **`20260912-07` → `20260912-08`**
-(5 chỗ: `web/index.html` 4 URL + banner `app.js`). Pin XSS **`101 sink / 1000 nội suy`** (từ 996;
-**+4 nội suy**, 0 sink — menu «Sửa bản vừa lưu» qua `escapeHtml`/`escapeHtmlAttr`).
+**KHÔNG CÓ MIGRATION — CSDL GIỮ `030`.** Ctrl+F5 trên `https://ttdt.site` là đủ. Pin XSS **101/1000**.
 
-**BA NÚT:**
+**BA NÚT (luật đang chạy production):**
 1. **Lưu tạm** = Save trong phiên đang mở, không gửi đi, không tính 1 bản (`forcesave: false`;
    userdata `luu-tam`; callback status 6 không `ban-cuoi:` **bỏ qua**).
 2. **Lưu bản cuối** = confirm «Chắc chắn lưu bản này không?» → userdata `ban-cuoi:<uuid>` + status 6
@@ -22,18 +25,14 @@ mỗi lần Save trên Office thành 1 bản mới. Đã tách thành 3 chức n
 Callback DS: **chỉ** `status=6` + userdata bắt đầu `ban-cuoi:` mới `luuTuCallback`. Status 2
 (đóng tab) và status 6 khác (Ctrl+S / Lưu tạm) trả `{"error":0}` không tạo bản.
 
-**TEST (số tự đo session này, chạy tuần tự từ `server/`):**
+**TEST trước phát hành (số tự đo, tuần tự từ `server/`):**
 - unit editor **15/15** · UI **68/68** · xss-guard **11/11** · phase8c **35/35** · API file **54/54**
 - full **2162/2162 · 118 file · 321.79s · exit 0**
 - `node ../tools/dem-xss.mjs` từ `server/` → **101/1000**
 
-**KHÔNG commit / push / deploy** cho đến khi bạn test PC (`chay-test.bat /giu /f` → Ctrl+F5,
-Network `app.js?v=20260912-08`, Console `[QLCV] app.js 20260912-08`) và nói OK.
-Bấm `docs/HUONG-DAN-TEST-GIAO-DIEN.md` **§9b.28**. HEAD vẫn `e7f5732` trên `vps/sua-loi-vat`.
-Hai file rác untracked `goi` / `phai` **để ngoài** mọi commit.
-
-**NỢ CŨ GIỮ NGUYÊN:** nghiệm thu §9b.27 trên production `https://ttdt.site` (bản 07 đã phát hành,
-chưa ai bấm thử). Không tự rollback VPS.
+**NỢ: NGHIỆM THU GIAO DIỆN TRÊN PRODUCTION.** Bấm §9b.28 (bước 112→122) **và** §9b.27 trên
+`https://ttdt.site` với Ctrl+F5. Network `app.js?v=20260912-08`, Console `[QLCV] app.js 20260912-08`.
+Không tự rollback VPS.
 
 ## Snapshot — thẻ nhiệm vụ Chi tiết công việc bản 20260912-07 (13/09/2026)
 

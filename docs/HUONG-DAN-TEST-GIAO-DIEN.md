@@ -2605,9 +2605,9 @@ Nếu một bước ở đây sai: ghi lại **số bước + tài khoản + mã
 
 ### 9b.28 OnlyOffice tách 3 nút: Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu (13/09/2026) — bấm để tự nghiệm
 
+**ĐÃ PHÁT HÀNH VPS 17/09/2026 THEO LỆNH «được rồi up push lên github và deloy» — CHƯA AI BẤM THỬ TRÊN PRODUCTION.**
 **KHÔNG CÓ MIGRATION — CSDL GIỮ `030`.** Chỉ mã máy chủ + editor + `app.js`, buster **`20260912-08`**.
-Ctrl+F5 là đủ. **CHƯA COMMIT / PUSH / DEPLOY** — test trên PC trước, không bấm trên `https://ttdt.site`
-(production còn bản 07). Test tự động: **2162/2162 · 118 file · exit 0**. Pin XSS **101/1000**.
+Ctrl+F5 trên `https://ttdt.site` là đủ. HEAD `70e1cab`. Test tự động trước phát hành: **2162/2162 · 118 file · exit 0**. Pin XSS **101/1000**.
 
 > **⚠ Ctrl+F5.** Network phải thấy `assets/js/app.js?v=20260912-08` và Console in `[QLCV] app.js 20260912-08`.
 > Nếu còn `20260912-07` thì tắt hẳn tab rồi mở lại. Dòng `[7/7]` của `chay-test.bat /giu /f` phải in
@@ -2722,7 +2722,7 @@ sạch thì xoá thư mục đó.
 | Chống XSS ở tên, mô tả, link | ✅ | mục 8 |
 | **Nộp file kết quả nhiệm vụ, tên tiếng Việt đúng dấu** | ✅ | mục **9b.1** — bộ seed Vòng 14 |
 | **Lãnh đạo phòng phụ trách xem/sửa/duyệt + nhận thông báo** | ✅ | mục **9b.2** |
-| **Sửa trực tuyến ONLYOFFICE — 3 nút Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu** | ⏳ **chờ test PC** | mục **9b.3** (lịch sử) + **9b.28** (bước 112 → 122) — buster `20260912-08`, **không** migration. Test tự động: **2162/2162 · 118 file**. Pin XSS **101/1000**. **CHƯA commit/push/deploy** |
+| **Sửa trực tuyến ONLYOFFICE — 3 nút Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu** | 🚀 **ĐÃ PHÁT HÀNH VPS 17/09/2026, CHƯA NGHIỆM THU GIAO DIỆN** | mục **9b.3** (lịch sử) + **9b.28** (bước 112 → 122) — nay bấm thử **trên `https://ttdt.site`** Ctrl+F5. VPS `70e1cab`, `pgmigrations`=**030**, buster `20260912-08`. Test tự động: **2162/2162 · 118 file**. Pin XSS **101/1000**. |
 | **Trang «Hàng chờ phê duyệt» hai tab con** | ✅ | mục **9b.4** |
 | **Trưởng phòng chọn được cán bộ khi tạo nhiệm vụ** | ✅ | mục **9b.6** (1) |
 | **Tạo công việc con hiện ngay, không phải tắt-mở modal** | ✅ | mục **9b.6** (2) |
@@ -2745,7 +2745,7 @@ sạch thì xoá thư mục đó.
 | **Bảng «Chờ duyệt» nói rõ «duyệt cái gì» + nút «Xem các thay đổi» · bốn nút duyệt bé lại · cán bộ lập mới cấp 3 chọn được BLĐKS và người thực hiện · TP/PP hết «Gửi đi duyệt» khi nhiệm vụ không trình BLĐ** | ⏳ **đang nghiệm thu** | mục **9b.25** (bước 61 → 79) — **KHÔNG có migration**, CSDL giữ `029`, **chỉ Ctrl+F5**. Đợi Network in `assets/js/app.js?v=20260912-02` và Console in `[QLCV] app.js 20260912-02`. Test tự động: **2076/2076 · 115 file · exit 0** (+11 ca `approvals-pending-da-sua.test.js`), pin XSS **101/986** |
 | **«Hoạt động gần đây» hết tên máy và hết JSON thô · thông báo sắp đến hạn · Zalo đẩy 5 loại tin** | ⏳ **chờ test PC** | mục **9b.26** (bước 80 → 95) — **không** migration, CSDL giữ `029` lúc đợt đó, buster `20260912-03`. Test tự động lúc commit: **2096/2096 · 116 file**. Pin XSS lúc đó **101/986** |
 | **Tách «Cập nhật» thành «Lưu chờ» + «Gửi duyệt» có popup tick · giỏ giữ cột cũ · gửi cả cây từ màn công việc con · thẻ nhiệm vụ Chi tiết thiết kế lại** | 🚀 **ĐÃ PHÁT HÀNH VPS 13/09/2026, CHƯA NGHIỆM THU GIAO DIỆN** | mục **9b.27** — nay bấm thử **trực tiếp trên `https://ttdt.site`** với Ctrl+F5. VPS ở `bc331b5`, `pgmigrations` = **030**, buster `20260912-07` cả bốn asset. Test tự động trước phát hành: focused **184/184 · 10 file**, full **2159/2159 · 118 file · exit 0**. Pin XSS **101/996** |
-| **OnlyOffice: Lưu tạm không thành bản · Lưu bản cuối hỏi rồi đóng tab · Sửa bản vừa lưu thay bản chờ · bỏ nút duyệt trên tab** | ⏳ **chờ test PC — CHƯA COMMIT/PUSH/DEPLOY** | mục **9b.28** (bước 112 → 122) — **không** migration, CSDL giữ `030`, **chỉ Ctrl+F5**. Network `app.js?v=20260912-08`. Test tự động: **2162/2162 · 118 file · 321.79s · exit 0**. Pin XSS **101/1000** (+4, 0 sink) |
+| **OnlyOffice: Lưu tạm không thành bản · Lưu bản cuối hỏi rồi đóng tab · Sửa bản vừa lưu thay bản chờ · bỏ nút duyệt trên tab** | 🚀 **ĐÃ PHÁT HÀNH VPS 17/09/2026, CHƯA NGHIỆM THU GIAO DIỆN** | mục **9b.28** (bước 112 → 122) — **không** migration, CSDL giữ `030`, **chỉ Ctrl+F5 trên `https://ttdt.site`**. HEAD `70e1cab`. Network `app.js?v=20260912-08`. Test tự động: **2162/2162 · 118 file · 321.79s · exit 0**. Pin XSS **101/1000** (+4, 0 sink) |
 
 
 | **Tạo công việc con (cấp 2) bằng biểu mẫu** | ❌ **điểm đỏ C7** | biểu mẫu không có ô `Cấp`/`Mã cha` ⇒ mọi dòng tạo ra là cấp 3 không cha. Việc **5.12** |
