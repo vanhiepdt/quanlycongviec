@@ -2,20 +2,22 @@
 
 ## Ưu tiên hiện tại — sửa ủy quyền R1 (NV cho mượn nhiệm vụ + phạm vi rỗng lấy phòng hồ sơ)
 
-**ĐANG PHÁT HÀNH THEO LỆNH «rồi commit và push rồi deploy đi».** Người dùng: «kiểm tra chức năng ủy quyền có hoạt động đúng ko, nếu có lỗi thì sửa» rồi ra lệnh commit/push/deploy. Hai lỗ R1/L3 đã sửa; mã máy chủ `6402345`.
+**ĐÃ PHÁT HÀNH VPS 18/09/2026 THEO LỆNH «rồi commit và push rồi deploy đi».** Người dùng: «kiểm tra chức năng ủy quyền có hoạt động đúng ko, nếu có lỗi thì sửa» rồi ra lệnh commit/push/deploy.
 
-**Hai lỗi:**
-1. `inScopeMuon` không có nhánh Nhân viên → NV→NV tạo được bản ghi (TC-UQ-05c 201) nhưng mượn quyền luôn `false`.
-2. `listEffectiveFor` khi `department_ids` rỗng chỉ đọc `department_managers` → TP/PP/NV tạo từ UI (không có dòng managers) cho mượn «không phòng nào».
+Hai commit explicit paths `6402345` (máy chủ, 4 file) · `d9d0d30` (tài liệu lúc mã xanh) → push `50e564f..d9d0d30` → VPS `backup.sh` (dump `qlcv-2026-09-18.dump` + storage) + `git pull --ff-only` (6 file, mode 644) + `restart.sh` **exit 0**. HEAD PC = VPS = origin **`d9d0d30`**. CSDL giữ **`pgmigrations` = 30** (không migration mới). `readyz` `{"ok":true,"db":"up"}`; OnlyOffice `healthcheck=true`; bốn asset nginx + banner **`20260912-08`**; log app **0** error/fatal; ba container healthy; ba lịch trong app (quá hạn `0 7 * * *` `sapDenHanNgay:3`, dọn chat `30 3 * * 0`, Zalo `*/2`) đều bật. Backup restart: `/var/backups/qlcv/restart-20260918-082822-OzbXRs`. Hai file rác `goi` / `phai` **để ngoài**. Untracked VPS `deploy/.env.save` không commit.
+
+**Hai lỗi đã sửa:**
+1. `inScopeMuon` không có nhánh Nhân viên → NV→NV tạo được bản ghi nhưng mượn quyền luôn `false`.
+2. `listEffectiveFor` khi `department_ids` rỗng chỉ đọc `department_managers` → TP/PP/NV tạo từ UI cho mượn «không phòng nào».
 
 **Sửa (không migration, không đụng app.js / buster 08):**
 - [server/src/middleware/rbac.js](server/src/middleware/rbac.js) — `inScopeMuon(d, entityType, row)`: NV chỉ task + cùng phòng + `assignee_id` = người ủy quyền.
 - [server/src/modules/delegations/repo.js](server/src/modules/delegations/repo.js) — UNION `users.department_id` cho TP/PP/NV/QLCV; PGD/admin không cộng phòng hồ sơ.
 - Test: TC-UQ-11c viết lại; TC-UQ-20 / 20b (HTTP). Không đụng TC-UQ-18 jsdom.
 
-**TEST tuần tự từ `server/`:** unit can **20/20** · API **35/35** · UI **43/43** · full **2164/2164 · 118 file · 264.56s · exit 0**. ESLint 0; Prettier đã format 2 file.
+**TEST tuần tự từ `server/`:** unit can **20/20** · API **35/35** · UI **43/43** · full **2164/2164 · 118 file · 264.56s · exit 0**. ESLint 0.
 
-**Commit:** `6402345` (máy chủ, 4 file) · tài liệu commit ngay sau. `goi` / `phai` **để ngoài**. Không migration — CSDL giữ `030`. Buster vẫn **`20260912-08`**.
+**NỢ: NGHIỆM THU ỦY QUYỀN TRÊN PRODUCTION.** Ctrl+F5 trên `https://ttdt.site`. NV A ủy quyền NV B cùng phòng → B Đồng ý → B sửa đúng nhiệm vụ A đang thực hiện. TP không có dòng managers ủy quyền cán bộ cùng phòng → người nhận sửa được công việc phòng đó. Buster vẫn `20260912-08`. Không tự rollback VPS.
 
 ## Snapshot — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08
 
