@@ -1,6 +1,23 @@
 # Bắt đầu một session mới — dán prompt, chạy, không phải nhớ gì
 
-## Ưu tiên hiện tại — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08
+## Ưu tiên hiện tại — sửa ủy quyền R1 (NV cho mượn nhiệm vụ + phạm vi rỗng lấy phòng hồ sơ)
+
+**ĐANG PHÁT HÀNH THEO LỆNH «rồi commit và push rồi deploy đi».** Người dùng: «kiểm tra chức năng ủy quyền có hoạt động đúng ko, nếu có lỗi thì sửa» rồi ra lệnh commit/push/deploy. Hai lỗ R1/L3 đã sửa; mã máy chủ `6402345`.
+
+**Hai lỗi:**
+1. `inScopeMuon` không có nhánh Nhân viên → NV→NV tạo được bản ghi (TC-UQ-05c 201) nhưng mượn quyền luôn `false`.
+2. `listEffectiveFor` khi `department_ids` rỗng chỉ đọc `department_managers` → TP/PP/NV tạo từ UI (không có dòng managers) cho mượn «không phòng nào».
+
+**Sửa (không migration, không đụng app.js / buster 08):**
+- [server/src/middleware/rbac.js](server/src/middleware/rbac.js) — `inScopeMuon(d, entityType, row)`: NV chỉ task + cùng phòng + `assignee_id` = người ủy quyền.
+- [server/src/modules/delegations/repo.js](server/src/modules/delegations/repo.js) — UNION `users.department_id` cho TP/PP/NV/QLCV; PGD/admin không cộng phòng hồ sơ.
+- Test: TC-UQ-11c viết lại; TC-UQ-20 / 20b (HTTP). Không đụng TC-UQ-18 jsdom.
+
+**TEST tuần tự từ `server/`:** unit can **20/20** · API **35/35** · UI **43/43** · full **2164/2164 · 118 file · 264.56s · exit 0**. ESLint 0; Prettier đã format 2 file.
+
+**Commit:** `6402345` (máy chủ, 4 file) · tài liệu commit ngay sau. `goi` / `phai` **để ngoài**. Không migration — CSDL giữ `030`. Buster vẫn **`20260912-08`**.
+
+## Snapshot — OnlyOffice tách 3 nút lưu (Lưu tạm / Lưu bản cuối / Sửa bản vừa lưu) bản 20260912-08
 
 **ĐÃ PHÁT HÀNH VPS 17/09/2026 THEO LỆNH «được rồi up push lên github và deloy».** Người dùng OK PC
 rồi ra lệnh commit/push/deploy. Ba commit explicit paths `430518f` (máy chủ) · `1eb6dfb` (giao diện) ·

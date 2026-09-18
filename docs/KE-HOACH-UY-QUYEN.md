@@ -164,6 +164,7 @@ Mọi hành động ghi đều đặt `res.locals.audit` (`delegations.create` /
 | TC-UQ-09 | `can()` | **sau** khoảng ngày: hết mượn (không cần cron) |
 | TC-UQ-10 | `can()` | `status='cancelled'` → không mượn dù còn trong khoảng ngày |
 | TC-UQ-11 | `can()` | chỉ mượn `work/subwork/task`; `user`/`department`/`delegation` KHÔNG mượn được (L4) |
+| TC-UQ-11c | `can()` | mượn từ Nhân viên chỉ tới nhiệm vụ `assignee_id` của người ủy quyền; không work/subwork; không approve |
 | TC-UQ-12 | `can()` | phạm vi mượn giới hạn theo `department_ids`: phòng ngoài phạm vi vẫn bị chặn |
 | TC-UQ-13 | API | hành động lọt nhờ mượn quyền ghi `activity_logs` có `details.viaDelegationId` |
 | TC-UQ-14 | API | huỷ = `status='cancelled'`, dòng vẫn còn trong bảng; người ngoài không huỷ được của người khác |
@@ -381,6 +382,7 @@ chặn. Không còn ai hợp lệ thì ô bị `disabled` kèm câu nói rõ lý
 | TC-UQ-18b (jsdom) | jsdom | `taoUyQuyen()` gửi `departmentIds` là mảng SỐ · admin quên chọn phòng ⇒ **không** gọi máy chủ · vai thường **không** gửi khoá đó |
 | TC-UQ-19 (jsdom) | jsdom | danh sách người nhận theo từng vai · ba cặp ngoại lệ khác phòng · loại chính mình / Nhà cung cấp / dòng thiếu email / vai lạ · xếp theo bậc rồi tên · phòng tra không ra ⇒ rỗng chứ không mở rộng · **cột «Đối tượng» của CSDL thật là 'Nội bộ'** (cùng 'Người dùng' và ô trống) vẫn phải hiện — lỗi ô chọn rỗng 2026-08-28 |
 | TC-UQ-19b (jsdom) | jsdom | ô người nhận là `select[name="to"] required`, **không** còn `input[name="to"]` hay datalist · option mang email chữ thường + nhãn «tên — vai · phòng» · rỗng ⇒ `disabled` + nói lý do · tên có mã tấn công không dựng được thẻ |
+| TC-UQ-20 / 20b | API | R1: NV→NV cùng phòng, sau `accept` PATCH đúng nhiệm vụ của người giao 200 + `viaDelegationId`; nhiệm vụ người khác / công việc 403. TP không có dòng `department_managers` — phạm vi rỗng vẫn lấy `users.department_id` |
 
 ## 12. Test tay phần phê duyệt — làm sau §10
 
