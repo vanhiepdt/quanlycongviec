@@ -40,7 +40,12 @@ export const TRANG_THAI_CON_HAN = Object.freeze([TRANG_THAI.CHO_PHE_DUYET, TRANG
  * Đây là câu chạy trên MỌI request có phiên (`attachSession`), nên nó phải trả về đúng thứ
  * `can()` cần và không gì hơn: vai trò mượn được, phạm vi phòng, tên người ủy quyền để hiện nhãn.
  *
- * `department_ids` rỗng ⇒ lấy các phòng người ủy quyền ĐANG phụ trách (`department_managers`).
+ * `department_ids` rỗng ⇒ lấy các phòng người ủy quyền ĐANG phụ trách: dòng `department_managers`
+ * **cộng** `users.department_id` với vai Trưởng/Phó phòng / Nhân viên / Quản lý công việc.
+ * Ba vai đó tạo từ giao diện thường chỉ có cột phòng trên `users`, không có dòng
+ * `department_managers` — chỉ đọc bảng kia thì bản ủy quyền để trống phòng thành «không phòng nào»,
+ * người nhận không mượn được gì dù R1 cho tạo. Phó Giám đốc / admin KHÔNG cộng `users.department_id`
+ * (phạm vi của họ là bảng phụ trách, không phải phòng ghi trên hồ sơ).
  * Chỗ này cố ý không chép cứng danh sách lúc tạo: người ủy quyền được giao thêm phòng thì bản ghi
  * theo kịp, bị rút phòng thì quyền mượn hẹp lại ngay — đúng luật "không rộng hơn quyền người ủy
  * quyền" (L3) ở mọi thời điểm, không chỉ lúc bấm tạo.
@@ -60,9 +65,16 @@ export async function listEffectiveFor(toUserId, client = null) {
             d.to_date,
             CASE
               WHEN array_length(d.department_ids, 1) IS NULL THEN COALESCE(
-                (SELECT array_agg(dm.department_id)
-                   FROM department_managers dm
-                  WHERE dm.user_id = d.from_user_id),
+                (SELECT array_agg(DISTINCT x.department_id)
+                   FROM (
+                     SELECT dm.department_id
+                       FROM department_managers dm
+                      WHERE dm.user_id = d.from_user_id
+                     UNION
+                     SELECT u.department_id
+                      WHERE u.department_id IS NOT NULL
+                        AND u.role IN ('Trưởng phòng', 'Phó phòng', 'Nhân viên', 'Quản lý công việc')
+                   ) x),
                 '{}'::bigint[]
               )
               ELSE d.department_ids

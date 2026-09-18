@@ -238,10 +238,14 @@ const MUON_DUOC = Object.freeze(['work', 'subwork', 'task']);
  *    một phòng có trong `departmentIds`.
  *  - `Quản lý công việc` — phạm vi thật là các công việc mình quản lý, KHÔNG phải cả phòng ⇒ ngoài
  *    điều kiện phòng còn phải đúng công việc của người ủy quyền. Nếu chỉ xét phòng thì người mượn
- *    được nhiều hơn người cho, trái luật L3.
- *  - Vai khác (`Nhân viên`, vai lạ) — không có phạm vi nào để cho mượn.
+ *    được nhiều hơn người cho, trái luật L3. (Vai này không còn trong `PERMISSIONS` nên nhánh dưới
+ *    không mở được gì — giữ để nếu ai thêm lại bảng quyền thì L3 vẫn đúng.)
+ *  - `Nhân viên` — R1 cho mọi cán bộ ủy quyền; quyền tự có của họ chỉ là nhiệm vụ CỦA HỌ
+ *    (`assignee_id` = người ủy quyền). Cho mượn cả phòng là nới quyền (L3). Công việc / việc con
+ *    họ vốn không sửa được nên cũng không cho mượn.
+ *  - Vai lạ — không có phạm vi nào để cho mượn.
  */
-function inScopeMuon(delegation, row) {
+function inScopeMuon(delegation, entityType, row) {
   const dept = (delegation.departmentIds ?? []).some((id) => sameId(id, row.department_id));
   switch (delegation.fromRole) {
     case 'Phó Giám đốc':
@@ -254,6 +258,8 @@ function inScopeMuon(delegation, row) {
         (sameId(row.manager_id, delegation.fromUserId) ||
           sameId(row.assignee_id, delegation.fromUserId))
       );
+    case 'Nhân viên':
+      return entityType === 'task' && dept && sameId(row.assignee_id, delegation.fromUserId);
     default:
       return false;
   }
@@ -278,7 +284,7 @@ function tryDelegations(user, action, entityType, row) {
     if (!d || d.fromRole === 'admin') continue;
     const table = Object.hasOwn(PERMISSIONS, d.fromRole) ? PERMISSIONS[d.fromRole] : null;
     if (!table || !table[entityType].includes(action)) continue;
-    if (row && !inScopeMuon(d, row)) continue;
+    if (row && !inScopeMuon(d, entityType, row)) continue;
     if (Array.isArray(user.viaDelegationIds) && !user.viaDelegationIds.includes(d.id)) {
       user.viaDelegationIds.push(d.id);
     }

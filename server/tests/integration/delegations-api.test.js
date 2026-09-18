@@ -18,7 +18,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
 import { flushAudit } from '../../src/middleware/audit.js';
-import { makeDepartment, makeWork, resetTables } from '../helpers/db.js';
+import { makeDepartment, makeItem, makeWork, resetTables } from '../helpers/db.js';
 import { client, makeLoginUser } from '../helpers/http.js';
 
 const app = createApp();
@@ -863,5 +863,91 @@ describe('TC-UQ-17: ủy quyền từ Giám đốc được đọc như Phó Gi�
       role: 'Nhân viên',
     });
     expect(themNguoi.status).toBe(403);
+  });
+});
+
+describe('TC-UQ-20: R1 — ủy quyền của Nhân viên / Trưởng phòng không có dòng department_managers', () => {
+  it('TC-UQ-20: Nhân viên ủy quyền được, người nhận sửa được ĐÚNG nhiệm vụ của người giao', async () => {
+    const congViec = await makeWork({
+      code: 'DA018',
+      name: 'Công việc phòng A',
+      department_id: phongA.id,
+    });
+    const cuaNguoiGiao = await makeItem({
+      code: 'DA018-01',
+      work_id: congViec.id,
+      level: 3,
+      name: 'Nhiệm vụ của người ủy quyền',
+    });
+    const cuaNguoiKhac = await makeItem({
+      code: 'DA018-02',
+      work_id: congViec.id,
+      level: 3,
+      name: 'Nhiệm vụ của người khác',
+    });
+    await pool.query(`UPDATE work_items SET assignee_id = $1 WHERE id = $2`, [
+      nhanVien.id,
+      cuaNguoiGiao.id,
+    ]);
+    await pool.query(`UPDATE work_items SET assignee_id = $1 WHERE id = $2`, [
+      phoGiamDoc.id,
+      cuaNguoiKhac.id,
+    ]);
+
+    const apiNv = await nhuLa(nhanVien);
+    const tao = await apiNv.post(URL_UQ, {
+      toUserId: nhanVienCungPhong.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(tao.status).toBe(201);
+    expect(tao.body.data.delegation.status).toBe('pending');
+    const uyQuyenId = Number(tao.body.data.delegation.id);
+    await pheDuyet(nhanVienCungPhong, uyQuyenId);
+
+    const api = await nhuLa(nhanVienCungPhong);
+    const sua = await api.patch(`/api/v1/work-items/${cuaNguoiGiao.code}`, {
+      name: 'Sửa nhờ ủy quyền cán bộ',
+    });
+    expect(sua.status).toBe(200);
+    const logs = await dongNhatKy('tasks.update');
+    expect(logs.length).toBe(1);
+    expect(Number(logs[0].details.viaDelegationId)).toBe(uyQuyenId);
+
+    expect(
+      (await api.patch(`/api/v1/work-items/${cuaNguoiKhac.code}`, { name: 'Đổi' })).status
+    ).toBe(403);
+    expect((await api.patch(`/api/v1/works/${congViec.code}`, { name: 'Đổi' })).status).toBe(403);
+  });
+
+  it('TC-UQ-20b: Trưởng phòng không có dòng department_managers — phạm vi rỗng vẫn lấy phòng trên hồ sơ', async () => {
+    const congViec = await makeWork({
+      code: 'DA019',
+      name: 'Công việc phòng B',
+      department_id: phongB.id,
+    });
+    const { rows: dm } = await pool.query(`SELECT 1 FROM department_managers WHERE user_id = $1`, [
+      truongPhongB.id,
+    ]);
+    expect(dm.length).toBe(0);
+
+    const apiTp = await nhuLa(truongPhongB);
+    const tao = await apiTp.post(URL_UQ, {
+      toUserId: nhanVienKhac.id,
+      fromDate: await ngayLech(0),
+      toDate: await ngayLech(3),
+    });
+    expect(tao.status).toBe(201);
+    const uyQuyenId = Number(tao.body.data.delegation.id);
+    await pheDuyet(nhanVienKhac, uyQuyenId);
+
+    const api = await nhuLa(nhanVienKhac);
+    const sua = await api.patch(`/api/v1/works/${congViec.code}`, {
+      name: 'Sửa nhờ ủy quyền trưởng phòng',
+    });
+    expect(sua.status).toBe(200);
+    const logs = await dongNhatKy('works.update');
+    expect(logs.length).toBe(1);
+    expect(Number(logs[0].details.viaDelegationId)).toBe(uyQuyenId);
   });
 });

@@ -116,9 +116,24 @@ describe('TC-UQ-11: L4 — chỉ công việc mượn được, người dùng v
     expect(v.ok).toBe(false);
   });
 
-  it('TC-UQ-11c: mượn từ `Nhân viên` không mở được gì (vai không có phạm vi để cho)', () => {
-    const user = nguoiMuon([uyQuyen({ fromRole: 'Nhân viên' })]);
+  it('TC-UQ-11c: mượn từ Nhân viên chỉ tới nhiệm vụ của người ủy quyền, không nới ra công việc', () => {
+    const uq = uyQuyen({ fromRole: 'Nhân viên', fromUserId: 210, departmentIds: [OWN_DEPT] });
+    const user = nguoiMuon([uq]);
+    // Công việc / việc con: Nhân viên vốn không sửa được nên không cho mượn (L3).
     expect(can(user, 'update', 'work', dongCV()).ok).toBe(false);
+    expect(can(user, 'update', 'subwork', dongCV({ level: 2 })).ok).toBe(false);
+    // Nhiệm vụ đúng người + đúng phòng: mượn được các hành động Nhân viên tự có trên task.
+    const cuaNguoiUyQuyen = dongCV({ level: 3, assignee_id: 210 });
+    expect(can(user, 'update', 'task', cuaNguoiUyQuyen).ok).toBe(true);
+    expect(can(user, 'create', 'task', cuaNguoiUyQuyen).ok).toBe(true);
+    expect(can(user, 'delete', 'task', cuaNguoiUyQuyen).ok).toBe(true);
+    expect(can(user, 'approve', 'task', cuaNguoiUyQuyen).ok).toBe(false);
+    // Nhiệm vụ của người khác, hoặc phòng ngoài phạm vi: không.
+    expect(can(user, 'update', 'task', dongCV({ level: 3, assignee_id: 999 })).ok).toBe(false);
+    expect(
+      can(user, 'update', 'task', dongCV({ level: 3, assignee_id: 210, department_id: OTHER_DEPT }))
+        .ok
+    ).toBe(false);
   });
 });
 
